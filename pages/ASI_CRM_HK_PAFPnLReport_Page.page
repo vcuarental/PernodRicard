@@ -1,0 +1,674 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_HK_PAFPnLReport_Page
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2018-05-02       Vincent Lam             Created
+-->
+<apex:page controller="ASI_CRM_HK_PAFPnLReport_PageCtrl" applyBodyTag="false">
+<head>
+<title>Contract Comparison Page</title>
+</head>
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/multiple-select.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.knob.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/multiple-select.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    
+    <!-- Style -->
+    <style>
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+		/*
+        th, td {
+                padding-top    : 5px;
+                padding-bottom : 5px;
+                padding-right  : 10px;
+                padding-left   : 10px;
+				vertical-align : middle;
+            }
+            
+        table { 
+            table-layout : fixed; 
+        }
+        
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+        
+        table.verticalDataTable .dataTableHeader,
+        table.verticalDataTable .dataTableSubHeader {
+			background-color : #cce6ff;
+            border-right     : 2px solid #e0e0d1;
+            font-weight      : bold;
+        }
+        
+        table.verticalDataTable .dataTableSubHeader {
+            border-top      : 2px solid #e0e0d1;
+            text-decoration : underline;
+        }
+    
+        table .verticalDataTable .dataTableBody {
+            border-right : 2px solid #e0e0d1;
+        }
+        
+        table.verticalDataTable .dataTableBody.odd {
+        	background-color : #e6f3ff;
+        }
+        
+        table.verticalDataTable .dataTableBody.even {
+            background-color : white;  
+        }
+        
+        table.verticalDataTable .numberTableColumn {
+            text-align : right;
+        }
+        
+        table.verticalDataTable .dataTableItemHeader {
+        	padding-left : 30px;
+            font-weight  : normal;
+        }
+        
+        table.verticalDataTable .dataTableItemHeaderWithBold {
+        	padding-left : 30px;
+        }
+
+        table.verticalDataTable .dataTableBody .textGreen {
+            color: green;
+        }
+
+        table.verticalDataTable .dataTableBody .textRed {
+            color: red;
+        }
+		
+		table.verticalDataTable .dataTableBody.oddodd {
+			background-color : #e6f3ff;
+		}
+
+		table.verticalDataTable .dataTableBody.oddeven {
+			background-color : #ECF6FF;  
+		}
+		
+		table.verticalDataTable .dataTableBody.evenodd {
+			background-color : #F8FFE6;
+		}
+
+		table.verticalDataTable .dataTableBody.eveneven {
+			background-color : #FAFFEE;  
+		}
+		
+		table.verticalDataTable .numberTableColumn {
+			text-align : right;
+		}
+		*/
+        
+    </style>
+
+    <script>
+        /*****************
+        VF Page Config
+        *****************/
+		const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : true,
+            "aLengthMenu":[10,25,50],
+            "iDisplayLength":10,
+            "bSort" : false,
+            "bPaginate": true,
+            "bScrollCollapse": true,
+            "bJQueryUI": false
+        };
+		
+		const STYLE_TITLE_FOR_EXCEL_HEADER = 'width:300px; height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-left:20px; background-color:#EFEDEC;';
+		const STYLE_TITLE_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-right:20px; text-align:right; background-color:#EFEDEC; padding-left:20px;';
+		const STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-left:20px; background-color:#EFEDEC;';
+		const STYLE_TITLE_FOR_EXCEL_CONTENT_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-right:20px; text-align:right; background-color:#EFEDEC; padding-left:20px;';
+		const STYLE_SUBSECTION_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-left:20px; background-color:#256FBF; color:#FFFFFF;';
+		const STYLE_SUBSECTION_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-right:20px; text-align:right; background-color:#256FBF; color:#FFFFFF; padding-left:20px;';
+		const STYLE_SUBTITLE_FOR_EXCEL_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; padding-left:20px;';
+		const STYLE_SUBTITLE_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-align:right; padding-right:20px; padding-left:20px;';
+		const STYLE_CAAP_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; padding-left:20px; background-color:#FBFF9E;';
+		const STYLE_CAAP_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-align:right; padding-right:20px; padding-left:20px; background-color:#FBFF9E;';
+		const STYLE_NORMAL_FOR_EXCEL_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-left:40px;';
+		const STYLE_NORMAL_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; text-align:right; padding-right:20px; padding-left:20px;';
+		
+		const TABLE_ROW = [
+			{ 'displayName': 'Gross Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'SalesValue', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Early Payment Discount', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A01', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Free Goods', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A02', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Free Goods (Sales Bulk Purchase)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A03', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'On Invoice Discount', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A04', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Annual Rebate', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A05', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Sales Incentives to Outlet Staff', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A06', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Volume Rebates / Incentives', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A07', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Volume Rebates / Incentives (All Products)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A08', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Volume Rebates / Incentives (Fixed)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A09', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Annual Rebate (Fixed)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A17', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Exclusivity Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A10', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			//{ 'displayName': 'Free Goods STK4', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A11', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Incentive Trip', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A12', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Unknown', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A13', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Listing Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A14', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Pouring Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A15', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Other Sales Reduction', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A16', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Display Rental', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B01', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Total Investment before Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentBeforeNetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'NetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			//{ 'displayName': 'Costs', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'Cost', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Contribution Margin (CM)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'CM', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Event Promotion', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B02', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Free Goods Non-Sales (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B04', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Trade Support (Others)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B05', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Other Fixed Investments', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B06', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Promoter Cost', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B07', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Trade Support (Free Goods Non-Sales)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B03', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Decoration Fee (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B08', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Event Promotion (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B09', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Event Promotion (Community Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B10', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Outdoor Advertising (Community Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B11', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Other Trade Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B14', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Other Media Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B12', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Other Consumer A&P Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B13', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Total Investment after Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentAfterNetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Contribution After A&P (CAAP)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'CAAP', 'dataStyle': STYLE_CAAP_DATA, 'headerStyle': STYLE_CAAP_HEADER, 'appendData': '' },
+			{ 'displayName': 'Total Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Total Investment % of Sales Values', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentPercentOfSalesValues', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+			{ 'displayName': 'ROI % (CAAP / Total Investment)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'ROIPercent', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+			{ 'displayName': 'Variable Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'VariableInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+			{ 'displayName': 'Fixed Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'FixedInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+
+		]
+
+        /*****************
+        Vertical Datatable Field Config
+        *****************/
+        //Header
+        const TABLE_HEADER                   = {"title"           : "PnL Report",
+                                                "data"            : ["sectionName"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_DATA
+                                               };
+        
+        const TABLE_HEADER_PAF               = {"title"           : "PAF",
+                                                "data"            : ["nameOfPAF"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_START             = {"title"           : "Start Date",
+                                                "data"            : ["startDateToDisplay"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_END               = {"title"           : "End Date",
+                                                "data"            : ["endDateToDisplay"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_NOOFMONTH         = {"title"           : "No. of Months",
+                                                "data"            : ["numberOfMonthToDisplay"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_CUSTOMER          = {"title"           : "Customer",
+                                                "data"            : ["customerName"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"         : [2],
+												"headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+												"dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_ROW_VOLUME9L             = {"title"           : "Volume (9L Cases)",
+                                                "data"            : ["volumeDisplay"],
+                                                //"numberOfRows"    : 2,
+												"headerStyle"     : STYLE_SUBSECTION_HEADER,
+												"dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        
+        const TABLE_ROW_FINANCIAL            = {"title"           : "Financials ('000 HKD)",
+                                                "data"            : ["financeDisplay"],
+                                                //"numberOfRows"    : 2,
+												"headerStyle"     : STYLE_SUBSECTION_HEADER,
+												"dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        
+        const TABLE_ROW_NNPper9L             = {"title"           : "NNP per 9L",
+                                                "data"            : ["nnpDisplay"],
+                                                //"numberOfRows"    : 2,
+												"headerStyle"     : STYLE_SUBSECTION_HEADER,
+												"dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        
+        const TABLE_ROW_BLANK                = {"title"           : " ",
+                                                "subtitle"        : [" "],
+                                                //"numberOfRows"    : 2,
+												"headerStyle"     : STYLE_NORMAL_FOR_EXCEL_HEADER,
+												"dataStyle"       : STYLE_NORMAL_FOR_EXCEL_DATA
+                                               };
+        
+        var baseContractId;
+        var selectedContractIdList = [];
+		var toPDF = false;
+        
+        //Base Contract Object For Calculate the diff
+        var baseContract;
+        
+        /****************
+        Define Page Standard Function
+        ****************/                          
+        $(document).ready(
+        function() {
+        	//$('#contractComparisonResultDialog').hide();
+			/*
+        	var showComparison = {!showComparison};
+            if(showComparison){
+                compareContractComplete(true, '{!JSENCODE(contractComparisonResultWrapperListJson)}')
+                return;
+            }
+            if('{!JSENCODE(contractComparisonResultWrapperListJson)}' != 'null') {
+                $("body").hide();
+				toPDF = true;
+                compareContractComplete(false, '{!JSENCODE(contractComparisonResultWrapperListJson)}');
+            	redirectPDF($('#contractComparisonResultDialog').html());
+            } else {
+        		//setContractTable('{!JSENCODE(contractListJson)}');
+				setDatepicker();
+				setMultiSelect();
+				$("#searchContractButton").trigger("click");
+        		setContractSelectionTable();
+            }*/
+			setContractComparisonResultTable('{!JSENCODE(subBrandSectionMapJson)}', '{!JSENCODE(contractComparisonResultWrapperListJson)}', '{!JSENCODE(map_type_isDisplayRow_Json)}');
+			//compareContractFromVF();
+        }
+       );
+
+        //Set Contract Comparsion Result Table
+        function setContractComparisonResultTable(subBrandSectionMapJson, contractComparisonResultWrapperListJson, map_type_isDisplayRow_Json) {
+            var contractComparisonResultWrapperList = jQuery.parseJSON(contractComparisonResultWrapperListJson);
+			var subBrandSectionMap = jQuery.parseJSON(subBrandSectionMapJson);
+			var map_type_isDisplayRow = jQuery.parseJSON(map_type_isDisplayRow_Json);
+            var showComparison = {!showComparison};
+			
+            
+            //Find out the base contract
+            for(var i = 0 ; i < contractComparisonResultWrapperList.length ; i++) {
+            	if(contractComparisonResultWrapperList[i].isBaseContract) baseContract = contractComparisonResultWrapperList[i];
+            }
+			
+			var list_columns9L = buildSubBrandColumns(subBrandSectionMap, "9L", map_type_isDisplayRow["Volume9L"]);
+
+            //Set the Contract Comparsion Result Table Config
+			var verticalDataTableProperties = {};
+			verticalDataTableProperties["data"] = contractComparisonResultWrapperList;
+			console.log(contractComparisonResultWrapperList);
+           
+            //Set column
+            var column = [];
+			column.push(TABLE_HEADER);
+			column.push(TABLE_HEADER_PAF);
+			column.push(TABLE_HEADER_CUSTOMER);
+			column.push(TABLE_HEADER_START);
+			column.push(TABLE_HEADER_END);
+			column.push(TABLE_HEADER_NOOFMONTH);
+			column.push(TABLE_ROW_BLANK);
+			column.push(TABLE_ROW_VOLUME9L);
+			column = column.concat(list_columns9L);
+			column.push(buildColumnByBrand9L('Total', 'total', "dataTableItemHeaderWithBold", STYLE_SUBTITLE_FOR_EXCEL_HEADER, STYLE_SUBTITLE_FOR_EXCEL_DATA));
+			column.push(TABLE_ROW_BLANK);
+			column.push(TABLE_ROW_FINANCIAL);
+			$.each(TABLE_ROW, function(index, value){
+				if(map_type_isDisplayRow["Financial"][value.data]){
+					column.push(buildColumnType(value.displayName, value.data, value.headerStyleClass, value.headerStyle, value.dataStyle, value.appendData));
+				}
+			})
+			column.push(TABLE_ROW_BLANK);
+			column.push(TABLE_ROW_NNPper9L);
+			var list_columnsNNP = buildSubBrandColumns(subBrandSectionMap, "NNP", map_type_isDisplayRow["NNPper9L"]);
+			column = column.concat(list_columnsNNP);
+            
+            verticalDataTableProperties["columns"] = column;
+            
+            $("#contractComparisonResultTable").verticalDatatTable(verticalDataTableProperties);
+        }
+		
+		function buildSubBrandColumns(subBrandSectionMap, type, map_isDisplay){
+			var list_columns = [];
+			
+			$.each(subBrandSectionMap, function(index, value){
+				var thisBrand = value;
+				var displayName = thisBrand.displayName;
+				var isDisplayNNP = thisBrand.displayNNP;
+				
+				if(type == "NNP" && !isDisplayNNP) return true;
+				
+				if(map_isDisplay[displayName]){
+					list_columns.push(buildColumnByBrand(type, displayName, displayName, "dataTableItemHeaderWithBold", STYLE_SUBTITLE_FOR_EXCEL_HEADER, STYLE_SUBTITLE_FOR_EXCEL_DATA));
+				}
+				if(thisBrand.hasOthers){
+					$.each(thisBrand.subSectionMap, function(indexSub, valueSub){
+						var thisSubBrand = valueSub;
+						var displayNameSub = thisSubBrand.displayName;
+						if(map_isDisplay[displayNameSub]){
+							list_columns.push(buildColumnByBrand(type, displayNameSub, displayNameSub, "dataTableItemHeader", STYLE_NORMAL_FOR_EXCEL_HEADER, STYLE_NORMAL_FOR_EXCEL_DATA));
+						}
+					})
+					if(map_isDisplay[displayName+"_others"]){
+						list_columns.push(buildColumnByBrand(type, "o/w Others", displayName+"_others", "dataTableItemHeader", STYLE_NORMAL_FOR_EXCEL_HEADER, STYLE_NORMAL_FOR_EXCEL_DATA));
+					}
+				}
+			})
+			if(type == "9L" && map_isDisplay["Others"]) {
+				list_columns.push(buildColumnByBrand(type, 'Other Brands', 'Others', "dataTableItemHeaderWithBold", STYLE_SUBTITLE_FOR_EXCEL_HEADER, STYLE_SUBTITLE_FOR_EXCEL_DATA));
+			}
+			return list_columns;
+		}
+		
+		function buildColumnByBrand(type, a, b, c, d, e){
+			switch(type){
+				case "9L": return buildColumnByBrand9L(a, b, c, d, e); break;
+				case "NNP": return buildColumnByBrandNNP(a, b, c, d, e); break;
+			}
+		}
+		
+		function buildColumnByBrand9L(displayName, storageName, headerStyleClass, headerStyle, dataStyle){
+			return {"title"            : displayName,
+					"headerStyleClass" : headerStyleClass, 
+					"headerStyle"      : headerStyle, 
+					"dataStyleClass"   : "numberTableColumn", 
+					"dataStyle"        : dataStyle, 
+					"data"             : ["Volume9L"],
+					"defaultContent"   : ["0"],
+					"render"           : [function(data, type, full) {
+											if(full.map_type_dW == null){
+												return "";
+											}
+											var Volume9L = full.map_type_dW[storageName] == undefined ? 0 : full.map_type_dW[storageName].Volume9L;
+											if(!full.isCompare) {
+												//return Volume9L.toLocaleString('en-US', {minimumFractionDigits: 1});
+												var diff = '<span> ';
+												if(Volume9L < 0){
+													diff += ' (' + Math.abs(Volume9L).toLocaleString('en-US', {minimumFractionDigits: 1}) + ')';
+												} else {
+													diff += ' ' + Math.abs(Volume9L).toLocaleString('en-US', {minimumFractionDigits: 1}) + '';
+												}
+												diff += '</span>';
+												return diff;
+											} else {
+												if(full.map_type_dW[storageName].Volume9L == null) return "";
+												var diff = '<span style=\'color:';
+												if(Volume9L < 0){
+													diff += 'red\'> (' + Math.abs(Volume9L).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%)';
+												} else {
+													diff += 'green\'> ' + Math.abs(Volume9L).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%';
+												}
+												diff += '</span>';
+												return diff;
+											}
+											
+										  }/*,
+										  function(data, type, full) {
+											if(full.isBaseContract) {
+												return "";
+											}
+											var dataValue = full.map_type_dW[storageName] == undefined ? 0 : full.map_type_dW[storageName].Volume9L;
+											var dataValueBase = baseContract.map_type_dW[storageName] == undefined ? 0 : baseContract.map_type_dW[storageName].Volume9L;
+											var diff = '<div class=\'';
+											if(dataValueBase > dataValue) {
+												diff += 'textRed\'> -' + (dataValueBase - dataValue).toLocaleString('en-US', {minimumFractionDigits: 2}) + '';
+											} else {
+												diff += 'textGreen\'> +' + (dataValue - dataValueBase).toLocaleString('en-US', {minimumFractionDigits: 2}) + '';
+											}
+											diff += '</div>';
+											return diff;
+										  }*/
+										 ],
+					//"numberOfRows"     : 2
+				   };
+		}
+		
+		function buildColumnByBrandNNP(displayName, storageName, headerStyleClass, headerStyle, dataStyle){
+			return {"title"            : displayName,
+					"headerStyleClass" : headerStyleClass, 
+					"headerStyle"      : headerStyle, 
+					"dataStyleClass"   : "numberTableColumn", 
+					"dataStyle"        : dataStyle, 
+					"data"             : ["NNPper9L"],
+					"defaultContent"   : ["0"],
+					"render"           : [function(data, type, full) {
+											if(full.map_type_dW == null){
+												return "";
+											}
+											var NNPper9L = full.map_type_dW[storageName] == undefined ? 0 : full.map_type_dW[storageName].NNPper9L;
+											if(!full.isCompare) {
+												//return NNPper9L.toLocaleString('en-US', {minimumFractionDigits: 2});
+												var diff = '<span> ';
+												if(NNPper9L < 0){
+													diff += ' (' + Math.abs(NNPper9L).toLocaleString('en-US', {minimumFractionDigits: 2}) + ')';
+												} else {
+													diff += ' ' + Math.abs(NNPper9L).toLocaleString('en-US', {minimumFractionDigits: 2}) + '';
+												}
+												diff += '</span>';
+												return diff;
+											} else {
+												if(full.map_type_dW[storageName].NNPper9L == null) return "";
+												var diff = '<span style=\'color:';
+												if(NNPper9L < 0){
+													diff += 'red\'> (' + Math.abs(NNPper9L).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%)';
+												} else {
+													diff += 'green\'> ' + Math.abs(NNPper9L).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%';
+												}
+												diff += '</span>';
+												return diff;
+											}
+										  }/*,
+										  function(data, type, full) {
+											if(full.isBaseContract) {
+												return "";
+											}
+											var dataValue = full.map_type_dW[storageName] == undefined ? 0 : full.map_type_dW[storageName].NNPper9L;
+											var dataValueBase = baseContract.map_type_dW[storageName] == undefined ? 0 : baseContract.map_type_dW[storageName].NNPper9L;
+											var diff = '<div class=\'';
+											if(dataValueBase > dataValue) {
+												diff += 'textRed\'> -' + (dataValueBase - dataValue).toLocaleString('en-US', {minimumFractionDigits: 2}) + '';
+											} else {
+												diff += 'textGreen\'> +' + (dataValue - dataValueBase).toLocaleString('en-US', {minimumFractionDigits: 2}) + '';
+											}
+											diff += '</div>';
+											return diff;
+										  }*/
+										 ],
+					//"numberOfRows"     : 2
+				   };
+		}
+		
+		function buildColumnType(displayName, storageName, headerStyleClass, headerStyle, dataStyle, appendData){
+			return {"title"            : displayName,
+					"headerStyleClass" : headerStyleClass,
+					"headerStyle"      : headerStyle, 
+					"dataStyleClass"   : "numberTableColumn", 
+					"dataStyle"        : dataStyle, 
+					"data"             : [storageName],
+					"defaultContent"   : ["0"],
+					"render"           : [function(data, type, full) {
+											if(full.map_type_dW == null){
+												return "";
+											}
+											var dataValue = full.map_type_dW.total == undefined ? 0 : full.map_type_dW.total[storageName];
+											if(!full.isCompare) {
+												//return dataValue.toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData;
+												var diff = '<span> ';
+												if(dataValue < 0){
+													diff += ' (' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 1}) + appendData + ')';
+												} else {
+													diff += ' ' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 1}) + appendData + '';
+												}
+												diff += '</span>';
+												return diff;
+											} else {
+												if(full.map_type_dW.total[storageName] == null) return "";
+												var diff = '<span style=\'color:';
+												if(dataValue < 0){
+													diff += 'red\'> (' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%)';
+												} else {
+													diff += 'green\'> ' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + '%';
+												}
+												diff += '</span>';
+												return diff;
+											}
+										  }/*,
+										  function(data, type, full) {
+											if(full.isBaseContract) {
+												return "";
+											}
+											var dataValue = full.map_type_dW.total == undefined ? 0 : full.map_type_dW.total[storageName];
+											var dataValueBase = baseContract.map_type_dW.total == undefined ? 0 : baseContract.map_type_dW.total[storageName];
+											var diff = '<div class=\'';
+											if(dataValueBase > dataValue) {
+												diff += 'textRed\'> -' + (dataValueBase - dataValue).toLocaleString('en-US', {minimumFractionDigits: 2}) + '' + appendData;
+											} else {
+												diff += 'textGreen\'> +' + (dataValue - dataValueBase).toLocaleString('en-US', {minimumFractionDigits: 2}) + '' + appendData;
+											}
+											diff += '</div>';
+											return diff;
+										  }*/
+										 ],
+					//"numberOfRows"     : 2
+				   };
+		}
+		
+
+        /****************
+       Compare Contract Handler
+        ****************/
+        function compareContractComplete(contractComparisonResultWrapperListJson, subBrandSectionMapJson) {
+			/*
+			setContractComparisonResultTable(isShowChart, contractComparisonResultWrapperListJson);
+
+            //Hide loading gif and select contract dialog
+            $('body').removeClass('savingRecord');
+            $('#preparationDialog').hide();
+
+            //Show contract comparison result dialog
+            $('#contractComparisonResultDialog').show();
+			*/
+			setContractComparisonResultTable(subBrandSectionMapJson, contractComparisonResultWrapperListJson);
+        }
+
+    	function preparePrintPDF(){
+            $('body').addClass('savingRecord');
+            var resultHtml = $('#contractComparisonResultTableDiv').html();
+            printPDFVF(resultHtml);
+        }
+    	function preparePrintExcel(){
+            $('body').addClass('savingRecord');
+            var resultHtml = $('#contractComparisonResultTableDiv').html();
+            printExcelVF(resultHtml);
+        }
+		function redirectPDF(fileId){
+            $('body').removeClass('savingRecord');
+			window.open('/apex/ASI_CRM_HK_PAFPnLReport_PagePDF?fileId='+fileId, '_target');
+		}
+		function redirectExcel(fileId){
+            $('body').removeClass('savingRecord');
+			window.open('/apex/ASI_CRM_HK_PAFPnLReport_PageExcel?fileId='+fileId, '_target');
+		}
+		function redirectToActual(){
+			window.open('/apex/ASI_CRM_HK_PAFPnLReport_Page?id={!pafId}&actual=True', '_target');
+		}
+    
+    </script>
+
+    <body>
+		<apex:form >
+            <apex:actionFunction name="printPDFVF" action="{!printPDF}"  onComplete="redirectPDF('{!returnFileId}');">
+            	<apex:param name="resultHTML" value=""/>
+            </apex:actionFunction>
+            <apex:actionFunction name="printExcelVF" action="{!printPDF}"  onComplete="redirectExcel('{!returnFileId}');">
+            	<apex:param name="resultHTML" value=""/>
+            </apex:actionFunction>
+        </apex:form>
+		<!-- Call init attribute to init the page -->
+			
+		<div class="fullScreenLoading"></div>
+		<div class="saveErrorPanel alert alert-danger" style="display: none;">
+			<strong>Error</strong> 
+			<br />
+			<p class="errorMessage"></p>
+		</div>
+
+        <input type="button" class="btn" value="Print PDF" onclick="preparePrintPDF();"/>
+        <input type="button" class="btn" value="Download Excel" onclick="preparePrintExcel();"/>
+        <input type="button" class="btn" value="Actual Breakdown by Customer" onclick="redirectToActual();" style="{! if(!isActualBreakdown,'','display:none') }"/>
+		<br/>
+		<br/>
+        
+        <div id="contractComparisonResultTableDiv">
+        <!-- Dialog for showing the contract record comparison result -->
+        <table id="contractComparisonResultTable" width="100%" />
+            
+        </div>
+
+    </body>
+  
+</apex:page>

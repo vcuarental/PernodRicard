@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_CRM_JP_Invoice_Call_Rejected_Notification_Email_Alert</fullName>
+        <description>CRM JP Invoice Call Rejected Notification Email Alert</description>
+        <protected>false</protected>
+        <recipients>
+            <type>owner</type>
+        </recipients>
+        <senderAddress>itservicedesk@pernod-ricard.com</senderAddress>
+        <senderType>OrgWideEmailAddress</senderType>
+        <template>ASI_CRM_JP_Email_Templates/ASI_CRM_JP_Invoice_Call_Rejected_Notification_Email_Template</template>
+    </alerts>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_Invoice_Date</fullName>
+        <field>ASI_CRM_Invoice_Date__c</field>
+        <formula>IF( ISBLANK( ASI_CRM_Invoice_Date__c ) , ASI_CRM_Visit_Date_Formula__c, ASI_CRM_Invoice_Date__c )</formula>
+        <name>Set Call Detail Invoice Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_Invoice_No</fullName>
+        <field>ASI_CRM_Invoice_No__c</field>
+        <formula>IF( ISBLANK( ASI_CRM_Invoice_No__c ) ,  Name , ASI_CRM_Invoice_No__c)</formula>
+        <name>Set Call Detail Invoice No.</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_Invoice_Read</fullName>
+        <field>RecordTypeId</field>
+        <lookupValue>ASI_CRM_JP_Call_Result_Detail_Invoice</lookupValue>
+        <lookupValueType>RecordType</lookupValueType>
+        <name>Set Call Detail Invoice Read-Only</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>LookupValue</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_Payment_Date</fullName>
+        <field>ASI_CRM_Payment_Date__c</field>
+        <formula>IF( ISBLANK( ASI_CRM_Payment_Date__c ) , 
+IF(Month(DATEVALUE(CreatedDate))== 11 || Month(DATEVALUE(CreatedDate))== 12,
+DATE( YEAR( DATEVALUE(CreatedDate) ) + 1 , Month(DATEVALUE(CreatedDate)) - 10 ,1) -1
+,
+DATE( YEAR( DATEVALUE(CreatedDate) ) , Month(DATEVALUE(CreatedDate)) + 2 ,1) -1)
+, 
+ASI_CRM_Payment_Date__c )</formula>
+        <name>Set Call Detail Invoice Payment Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_ReadOnly</fullName>
+        <field>RecordTypeId</field>
+        <lookupValue>ASI_CRM_JP_Call_Result_Detail_Locked</lookupValue>
+        <lookupValueType>RecordType</lookupValueType>
+        <name>Set Call Detail Read-Only</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>LookupValue</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Detail_Result</fullName>
+        <field>RecordTypeId</field>
+        <lookupValue>ASI_CRM_JP_Call_Result_Detail</lookupValue>
+        <lookupValueType>RecordType</lookupValueType>
+        <name>Set Call Detail Result</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>LookupValue</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Plan_Repeat</fullName>
+        <field>RecordTypeId</field>
+        <lookupValue>ASI_CRM_JP_Call_Plan_Detail_Repeat</lookupValue>
+        <lookupValueType>RecordType</lookupValueType>
+        <name>Set Call Plan Repeat</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>LookupValue</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Set_Call_Result_Detail_Repeat</fullName>
+        <field>RecordTypeId</field>
+        <lookupValue>ASI_CRM_JP_Call_Result_Detail_Repeat</lookupValue>
+        <lookupValueType>RecordType</lookupValueType>
+        <name>Set Call Result Detail Repeat</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>LookupValue</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Update_Dohan_Flag_False</fullName>
+        <field>ASI_CRM_Dohan__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI CRM JP Update Dohan Flag False</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Update_Dohan_Flag_True</fullName>
+        <field>ASI_CRM_Dohan__c</field>
+        <literalValue>1</literalValue>
+        <name>ASI CRM JP Update Dohan Flag True</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Update_Sys_Ref_Period_From</fullName>
+        <field>ASI_CRM_Sys_Ref_Period_From__c</field>
+        <formula>Datevalue(ASI_CRM_Visit_Date_From__c)</formula>
+        <name>Update Sys Ref Period From</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+        <targetObject>ASI_CRM_Call_Plan__c</targetObject>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_JP_Update_Sys_Ref_Period_To</fullName>
+        <field>ASI_CRM_Sys_Ref_Period_To__c</field>
+        <formula>Datevalue(ASI_CRM_Visit_Date_From__c)</formula>
+        <name>Update Sys Ref Period To</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+        <targetObject>ASI_CRM_Call_Plan__c</targetObject>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_Update_Status_as_Planned</fullName>
+        <field>ASI_CRM_Status__c</field>
+        <literalValue>Planned</literalValue>
+        <name>Update Status as Planned</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>Set_Call_Detail_Invoice_G_L_Date</fullName>
+        <field>ASI_CRM_G_L_Date__c</field>
+        <formula>Today()</formula>
+        <name>Set Call Detail Invoice G/L Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_CRM_JP_AutoCheck_Dohan_In_Achieved_Status</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Update_Dohan_Flag_True</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>startsWith</operation>
+            <value>JP Call</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Activity_Purpose__c</field>
+            <operation>equals</operation>
+            <value>Mama-san</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Achieved</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Free_Call_Detail_Repeat</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Result_Detail_Repeat</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_JP_Update_Dohan_Flag_False</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <booleanFilter>(1 OR (2 AND 3)) AND 4</booleanFilter>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Plan Detail Repeat</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Result Detail Locked,JP Call Result Detail Invoice</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Pattern__c</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Planned</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Invoice_Achieved</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Invoice_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Invoice_No</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Invoice_Read</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Payment_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Result Detail,JP Call Result Detail Repeat</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Achieved</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Payment_Option__c</field>
+            <operation>equals</operation>
+            <value>Invoice</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Invoice_Call_GL_Date_Today</fullName>
+        <actions>
+            <name>Set_Call_Detail_Invoice_G_L_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_G_L_Date__c</field>
+            <operation>equals</operation>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Final</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Payment_Option__c</field>
+            <operation>equals</operation>
+            <value>Invoice</value>
+        </criteriaItems>
+        <description>Update G/L Date today if Accounting does not specify it.</description>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Lock_Call_Detail</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_ReadOnly</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Result Detail,JP Call Result Detail Repeat</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Achieved</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Payment_Option__c</field>
+            <operation>notEqual</operation>
+            <value>Invoice</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Reject_Invoice_Call_By_Accounting</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Invoice_Call_Rejected_Notification_Email_Alert</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <booleanFilter>1 AND 2 AND 3</booleanFilter>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Result Detail Invoice</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Planned</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>User.UserRoleId</field>
+            <operation>startsWith</operation>
+            <value>JP Accounting</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Update_Adhoc_Call_as_Planned</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Result</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_Update_Status_as_Planned</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Plan Detail,JP Call Plan Detail Repeat</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Ad_hoc__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Update_Plan_Repeat_RecordType</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Plan_Repeat</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Plan Detail Repeat Settings</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Repeat_End_Date__c</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Update_Sys_Ref_Period_From_Date</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Update_Sys_Ref_Period_From</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <formula>CONTAINS(RecordType.DeveloperName,&apos;ASI_CRM_JP_Call_Plan_Detail&apos;) &amp;&amp; (ISBLANK(ASI_CRM_Call_Plan__r.ASI_CRM_Sys_Ref_Period_From__c)  || ASI_CRM_Call_Plan__r.ASI_CRM_Sys_Ref_Period_From__c  &gt; DATEVALUE(ASI_CRM_Visit_Date_From__c))</formula>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Update_Sys_Ref_Period_To_Date</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Update_Sys_Ref_Period_To</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <formula>CONTAINS(RecordType.DeveloperName,&apos;ASI_CRM_JP_Call_Plan_Detail&apos;) &amp;&amp; (ISBLANK(ASI_CRM_Call_Plan__r.ASI_CRM_Sys_Ref_Period_To__c)  || ASI_CRM_Call_Plan__r.ASI_CRM_Sys_Ref_Period_To__c  &lt; DATEVALUE(ASI_CRM_Visit_Date_From__c))</formula>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CRM_JP_Update_To_Call_Result</fullName>
+        <actions>
+            <name>ASI_CRM_JP_Set_Call_Detail_Result</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <actions>
+            <name>ASI_CRM_JP_Update_Dohan_Flag_False</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <booleanFilter>(1 OR (2 AND 3)) AND 4</booleanFilter>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Plan Detail</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>JP Call Result Detail Locked,JP Call Result Detail Invoice</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Pattern__c</field>
+            <operation>equals</operation>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Call_Detail__c.ASI_CRM_Status__c</field>
+            <operation>equals</operation>
+            <value>Planned</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

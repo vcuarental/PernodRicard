@@ -1,0 +1,985 @@
+<apex:component controller="ASI_CRM_CN_OffContractGenerationCtrl" access="global" >
+    <apex:attribute name="headerId" type="String" description="The contract id for contract agreement" assignTo="{!contractId}"/>
+    <apex:attribute name="allowEdit" type="Boolean" description="Allow edit the content of contract agreement" assignTo="{!isEditable}"/>
+    <apex:attribute name="ForHighLight" type="Boolean" description="For Hight Light of contract agreement" assignTo="{!HighLight}"/>
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <head>
+        <apex:stylesheet value="/resource/ASI_CRM_CN_contract_Printout" />
+        <!-- <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/contract-printout.css')}" /> -->
+        <style>
+            td {
+                vertical-align: top;
+                page-break-inside: avoid;
+            }
+
+            @page {
+                size: A4;
+            }
+
+            @page {
+                @bottom-right {
+                    content: element(footer);
+                }
+            }
+
+            div.footer {
+                display: block;
+                padding: 5px;
+                position: running(footer);
+            }
+
+            .pagenumber:before {
+                content: counter(page);
+            }
+
+            .pagecount:before {
+                content: counter(pages);
+            }
+
+            .savingRecord .fullScreenLoading {
+                display: block;
+            }
+
+            .fullScreenLoading {
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: 100%;
+                background: rgba(255, 255, 255, .8) url('../images/loading.gif') 50% 50% no-repeat;
+            }
+            input[type="button"].expandButton {
+                color: #fff; 
+                background-color: #f0ad4e; 
+                border-color: #eea236; 
+                display: inline-block; 
+                padding: 2px 4px; 
+                margin-bottom: 0; 
+                font-size: 14px; 
+                font-weight: 400; 
+                line-height: 1.42857143; 
+                text-align: center; 
+                white-space: nowrap;
+                user-select: none; 
+                background-image: none; 
+                border: 1px solid transparent; 
+                border-radius: 4px;
+            }
+        </style>
+
+        <script>
+            'use strict';
+
+            window.onload = onWindowLoad;
+
+            function onWindowLoad() {
+                $('input[type=text]').blur();
+
+                const inputField = $('input[type=text]');
+
+                inputField.blur(); 
+                inputField.on('keydown', onKeyDown);
+
+                function onKeyDown(event) {
+                    if (event.which == 13) {
+                        event.preventDefault();
+                    }
+                }
+            }
+
+            function Change3PartyFun() {
+                AppService.changeTo3Party();
+            }
+
+            function Change2PartyFun() {
+                AppService.changeTo2Party();
+            }
+
+            function PrintOut() {
+                AppService.print();
+            }
+
+            function ChangingDisplay(that) {
+                AppService.changeDisplay(that);
+            }
+
+            const AppUtil = (function () {
+
+                const loadingDivClassName = '.fullScreenLoading';
+                
+                let buttonStyles = '';
+                buttonStyles += 'color: #333; ';
+                buttonStyles += 'background-color: #fff; ';
+                buttonStyles += 'border-color: #ccc; ';
+                buttonStyles += 'display: inline-block; ';
+                buttonStyles += 'padding: 3px 6px; ';
+                buttonStyles += 'margin-bottom: 0; ';
+                buttonStyles += 'font-size: 14px; ';
+                buttonStyles += 'font-weight: 400; ';
+                buttonStyles += 'line-height: 1.42857143; ';
+                buttonStyles += 'text-align: center; ';
+                buttonStyles += 'white-space: nowrap; ';
+                buttonStyles += 'vertical-align: middle; ';
+                buttonStyles += '-ms-touch-action: manipulation; ';
+                buttonStyles += 'touch-action: manipulation; ';
+                buttonStyles += 'cursor: pointer; ';
+                buttonStyles += '-webkit-user-select: none; ';
+                buttonStyles += '-moz-user-select: none; ';
+                buttonStyles += '-ms-user-select: none; ';
+                buttonStyles += 'user-select: none; ';
+                buttonStyles += 'background-image: none; ';
+                buttonStyles += 'border: 1px solid lightgrey; ';
+                buttonStyles += 'border-radius: 4px;';
+
+                function getUrlParameters(name, url) {
+
+                    if (!url) url = location.href;
+
+                    const paramName = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+                    const regexS = "[\\?&]" + paramName + "=([^&#]*)";
+                    const regex = new RegExp(regexS);
+                    const results = regex.exec(url);
+
+                    return results == null ? null : results[1];
+                }
+
+                function getParameterString(parameters) {
+                    if (!parameters) return '';
+                    console.log('----'+Object.keys(parameters).map(parameterKey => {return parameterKey + '=' + getStringValue(parameters[parameterKey]);}).join('&'));
+                    return Object.keys(parameters).map(parameterKey => {
+                        return parameterKey + '=' + getStringValue(parameters[parameterKey]);
+                    }).join('&');
+                }
+
+                function showLoading() {
+                    $(loadingDivClassName).show();
+                }
+
+                function hideLoading() {
+                    $(loadingDivClassName).hide();
+                }
+
+                function showThreePartyButton() {
+                    document.getElementById('Change3Party').style.display = '';
+                    document.getElementById('Change3Party').setAttribute('style', buttonStyles);
+                }
+
+                function showTwoPartyButton() {
+                    document.getElementById('Change2Party').style.display = '';
+                    document.getElementById("Change2Party").setAttribute('style', buttonStyles);
+                }
+
+                function redirectTo(url) {
+                    if (!url) return;
+
+                    window.location.replace(url);
+                }
+
+                function openWindow(url) {
+                    if (!url) return;
+
+                    window.open(url);
+                }
+
+                //Private functions
+                function getStringValue(value) {
+                    if (value === undefined || value === null) return '';
+                    return value;
+                }
+
+                return {
+                    getUrlParameters: getUrlParameters,
+                    getParameterString: getParameterString,
+                    showLoading: showLoading,
+                    hideLoading: hideLoading,
+                    showThreePartyButton: showThreePartyButton,
+                    showTwoPartyButton: showTwoPartyButton,
+                    redirectTo: redirectTo,
+                    openWindow: openWindow
+                }
+            })();
+
+            const DataService = (function () {
+
+                const contractId = '{! contractId }';
+                const isTwoParty = ('{! ContractSelected.ASI_CRM_CN_Two_Party_Contract_Template__c }' === 'true');
+                const twoPartyExists = ('{! ExistTwoParty }' === 'true');
+                const regionName = '{! ContractSelected.ASI_CRM_CN_Outlet_WS__r.ASI_CRM_CN_Region__c }';
+
+                const wholeSellers = [];
+
+                const headerSectionMap = JSON.parse(`{! JSENCODE(headerSectionMapString) }`);
+                const BodySectionMap = JSON.parse(`{! JSENCODE(BodySectionMapString) }`);
+                const BodySignatureMap = JSON.parse(`{! JSENCODE(BodySignatureMapString) }`);
+                const AppendixSectionMap = JSON.parse(`{! JSENCODE(AppendixSectionMapString) }`);
+                const AppendixSignatureMap = JSON.parse(`{! JSENCODE(AppendixSignatureMapString) }`);
+
+                function loadWholeSellers() {
+                    const selectFields = `Id, Name,ASI_CRM_CN_Legal_Name__c, ASI_CRM_CN_Chi_Name__c, ASI_CRM_Account__c, ASI_CRM_Account__r.Id`;
+                    const whereCriteria = `WHERE (RecordType.DeveloperName = 'ASI_CRM_CN_WS' or RecordType.DeveloperName = 'ASI_CRM_CN_Wholesales_CN') and ASI_CRM_CN_Region__c='${RegionName}'`;
+
+                    // var whereClause = ' WHERE (RecordType.DeveloperName = \'ASI_CRM_CN_WS\'  or RecordType.DeveloperName = \'ASI_CRM_CN_Wholesales_CN\')  and  ASI_CRM_CN_Region__c=\'' + RegionName + '\'';
+                    // var statement = 'Id,Name,ASI_CRM_CN_Legal_Name__c, ASI_CRM_CN_Chi_Name__c,ASI_CRM_Account__c, ASI_CRM_Account__r.id ';
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{! $RemoteAction.ASI_CRM_CN_OffContractGenerationCtrl.findList }', 'ASI_CRM_AccountsAdditionalField__c',
+                        selectFields, whereCriteria, onWholeSellersLoad, { escape: true }
+                    );
+                }
+
+                //Private functions
+
+                function onWholeSellersLoad(result, event) {
+                    console.log('onWholeSellersLoad:::', result);
+
+                    if (event.status && result) {
+                        const size = result.length;
+
+                        wholeSellers.length = 0;
+
+                        for (let i = 0; i < size; i++) {
+                            let wholeSeller = {};
+
+                            if (result[i]['ASI_CRM_CN_Legal_Name__c']) {
+                                wholeSeller.LegalName = htmlEncode(result[i]['ASI_CRM_CN_Legal_Name__c']);
+                            } else {
+                                wholeSeller.LegalName = htmlEncode(result[i]['ASI_CRM_CN_Chi_Name__c']);
+                            }
+
+                            wholeSeller.label = htmlEncode(result[i]['Name']);
+                            wholeSeller.value = htmlEncode(result[i]['Id']);
+                            wholeSellers.push(wholeSeller);
+                        }
+                    }
+                    // initalizeAutoCompleteComponent();
+                }
+
+                return {
+                    getContractId: () => contractId,
+                    isTwoParty: () => isTwoParty,
+                    twoPartyExists: () => twoPartyExists,
+                    getRegionName: () => regionName,
+                    getWholeSellers: () => wholeSellers,
+                    getHeaderSectionMap: () => headerSectionMap,
+                    getBodySectionMap: () => BodySectionMap,
+                    getBodySignatureMap: () => BodySignatureMap,
+                    getAppendixSectionMap: () => AppendixSectionMap,
+                    getAppendixSignatureMap: () => AppendixSignatureMap,
+                    loadWholeSellers: loadWholeSellers
+                };
+            })();
+
+            const AppService = (function() {
+
+                function changeTo2Party() {
+                    const contract = getNewContract();
+                    const regionName = DataService.getRegionName();
+                    const changeTemplateRemoteActionName = '{! $RemoteAction.ASI_CRM_CN_OffContractGenerationCtrl.ChangeTemplate }';
+
+                    Visualforce.remoting.Manager.invokeAction(
+                        changeTemplateRemoteActionName, contract, regionName, true, onPartyChangeComplete, { buffer: false, escape: true }
+                    );
+                }
+
+                function changeTo3Party() {
+                    const contract = getNewContract();
+                    const regionName = DataService.getRegionName();
+					const changeTemplateRemoteActionName = '{! $RemoteAction.ASI_CRM_CN_OffContractGenerationCtrl.ChangeTemplate }';                    
+	
+                    Visualforce.remoting.Manager.invokeAction(
+                        changeTemplateRemoteActionName, contract, regionName, false, onPartyChangeComplete, { buffer: false, escape: true }
+                    );
+                }
+
+                function onPartyChangeComplete(result, event) {
+                    if (!event.status || !result) return;
+
+                    if (result === 'OK') {
+                        const parameters = { id: DataService.getContractId(), edit: 1 };
+                        const url = '/apex/ASI_CRM_CN_OffContractGenerationPage?' + AppUtil.getParameterString(parameters);
+
+                        AppUtil.redirectTo(url);
+                    }
+                }
+
+                function print() {
+                    const IsTwoParty = DataService.isTwoParty();
+                    const contractId = DataService.getContractId();
+                    let url1;
+
+                    if (IsTwoParty) {
+                        //if 2 parties, combine them
+                        const params = {id: contractId, edit: 0, ForHighLight: 0};
+
+                        url1 = '/apex/ASI_CRM_CN_OffContractGenerationPage?' + AppUtil.getParameterString(params);
+                    } else {
+                        const params1 = {id: contractId, edit: 0, part: 'Body'};
+                        const params2 = {id: contractId, edit: 0, part: 'Appendix'};
+
+                        const url2 = '/apex/ASI_CRM_CN_OffContractGenPartPage?' + AppUtil.getParameterString(params2);
+
+                        AppUtil.openWindow(url2);
+
+                        url1 = '/apex/ASI_CRM_CN_OffContractGenPartPage?' + AppUtil.getParameterString(params1);
+                    }
+                    AppUtil.openWindow(url1);
+                }
+
+                function changeDisplay(element) {
+                    const DivPartId = element.getAttribute('data-id');
+
+                    if (element.value == '-') {
+                        document.getElementById(DivPartId).style.display = "none";
+                        element.value = '+';
+                    } else {
+                        element.value = '-';
+                        document.getElementById(DivPartId).style.display = "";
+                    }
+                }
+
+                function validateRequiredFields() {
+
+                    $('.RequiredField').each(function (index, element) {
+                        if ($(element).val()) return;
+
+                        return '<br/>We found that you have not input some required field. Please input all required field, thank you!<br/>我们发现下面有必填项您还没有填写。';
+                    });
+
+                    return null;
+                }
+
+                //Private functions
+                function getNewContract() {
+                    const contract = new ASI_TH_CRM_Contract__c();
+                    contract.Id = DataService.getContractId();
+                    return contract;
+                }
+
+                return {
+                    changeTo2Party: changeTo2Party,
+                    changeTo3Party: changeTo3Party,
+                    print: print,
+                    changeDisplay, changeDisplay,
+                    validateRequiredFields: validateRequiredFields
+                };
+            })();
+
+            $(document).ready(function () {
+                console.log('App ready');
+                
+                // reBuildMainNumbering();
+            });
+            
+            function reBuildMainNumbering() {
+                let counter = 1;
+                $($('.mainSectionTable')[0])
+                    .find('.mainSectionRow')
+                    .each((i1, mainSectionRow) => {
+                        const mainSectionCells = $(mainSectionRow).find('.mainSectionCell');
+                        const secondColumnContent = $(mainSectionCells[1]).html();
+
+                        if (secondColumnContent.trim().length > 0) {
+                            $(mainSectionCells[0]).html(counter);
+                            counter++;
+                        }
+                        // .find('.mainSectionCell')
+                        // .each((i2, mainSectionCell) => {
+                        //     //console.log($(mainSectionCell));
+                        //     console.log($(mainSectionCell).html());
+                        // });
+                    });
+            }
+
+        </script>
+
+        <script>
+        var currentAction;
+        var contractId;
+        var WholesalerList = [];
+        var SelectedWholesaler = {};
+        var RegionName = '';
+
+        //init for js
+        $(document).ready(function(){
+
+            AppUtil.showLoading();
+
+            RegionName = DataService.getRegionName();
+
+            var currentUrl = location.href;
+            var IsTwoParty = DataService.isTwoParty();
+            var ExistTwoParty = DataService.twoPartyExists();
+
+            console.log('currentUrl:::', currentUrl);
+            console.log('IsTwoParty:::', IsTwoParty);
+            console.log('ExistTwoParty:::', ExistTwoParty);
+
+            if (ExistTwoParty && IsTwoParty) {//Show 3 party button
+                AppUtil.showThreePartyButton();
+            }
+
+            if (ExistTwoParty && !IsTwoParty) {//Show two party button
+                AppUtil.showTwoPartyButton();
+            }
+
+            //********************************Read Only **********************************************
+            if (AppUtil.getUrlParameters('ViewType', currentUrl) == 'Read') {
+                document.getElementById("Savebtn").style.display = "none";
+                document.getElementById("PreviewAsApproverbtn").style.display = "none";
+                document.getElementById("PreviewAsCustomerbtn").style.display = "none";
+                document.getElementById("Printbtn").style.display = "";
+                document.getElementById("Printbtn").setAttribute("style", "color: #333; background-color: #fff; border-color: #ccc; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: 400; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-image: none; border: 1px solid lightgrey; border-radius: 4px; ");
+                document.getElementById('Change2Party').style.display = "none";
+                document.getElementById('Change3Party').style.display = "none";
+            }
+
+            document.getElementById('BodyPart').style.display = "none";
+            document.getElementById('BodySignaturePart').style.display = "none";
+            document.getElementById('BodySignaturePart2').style.display = "none";
+
+            contractId = DataService.getContractId();
+            $(".RequiredField").css({ 'border-left': "3px solid red" });
+            RetrieveWholesaler();
+            // DataService.loadWholeSellers();
+        });
+
+        function SaveProcess(action){
+            document.getElementById('SystemInfo').style.display = 'none';
+            currentAction = action;
+
+            let msg = '';
+            let IsPass = true;
+            let TextList = $('.InputText');
+
+            //Required Field Checking
+            msg = AppService.validateRequiredFields();
+            IsPass = msg === null ? true : false;
+
+            //Getting Amount
+            var InputAmountUpdatedList = [];      // var InputAmountList = $("[class^='InputAmount']");
+            $(".InputAmount").each(function(index, element) { //console.log($(element).attr("data-id"));//console.log($(element).val());
+                if($(element).val()){//console.log( $(element).attr("data-id") +' || '+$(element).val());
+                    var str=$(element).attr("data-id") + '//'+$(element).val();
+                    InputAmountUpdatedList.push(str);
+                }
+            });
+
+
+            //Getting Text Input Field
+            var ModuleRefList=[];
+            var TextUpdatedList=[];
+            var ContractCostList = [];
+
+
+            TextList.each(function(index, element) {//console.log($(element).attr('class'));//console.log($(element).attr('data-value'));// console.log('**********');//Header_partyB
+
+                var InputValue = $(element).val();
+                console.log('$(element):::', $(element));
+                if(!InputValue){
+                    InputValue = ' ';
+                }
+                var str=$(element).attr("data-id") + '//'+InputValue;
+
+                if($(element).attr('class').indexOf("Header_partyB")>-1 || $(element).attr('class').indexOf("EffectiveSupplierCls")>-1 ){
+                    str+= ':'+$(element).attr('data-value')+':'+$(element).attr('legal-name'); // data-value: ID , Final Format ":   Chi Name: ID : Legal Name
+                }
+
+
+                if($(element).attr("FixCost-Line")){
+                    //console.log(InputValue + 'FixCost-Line :  '+ $(element).attr("FixCost-Line"));
+                    ContractCostList.push($(element).attr("FixCost-Line")+'//'+InputValue);
+                }
+
+                console.log("**"+str);
+
+                if(InputValue){
+                    TextUpdatedList.push(str);
+                }
+                if($(element).attr("Module-Id") && InputValue){//console.log($(element).attr("Module-Id"));
+                    //console.log(str);
+                    ModuleRefList.push($(element).attr("Module-Id")+'//'+InputValue);
+                }
+
+            });
+
+            var bodySelectedList = $("[class^='bodySelection']");
+            bodySelectedList.each(function(index, element) {
+                var str = $(element).attr("class").replace("bodySelection ", "");
+                str += "//" + $(element).is(":checked");
+
+                TextUpdatedList.push(str);
+                if($(element).attr("Module-Id") && $(element).is(":checked")){
+                    ModuleRefList.push($(element).attr("Module-Id")+'//'+$(element).next().html());//console.log($(element).attr("Module-Id"));//console.log($(element).parent().html());//console.log($(element).next().html());
+                }
+            });
+
+
+            if($("#PartyB").val()){
+                var str='PartyB1//'+$("#PartyB").val()+':'+$("#PartyB").attr("data-value") + ':'+$("#PartyB").attr("legal-name");
+                console.log('2018str : '+ str);
+                console.log('legalName1:' + $("#PartyB").attr("legal-name"));
+
+                TextUpdatedList.push(str);
+            }
+
+            console.log('TextUpdatedList:::', TextUpdatedList);
+            console.log('ContractCostList:::', ContractCostList);
+            console.log('ModuleRefList:::', ModuleRefList);
+            console.log('InputAmountUpdatedList:::', InputAmountUpdatedList);
+            // return;
+            if(IsPass){
+
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ASI_CRM_CN_OffContractGenerationCtrl.saveTemplate}', action, contractId,
+                    JSON.stringify(TextUpdatedList),
+                    JSON.stringify(InputAmountUpdatedList),
+                    JSON.stringify(ModuleRefList),
+                    JSON.stringify(ContractCostList),
+                    ReturnResultFunction,
+                    { buffer: false, escape: true }
+                );
+
+            }else{
+                document.getElementById("SystemInfo").style.display='';
+                $(".fullScreenLoading").hide();
+                document.getElementById('SystemInfoStr').innerHTML=msg;
+            }
+
+        }
+
+        function ReturnResultFunction(result, event) {
+            const IsTwoParty = ('{!ContractSelected.ASI_CRM_CN_Two_Party_Contract_Template__c}' == 'true');
+
+            if (!event.status) {
+                AppUtil.hideLoading();
+                return;
+            }
+
+            if (!result) return;
+
+            AppUtil.hideLoading();
+
+            console.log(result);
+            let url = '';
+            let url2 = ''
+
+            switch (currentAction) {
+                case 'back': {
+                    let url = '/' + contractId;
+                    window.location = url;
+                    break;
+                }
+                case 'approver': {
+                    const parameters = { id: contractId, edit: 0, ForHighLight: 1 };
+                    url = '/apex/ASI_CRM_CN_OffContractGenerationPage?' + AppUtil.getParameterString(parameters);
+                    window.open(url);
+
+                    break;
+                }
+                case 'customer': {
+                    if (IsTwoParty) { //if 2 parties, combine them
+                        const parameters = { id: contractId, edit: 0, ForHighLight: 0 };
+                        url = '/apex/ASI_CRM_CN_OffContractGenerationPage?' + AppUtil.getParameterString(parameters);
+                    } else { //if 3 parties, break into 2 part
+                        const parameters1 = { id: contractId, edit: 0, part: 'Body' };
+                        url = '/apex/ASI_CRM_CN_OffContractGenPartPage?' + AppUtil.getParameterString(parameters1);
+
+                        const parameters2 = { id: contractId, edit: 0, part: 'Appendix' };
+                        url2 = '/apex/ASI_CRM_CN_OffContractGenPartPage?' + AppUtil.getParameterString(parameters2);
+
+                        window.open(url2);
+                    }
+                    window.open(url);
+                    break;
+                }
+                default: {
+                    url = '/' + contractId;
+                    window.location = url;
+                    break;
+                }
+            }
+
+        }
+
+        function RetrieveWholesaler() {
+
+            const selectFields = `Id, Name,ASI_CRM_CN_Legal_Name__c, ASI_CRM_CN_Chi_Name__c, ASI_CRM_Account__c, ASI_CRM_Account__r.Id`;
+            const whereCriteria = `WHERE (RecordType.DeveloperName = 'ASI_CRM_CN_WS' or RecordType.DeveloperName = 'ASI_CRM_CN_Wholesales_CN') and ASI_CRM_CN_Region__c='${RegionName}'`;
+
+            // var whereClause = ' WHERE (RecordType.DeveloperName = \'ASI_CRM_CN_WS\'  or RecordType.DeveloperName = \'ASI_CRM_CN_Wholesales_CN\')  and  ASI_CRM_CN_Region__c=\'' + RegionName + '\'';
+            // var statement = 'Id,Name,ASI_CRM_CN_Legal_Name__c, ASI_CRM_CN_Chi_Name__c,ASI_CRM_Account__c, ASI_CRM_Account__r.id ';
+            Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ASI_CRM_CN_OffContractGenerationCtrl.findList}', 'ASI_CRM_AccountsAdditionalField__c',
+                    selectFields, whereCriteria , CallBackWholesaler , {escape: true}
+            );
+
+        }
+
+        function CallBackWholesaler(result, event) {
+            if (event.status && result) {
+                WholesalerList = [];
+                const size = result.length;
+
+                for (let i = 0; i < size; i++) {
+                    let Wholesaler = new Object();
+                    //console.log(result[i]["ASI_CRM_CN_Legal_Name__c"]);
+                    if (result[i]["ASI_CRM_CN_Legal_Name__c"]) {
+                        Wholesaler.LegalName = htmlEncode(result[i]["ASI_CRM_CN_Legal_Name__c"]);
+                    } else {
+                        Wholesaler.LegalName = htmlEncode(result[i]["ASI_CRM_CN_Chi_Name__c"]);
+                    }
+                    Wholesaler.label = htmlEncode(result[i]["Name"]);
+                    Wholesaler.value = htmlEncode(result[i]["Id"]);
+                    WholesalerList.push(Wholesaler);
+                }
+            }
+
+            initalizeAutoCompleteComponent();
+        }
+
+        function initalizeAutoCompleteComponent() {
+            // autoFocus: true,
+            $(".Header_partyB").autocomplete({
+                 source:
+                 WholesalerList,
+                 response: function(event, ui){
+                     if(ui.content.length===0){
+                         console.log("No result found");
+                     }
+                 },minLength: 0,
+                 scroll: true,
+                 change: function (event, ui) {
+                     console.log('Now Value : '+$(this).val());
+                     console.log('Now Value : '+$(this).attr("data-value"));
+                     console.log(ui.item);
+
+                     if (!ui.item && typeof ui.item !== 'undefined' ) {
+                         console.log("remove!");
+                         this.value = '';
+                     }
+                 },select: function(event, ui){//console.log('********select***********');//console.log(ui.item);
+                     SelectedWholesaler=ui.item;
+                     $(this).attr("data-value",ui.item.value);
+                     $(this).attr("legal-name",ui.item.LegalName);
+                     $(this).val(ui.item.label);
+                     $(this).next().next().children().val(ui.item.value);
+                     event.preventDefault();
+                 },focus: function(event, ui){
+
+                     // event.preventDefault();
+                 }
+
+             });
+
+             //setTimeout(function(){ $(".fullScreenLoading").hide();}, 3000);
+             $(".fullScreenLoading").hide();
+        }
+
+        function htmlEncode(input) {
+            const e = document.createElement('div');
+            e.innerHTML = input;
+
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        }
+
+        function ASI_TH_CRM_Contract__c(){ }//please don't delete this function
+
+
+        function AddingNewWholesaler() {
+            let rowCount = $('#WholesalerTable tr').length;
+            rowCount++;
+
+            let style = '';
+            style += 'color: #fff;';
+            style += 'background-color: #f0ad4e;';
+            style += 'border-color: #eea236;';
+            style += 'display: inline-block;';
+            style += 'margin-bottom: 0;';
+            style += 'font-weight: 400;';
+            style += 'line-height: 1.42857143;';
+            style += 'text-align: center;';
+            style += 'white-space: nowrap;';
+            style += 'user-select: none;';
+            style += 'background-image: none;';
+            style += 'border: 1px solid transparent;';
+            style += 'border-radius: 4px;';
+
+            let markup = '';
+            markup += '<tr>';
+            markup += '<td style="color: white;" >乙方：</td>';
+            markup += '<td>';
+            markup += '<button type="button" onclick="DeleteTableRow(this)" style="' + style + '"> X</button>';
+            markup += '<input type="text" class="Header_partyB RequiredField InputText" name="partyB" data-id="partyB' + rowCount + '"  value=""></input>';
+            markup += '</td>';
+            markup += '</tr>';
+
+            $("#WholesalerTable").append(markup);
+            $(".RequiredField").css({'border-left': "3px solid red"});
+
+            initalizeAutoCompleteComponent();
+        }
+
+        function DeleteTableRow(that) {
+            $(that).closest('tr').remove();
+        }
+
+        </script>
+    </head>
+    <body>
+    <div class="footer"  style="{!if(isEditable,'display:none','font-family:  Arial Unicode MS;')}">
+        <table  style="width: 100%;  {!if(HighLight,'display:none','')} ">
+            <tr>
+                <td  style="font-size: 11px; width: 33%; "> &nbsp;
+                </td>
+                <td style="font-size: 11px; width: 33%;  " align="center">
+                    <div>Page <span class="pagenumber"/> of <span class="pagecount"/><span style="{!if(IsApprovedVersion,'','display:none')}  " >  (最终版)  {!TodayString} </span></div>
+                </td>
+                <td  align="right" >
+                    <!--<apex:image height="2cm" width="2cm" style="{!if(IsApprovedVersion,'float: top;margin-top:-35px;','display:none')}  " url="{!URLFOR($Resource.ASI_CN_Company_Chop)}" />-->
+                </td>
+            </tr>
+        </table>
+    </div>
+    <form style="font-family:  Arial Unicode MS;" >
+        <div style="{!if(isEditable,'','display:none;')} color: #fff; border-radius: 4px; background-color: #337ab7; border: 1px solid transparent; border-color: #337ab7; padding: 10px 15px; text-align: left;font-weight: bold;" >
+            {!$Label.ASI_CRM_CN_Generate_Contract}
+        </div>
+        <div class="fullScreenLoading"></div>
+        <input type="hidden" name="country" value="Norway" />
+        <input type="button" class="btn BSCommandButton " value="{!$Label.ASI_CRM_CN_Contract_Back}" onclick="window.location='/{!contractId}'" style="color: #333; background-color: #fff; border-color: #ccc; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: 400; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-image: none; border: 1px solid lightgrey; border-radius: 4px; " />
+        <input type="button" id="Savebtn" class="btn" value="{!$Label.ASI_CRM_CN_IOM_Save}" onclick="SaveProcess('back');" style="color: #333; background-color: #fff; border-color: #ccc; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: 400; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-image: none; border: 1px solid lightgrey; border-radius: 4px; "   />
+        <input type="button" id="PreviewAsApproverbtn" class="btn" value=" {!$Label.ASI_CRM_CN_Contract_Preview_As_Approver}" onclick="SaveProcess('approver')" style="color: #333; background-color: #fff; border-color: #ccc; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: 400; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-image: none; border: 1px solid lightgrey; border-radius: 4px; "   />
+        <input type="button" id="PreviewAsCustomerbtn" class="btn" value="{!$Label.ASI_CRM_CN_Contract_Preview_As_Customer}" onclick="SaveProcess('customer')" style="color: #333; background-color: #fff; border-color: #ccc; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: 400; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-image: none; border: 1px solid lightgrey; border-radius: 4px; "  />
+        <input type="button" id="Printbtn" class="btn" value="{!$Label.ASI_CRM_CN_Contract_Print}" onclick="PrintOut()" style="display:none;" />
+        <input type="button" id="Change3Party" class="btn" value="{!$Label.ASI_CRM_CN_3Party}" onclick="Change3PartyFun();" style="display:none;"  />
+        <input type="button" id="Change2Party" class="btn" value="{!$Label.ASI_CRM_CN_2Party}" onclick="Change2PartyFun();" style="display:none;"  />
+        <!-- <center><apex:image height="2cm" width="7cm" url="{!URLFOR($Resource.ASI_MFM_CN_Logo)}" /> </center> -->
+        <div id="SystemInfo" style="display:none; color:#a94442;background-color: #f2dede; border-color: #ebccd1;     margin-top: 0.5em; padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px;">
+            <a href="#" style=" text-decoration: none; float: right; font-size: 21px; font-weight: 700; line-height: 1; color: #000; text-shadow: 0 1px 0 #fff; filter: alpha(opacity=20); opacity: .2;" data-dismiss="alert" aria-label="close">&times;</a>
+            <strong>Failed!</strong><span id="SystemInfoStr"></span>
+        </div>
+
+        <table style="{!if(isEditable,'','display:none')}" >
+            <tr>
+                <th>{!$Label.ASI_CRM_CN_Contract_Print_Header}</th>
+                <th><input type="button" class="btn expandButton" value="-" data-id="HeaderPart" onclick="ChangingDisplay(this);" /></th>
+            </tr>
+        </table>
+
+        <table id="HeaderPart"  style="width:100%;" >
+            <apex:repeat value="{!headerSectionMap}" var="headerIndex">
+                <tr>
+                    <apex:variable value="{!headerSectionMap[headerIndex]}" var="header" />
+                    <td style="{!header.style}"  >
+                        <apex:outputText value="{!header.content}" escape="false"  />
+                        <apex:outputPanel rendered="{!header.hasSubSection}">
+                            <table cellpadding="3">
+                                <apex:repeat value="{!header.subSectionMap}" var="subSectionIndex">
+                                    <apex:variable value="{!header.subSectionMap[subSectionIndex]}" var="subSection" />
+                                    <tr>
+                                        <td>
+                                            <apex:outputText value="{!subSection.displayNumber}" escape="false" style="{!subSection.style}" />
+                                        </td>
+                                        <td style="text-align:justify">
+                                            <apex:outputText value="{!subSection.content}" escape="false" style="{!subSection.style}" />
+                                        </td>
+                                    </tr>
+                                </apex:repeat>
+                            </table>
+                        </apex:outputPanel>
+                    </td>
+                </tr>
+            </apex:repeat>
+        </table>
+        <br/>
+
+        <table style="{! if(isEditable,'','display:none') }" >
+            <tr>
+                <th>主要部分 - //Main Part//</th>
+                <th><input type="button" class="btn expandButton" value="+" data-id="BodyPart" onclick="ChangingDisplay(this);" /></th>
+            </tr>
+        </table>
+
+
+
+        <!-- <apex:form > -->
+        <table id="BodyPart" class="mainSectionTable" style="{!if(HighLight,'display:none','')}">
+
+            <!-- <apex:variable var="mainListCounter" value="{! 1 }" /> -->
+
+            <apex:repeat value="{!BodySectionMap}" var="BodyIndex">
+                <apex:variable value="{!BodySectionMap[BodyIndex]}" var="Body" />
+                <tr class="mainSectionRow" style="{!if(AND( NOT(isEditable),NOT(Body.isShow) ),'display:none;','')} "    >
+                    <!-- <tr class="mainSectionRow"   > -->
+                    <td class="mainSectionCell" style="text-align:justify; font-weight: bold;" valign="top">
+                        <apex:outputPanel rendered="{! AND(Body.hasSubSection, Body.isShow ,!allowEdit) }">
+                            <!-- <apex:outputText value="{! mainListCounter }" escape="false" style="{!Body.style + '; font-size: 16px'}" /> -->
+                            <!-- <apex:variable var="mainListCounter" value="{! mainListCounter + 1 }" /> -->
+                        </apex:outputPanel>
+                        <apex:outputText value="{!Body.displayNumber}" escape="false" style="{!Body.style}" />
+                        <!-- BodyIndex-><apex:outputText value="{! BodyIndex }" escape="false" style="{!Body.style}" /> -->
+                    </td>
+                    <td class="mainSectionCell">
+                        <apex:outputPanel rendered="{!AND(Body.type == 'Selectable', isEditable, Body.isShow)}">
+                            <input type="checkbox"  class="bodySelection {!Body.name}" checked="true" />
+                        </apex:outputPanel>
+                        <apex:outputPanel rendered="{!AND(Body.type == 'Selectable', isEditable, NOT(Body.isShow)) }">
+                            <input type="checkbox"  class="bodySelection {!Body.name}"/>
+                        </apex:outputPanel>
+
+
+
+                        <apex:outputPanel rendered="{!AND( Body.name != 'section4', OR(isEditable ,!allowEdit)) }">
+                            <apex:outputText value="{! Body.content }" rendered="{! OR(isEditable ,!allowEdit) }" escape="false" style="{! Body.style }" />
+                        </apex:outputPanel>
+
+                        <!-- -->
+                        <apex:outputPanel rendered="{! AND(Body.name == 'section4'  ) }">
+                            <!-- <apex:inputTextarea value="{! Body.content }" rendered="{! isEditable }" style="{! Body.style } width:66%;" /> -->
+                            <textarea style="{! Body.style } width:66%; {!if(isEditable,'','display:none;')} " class="InputText {! Body.name }" data-id="{! Body.name }">{! Body.content }</textarea>
+                            <!-- <br /> -->
+                            <apex:outputText value="{! Body.content }" rendered="{! AND(NOT(isEditable) , Body.isShow) }" escape="false" style="{! Body.style }" />
+                        </apex:outputPanel>
+
+
+
+                        <!-- -->
+                        <apex:outputPanel rendered="{! AND(Body.hasSubSection, OR(isEditable, AND(!isEditable,Body.isShow))) }">
+                            <table cellpadding="3">
+
+                                <apex:repeat value="{!Body.subSectionMap}" var="subSectionIndex">
+                                    <apex:variable value="{!Body.subSectionMap[subSectionIndex]}" var="subSection" />
+                                    <tr style="{!if(AND( NOT(isEditable),NOT(subSection.isShow) ),'display:none;','')} "  >
+                                        <td valign="top">
+                                            <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, subSection.isShow)}">
+                                                <input type="checkbox" checked="true" class="bodySelection {!subSection.name}"/>
+                                            </apex:outputPanel>
+                                            <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, NOT(subSection.isShow)) }">
+                                                <input type="checkbox"  class="bodySelection {!subSection.name}"/>
+                                            </apex:outputPanel>
+
+                                            <apex:outputText value="{!subSection.displayNumber}" escape="false" style="{!subSection.style}; " />
+                                        </td>
+                                        <td style="text-align: left;"> <apex:outputText value="{!subSection.content}"  escape="false" style="width:8px;text-align: left;" /></td>
+                                    </tr>
+                                </apex:repeat>
+                            </table>
+                        </apex:outputPanel>
+                    </td>
+                </tr>
+            </apex:repeat>
+        </table>
+        <!-- </apex:form> -->
+
+        <br/>
+
+        <table style="{!if(isEditable,'','display:none')}"  >
+            <tr>
+                <th>签字</th>
+                <th><input type="button" class="btn expandButton" value="+" data-id="BodySignaturePart" onclick="ChangingDisplay(this);" /></th>
+            </tr>
+        </table>
+        <table id="BodySignaturePart"   style="{!if(HighLight,'display:none','width:100%')}"  >
+            <apex:repeat value="{!BodySignatureMap}" var="BodySignatureIndex">
+                <apex:variable value="{!BodySignatureMap[BodySignatureIndex]}" var="BodySignature" />
+                <tr>
+                    <td><apex:outputText value="{!BodySignature.LeftContent}" escape="false" style="{!BodySignature.style}" /></td>
+                    <td></td>
+                    <td><apex:outputText value="{!BodySignature.RightContent}  " escape="false" style="{!BodySignature.style}" /></td>
+                    <td></td>
+                </tr>
+            </apex:repeat>
+        </table>
+
+        <div style="page-break-after:always;"/>
+
+        <table style="{!if(isEditable,'','display:none')}">
+            <tr>
+                <th>附件</th>
+                <th><input type="button" class="btn expandButton" value="-" data-id="AppendixSignaturePart" onclick="ChangingDisplay(this);" /></th>
+            </tr>
+        </table>
+        <table id="AppendixSignaturePart" >
+            <apex:repeat value="{!AppendixSectionMap}" var="AppendixIndex">
+                <apex:variable value="{!AppendixSectionMap[AppendixIndex]}" var="Appendix" />
+                <tr style="{! if(AND(NOT(isEditable),NOT(Appendix.isShow)),'display:none;','') };">
+                    <td style="text-align:justify" valign="top">
+                        <apex:outputPanel rendered="{!AND(Appendix.type == 'Selectable', isEditable, Appendix.isShow, NOT(Appendix.checked))}">
+                            <input type="checkbox"  class="bodySelection {!Appendix.name}"/>
+                        </apex:outputPanel>
+                        <apex:outputPanel rendered="{!AND(Appendix.type == 'Selectable', isEditable, Appendix.isShow, Appendix.checked)}">
+                            <input type="checkbox" checked="true" class="bodySelection {!Appendix.name} "/>
+                        </apex:outputPanel>
+                        <apex:outputPanel rendered="{!AND(Appendix.type == 'Selectable', isEditable, NOT(Appendix.isShow)) }">
+                            <input type="checkbox"  class="bodySelection {!Appendix.name}"/>
+                        </apex:outputPanel>
+                        <apex:outputText value="{!Appendix.displayNumber}" escape="false" style="{!Appendix.style}" />
+                    </td>
+                    <!--Testing-->
+
+                    <td valign="top">
+                        <apex:outputText value="{!Appendix.content} " escape="false" style="{!Appendix.style}" rendered="{!Appendix.type != 'Editable'}"   />
+                        <apex:outputPanel rendered="{! AND(Appendix.type == 'Editable', Appendix.isShow )}" >
+                            <textarea cols="100" rows="3" class="InputText" data-id="{!Appendix.name}" >{!Appendix.content} test </textarea>
+                        </apex:outputPanel>
+
+                        <apex:outputPanel rendered="{!AND(Appendix.hasSubSection, OR(isEditable, AND(!isEditable,Appendix.isShow )  ) )}"   >
+                            <apex:outputPanel rendered="{!Appendix.name!='FixCostTable'}">
+                                <table cellpadding="3">
+
+                                    <apex:repeat value="{!Appendix.subSectionMap}" var="subSectionIndex">
+                                        <apex:variable value="{!Appendix.subSectionMap[subSectionIndex]}" var="subSection" />
+                                        <tr style="{!if(AND(NOT(isEditable),NOT(subSection.isShow)),'display:none;','')} " >
+                                            <td  valign="top">
+                                                <apex:outputText value="{!subSection.displayNumber}" escape="false" style="{!subSection.style}"  />
+                                                <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, subSection.isShow, NOT(subSection.checked))}">
+                                                    <input type="checkbox" class="bodySelection {!subSection.name}"/>
+                                                </apex:outputPanel>
+                                                <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, subSection.isShow, subSection.checked)}">
+                                                    <input type="checkbox" checked="true" class="bodySelection {!subSection.name}"/>
+                                                </apex:outputPanel>
+                                                <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, NOT(subSection.isShow))}">
+                                                    <input type="checkbox" class="bodySelection {!subSection.name}"/>
+                                                </apex:outputPanel>
+                                            </td>
+                                            <td style="text-align:left" valign="top">
+                                                <apex:outputText value="{!subSection.content}" escape="false" style="{!subSection.style}"  rendered="{!subSection.type != 'Editable'}"  />
+                                                <apex:outputPanel rendered="{!AND(subSection.type == 'Editable',subSection.isShow)}" >
+                                                    <!-- rendered="{!AND(subSection.type == 'Editable' , isEditable)}"-->
+                                                    <textarea cols="100" rows="1" class="InputText" data-id="{!subSection.name}" >{!subSection.content}</textarea>
+                                                </apex:outputPanel>
+                                            </td>
+                                        </tr>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </td>
+                </tr>
+            </apex:repeat>
+        </table>
+
+        <table style="{!if(isEditable,'','display:none')}">
+            <tr>
+                <th>签字</th>
+                <th><input type="button" class="btn expandButton" value="+" data-id="BodySignaturePart2" onclick="ChangingDisplay(this);" /></th>
+            </tr>
+        </table>
+        <table id="BodySignaturePart2" style="{!if(HighLight,'display:none','width:100%')}">
+            <apex:repeat value="{!AppendixSignatureMap}" var="BodySignatureIndex">
+                <apex:variable value="{!AppendixSignatureMap[BodySignatureIndex]}" var="BodySignature"/>
+                <tr>
+                    <td> <apex:outputText value="{!BodySignature.LeftContent}" escape="false" style="{!BodySignature.style}"/> </td>
+                    <td></td>
+                    <td> <apex:outputText value="{!BodySignature.RightContent}" escape="false" style="{!BodySignature.style}"/> </td>
+                    <td></td>
+                </tr>
+            </apex:repeat>
+        </table>
+    </form>
+    </body>
+</apex:component>

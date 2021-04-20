@@ -1,0 +1,522 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_PH_FOCManageAll_Page
+ * Description: SKU Manage all page for ASI_FOC_Free_Goods_Request__c
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 09/11/2018       LAPUTA: CALVIN          Created    
+-->
+<apex:page standardController="ASI_FOC_Free_Goods_Request__c" extensions="ASI_CRM_PH_FOCManageAll_Ctrl">
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}"/>
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}"/>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+    <!-- Style -->
+    <style>
+        .link-button {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .savingRecord .fullScreenLoading {
+            display: block;
+        }
+
+        .fullScreenLoading {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: rgba(255, 255, 255, .8) url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}') 50% 50% no-repeat;
+        }
+
+        .error {
+            border: 2px solid red;
+        }
+
+        th, td {
+            padding-top: 5px;
+            padding-bottom: 5px;
+            padding-right: 7px;
+            padding-left: 7px;
+        }
+
+        table {
+
+        }
+
+        <!--
+        Datatable Styling
+
+        -->
+        table.dataTable td {
+            height: 30px;
+        }
+
+        table.dataTable thead tr {
+            background-color: #cce6ff;
+        }
+
+        table.dataTable tbody tr {
+            background-color: #e6f3ff;
+        }
+
+        table.dataTable tbody tr:nth-child(even) {
+            background-color: white;
+        }
+
+        table.dataTable td {
+            border-bottom: 2px solid #e0e0d1;
+        }
+
+        .inputField_short {
+            width: 50px;
+        }
+
+        .inputField_medium {
+            width: 75px;
+        }
+
+        .inputField_long {
+            width: 150px;
+        }
+
+        .inputField_x_long {
+            width: 400px;
+        }
+
+        .alignRight {
+            text-align: right;
+        }
+    </style>
+
+    <!-- JavaScript -->
+    <script>
+        /****************
+         Define Variable
+         ****************/
+        const numFormater = new Intl.NumberFormat();
+
+        const ACTION_LABEL = 'Action';
+        const NEW_FOC_ITEM_PREFIX = 'Sku_';
+        const READ_ONLY = '{!isReadOnly}' == 'true';
+
+        const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy": true,
+            "bStateSave": true,
+            "bSearch": false,
+            "bFilter": false,
+            "iDisplayLength": 1000,
+            "bSort": false,
+            "bPaginate": false,
+            "bScrollCollapse": true,
+            "bJQueryUI": true
+        };
+
+        const FOC_ID = '{!foc.Id}';
+        const FOC_NAME = '{!foc.Name}';
+        const FOC_RECORD_TYPE_NAME = '{!foc.RecordType.DeveloperName}';
+        const FOC_REQUEST_TYPE = '{!foc.ASI_FOC_Request_Type__c}';
+
+
+        //Auto Complete Value
+        const SKU_LIST = jQuery.parseJSON('{!JSENCODE(SKUListJson)}');
+        const SKU_MAP = jQuery.parseJSON('{!JSENCODE(SKUMapJson)}');
+
+        var SKU_LIST_NOSPACE = [];
+
+        var NEW_SKU_INDEX = 1;
+        var deleteFocItemIdList = [];
+
+        /*****************
+         Datatable Field Config
+         *****************/
+        const FIELD_CONFIG_MAPPING = {
+            "ACTION": {
+                "title": ACTION_LABEL,
+                "data": "",
+                "render": function (data, type, full) {
+                    return "<a class='link-button' onClick='deleteFocItemRow(this.parentNode.parentNode)'>Delete</a>";
+                }
+            },
+
+            "ASI_FOC_SKU__c": {
+                "title": "SKU",
+                "data": "",
+                "render": function (data, type, full) {
+                    var fieldAPIName = 'ASI_FOC_SKU__c';
+                    if (full.ASI_FOC_SKU__c) {
+                        data = full.ASI_FOC_SKU__r.Name;
+                    } else {
+                        data = "";
+                    }
+
+                    if (READ_ONLY) return data;
+                    return "<input class='" + fieldAPIName + " inputField_x_long form-control' type='text' value=\"" + data + "\" onChange='updateFocItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)' required />";
+                }
+            },
+
+            "ASI_FOC_Sub_brand__c": {
+                "title": "Sub Brand Code",
+                "data": "",
+                "render": function (data, type, full) {
+                    if (full.ASI_FOC_SKU__r && full.ASI_FOC_SKU__r.ASI_MFM_Sub_brand__r) {
+                        data = full.ASI_FOC_SKU__r.ASI_MFM_Sub_brand__r.Name;
+                    } else {
+                        data = "";
+                    }
+                    return data;
+                }
+            },
+
+            "ASI_CRM_Support_Type__c": {
+                "title": "Type",
+                "data": "",
+                "render": function (data, type, full) {
+                    if (FOC_RECORD_TYPE_NAME == 'ASI_CRM_PH_Contract_FOC_POSM_Request' ||
+                            FOC_RECORD_TYPE_NAME === 'ASI_CRM_PH_Contract_FOC_POSM_Request_Read_Only') {
+                        if (FOC_REQUEST_TYPE == 'FOC') {
+                            return "Marketing Support Fund (FOC)";
+                        } else if (FOC_REQUEST_TYPE == 'POSM') {
+                            return "Merchandise";
+                        } else return "";
+                    } else return "";
+                }
+            },
+
+            "ASI_FOC_Request_Quantity_Bottle__c": {
+                "title": "Quantity (Bottle)",
+                "data": "",
+                "render": function (data, type, full) {
+                    var fieldAPIName = 'ASI_FOC_Request_Quantity_Bottle__c';
+                    if (full.ASI_FOC_Request_Quantity_Bottle__c) {
+                        data = full.ASI_FOC_Request_Quantity_Bottle__c;
+                    } else {
+                        data = "";
+                    }
+
+                    if (READ_ONLY) return data;
+                    return "<input class='" + fieldAPIName + " integerField form-control' type='number' min='0' step='1' value='" + data + "' onChange='updateFocItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                }
+            }
+        };
+
+        /****************
+         Define Standard Function
+         ****************/
+        $(document).ready(
+                function () {
+                    setTable('{!JSENCODE(focItemListJson)}');
+                    initAutoComplete();
+                    preventNegativeNumber();
+                    buildListWithoutSpace();
+					
+
+                    $("#warningPanel").hide();
+                    $("#saveErrorPanel").hide();
+
+                    if (READ_ONLY) $('.btn').hide();
+                }
+        );
+
+        //Set Data Table
+        function setTable(focItemListJson) {
+            var dataTableProperties = CONST_DATA_TABLE_PROPERTIES;
+            //Convert so detail list JSON to Object format
+
+            var itemList = jQuery.parseJSON(focItemListJson);
+
+            dataTableProperties["aaData"] = jQuery.parseJSON(focItemListJson);
+            //Set data table row id = detail id
+            dataTableProperties["rowId"] = "Id";
+
+            //Set the data table columns
+            var columns = [];
+            if (!READ_ONLY) {
+                columns.push(FIELD_CONFIG_MAPPING.ACTION);
+            }
+            columns.push(FIELD_CONFIG_MAPPING.ASI_FOC_SKU__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_FOC_Sub_brand__c);
+            if (FOC_RECORD_TYPE_NAME != 'ASI_MFM_PH_PO_FOC_POSM_Request') {
+                columns.push(FIELD_CONFIG_MAPPING.ASI_CRM_Support_Type__c);
+            }
+            columns.push(FIELD_CONFIG_MAPPING.ASI_FOC_Request_Quantity_Bottle__c);
+
+            dataTableProperties["aoColumns"] = columns;
+
+            $("#focItemTable").dataTable(dataTableProperties);
+
+            initAutoComplete();
+            $('input').trigger('change');
+        }
+
+        function addSKURow() {
+            var newFocItem = {};
+            newFocItem["Id"] = NEW_FOC_ITEM_PREFIX + NEW_SKU_INDEX;
+            newFocItem["ASI_FOC_Request_Order__c"] = FOC_ID;
+
+            $("#focItemTable").DataTable().row.add(newFocItem).draw();
+            $('#focItemTable').DataTable().page('last').draw('page');
+
+            NEW_SKU_INDEX++;
+
+            initAutoComplete();
+            preventNegativeNumber();
+        }
+
+        function updateFocItemValue(row, fieldName, newValue) {
+            var focItemData = $("#focItemTable").DataTable().row(row).data();
+            focItemData[fieldName] = newValue;
+        }
+
+        function deleteFocItemRow(row) {
+            var rowId = row.id;
+            console.log('rowId:: ' + rowId);
+            //Check if the promotion  is existing in database
+            if (!rowId.startsWith(NEW_FOC_ITEM_PREFIX)) {
+                //Add to delete list
+                deleteFocItemIdList.push(rowId);
+            }
+            //Remove the row and redraw it
+            $("#focItemTable").DataTable().row(row).remove().draw();
+        }
+
+        function validateFocItems(focItemList) {
+            var errorMessage;
+
+            //if(focItemList.length == 0) return "Please add promotion mechanic records";
+
+            for (var index = 0; index < focItemList.length; index++) {
+                var requiredFieldList = [];
+                var focItem = focItemList[index];
+                if (!focItem.ASI_FOC_SKU__c)
+                    requiredFieldList.push("SKU");
+                if (!focItem.ASI_FOC_Request_Quantity_Bottle__c || focItem.ASI_FOC_Request_Quantity_Bottle__c == 0)
+                    requiredFieldList.push("Request Qty (Bottle)");
+
+                if (requiredFieldList.length != 0) {
+                    if (!errorMessage) errorMessage = "";
+                    errorMessage += "Line " + (index + 1) + " missing required field [";
+                    for (var requiredFieldIndex in requiredFieldList) {
+                        errorMessage += requiredFieldList[requiredFieldIndex] + ", ";
+                    }
+                    errorMessage = errorMessage.slice(0, -2);
+                    errorMessage += "]<br />";
+                }
+            }
+
+            return errorMessage;
+        }
+
+        function saveRecord(isQuickSave) {
+            var upsertFocItemList = [];
+
+            var focItemList = $("#focItemTable").DataTable().rows().data();
+
+            var errorMessage = validateFocItems(focItemList.data());
+            if (errorMessage) {
+                $("#warningPanel").show();
+                $("#warningMessage").html(errorMessage);
+            } else {
+                $("#warningPanel").hide();
+                $("#saveErrorPanel").hide();
+
+                var upsertFocItemList = [];
+                let supportType = "";
+                if (FOC_RECORD_TYPE_NAME == "ASI_CRM_PH_Contract_FOC_POSM_Request") {
+                    if (FOC_REQUEST_TYPE == "FOC") {
+                        supportType = "Marketing Support Fund (FOC)";
+                    } else if (FOC_REQUEST_TYPE == "POSM") {
+                        supportType = "Merchandise";
+                    }
+                }
+
+                var focItemList = $("#focItemTable").DataTable().rows().data();
+                for (var i = 0; i < focItemList.data().length; i++) {
+                    var clonedFocItem = jQuery.extend({}, focItemList[i]);
+                    if (clonedFocItem.Id.startsWith(NEW_FOC_ITEM_PREFIX)) {
+                        delete clonedFocItem["Id"];
+                        clonedFocItem.ASI_CRM_Support_Type__c = supportType;
+                    }
+                    clonedFocItem.ASI_FOC_SKU__c = clonedFocItem.ASI_FOC_SKU__r.Id;
+
+                    delete clonedFocItem["ASI_FOC_SKU__r"];
+                    upsertFocItemList.push(clonedFocItem);
+                }
+
+                $("body").addClass("savingRecord");
+                saveFocItem(isQuickSave, JSON.stringify(upsertFocItemList), JSON.stringify(deleteFocItemIdList));
+            }
+        }
+
+        function saveRecordComplete(focItemListJson, hasError, exceptionListJson) {
+            $("body").removeClass("savingRecord");
+            if (hasError == 'true') {
+                showError(exceptionListJson);
+            } else {
+                setTable(focItemListJson);
+            }
+        }
+
+        function showError(exceptionListJson) {
+            //Display the error message
+            $('#saveErrorPanel').show();
+
+            var errorMessage = '';
+            var exceptionList = jQuery.parseJSON(exceptionListJson);
+            for (var errorIndex = 0; errorIndex < exceptionList.length; errorIndex++) {
+                var exceptionObj = exceptionList[errorIndex];
+                errorMessage += exceptionObj['errorMessage'] + '<br />';
+            }
+
+            //Assign the error message to page
+            $('#saveErrorMessage').html(errorMessage);
+        }
+
+        function initAutoComplete() {
+            $(".ASI_FOC_SKU__c").each(function (index) {
+                $(this).autocomplete({
+                    source: SKU_LIST,
+                    minLength: 3,
+                    response: function (event, ui) {
+                        if (ui.content.length === 0) {
+                            console.log("No result found");
+                        }
+                    },
+                    change: function (event, ui) {
+                        if (!ui.item && typeof ui.item !== 'undefined') {
+                            console.log('remove  ' + this.value);
+                            $(this).parent().next().text("");
+                            this.value = '';
+                        }
+                    },
+                    select: function (event, ui) {
+                        $(this).val(ui.item.label);
+                        event.preventDefault();
+
+                        // on selecting SKU, change Sub-Brand display
+                        const sku = SKU_MAP[ui.item.label];
+                        // console.log(sku);
+                        const skuCode = sku ? sku.ASI_MFM_SKU_Code__c : null;
+                        const subBrand = sku ? sku.ASI_MFM_Sub_brand__r : null;
+                        const subBrandName = subBrand ? subBrand.Name : null;
+
+                        ASI_CRM_SKU__r = {
+                            "Name": ui.item.label,
+                            "Id": sku.Id,
+                            "ASI_MFM_Sub_brand__r": {"Name": subBrandName}
+                        };
+
+                        var rowId = $(this.parentNode.parentNode).attr('id');
+                        var SKUData = $("#focItemTable").DataTable().row($('#' + rowId)).data();
+
+                        SKUData['ASI_FOC_SKU__c'] = ASI_CRM_SKU__r.Name;
+                        SKUData['ASI_FOC_SKU__r'] = ASI_CRM_SKU__r;
+                        $('#focItemTable').DataTable().rows().invalidate('data').draw(false);
+
+                        initAutoComplete();
+						
+						preventNegativeNumber();
+                    }
+                });
+            });
+        }
+
+        function preventNegativeNumber() {
+            $(".integerField").keydown(function (e) {
+				if (!((e.which > 95 && e.which < 106)
+                        || (e.which > 47 && e.which < 58)
+                        || e.which == 8 || e.which == 46)) {
+                    return false;
+                }
+            });
+            $(".decimalField").keydown(function (e) {
+                if (!((e.which > 95 && e.which < 106)
+                        || (e.which > 47 && e.which < 58)
+                        || e.which == 8 || e.which == 46 || e.which == 110 || e.which == 190)) {
+                    return false;
+                }
+            });
+        }
+
+        function buildListWithoutSpace() {
+            $.each(SKU_LIST, function () {
+                SKU_LIST_NOSPACE.push(this.replace(/\s+/g, ''));
+            });
+        }
+    </script>
+
+    <body>
+    <div class="fullScreenLoading"></div>
+
+    <div id="saveErrorPanel" class="panel panel-danger" style="display: none">
+        <div class="panel-heading">Error!</div>
+        <div id="saveErrorMessage" class="panel-body"></div>
+    </div>
+    <div id="warningPanel" class="panel panel-danger" style="display:none">
+        <div class="panel-heading">Warning!</div>
+        <div id="warningMessage" class="panel-body"></div>
+    </div>
+
+    <!-- Defind Action Function -->
+    <apex:form >
+        <apex:actionFunction name="saveFocItem" action="{!saveFocItem}" reRender="pageMsg"
+                             onComplete="saveRecordComplete('{!JSENCODE(focItemListJson)}', '{!hasError}', '{!JSENCODE(exceptionListJson)}');">
+            <apex:param name="isQuickSave" value=""/>
+            <apex:param name="upsertFocListJson" value=""/>
+            <apex:param name="deleteFocItemIdListJson" value=""/>
+        </apex:actionFunction>
+        <apex:actionFunction name="cancel" action="{!cancel}"/>
+    </apex:form>
+
+    <!-- Body -->
+    <apex:pageBlock id="detail_pageBlock">
+        <apex:pageblockButtons >
+            <input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="Save"/>
+            <input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="Quick Save"/>
+            <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel"/>
+        </apex:pageblockButtons>
+
+        <!-- Nav bar -->
+        <div class="row">
+            <div class="container-fluid">
+                <div class="panel with-nav-tabs panel-primary">
+                    <!-- Nav bar header -->
+                    <div class="panel-heading">
+                        <ul class="nav nav-tabs">
+                            <li class="active"><a href="#focItemPanel" data-toggle="tab">SKU</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Nav bar body -->
+                    <div class="panel-body">
+                        <div class="tab-content">
+                            <!-- Foc Item Panel -->
+                            <div class="tab-pane fade in active" id="focItemPanel">
+                                <form id="focItemForm">
+                                    <input type="button" class="btn newRowBtn" onclick="addSKURow()" value="Add Row"/>
+                                    <table id="focItemTable" width="100%"/>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </apex:pageBlock>
+    </body>
+
+</apex:page>

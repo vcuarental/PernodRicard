@@ -1,0 +1,2222 @@
+<apex:page controller="clm.GeolocationCenterController" docType="html-5.0" title="{!$Label.clm__uvm_headertitle}" showHeader="false" showChat="false" sidebar="false" >
+
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'assets/styles/salesforce-lightning-design-system-vf.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.clm__CLMRes, 'JTreeTable/JqTG/jquery-ui.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'scss/GeolocationCenter.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'pikaday/pikaday.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'geolocation/chosen.css')}" />
+        <script type="text/javascript" src="{!URLFOR($Resource.CLMRes,'JTreeTable/JqTG/jquery.min.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.CLMRes,'JTreeTable/JqTG/grid.locale-en.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.CLMRes,'JTreeTable/JqTG/jquery-ui.min.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'pikaday/moment.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'pikaday/pikaday.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'geolocation/MarkerClusterer.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'geolocation/moment.min.js')}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'geolocation/moment-timezone-with-data.min.js')}"></script>
+        <script type="text/javascript" src="soap/ajax/37.0/connection.js"></script>
+        <script type="text/javascript">
+            var iconObj = null;
+        </script>
+
+
+        <style type="text/css">
+        .chosen-container-single .chosen-single div{
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: block;
+            width: 18px;
+            height: 100%;
+            left: 300px;
+            top: 50px;
+        }
+        </style>
+ 
+        <script>
+            function setFocusOnLoad() {  
+                
+            }
+
+            function showErrors(){
+                $('#hiddenMessage').show();
+            }
+        </script>
+      
+            
+            <script>
+                function setStyles(needStyles){
+                    if (needStyles == 'activities'){                                            //устанавливаем стили, если выбрана вкладка ACTIVITIES
+                        $("[id*='cMapContainer']").addClass('slds-grid');
+                        $("[id*='cMapContainer']").addClass('slds-wrap');
+                        $("[id*='cMapContainer']").addClass('slds-grid--pull-padded');
+                        $("[id*='map']").addClass('slds-col--padded');
+                        $("[id*='map']").addClass('slds-size--1-of-2');
+                        $("[id*='map']").addClass('slds-medium-size--5-of-6');
+                        $("[id*='map']").addClass('slds-large-size--8-of-12');
+                        $("[id*='ActivitiesContainer']").css('display','');
+                        $("[id*='UsersContainer']").css('display','none');
+                          
+                    } else if (needStyles == 'users'){                                            //устанавливаем стили, если выбрана вкладка USERS
+                        $("[id*='cMapContainer']").addClass('slds-grid');
+                        $("[id*='cMapContainer']").addClass('slds-wrap');
+                        $("[id*='cMapContainer']").addClass('slds-grid--pull-padded');
+                        $("[id*='map']").addClass('slds-col--padded');
+                        $("[id*='map']").addClass('slds-size--1-of-2');
+                        $("[id*='map']").addClass('slds-medium-size--5-of-6');
+                        $("[id*='map']").addClass('slds-large-size--8-of-12');
+                        $("[id*='ActivitiesContainer']").css('display','none');
+                        $("[id*='UsersContainer']").css('display','');
+                    } else {                                                    //убираем стили, если выбрана другая вкладка
+                        $("[id*='cMapContainer']").removeClass('slds-grid');
+                        $("[id*='cMapContainer']").removeClass('slds-wrap');
+                        $("[id*='cMapContainer']").removeClass('slds-grid--pull-padded');
+                        $("[id*='map']").removeClass('slds-col--padded');
+                        $("[id*='map']").removeClass('slds-size--1-of-2');
+                        $("[id*='map']").removeClass('slds-medium-size--5-of-6');
+                        $("[id*='map']").removeClass('slds-large-size--8-of-12'); 
+                        $("[id*='ActivitiesContainer']").css('display','none');
+                        $("[id*='UsersContainer']").css('display','none');
+                    }
+                }
+
+                function colorPageBlock(pageblock, color) {
+                    if (pageblock != null) pageblock.firstChild.style.cssText = "background-color: " + color + ";";
+                }
+
+                var rad = function(x) {
+                  return x * Math.PI / 180;
+                };
+
+                var getDistance = function(p1, p2) {
+                  var R = 6378137;
+                  var dLat = rad(p2.lat - p1.lat);
+                  var dLong = rad(p2.lng - p1.lng);
+                  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) *
+                    Math.sin(dLong / 2) * Math.sin(dLong / 2);
+                  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                  var d = R * c;
+                  return d; 
+                };
+
+                //главный скрипт, инициализирует карту, нестандартные маркеры и т.д.
+                function renderMapOnly(notOnlyMap, from){
+                        console.log('in renderMapOnly, from: ' + from);
+                        routes_count = 0;
+
+                        initAcitivyTabs();
+                        bounds = new google.maps.LatLngBounds(); 
+                        var styledMap = new google.maps.StyledMapType(styles, {name: "Styled Map"});
+
+                        var myOptions = {
+                            zoom: zoom_option,
+                            zoomControl: true,
+                            center: new google.maps.LatLng(55.751, 37.656),
+                            disableDefaultUI: true
+                        };
+                        
+                        map = new google.maps.Map(document.getElementById("map"), myOptions);                        
+                        map.setOptions({styles: styles});
+                        map.mapTypes.set('map_style', styledMap);
+                        map.setMapTypeId('map_style');
+
+
+                        clearInterval(realRouteInterval);
+                        realRouteIntervalStep = null;
+
+                        if (piligrim) piligrim.destroyPrevious();
+
+
+                        if (notOnlyMap) renderMap();
+
+                        /*при смене зума на карте меняем размер пинов для иконок аккаутов отображённых визитов*/
+                        google.maps.event.addListener(map, 'zoom_changed', function() {
+
+                            var width = 1.1 + (2 *(map.getZoom() - 9));
+                            var ratio = width / 50;
+                            var height = 38.3 * ratio;
+
+                            for(var i=0; i< accountVisitMarkers.length; i++ ) {
+                                var icon = accountVisitMarkers[i].getIcon();
+                                accountVisitMarkers[i].setIcon(new google.maps.MarkerImage(
+                                    icon.url,
+                                    null,
+                                    null,
+                                    null,
+                                    new google.maps.Size(width, height))
+                                );
+                            }
+                        });
+
+                }
+
+
+                function initClusters(){
+                    clearClusters();
+                    var clusterIcon_m1 = '{!URLFOR($Resource.sfdc_lightning,"/assets/images/cluster-images/m1.png")}';
+                    var clustersImages = '{!URLFOR($Resource.sfdc_lightning,"/assets/images/cluster-images/m")}';
+                    var clusterOptions = {
+                        imagePath: clustersImages,
+                        maxZoom: 15
+                    }; 
+                    markerCluster = new MarkerClusterer(map, markers, clusterOptions);
+                }
+
+                function clearClusters(){
+                    if (markerCluster && markerCluster.clearMarkers) markerCluster.clearMarkers();
+                }
+
+                function renderMap(){
+                        console.log('in renderMap');
+                        initCustomMarker();
+
+                        var realUserPathChckBx = $("#showRealTrack").attr('checked');
+                        var selectedTab = $("#mainTbs").tabs('option', 'selected');
+                        if (realUserPathChckBx == null || realUserPathChckBx != 'checked' ){
+                            directionsService = new google.maps.DirectionsService();
+                            directionsDisplay = new google.maps.DirectionsRenderer();
+                            directionsDisplay.setMap(map); 
+                        }
+                        renderRealRoute()
+                        renderPoints('renderMap');
+
+                        drawMarkersOnly(); //added 05.09.2016
+                        setTimeout(initClusters,1500);//added 05.09.2016
+                        if (piligrim) piligrim.destroyPrevious();
+                        piligrim = new Piligrim();
+                        piligrim.initRoute(realRouts);
+                    }
+
+
+                    function playRealRoute(){
+                        if (realRouteIntervalStep == null)
+                            realRouteIntervalStep = 1;
+
+                        var pathCoordinates = [];
+                        var iconsetngs = {
+                            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+                        };
+
+                        if (realRouteIntervalStep != null && realRouteIntervalStep > 0 && (realRouteIntervalStep <= realRouts.length-1))   {
+                            pathCoordinates.push(  {lat: realRouts[realRouteIntervalStep-1].visitLocation.lat, lng: realRouts[realRouteIntervalStep-1].visitLocation.lng} );
+                            pathCoordinates.push(  {lat: realRouts[realRouteIntervalStep].visitLocation.lat, lng: realRouts[realRouteIntervalStep].visitLocation.lng} );
+                        } 
+
+                        userPath = new google.maps.Polyline({
+                            path: pathCoordinates,
+                            geodesic: true,
+                            strokeColor: '#484848',
+                            strokeOpacity: 1.0,
+                            strokeWeight: 1,
+                            icons: [{
+                                icon: iconsetngs,
+                                repeat:'55px',
+                                offset: '50%'}]
+                        });
+
+                        userPath.setMap(map);
+
+                        //устанавливаем маркеры
+                        var datetimeformat;
+                        if (UserContext && UserContext.dateFormat) {
+                            var dtArray = UserContext.dateTimeFormat.split(' ');
+                            datetimeformat = dtArray[0].toUpperCase() + ' ' + dtArray[1];
+                        } else {
+                            datetimeformat = 'dd/MM/yyyy HH:mm';
+                        }
+
+                        createRealRouteMarker(realRouts[realRouteIntervalStep],datetimeformat);
+
+                    if (realRouteIntervalStep == 1){
+                        //приближаем карту на маршрут
+                        var bounds = new google.maps.LatLngBounds();
+                        for (var i = 0; i < pathCoordinates.length; i++) {
+                            var latlng = new google.maps.LatLng(pathCoordinates[i].lat, pathCoordinates[i].lng);
+                            bounds.extend(latlng);
+                        }
+                        bounds.getCenter();
+                        map.fitBounds(bounds);
+                        map.setZoom(14);  
+                    }
+                        
+                        realRouteIntervalStep++;
+                        if (realRouteIntervalStep > realRouts.length + 1)
+                            clearInterval(realRouteInterval)
+                    }
+
+
+                    //предполагается, что в realRouts будут лежать уже сортированные данные
+                    function renderRealRoute(){ 
+
+                        clearMap();
+                        markers = [];
+
+                        var realUserPathChckBx = $("#showRealTrack").attr('checked');
+
+                        var selectedTab = $("#mainTbs").tabs('option', 'selected');
+
+                        if (realUserPathChckBx != null && realUserPathChckBx == 'checked' && selectedTab === 0 ){
+
+                            console.log('realUserPathChckBx is checked');
+
+                            if (realRouts && realRouts.length > 0) realRouteInterval = setInterval(playRealRoute, 60);
+ 
+                            /* если до этого были проложены стандартные гугловые маршруты - отключаем их */
+                            for (var i in renderArray){
+                                try{
+                                    renderArray[i].setMap(null)
+                                } catch(err){
+                                    console.error(err);
+                                }
+                            }
+
+                            //показываем play user track
+
+                             $('[id *="playUserTrack"]').show();
+                             $('[id *="playUserTrack"]').attr('display', 'inline');
+
+                        } else {
+
+                              //cкрываем play user track
+                             $('[id *="playUserTrack"]').hide();
+
+                            try{ 
+                                if (userPath != null) userPath.setMap(null);
+                                if (flightPath != null) flightPath.setMap(null);
+                            } catch(ex) {
+                                console.log('exception>>> ' + ex);
+                            }
+ 
+                        }
+
+                    }
+
+                    function createRealRouteMarker(rVisit,datetimeformat){
+                        if (rVisit == null || rVisit == undefined) return;
+                        var pos = {lat: rVisit.visitLocation.lat, lng: rVisit.visitLocation.lng};
+                        var marker = new google.maps.Marker({
+                            position: pos,
+                            icon: {
+                              path: google.maps.SymbolPath.CIRCLE,
+                              scale: 2
+                            },
+                            draggable: false,
+                            map: map
+                        });
+
+                        var utime;
+                        var utime;
+                        var showedtime; 
+                        var tt;
+                        try{
+                            tt = moment.tz(rVisit.utime, timeZone)
+                            showedtime = tt.format(datetimeformat)
+                        }catch(ex){
+                             console.log('exception!!!!' + ex);
+                             utime = moment(rVisit.utime);
+                             utime = moment(utime).format(datetimeformat);
+                             showedtime = rVisit.showedtime
+                        }
+
+                        var contentString =  '<div id="content">'+
+                                                '<div id="siteNotice" style="display: inline-flex;">'+
+                                                '<div></div><b>' + showedtime +  '</b></div>'+ 
+                                            '</div>';
+
+                        var infowindow = new google.maps.InfoWindow({
+                            content: contentString,
+                            pixelOffset: new google.maps.Size(6, 0),
+                        });
+                        marker.addListener('click', function() {
+                            infowindow.open(map, marker);
+                        });
+
+                        infowindowMap[marker.id] = infowindow;
+                        marker.setMap(map); 
+                        realRoutemarkers.push(marker);
+                    }
+
+                    //создание точек маршрута, разделено на два скрипта т.к. одна часть используется до rerender, другая - после
+                    function renderPoints(from){  
+                        console.log('in renderPoints, from: ' + from); 
+                        visitsScope = []; 
+                        realRoutemarkers = [];
+                        var allVisits = [];
+                        if (visitsInObjMap && afterRender) {                
+                            for (var item in visitsInObjMap){
+                                var tmpVisitList = visitsInObjMap[item];
+                                if (tmpVisitList){
+                                    for (var i = 0 ; i < tmpVisitList.length ; i++ ){ 
+                                        visitMap[tmpVisitList[i].id] = tmpVisitList[i]; 
+                                        if (allVisits  ) {
+                                            if (getGeo(tmpVisitList[i])) allVisits.push(tmpVisitList[i]);
+                                            visitsScope.push(tmpVisitList[i]);
+                                        }
+                                    }
+                                }
+                               
+                            }
+                        } else if (visitsInObjMap && !afterRender){
+
+                            for (var item in visitsInObjMap){
+                                var tmpVisitList = visitsInObjMap[item];
+                                if (tmpVisitList){
+                                    for (var i = 0 ; i < tmpVisitList.length ; i++ ){ 
+                                        visitMap[tmpVisitList[i].id] = tmpVisitList[i];
+                                        if (SELECTED_OBJS[item]) {
+                                            if (getGeo(tmpVisitList[i])) allVisits.push(tmpVisitList[i]);
+                                            visitsScope.push(tmpVisitList[i])
+                                        }
+                                    }
+                                }
+                               
+                            }
+                        } 
+
+                        allVisits.sort(function(a,b){
+                            return a-b;
+                        }); 
+
+                         createWaypoints(allVisits); 
+                    }
+
+                    //создание точек маршрута
+                    function createWaypoints(visits){
+                        console.log('in createWaypoints'); 
+                        if (visits){
+                            var start;
+                            var end;
+                            var points = [];
+                            if (visits.length == 1){                                                  //один визит 
+                                gotoVisit(visits[0].id, null, true);      
+                            } else if (visits.length == 2) {
+                                start = getGeo(visits[0]);
+                                end =  getGeo(visits[1]);
+                                calcRoute(start, end, null);
+                            } else if (visits.length > 2 && visits.length <= 7){                      // 7 и меньше визитов
+                                start = getGeo(visits.shift());
+                                end = getGeo(visits.pop()); 
+                                for(var i=0; i < visits.length; i++){  
+                                    points.push({ location: getGetGMaps(visits[i]) , stopover: true});
+                                }  
+                                calcRoute(start, end, points)
+
+                            } else if (visits.length > 7){                                             //больше 7 визитов
+                                start = getGeo(visits.shift());
+                                end = getGeo(visits[6]);
+                                for(var i=0; ( i < 6 ); i++){  
+                                    points.push({ location: getGetGMaps(visits.shift()) , stopover: true});
+                                } 
+                                calcRoute(start, end, points)
+                                createWaypoints(visits);
+                            }
+                        } 
+                    }
+
+                    //запрос на отрисовку маршрута
+                    function calcRoute(start, end, waypoints) {
+                        console.log('in calcRoute');
+                        var request = {
+                            origin:start,
+                            destination:end,
+                            waypoints: waypoints != null ? waypoints : [],
+                            travelMode: google.maps.DirectionsTravelMode.DRIVING
+                        };
+                        directionsService.route(request, directionResults);
+                    }   
+
+                    //отрисовка маршрута
+                    function directionResults(result, status) {
+
+                        var iconBase = 'https://maps.google.com/mapfiles/kml/shapes/';
+                        routes_count++;
+                        if (status == google.maps.DirectionsStatus.OK) {
+                            renderArray[routes_count] = new google.maps.DirectionsRenderer({
+                                markerOptions: {
+                                                icon: {
+                                                        url: custom_icon_user_marker, 
+                                                        scaledSize: new google.maps.Size(25, 50) 
+                                                      }
+
+                                                }//"https://maps.google.com/mapfiles/ms/micons/red-dot.png"}
+                            });
+                             
+                            var realUserPathChckBx = $("#showRealTrack").attr('checked');
+                            if (realUserPathChckBx == null || realUserPathChckBx != 'checked' ){
+                                renderArray[routes_count].setMap(map);
+                                renderArray[routes_count].setOptions( { suppressMarkers: true } );
+                                renderArray[routes_count].setDirections(result);
+                            }
+
+                        } else {
+                            showPopup('{!JSENCODE($Label.UVM_route_error)}'  + ' ', status); 
+                            //drawMarkersOnly();
+                        }
+                    }
+
+                var GlobalTmp;
+
+                function showAccountToo(visit) {
+
+                        if ( visit.accountLocation ){
+
+                        var acc_coord = {lat: visit.accountLocation.lat - 0.00002, lng: visit.accountLocation.lng + 0.00003};
+
+                        var m_marker = new google.maps.Marker({
+                            position: acc_coord,
+                            title:"",
+                            icon: {
+                                url: accountIcon, 
+                                scaledSize: new google.maps.Size(15, 15)
+                              }
+                        }); 
+
+                       var contentString =   '<div id="content">'+
+                                                      '<div id="siteNotice" style="display: inline-flex;">'+
+                                                      '<div></div><b>' + visit.name +  '</b></div>'+ 
+                                                      '<div id="bodyContent">'+
+                                                        '<p>' + visit.accountAddress + ' </p>'+ 
+                                                      '</div>'+
+                                                  '</div>';
+
+                            var infowindow = new google.maps.InfoWindow({
+                                content: contentString,
+                                pixelOffset: new google.maps.Size(6, 0),
+                            });
+                            m_marker.addListener('click', function() {
+                                infowindow.open(map, m_marker);
+                            });
+
+                            infowindowMap[m_marker.id] = infowindow;
+                            m_marker.setMap(map); 
+                            accountVisitMarkers.push(m_marker);
+                    } else {
+
+                        var _address;
+                        if ( visit.accountAddress != null ) _address = visit.accountAddress;
+                        else if ( visit.visitAddress != null )_address = visit.visitAddress;
+
+                        geocoder.geocode( { 'address': _address }, function(results, status) {
+                            if (status == google.maps.GeocoderStatus.OK) { 
+                                map.setCenter(results[0].geometry.location); 
+
+                                var acc_coord = {lat: results[0].geometry.location.lat() - 0.00002, lng: results[0].geometry.location.lng() + 0.00003};
+
+                                m_marker = new google.maps.Marker({
+                                    map: map,
+                                    icon: {
+                                            url: accountIcon, 
+                                            scaledSize: new google.maps.Size(15, 15) 
+                                          },
+                                    position: acc_coord
+                                }); 
+
+                                var contentString =   '<div id="content">'+
+                                                      '<div id="siteNotice" style="display: inline-flex;">'+
+                                                      '<div></div><b>' + visit.name +  '</b></div>'+ 
+                                                      '<div id="bodyContent">'+
+                                                        '<p>' + _address + '</p>'+ 
+                                                      '</div>'+
+                                                  '</div>';
+
+                                var infowindow = new google.maps.InfoWindow({
+                                    content: contentString,
+                                    pixelOffset: new google.maps.Size(6, 0),
+                                });
+                                m_marker.addListener('click', function() {
+                                    infowindow.open(map, m_marker);
+                                });
+
+                                infowindowMap[m_marker.id] = infowindow;
+
+                                //finishOneMarker(m_marker); replaced on    directionsDisplay.setMap(null);
+                                directionsDisplay.setMap(null); 
+                                m_marker.setMap(map); 
+                                accountVisitMarkers.push(m_marker);
+
+                                } else {
+                                    //showPopup('{!JSENCODE($Label.UVM_geocode_error)}' + ' ' , status);
+                                }
+                            }); 
+                    }
+                }
+
+
+                var Piligrim = function(){
+
+                  var self = this, 
+                    points = [],
+                    markerIcon = '{!URLFOR($Resource.sfdc_lightning,"/assets/images/man1.png")}',
+                    actualPoint = null,
+                    piligrimMarker = null,
+                    interval = null; 
+
+
+                  self.initRoute = function(_points){
+                    points = [];
+                    for (var i in _points){
+                        points.push(  {lat: _points[i].visitLocation.lat, lng: _points[i].visitLocation.lng} );
+                    }
+
+                    points = points;
+
+                    piligrimMarker = new google.maps.Marker({
+                      position: {lat: 0, lng: 0},
+                      title:"",
+                      icon: {
+                        url: markerIcon, 
+                        scaledSize: new google.maps.Size(30, 30)
+                      }
+                    }); 
+                  }
+
+                  self.nextstep = function(){
+                    if (points == null || points.length == 0){
+                        showPopup('{!JSENCODE($Label.UVM_NoRealRoute)}');
+                        return;
+                    }
+                    if (self.actualPoint == null){
+                      self.actualPoint = 0;
+                    } else if (self.actualPoint >= points.length){
+                        self.actualPoint = null
+                        clearInterval(self.interval)
+                    } else 
+                      self.actualPoint++;
+
+                    for(var i=0; i < markers.length; i++){
+                        var markerD = {lat: markers[i].position.lat(), lng: markers[i].position.lng() };
+                        var mi_url;
+                        if ( getDistance(points[self.actualPoint],markerD) <= 100){
+                            if (markers[i].icon.url) {
+                                mi_url = markers[i].icon.url.replace('|111111|FFFFFF','|2E8B57|FFFFFF');
+                            } else mi_url = markers[i].icon.replace('|111111|FFFFFF','|2E8B57|FFFFFF');
+
+                            markers[i].setIcon(mi_url);
+                        } else {
+                            if (markers[i].icon.url) {
+                                mi_url = markers[i].icon.url.replace('|2E8B57|FFFFFF','|111111|FFFFFF');
+                            } else  mi_url = markers[i].icon.replace('|2E8B57|FFFFFF','|111111|FFFFFF');
+                            markers[i].setIcon(mi_url);
+                        }
+                    }
+ 
+
+                    piligrimMarker.setMap(map);
+                    piligrimMarker.setPosition(points[self.actualPoint]);  
+                    map.setCenter(piligrimMarker.getPosition())
+                    //map.setZoom(14);  
+                  }
+
+                  self.prevstep = function(){
+                    if (points == null || points.length == 0){
+                        showPopup('{!JSENCODE($Label.UVM_NoRealRoute)}');
+                        return;
+                    }
+                    if (self.actualPoint == null){
+                      self.actualPoint = 0;
+                    } else if (self.actualPoint >= points.length){
+                        self.actualPoint = points.length ; //стопорим в конце 
+                        self.stop();
+                    } else 
+                      self.actualPoint--;
+
+                    for(var i=0; i < markers.length; i++){
+                        var markerD = {lat: markers[i].position.lat(), lng: markers[i].position.lng() };
+                        var mi_url;
+                        if ( getDistance(points[self.actualPoint],markerD) <= 200){
+                            if (markers[i].icon.url) {
+                                mi_url = markers[i].icon.url.replace('|111111|FFFFFF','|2E8B57|FFFFFF');
+                            } else mi_url = markers[i].icon.replace('|111111|FFFFFF','|2E8B57|FFFFFF');
+
+                            markers[i].setIcon(mi_url);
+                        } else {
+                            if (markers[i].icon.url) {
+                                mi_url = markers[i].icon.url.replace('|2E8B57|FFFFFF','|111111|FFFFFF');
+                            } else  mi_url = markers[i].icon.replace('|2E8B57|FFFFFF','|111111|FFFFFF');
+                            markers[i].setIcon(mi_url);
+                        }
+                    }
+ 
+
+                    piligrimMarker.setMap(map);
+                    piligrimMarker.setPosition(points[self.actualPoint]); 
+                    map.setCenter(piligrimMarker.getPosition())
+                    //map.setZoom(14);   
+                  }
+  
+                  self.go = function(){
+                    if (points == null || points.length == 0){
+                        showPopup('{!JSENCODE($Label.UVM_NoRealRoute)}');
+                        return;
+                    }
+                    clearInterval(self.interval)
+                    self.interval = setInterval( function() {
+                      self.nextstep();
+                    }, 400);
+                  }
+
+                  self.stop = function(){
+                    if (points == null || points.length == 0){
+                        showPopup('{!JSENCODE($Label.UVM_NoRealRoute)}');
+                        return;
+                    }
+                    self.actualPoint = null
+                    clearInterval(self.interval)
+                    piligrimMarker.setMap(map)
+                    piligrimMarker.setPosition(points[0])
+                  }
+
+                  self.pause = function(){
+                    if (points == null || points.length == 0){
+                        showPopup('{!JSENCODE($Label.UVM_NoRealRoute)}');
+                        return;
+                    }
+                    clearInterval(self.interval);
+                  }
+
+                  self.destroyPrevious = function(){
+                    clearInterval(self.interval);
+                    piligrimMarker.setMap(null); 
+                  }
+
+                  return {
+                      initRoute: self.initRoute, 
+                      go: self.go,
+                      nextstep: self.nextstep,
+                      pause: self.pause,
+                      stop: self.stop,
+                      destroyPrevious: self.destroyPrevious,
+                      prevstep: self.prevstep
+                  }
+
+                }
+
+                function play(){ 
+                }
+
+
+                function gotoVisit(vid,e, showAccount, visitCounter){
+                    console.log('gotoVisit visitCounter: ' + visitCounter);
+                    var m_marker;
+                    console.log(vid);
+
+                    if (visitMap['' + vid]){
+                        var visit = visitMap['' + vid];
+
+                        if (showAccount && visit && (visit.accountLocation || visit.visitAddress || visit.accountAddress)) {
+                            showAccountToo(visit);
+                        } 
+                    }
+
+                    for (var i in markers){
+                        if (markers[i].vid == vid) {
+
+                            m_marker = markers[i];
+                            m_marker.setMap(map);
+                            map.setCenter(m_marker.getPosition())
+                            map.setZoom(18);
+
+                        }
+                    }
+
+                    if (!m_marker){
+                        showPopup('{!JSENCODE($Label.UVM_Object_hvn_location)}', '');
+                    }    
+                }
+
+                function showAllAccPositions(){
+                    if (visitMap){
+                        for(var v in visitMap){
+                            var visit = visitMap[v];
+
+                            if (visit && (visit.accountLocation || visit.visitAddress || visit.accountAddress)) {
+                                showAccountToo(visit);
+                            } 
+                        } 
+                    }
+                }
+
+                    //по клику - переходит на карте к организации
+                    function gotoAccount(accId){
+                        console.log('in gotoAccount, accId : ' + accId);
+                        var marker = account_to_marker_map[accId];
+                        var account = accountsGEOmap[accId];
+                        if (marker){
+                            for(var m in account_to_marker_map){
+                                account_to_marker_map[m].setMap(null); 
+                            }
+                            marker.setMap(map);
+                            continueZoom(marker);
+                        } else if (account.accountAddress)  {  
+
+                            var custom_icon = {
+                                url: custom_icon_user_marker, 
+                                scaledSize: new google.maps.Size(25, 50), // scaled size 
+                            };
+                            //геокодируем и ставим маркер 
+                            geocoder.geocode( { 'address': getGeo(account)}, function(results, status) { 
+                                console.log(status);
+                                if (status == google.maps.GeocoderStatus.OK) {
+
+                                    map.setCenter(results[0].geometry.location);
+                                    marker = new google.maps.Marker({
+                                        id:         account.id,
+                                        name:       account.name,
+                                        map:        map,
+                                        position:   results[0].geometry.location,
+                                        title :     account.name,
+                                        icon:       custom_icon
+                                    });  
+                                    pushMarker(account, marker);
+                                    clickToPopup(marker);
+                                    continueZoom(marker);
+                                } else {
+                                    showPopup(' ', status);
+                                }
+                            })
+                        } else { 
+                            showPopup('{!JSENCODE($Label.UVM_Object_hvn_location)}', '');
+                        }
+                    }
+
+                    //по клику - переходит на карте к определённому пользователю на данный момент
+                    function gotoUser(userId,e){
+                        console.log('in gotoUser, userId : ' + userId);
+                        zoomtoMarker(user_to_marker_map[userId],true)
+
+                    }
+
+
+                    //по клику - переходит на карте к определённому пользователю на данный момент
+                    function zoomtoMarker(curmarker){
+                        for (var key in infowindowMap){
+                            infowindowMap[key].close()
+                        }
+                        google.maps.event.trigger(curmarker, 'click');
+                        if (curmarker && curmarker.div && curmarker.div.style) curmarker.div.style.zIndex = getZIndex();
+                        curmarker.setMap(map);
+                        setInterval(continueZoom(curmarker), 100); //добавление задержки
+                    }
+
+                    
+                    function continueZoom(curmarker){
+                        map.setZoom(17);
+                        map.panTo(curmarker.position);
+                    }
+
+                    function createVisitMarker(visit, v_address, visitCounter){  
+                            console.log('visitCounter: ' + visitCounter);
+                            var numberedMarkerUrl = 'https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld='+ visitCounter + '|111111|FFFFFF'; //до замены было url: 
+
+                            var contentString =   '<div id="content">'+
+                                          '<div id="siteNotice" style="display: inline-flex;">'+
+                                          '<div></div> <b>' + visit.name +  '</b></div>'+ 
+                                          '<div id="bodyContent">'+
+                                            '<p> ' + v_address + ' </p>'+ 
+                                          '</div>'+
+                                      '</div>';
+                            if ((visit.visitLocation && visit.visitLocation.lat != null) || visit.accountLocation){
+
+                                       var marker = new google.maps.Marker({
+                                            position: getGeo(visit),
+                                            map: map,
+                                            vid: visit.id,
+                                            title:v_address,
+                                            icon: {
+                                                url: numberedMarkerUrl
+                                              }
+                                        });  
+
+                                        var infowindow = new google.maps.InfoWindow({
+                                            content: contentString,
+                                            pixelOffset: new google.maps.Size(6, 0),
+                                        }); 
+                                         
+                                        markers.push(marker); 
+                                        marker.addListener('click', function() {
+                                            infowindow.open(map, marker);
+                                        }); 
+                                        infowindowMap[marker.id] = infowindow; 
+
+                                } else if (visit.visitAddress || visit.accountAddress){ 
+
+                                    geocoder.geocode( { 'address': getGeo(visit)}, function(results, status) {
+
+                                        if (status == google.maps.GeocoderStatus.OK) {
+                                            map.setCenter(results[0].geometry.location);
+                                            var marker = new google.maps.Marker({
+                                                            map: map,
+                                                            title: visit.name,
+                                                            vid: visit.id,
+                                                            position: results[0].geometry.location,
+                                                            icon: {
+                                                                url: numberedMarkerUrl
+                                                            }
+                                            });
+
+
+                                            var infowindow = new google.maps.InfoWindow({
+                                                content: contentString,
+                                                pixelOffset: new google.maps.Size(6, 0),
+                                            });
+
+                                            marker.addListener('click', function() {
+                                                infowindow.open(map, marker);
+                                            });
+
+                                            infowindowMap[marker.id] = infowindow;
+                                            
+                                            markers.push(marker);
+                                        } 
+                                    }); 
+                            }  
+ 
+                }
+
+                    //отрисовка маркеров для визитов без маршрута, т.к. он не найден/возника ошибка/etc
+                    function drawMarkersOnly(){
+                        console.log('in drawMarkersOnly');
+                        showAllAccPositions();
+                        SELECTED_OBJS = {};
+                        var el_labels = $('#objCheckBoxes').children();
+
+
+                        for (var i=0; i < el_labels.length; i++){
+                            var obj_id = el_labels[i].id; 
+                            var checked = $(el_labels[i]).find('input')[0].checked;
+                            SELECTED_OBJS['' + obj_id] = checked; 
+                        }
+
+                        for(var i=0; i < visitsScope.length; i++){
+                            var visit = visitsScope[i]
+                            var order = 1 + i;
+
+                            var windowAddress = visitsScope[i].visitAddress == null ?  visitsScope[i].accountAddress : visitsScope[i].visitAddress; 
+                            
+                            if (visit && SELECTED_OBJS['' + visit.apiName] == true ) createVisitMarker(visit,windowAddress, order);  
+
+                        }
+                    }
+
+                    //перерисовывает карту так, чтобы там были маркеры только выбранных объектов визитов, а также скрываем снятые в списке
+                    function chckBxClicked(el){
+                        SELECTED_OBJS = {};
+                        console.log(el);
+                        afterRender = false; 
+                        var el_labels = $('#objCheckBoxes').children();
+
+
+                        for (var i=0; i < el_labels.length; i++){
+                            var obj_id = el_labels[i].id; 
+                            var checked = $(el_labels[i]).find('input')[0].checked;
+                            SELECTED_OBJS['' + obj_id] = checked; 
+
+                            if (checked){ //показываем отмеченные в списке
+                                $('.' + obj_id + 'lineobjectdiv').show();
+                            } else { //скрываем снятые в списке
+                                $('.' + obj_id + 'lineobjectdiv').hide();
+                            }
+                        }
+
+
+                        renderMapOnly(true, 'chckBxClicked');
+                    }
+
+
+                    //popup
+                    function showPopup(title, err){
+ 
+                        $('.b-popup').find('#eTitle').text(err);
+                        $('.b-popup').find('#eText').text(title); 
+                        $( ".b-popup" ).show({ effect: "fade", duration: 200 }); 
+                        setTimeout(hidePopup, 2000);
+                    }
+
+
+                    function hidePopup(){ 
+                        $( ".b-popup" ).hide({ effect: "fade", duration: 200 }); 
+                    }
+                    
+                    //переходим к одному визиту
+                    function finishOneMarker(marker){
+
+                        directionsDisplay.setMap(null);
+                        for(var m in markers){
+                             markers[m].setMap(null);
+                        }
+                        
+                        marker.setMap(map); 
+                        markers.push(marker);
+                        map.setCenter(marker.getPosition())
+                        map.setZoom(18);
+                    }     
+
+                    //возвращает координаты
+                    function getGeo(visit){
+                        if (visit.visitLocation != null && visit.visitLocation.lat != null)   return {lat: visit.visitLocation.lat, lng: visit.visitLocation.lng};
+                        if (visit.accountLocation != null && visit.accountLocation.lat != null) return {lat: visit.accountLocation.lat, lng: visit.accountLocation.lng}; 
+                        if (visit.accountAddress != null)  return visit.accountAddress;
+                        if (visit.visitAddress != null)    return visit.visitAddress;
+                    }
+
+                    //возвращает координаты
+                    function getGetGMaps(visit){
+                        if (visit.visitLocation != null && visit.visitLocation.lat != null)   return new google.maps.LatLng(visit.visitLocation.lat, visit.visitLocation.lng);
+                        if (visit.visitAddress != null)    return visit.visitAddress;
+                        if (visit.accountLocation != null && visit.accountLocation.lat != null) return new google.maps.LatLng(visit.accountLocation.lat, visit.accountLocation.lng);
+                        if (visit.accountAddress != null)  return visit.accountAddress; 
+                    }
+    
+                    var afterPageLoaded = true;
+
+                    function initAccountsMap(){
+                        if (afterPageLoaded) {
+                            afterPageLoaded = false;
+                        } else {
+                            clearPrevious('accountsTb');
+                            accountsGEOmap = {};
+                            accountMarkers= [];
+                            realRoutemarkers = [];
+                            infowindowMap = []; 
+                            accountVisitMarkers = [];
+                            account_to_marker_map = {};
+
+                            for(var i=0; i < accountsGEOlist.length; i++){
+                                renderAccountMarker(accountsGEOlist[i]);
+                                accountsGEOmap[ '' + accountsGEOlist[i].id ] = accountsGEOlist[i];
+                            }
+                        }
+
+                    } 
+
+
+                    function renderAccountMarker(account, deelayF){
+                    
+                        var marker;
+
+                        var custom_icon = {
+                            url: custom_icon_user_marker, 
+                            scaledSize: new google.maps.Size(25, 50), // scaled size
+                            /*origin: new google.maps.Point(0,0), // origin
+                            anchor: new google.maps.Point(0, 0) // anchor*/
+                        };
+    
+                        
+                       if ( account.visitLocation || account.accountLocation){
+                           
+                           marker = new google.maps.Marker({
+                                position: getGeo(account),
+                                title:    account.name,
+                                name:     account.name,
+                                icon:     custom_icon
+                            });  
+                           marker.setMap(map);
+                           pushMarker(account, marker);
+                           clickToPopup(marker);
+
+                           jQuery('#' + account.id).find('#accGEOok').show();
+                           jQuery('#' + account.id).find('#accGEObad').hide();
+
+
+                        }   
+                    }
+
+
+                    function pushMarker(account, marker){
+                        accountMarkers.push(marker);
+                        account_to_marker_map[account.id] = marker;
+                        FitMap(accountMarkers); 
+                    }
+
+                    function clickToPopup(marker){ 
+
+                        var contentString =   '<div id="content">'+
+                                                  '<div id="siteNotice" style="display: inline-flex;">'+
+                                                  '<div></div>' + marker.name +  '</div>'+ 
+                                                  '<div id="bodyContent">'+
+                                                    '<p> </p>'+ 
+                                                  '</div>'+
+                                              '</div>';
+
+                        var infowindow = new google.maps.InfoWindow({
+                            content: contentString,
+                            pixelOffset: new google.maps.Size(6, 0),
+                        });
+                        marker.addListener('click', function() {
+                            infowindow.open(map, marker);
+                        });
+
+                        infowindowMap[marker.id] = infowindow; 
+                    }
+
+                    function accountSearchJS(){
+                        continueChangeAccList();
+                    }
+  
+
+            </script>
+            <script>
+
+                    function initAcitivyTabs(){ 
+                        $( "#tabs" ).tabs(); 
+                        hideTab();
+                    }
+
+                    function initMainTabs(){
+                         $( "#mainTbs" ).tabs(); 
+
+                         //set resizable
+                        var resize_opt = {
+                              maxHeight: 550,
+                              minHeight: 200, 
+                              handles: 's' 
+                        }
+
+                    }
+
+                    function initAnimation(){ 
+                        console.log('in initAnimation')
+                        $('.activity-header').click(function () {
+                          if ($(this).parent().siblings(".activity-content").is(":hidden")) {
+                            $(this).parent().siblings(".activity-content").slideDown("slow");
+                          } else {
+                            $(this).parent().siblings(".activity-content").slideUp();
+                          }
+                        });
+                    }
+
+                    function setIcons(){
+                        //устанавливаем иконки на объекты визитов:
+                        console.log('in setIcons');
+                        sforce.connection.sessionId = "{!$Api.Session_ID}";
+                        if (iconObj == null){ 
+                            try{ 
+                                iconObj = sforce.connection.describeGlobalTheme();
+                            } catch(ex){
+                                console.error(ex);
+                            }
+                        }
+
+                        var ObjectIds = {};
+
+                        var el_labels = $('#objCheckBoxes').children(); 
+                        for (var i=0; i < el_labels.length; i++){
+                            ObjectIds[el_labels[i].id] = true; 
+                        }
+
+
+                        for (var i in iconObj[0].theme.themeItems){ 
+                           if (ObjectIds[iconObj[0].theme.themeItems[i].name] === true){ 
+
+                               var xml = iconObj[0].theme.themeItems[i].icons;
+
+                                for(var el in xml){
+                                    var icon = xml[el];
+                                    if (icon.height == '60' && icon.width == '60'){
+                                        $('.' + iconObj[0].theme.themeItems[i].name + '-icon').attr("src",icon.url);
+                                    }
+                                }    
+
+                           } 
+                        }
+
+                    }
+                    var picker;
+                    function initDatePicker(){ 
+
+                        var documentId = $('[id*="DateField"]').attr('id');
+                        var format;
+                        if (UserContext && UserContext.dateFormat) {
+                            format = UserContext.dateFormat.toUpperCase()
+                        } else {
+                            format = 'MM/DD/YYYY';
+                        }
+
+
+                        picker = new Pikaday(
+                        {
+                            field: document.getElementById(documentId),
+                            firstDay: 1,
+                            minDate: new Date(2000, 0, 1),
+                            maxDate: new Date(2025, 12, 31),
+                            format: format,
+                            yearRange: [2000,2020]
+                        });
+                         console.log('done'); 
+                    }
+
+                    function setDateField(next){
+                        if (next){
+                            picker.setMoment(moment( picker.getMoment() ).add(1, 'days') );
+                        } else {
+                            picker.setMoment(moment( picker.getMoment() ).add(-1, 'days') );
+                        }
+                    }
+
+                    var initChoosen = function(){
+                        $('#usersList').chosen();
+                    }
+
+                    $(document).ready(function() {  
+                        console.log('document ready'); 
+                        renderMapOnly(true, 'document ready');
+                        setTimeout(setSelectedUser,1);
+                        setTimeout(initAcitivyTabs,1);
+                        setTimeout(initMainTabs,1); 
+                        setTimeout(initAnimation,1);
+                        setTimeout(setIcons,1);
+                        setTimeout(setStyles('activities'), 1);
+                        setTimeout(initDatePicker, 1);
+                        setTimeout(initChoosen, 1);
+
+
+                    });
+            </script>
+
+            <style type="text/css">
+                div[id$='UserBlock']{
+                    padding-top: 5px;
+                    border-bottom: none !important;
+                }
+            </style>
+
+            <script type="text/javascript">
+                function getDataByFilterId (filterIdval) {
+                     console.log('filterIdval : ' + filterIdval);
+                     setDisabled();
+                     onChangeFilter(filterIdval); 
+                } 
+
+                function getDataByFilterIdAccounts (filterIdval) {
+                     console.log('filterIdval : ' + filterIdval);
+                     setDisabled();
+                     onChangeFilterAccounts(filterIdval); 
+                }
+            </script>
+
+    <div class="slds"> 
+
+
+
+            <apex:outputPanel >
+                <div class="slds-page-header" role="banner" style="height: 80px;">
+                  <div class="slds-grid">
+                    <div class="slds-col slds-has-flexi-truncate">
+                      <div class="slds-media">
+                        <div class="slds-media__figure">  
+                        <span onclick="" class="slds-icon__container slds-icon-action-description">
+                          <span class="slds-assistive-text">Record</span>
+                        </span> 
+                        </div>
+                        <div class="slds-media__body">
+                          <p class="slds-text-heading--label">{!$Label.UVM_HeaderSubtitle}</p>
+                          <div class="slds-grid">
+                            <h1 style="color: #0070D2;" class="slds-text-heading--medium slds-m-right--small slds-truncate slds-align-middle" title="Record Title">{!$Label.clm__uvm_headertitle}</h1>
+                          </div>
+                        </div>  
+
+                        <button onclick="window.location.href = '/'; return false" class="slds-button slds-button--neutral">{!$Label.UVM_Home}</button>
+
+                      </div>
+                    </div>
+                  </div>
+                  <div class="slds-grid slds-page-header__detail-row">
+                    <div class="slds-col--padded slds-size--1-of-4">
+                      <dl>
+                        <dt>
+                          <p class="slds-text-heading--label slds-truncate" title="Field 1"> </p>
+                        </dt>
+                        <dd>
+                          <p class="slds-text-body--regular slds-truncate" title=" "> </p>
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div> 
+         </apex:outputPanel>
+
+         
+        <apex:form id="form"  rendered="{!IF(ISNULL(errorString) , true, false)}">   
+              
+        <!-- pop-up -->      
+        <div class="b-popup" style="display:none; z-index: 5;">
+            <div class="b-popup-content">
+                <h2 id="eTitle" class="slds-text-heading--normal">Info</h2>
+                <div class="notify__content">
+                    <h2 id="eText" class="slds-text-heading--small">Location not found</h2>
+                </div>
+            </div>
+        </div>
+        <!-- //pop-up -->
+        <div id="mainTbs">
+            <ul>
+                <li><a href="#visitsTb" onclick="setStyles('activities');renderMapOnly(true, 'visitsTb');">{!$Label.UVM_Visits}</a></li> 
+                <li><a href="#usersTb" onclick="setStyles('users'); renderMapOnly(false, 'usersTb');">{!$Label.UVM_Users}</a></li>
+                <li><a href="#accountsTb" onclick="setStyles('accounts');renderMapOnly(false, 'accountsTb'); initAccountsMap();">{!$Label.UVM_Accounts}</a></li>
+            </ul>
+
+
+            <!--                 -->
+            <!--  ACCOUNTS TAB   -->
+            <!--                 -->
+            <div id="accountsTb" style="overflow-x: auto;">
+                <apex:actionFunction action="{!onChangeFilterAccounts}" name="onChangeFilterAccounts" rerender="accsCounter, watchAccounts ,accountButtonPanel" oncomplete="setEnabled();">
+                    <apex:param name="FilterId_val_accs" value="" />
+                </apex:actionFunction> 
+
+                <apex:actionFunction name="continueChangeAccList" action="{!continueChangeAccList}"  rerender="accsCounter, watchAccounts ,accountButtonPanel" status="accSearchStatus" oncomplete="setTimeout(setAccountSearchFocus, 100);"/>
+
+                <apex:actionStatus id="accSearchStatus" onstart="setDisabled();" onstop="setEnabled();" />
+
+
+                <apex:pageBlock id="bigBrotherAccounts" >  
+                    <apex:outputPanel styleClass="" >
+                        <label class="labels" style="padding-left: 8px;">{!$Label.UVM_View}</label>
+                        <select style="" class="text-bold" id="selAcc"  size="1" onchange="getDataByFilterIdAccounts (document.getElementById('selAcc').value);">  
+                            <apex:repeat var="so" value="{!ExistingViewAccounts}">     
+                                <option value="{!so.value}">{!so.label}</option>
+                            </apex:repeat> 
+                        </select>  
+                        <apex:outputPanel id="searchAccPanel" style="padding-left: 10px;" >
+                            {!$Label.clm__uvm_searchacc}
+                            <apex:inputText id="accountSearchStr" value="{!accountSearchStr}" style="width:210px;margin-left: 10px;" styleClass="slds-input" html-placeholder="{!$Label.clm__uvm_searchaccountplaceholder}"/>
+                            <img onclick="accountSearchJS();" style=" cursor: pointer; transform:scale(1.2,1.2); margin-right: 5px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/searchSmall.png")}' 
+                               onmouseout="this.style.transform='scale(1.2,1.2)'"
+                               onmouseover="this.style.transform='scale(1.35,1.35)'"
+                            />
+
+                        </apex:outputPanel>
+                        <apex:outputPanel id="accsCounter" styleClass="" style="padding-left: 10px;"> 
+                            <script type="text/javascript">
+
+                                accountsGEOlist = JSON.parse('{!JSENCODE(accountsGEOJSON)}');   
+
+                                setTimeout(initAccountsMap, 500);
+
+                            </script>
+ 
+                            {!firstIndexAcc}-{!lastIndexAcc} {!$Label.UVM_ofLabel} {!itemCountAcc}
+                            {!$Label.UVM_Page} {!pageNumberAcc} / {!totalAccs}  &nbsp;&nbsp;
+                            <!-- <label class="slds-checkbox" id="onlyGEOchbx">
+                                <apex:inputCheckbox id="chckbx" value="{!accsOnlyWithGEO}"  onclick="chckBxAccountOnlyGEOClicked();"/> 
+                                <span class="slds-checkbox--faux"></span>
+                                <span class="slds-form-element__label">todo show only with geolocation</span>
+                            </label> -->
+                         </apex:outputPanel>     
+                    </apex:outputPanel>
+
+                    <apex:outputPanel id="accountButtonPanel" styleClass=" " style="float: right;    margin-bottom: 5px;">
+                        <!-- ACCOUNT PAGINATOR BUTTONS --> 
+                        <apex:commandButton id="firstAccs" styleClass="button" value="{!$Label.clm__uvm_firstpage}" action="{!first}" rerender="accsCounter, watchAccounts ,accountButtonPanel" onclick="setDisabled();" oncomplete="setEnabled()" style="{!style_first}" disabled="{!hasPrevious == false}"/> 
+                        <apex:commandButton id="previosAccs" styleClass="button" value="{!$Label.clm__uvm_previouspage}" action="{!previous}" rerender="accsCounter, watchAccounts ,accountButtonPanel" onclick="setDisabled();" oncomplete="setEnabled()" style="{!style_prev}" disabled="{!hasPrevious == false}"/>  
+                        <apex:commandButton id="nextAccs" styleClass="button" value="{!$Label.clm__uvm_nextpage}" action="{!next}" rerender="accsCounter, watchAccounts ,accountButtonPanel" onclick="setDisabled();" oncomplete="setEnabled()" style="{!style_next}" disabled="{! hasNext == false}"/>    
+                        <apex:commandButton id="lastAccs" styleClass="button" value="{!$Label.clm__uvm_lastpage}" action="{!last}" rerender="accsCounter, watchAccounts ,accountButtonPanel" onclick="setDisabled();" oncomplete="setEnabled()" style="{!style_last}" disabled="{!hasNext == false}"/>  
+                        <!-- ACCOUNT PAGINATOR BUTTONS --> 
+                    </apex:outputPanel>
+                    <apex:pageblockSection id="watchAccounts" columns="1">
+                        <apex:pageblocksectionItem > 
+                                <apex:outputPanel id="account4locationTablePanel">  
+                                     <div id="tableID">  
+                                        <table class="slds-table slds-table--bordered">
+                                            <thead>
+                                                <tr class="slds-text-heading--label" style="border-left: 1px solid #d8dde6; border-right:1px solid #d8dde6;"> 
+                                                    <apex:repeat id="actualAccountFields" value="{!actualAccountFields}" var="f">  
+                                                        <th class="slds-is-sortable" scope="col" style="cursor: pointer;" >
+                                                            <span class="slds-truncate">{!actualAccountFieldsLabels[f]}</span>
+                                                        </th>  
+                                                    </apex:repeat> 
+                                                        <th class="slds-is-sortable" scope="col" style="cursor: pointer;" >
+                                                            <span class="slds-truncate">{!$Label.UVM_GeoposExist}</span>
+                                                        </th> 
+                                                </tr> 
+                                            </thead>
+                                          <tbody>  
+                                            <apex:repeat id="accounts2Page" value="{!accounts2Page}" var="acc">  
+                                                <tr id="{!acc['id']}" class="slds-hint-parent"  onclick="gotoAccount('{!acc['id']}');" style="cursor: pointer; border-left: 1px solid #d8dde6; border-right:1px solid #d8dde6;">
+                                                    <apex:repeat id="actualAccountFields" value="{!actualAccountFields}" var="f">  
+                                                        <td data-label="label" style="text-align: left;">
+                                                            <span class="slds-truncate" > 
+                                                                {!acc[f]}
+                                                            </span>
+                                                        </td>     
+                                                    </apex:repeat> 
+                                                    <td data-label="label" style="text-align: left;">
+                                                        <span class="slds-truncate" id="accountImages">  
+                                                            <img id="accGEOok"  src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/ok.png")}'      style=";display:none;transform: scale(.3, .3)"  />
+                                                            <img id="accGEObad" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/error.png")}'   style=";transform: scale(.3, .3)"  />
+                                                        </span>
+                                                    </td>
+                                                </tr>  
+                                            </apex:repeat> 
+                                          </tbody>  
+                                        </table>   
+                                    </div> 
+                                </apex:outputPanel> 
+                            </apex:pageblocksectionItem>    
+                    </apex:pageblockSection>
+                </apex:pageBlock>
+            </div>
+
+
+            <div id="usersTb" style="height: 50px;    overflow-y: hidden;">
+
+            <apex:actionFunction action="{!onChangeFilter}" name="onChangeFilter" rerender="watchUsers,UsersWithChbs, buttonPanel" oncomplete="setEnabled();">
+                <apex:param name="FilterId_val" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="massCheckboxClick" action="{!massCheckboxClick}" rerender="watchUsers" oncomplete="setEnabled();" > </apex:actionFunction>
+   
+                <apex:pageBlock id="bigBrother" html-style="border:none;" >  
+                <div class="slds-grid slds-wrap slds-grid--pull-padded">
+                    <div class="slds-col--padded slds-size--1-of-2 slds-medium-size--1-of-6 slds-large-size--4-of-12" style="min-width: 370px;    width: 380px;"> 
+                        <apex:outputPanel >
+                            <apex:outputPanel >
+                                <label class="labels" style="padding-left: 8px;">{!$Label.UVM_View}</label>
+                                <select style="margin-right:3%; " class="text-bold" id="sel"  size="1" onchange="getDataByFilterId (document.getElementById('sel').value); clearUserSearch();">  
+                                    <apex:repeat var="so" value="{!ExistingViews}">     
+                                        <option value="{!so.value}">{!so.label}</option>
+                                    </apex:repeat> 
+                                </select> 
+
+                                <apex:outputPanel id="buttonPanel">
+                                    <apex:commandButton disabled="{!users4wats.size == 0}" id="watchButton" style="" styleClass="button" value="{!watchLabel}" action="{!watch4all}" rerender="userStatus, poolerPanel" onclick="startRenderAll();setDisabled();reNameWatchButton();"/>  
+                                </apex:outputPanel>
+                                <label class="labels" style="padding-left: 8px;">{!$Label.UVM_SearchUser}</label>
+                                <input id="userSearchString" placeholder="{!$Label.UVM_SearchUserPlaceholder}" class="slds-input" style="max-width: 210px;" onkeyup="userSearchChanged();"/>
+
+                                <apex:outputPanel id="bigspinnerPanel" style="display:inline-block;">    
+
+                                    <img id="spinnerOnClick" style=" margin-left: 40%; display:none;height: 40px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/spinners/slds_spinner_brand.gif")}'  />
+                                </apex:outputPanel>
+
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </div>
+
+                    
+                </div>    
+                    <apex:outputPanel id="poolerPanel">
+                        <apex:actionPoller enabled="{!IF(counter < COUNTER_STOP, true, false)}" action="{!getSynchLog}" reRender="usersGEO, watchButton, userStatus" interval="5"/> 
+                    </apex:outputPanel>
+
+                    <apex:outputPanel id="userWatcherScripts">
+                        <script type="text/javascript">
+
+                            var LOGS = {}; 
+                            var tempLogs = {};
+                            var user_to_log_map = {};
+                            var userMarkers = [];
+                            var custom_icon_user_marker = '{!URLFOR($Resource.clm__sfdc_lightning,"/assets/images/location-512px.svg")}';
+                            var accountIcon = '{!URLFOR($Resource.clm__sfdc_lightning,"/assets/images/hospital/hospital3.png")}';
+                            var infowindowMap = {};
+                            var normal_label = '{!JSENCODE($Label.clm__uvm_finduserbutton)}';
+                            var watch_label = '{!JSENCODE($Label.clm__uvm_watching)}';
+                            var bounds;
+                            var zIndexCounter = 1; 
+
+                            function clearPrevious(tab){
+
+                                if (tab == 'accountsTb'){ 
+                                    clearMap();
+                                }
+                            }
+                                
+                            //hide tab if only one object 
+                            function hideTab(){
+                                var size = '{!SelLabelsOnView.size}';
+                                console.log('size : ' + size);
+                                if (size == 1){
+                                    $('#tabs').find('ul').hide();
+                                }
+                            }
+             
+                            //вызывается при вводе в строку поиска символов (букв/цифр)
+                            function userSearchChanged(){
+                                console.debug('debugger');
+                                var qString = $('[id *= "userSearchString"]').val(); 
+
+                                $('[id *= "watchingUserRow"]').each(  function(index, el) {  var uname = $(el).find('#userName').text();
+                                                                                      if (uname.indexOf(qString) != -1){
+                                                                                        $(el).show();
+                                                                                        $(el).find('[id *="coffinJackdaws"]').attr('checked', true);
+                                                                                      } else {
+                                                                                        $(el).hide();
+                                                                                        $(el).find('[id *="coffinJackdaws"]').attr('checked', false);
+                                                                                      }
+                                                                    })
+                            }
+
+                            function clearUserSearch(){
+                                $('[id *= "userSearchString"]').val('');
+                            }
+
+                            //очистка карты перед отрисовкой новых элементов
+                            function clearMap(){ 
+                                console.log('in clearMap');
+                                directionsDisplay.setMap(null);
+ 
+                                for(var m in markers){
+                                     markers[m].setMap(null);
+                                }
+
+                                for (var m in accountMarkers){
+                                    accountMarkers[m].setMap(null);
+                                }
+                                for (var a in accountVisitMarkers){
+                                    accountVisitMarkers[a].setMap(null);
+                                }
+
+                                for (var m in userMarkers){
+                                    userMarkers[m].setMap(null);
+                                }
+  
+                                for (var r in renderArray){
+                                    renderArray[r].setMap(null);
+                                }
+
+                                for(var a in accountMarkers){
+                                    accountMarkers[a].setMap(null);
+                                }
+
+                                for(var r in realRoutemarkers){
+                                    realRoutemarkers[r].setMap(null);
+                                }
+
+                                clearClusters();
+
+                            }
+
+                            function getZIndex(){
+                                zIndexCounter++;
+                                return zIndexCounter-1;
+                            }
+
+                            //отрисовка пользователей из массива
+                            function renderUsers(){
+                                console.log('in renderUsers');
+                                for (i in tempLogs){
+                                    var place = tempLogs[i]
+                                    if (place && place.clm__Geolocation__Latitude__s && place.clm__Geolocation__Longitude__s && !user_to_log_map[place.OwnerId]){
+                                        createMarker(place);
+                                        user_to_log_map[place.OwnerId] = place;
+                                    }
+                                }
+                            }
+
+                            //скрипт для заморозки на время пик-листа (нужен, т.к. пиклист перерисовывается)
+                            function checkSelectList(counter){
+                                var CONTS_COUNTER = {!COUNTER_STOP};
+
+
+                                if(counter < CONTS_COUNTER){
+                                    setDisabled();
+                                    $('[id *= "watchButton"]').val(watch_label);  
+                                } else {
+                                    setEnabled();
+                                    $('[id *= "watchButton"]').val(normal_label); 
+                                }
+                            }
+
+                            //временно переименовывает кнопку по клику,
+                            function reNameWatchButton(){
+                                $('[id *= "watchButton"]').val(watch_label); 
+                            }
+  
+                            //устанавливает фокус на строке поиске на вкладке отслеживания пользователей
+                            function setUserSearchFocus(){
+                                $('[id *= "userSearchString"]').focus();
+                            }
+
+                            function setAccountSearchFocus(){
+                                $('[id *= "accountSearchStr"]').focus();
+                            }
+
+
+                            //снимает с влакдок, кнопки поиска и листа с выбором листвьюшек пользователей блок
+                            function setEnabled(){ 
+                                var selectList = $('#sel');
+                                var button  = $('[id *= "watchButton"]');
+                                var searchUserInput = $('[id *= "userSearchString"]');
+                                var searchAccountInput = $('[id *= "accountSearchStr"]');
+                                var coffinJackdaws = $('[id *= "coffinJackdaws"]');
+
+                                $(selectList).removeAttr('disabled');
+                                $(selectList).css('background',''); 
+
+                                $(button).removeAttr('disabled');
+                                $(button).css('background',''); 
+                                $(coffinJackdaws).removeAttr('disabled');
+
+                                $(searchUserInput ).removeAttr('disabled');
+                                $(searchAccountInput ).removeAttr('disabled');
+
+                                $('#mainTbs').tabs( "enable", 0 );
+                                $('#mainTbs').tabs( "enable", 1 );
+                                $('#mainTbs').tabs( "enable", 2 );
+                            }
+
+
+                            //устанавливает на влакдки, кнопку поиска и лист с выбором листвьюшек пользователей блок 
+                            function setDisabled(){
+
+                                var selectList = $('#sel');
+                                var button  = $('[id *= "watchButton"]');
+                                var searchUserInput = $('[id *= "userSearchString"]');
+                                var searchAccountInput = $('[id *= "accountSearchStr"]');
+                                var coffinJackdaws = $('[id *= "coffinJackdaws"]');
+
+                                $(selectList).attr('disabled','');
+                                $(selectList).css('background','ghostwhite'); 
+
+                                $(button).attr('disabled','');
+                                $(button).css('cssText','background : ghostwhite !important'); 
+
+                                $(searchUserInput ).attr('disabled','');
+                                $(searchAccountInput).attr('disabled','');
+                                $(coffinJackdaws).attr('disabled','');
+
+                                $('#mainTbs').tabs({
+                                  disabled: [ 0, 1 , 2]
+                                });
+                            }
+
+                            //запуск массового снятия/установки чекбоксов на пользователях
+                            function massCheckboxClickPre(){
+                                if ( $('[id *= "watchButton"]').val() != watch_label) massCheckboxClick();
+                            }
+
+                            //создаёт маркер (используется для создания маркеров пользователей, которые отслеживаются на данный момент)
+                            function createMarker(place, zoomIn){ 
+                                var role = users4watch[place.OwnerId].userRole
+                                
+
+                                var contentString =   '<div id="content">'+
+                                                          '<div id="siteNotice" style="display: inline-flex;">'+
+                                                          '<div><img src="' + users4watch[place.OwnerId].photoUrl + '" style="height: 32px; width: 32px;" /></div>' + 
+                                                                '<div    style=" padding-left: 5px;">'
+                                                                  + place.Owner.Name + '<div style="text-align: center;"> ';
+                                    if (role != null && role != undefined) {contentString+=  ' ('  + role +  ')';}
+                                   contentString+= '</div>' +
+                                                              '</div></div>'+ 
+                                                          '<div id="bodyContent">'+
+                                                            '<p> </p>'+ 
+                                                          '</div>'+
+                                                      '</div>';
+
+                                var infowindow = new google.maps.InfoWindow({
+                                    content: contentString,
+                                    pixelOffset: new google.maps.Size(6, 0),
+                                });
+                                
+                                var m_latLogn = new google.maps.LatLng(getLat(place),getLng(place));
+                                console.log('m_latLogn: ' + m_latLogn);
+                                
+                                var marker = new CustomMarker(
+                                        m_latLogn, 
+                                        map,
+                                        {
+                                            marker_id: '123'
+                                        },
+                                        users4watch[place.OwnerId].photoUrl
+                                    );
+
+                                marker.addListener('click', function() {
+                                    infowindow.open(map, marker);
+                                });
+
+                                userMarkers.push(marker);
+                                infowindowMap[place.OwnerId] = infowindow;
+
+                                user_to_marker_map[place.OwnerId] = marker;
+
+                                FitMap(userMarkers);
+                            }
+
+
+                            //подгоняет карту так, чтобы видны были все существующие маркеры
+                            function FitMap(markers){  
+
+                                var opt = {maxZoom: 17};
+                                map.setOptions(opt);
+
+                                var latlngbounds = new google.maps.LatLngBounds();
+                                markers.forEach(function(n){
+                                   if (n.getPosition()) latlngbounds.extend(n.getPosition());
+                                });
+                                map.setCenter(latlngbounds.getCenter());
+                                map.fitBounds(latlngbounds); 
+
+                                opt = {maxZoom: 20};
+                                map.setOptions(opt);
+                                
+                            }
+
+
+                            //возвращает координаты пользователя
+                            function getLat(place){
+                                return place.clm__Geolocation__Latitude__s;
+                            }
+
+                            //возвращает координаты пользователя
+                            function getLng(place){
+                                return place.clm__Geolocation__Longitude__s;
+                            }
+
+                            //отвечает за показ spinner, обнуляет переменные, запускает орисовку пользователей
+                            function startRenderAll(){
+                                console.log('in startRenderAll');
+
+                                $('#spinnerOnClick').show();
+                                setTimeout(hideSpinner, 9000);
+                                visitsInObjMap = false;
+                                renderMapOnly(true, 'startRenderAll');
+                                //hideAll();
+                                LOGS = {};
+                                tempLogs = {};
+                                user_to_log_map = {};
+                                user_to_marker_map = {};
+                                renderUsers();
+                            }
+
+                            //скрывает spinner
+                            function hideSpinner(){
+                                $('#spinnerOnClick').hide({ effect: "fade", duration: 2000 });
+                            } 
+                        </script>
+
+                        <script type="text/javascript">
+                        /* * * * * * * * * * * * * * * * * * * * * * * * * *  * * * * /
+                        /* * * * скрипты для нестандартных меток на картах * * * * * */
+                        /* * * * * * * * * * * * * * * * * * * * * *  * * * *  * * * */
+
+                        function CustomMarker(latlng, map, args, url) {
+                            this.latlng = latlng;
+                            this.position = latlng; 
+                            this.args = args;   
+                            this.setMap(map);   
+                            this.avatar_url = url;
+                        }
+                        function initCustomMarker(){
+                            CustomMarker.prototype = new google.maps.OverlayView();
+
+                        CustomMarker.prototype.draw = function() {
+                            
+                            var self = this;
+                            var div = this.div;
+                            if (!div) {
+                                div = this.div = document.createElement('div');
+                                div.className = 'CustomMarkerStyle';
+                                div.style.position = 'absolute';
+                                div.style.cursor = 'pointer';
+                                div.style.width = '32px';
+                                div.style.height = '32px';
+                                div.style.background = 'transparent';
+                                div.style.borderRadius = '50%';
+                                div.innerHTML = '<img style="border-radius:50%; width:26px; height:26px;" src="' + self.avatar_url + '" />';
+                                if (typeof(self.args.marker_id) !== 'undefined') {
+                                    div.dataset.marker_id = self.args.marker_id;
+                                }
+                                
+                                google.maps.event.addDomListener(div, "click", function(event) {
+                                    //alert('You clicked on a custom marker!');         
+                                    google.maps.event.trigger(self, "click");
+                                });
+                                
+                                var panes = this.getPanes();
+                                panes.overlayImage.appendChild(div);
+                            }
+                            
+                            var point = this.getProjection().fromLatLngToDivPixel(this.latlng);
+                            
+                            if (point) {
+                                div.style.left = (point.x - 10) + 'px';
+                                div.style.top = (point.y - 20) + 'px';
+                            }
+                        };
+
+                        CustomMarker.prototype.remove = function() {
+                            if (this.div) {
+                                this.div.parentNode.removeChild(this.div);
+                                this.div = null;
+                            }   
+                        };
+
+                        CustomMarker.prototype.getPosition = function() {
+                            return this.latlng; 
+                        };
+                        }
+                        
+                    </script>
+                    </apex:outputPanel>
+
+                    <apex:outputPanel id="usersGEO">
+                        <script type="text/javascript">
+                            tempLogs = JSON.parse('{!JSENCODE(logListJSON)}');
+                            users4watch = JSON.parse('{!JSENCODE(userPhotoMapJSON)}');
+                            renderUsers();
+                            checkSelectList({!counter});
+                        </script>
+                    </apex:outputPanel>
+
+                </apex:pageBlock>
+            </div>
+            <div id="visitsTb" style="height: 65px; overflow-y: hidden;">
+                <apex:pageBlock id="UserBlock" >
+                    <apex:actionFunction id="refreshSelectedUser" action="{!refreshSelectedUser}" name="refreshSelectedUser" 
+                        rerender="wrappers, VisitsBlock1, GoogleMap, VisitsBlock2,visitsMultiChbx" 
+                        oncomplete="renderMapOnly(true, 'from refreshSelectedUser');initAnimation();setIcons();" >
+                        <apex:param id="selUserId" name="selUserId" value="" />
+                    </apex:actionFunction>
+
+          
+                            <apex:outputPanel >
+                                <apex:outputLabel value="{!$Label.clm__uvm_username}   " styleClass="labels"/> &nbsp;&nbsp;&nbsp; 
+                                
+                                <select id="usersList" style="width:200px" styleclass="form-control rec" onchange="refreshSelectedUserPre();">
+                                    <apex:repeat value="{!displayingUserList0}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                    <apex:repeat value="{!displayingUserList1}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                    <apex:repeat value="{!displayingUserList2}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                    <apex:repeat value="{!displayingUserList3}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                    <apex:repeat value="{!displayingUserList4}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                    <apex:repeat value="{!displayingUserList5}" var="user" >
+                                            <option value="{!user.Id}">
+                                                {!user.LastName}
+                                            </option>
+                                    </apex:repeat>
+                                </select>
+
+                                
+                                <script>
+
+                                    var setSelectedUser = function(){
+                                        var userId = '{!JSENCODE(selUserId)}';
+                                        $('#usersList').find('option').each(function( index ) {
+                                            if ( $( this ).val() == userId ){
+                                                $('#usersList').val( $( this ).val() ) 
+                                            }
+                                        })
+                                    }
+
+                                    var refreshSelectedUserPre = function(){
+                                        var uId = $('[id*="usersList"]').val();
+                                        refreshSelectedUser(uId);
+                                    }
+
+                                        // Relinquish jQuerys va of the $ variable
+                                    jQuery.noConflict();
+                                
+                                    (function (componentName) {
+                                        // get a reference to the select component in the page
+                                        var selectList = jQuery('[id="' + componentName + '"]');
+                                
+                                        // a javascript object to collect the elements in each role
+                                        var roles = {};
+                                
+                                        // iterate all of the options and collect them by region
+                                        jQuery('option', selectList).each(function (i) {
+                                            var oElement = jQuery(this);
+                                            var rolesArray = oElement.text().split('_');
+                                            
+                                            // create an array entry for the region name if there is not one
+                                            if (!roles[rolesArray[0]]) {
+                                                roles[rolesArray[0]] = [];
+                                            }
+                                
+                                            // add the item to the array for this region
+                                            roles[rolesArray[0]].push(oElement);
+                                        });
+                                
+                                        // iterate all of the names in the regions object
+                                        for (var role in roles) {
+                                
+                                            // make sure the name did not come from the prototype
+                                            if (roles.hasOwnProperty(role)) {
+                                
+                                                // turn the array of items into a single jQuery collection
+                                                var groupElements = jQuery(roles[role]).map(function () {
+                                                    return this.toArray();
+                                                });
+                                
+                                                // create the group and set the label
+                                                var optgroup = jQuery('<optgroup/>');
+                                                optgroup.attr('label', role);
+                                
+                                                // wrap the option elements in an optgroup
+                                                groupElements.wrapAll(optgroup);
+                                
+                                                // remove the region text from the label
+                                                groupElements.each(function () {
+                                                    jQuery(this).text(function () {
+                                                        return jQuery(this).text().replace(role + '_', '');
+                                                    });
+                                                });
+                                            }
+                                        }
+                                    })('usersList'); // 23.06.2016 было - {!$Component.usersList} immediate function execution - pass in the id of the select list
+                                </script>                            
+                            </apex:outputPanel> 
+                              
+                            <apex:outputPanel >
+                                &nbsp;&nbsp;&nbsp;<apex:outputLabel value="{!$Label.clm__uvm_selecteddate} " styleClass="labels"/>&nbsp;&nbsp;&nbsp;
+
+                                <apex:inputText id="DateField" value="{!pageselecteddate}"   size="20" disabled="false" style="width:150px;">
+                                    <apex:actionSupport event="onchange" action="{!refreshSelectedDate}" rerender="wrappers, GoogleMap, VisitsBlock1, VisitsBlock2,visitsMultiChbx" oncomplete="renderMapOnly(true, 'DateField onchange');initAnimation();setIcons();" />
+                                </apex:inputText>
+
+                                &nbsp;&nbsp;&nbsp;
+                                <apex:commandButton style="120px !important" styleClass="button-small" value="<<" action="{!empty}" rerender="none" onclick="setDateField(false)"/>
+                                <apex:commandButton style="120px !important" styleClass="button-small" value=">>" action="{!empty}" rerender="none" onclick="setDateField(true)" />
+                                
+                            </apex:outputPanel> 
+
+                            <apex:outputPanel >
+                                 &nbsp;&nbsp;&nbsp;<apex:outputLabel value="{!$Label.clm__uvm_showrealuserpath}" styleClass="labels"/>
+                                 <input id="showRealTrack" type="checkbox" onchange="renderMapOnly(true, 'showRealTrack chckbx clicked');" /> 
+                                 <div id="playUserTrack" style="display: inline; padding-left: 30px;">
+                                     &nbsp;&nbsp;&nbsp;<apex:outputLabel value="{!$Label.clm__uvm_playpath}" styleClass="labels"/>
+                                     <img onclick="piligrim.go();" style="cursor: pointer; width: 25px;height: 25px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/playertracker/play.png")}' />
+                                     <img onclick="piligrim.stop();" style="cursor: pointer; width: 25px;height: 25px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/playertracker/stop.png")}' />
+                                     <img onclick="piligrim.pause();" style="cursor: pointer; width: 25px;height: 25px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/playertracker/pause.png")}' />
+                                     <img onclick="piligrim.nextstep();" style="cursor: pointer; width: 17px;height: 14px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/playertracker/previous2.png")}' />
+                                     <img onclick="piligrim.prevstep();" style="cursor: pointer; width: 17px;height: 14px;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/playertracker/next2.png")}' />
+                                </div>
+                                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                            </apex:outputPanel>
+
+                </apex:pageBlock>     
+
+            
+                <script type="text/javascript">
+
+                    var styles=[{featureType:"water",elementType:"geometry",stylers:[{color:"#e9e9e9"},{lightness:17}]},{featureType:"landscape",elementType:"geometry",stylers:[{color:"#f5f5f5"},{lightness:20}]},{featureType:"road.highway",elementType:"geometry.fill",stylers:[{color:"#ffffff"},{lightness:17}]},{featureType:"road.highway",elementType:"geometry.stroke",stylers:[{color:"#ffffff"},{lightness:29},{weight:.2}]},{featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#ffffff"},{lightness:18}]},{featureType:"road.local",elementType:"geometry",stylers:[{color:"#ffffff"},{lightness:16}]},{featureType:"poi",elementType:"geometry",stylers:[{color:"#f5f5f5"},{lightness:21}]},{featureType:"poi.park",elementType:"geometry",stylers:[{color:"#dedede"},{lightness:21}]},{elementType:"labels.text.stroke",stylers:[{visibility:"on"},{color:"#ffffff"},{lightness:16}]},{elementType:"labels.text.fill",stylers:[{saturation:36},{color:"#333333"},{lightness:40}]},{elementType:"labels.icon",stylers:[{visibility:"off"}]},{featureType:"transit",elementType:"geometry",stylers:[{color:"#f2f2f2"},{lightness:19}]},{featureType:"administrative",elementType:"geometry.fill",stylers:[{color:"#fefefe"},{lightness:20}]},{featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#fefefe"},{lightness:17},{weight:1.2}]}];
+
+                    markers = []; 
+                    var markerCluster = {};
+                    var realRoutemarkers = [];
+                    var directionsDisplay ;  
+                    renderArray = [];
+                    var routes_count = 0; 
+                    var afterRender = true;
+                    var SELECTED_OBJS = {};
+                </script> 
+
+            </div>
+        </div>
+            
+            <apex:pageBlock id="GoogleMap" title="{!$Label.clm__uvm_googlemaptitle}">
+                <head>                  
+                     <apex:outputPanel rendered="{!IF(ISBLANK(gmapskey), false, true)}">
+                        <script type="text/javascript" src="https://maps.google.com/maps/api/js?key={!JSENCODE(gmapskey)}&sensor=false&language={!JSENCODE(userLang)};"></script>
+                    </apex:outputPanel>
+
+                     <apex:outputPanel rendered="{!IF(ISBLANK(gmapskey), true, false)}">
+                        <script type="text/javascript" src="https://maps.google.com/maps/api/js?sensor=false&language={!JSENCODE(userLang)};"></script>
+                    </apex:outputPanel>
+
+                    <script src="{!URLFOR($Resource.CLMRes,'JTreeTable/JqTG/jquery.min.js')}"></script>
+                    <script src="{!URLFOR($Resource.CLMRes,'JTreeTable/JqTG/jquery-ui.min.js')}"></script>
+                    <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'geolocation/chosen.jquery.js')}"></script>
+                              
+                    <apex:includeScript value="/soap/ajax/31.0/connection.js"/>
+                    <apex:includeScript value="/soap/ajax/31.0/apex.js"/>
+                    
+                    <script type="text/javascript"> 
+
+                        var lastRow;
+                        var chosenLocation; 
+                        var isChosen = 0; 
+                        var isTheSame = 0; 
+                        var count = 0;
+                        var accountsGEOlist;
+                        var accountsGEOmap = {};
+                        var accountMarkers = [];
+                        var accountVisitMarkers = [];
+                        var account_to_marker_map = {};
+                        //Define a variable with all map points.
+                        var _mapPoints = new Array();
+                        var backupPoints;
+                        var tempArr = {};     
+                        var tempArr2 = new Array();
+                        var i = 0;
+                        var j = 0;
+                        var flag = 0; 
+                        var accArray ;
+                        var contArray ;  
+                        
+                        for (var k = 0; k < tempArr.length; k++) {
+                            tempArr2.push(tempArr[k]);
+                            flag = 1;
+                            j = j + 1;
+                            if (j > 9) {
+                                j = 0;
+                                _mapPoints[i] = tempArr2;
+                                i = i + 1;
+                                tempArr2 = new Array();
+                                tempArr2.push(_mapPoints[i - 1][_mapPoints.length]);
+                                flag = 1;
+                                j = j + 1;
+                            }
+                        }
+                        if (flag == 1) {
+                            _mapPoints[i] = tempArr2;
+                        }
+                         
+                        var zoom_option = 3; 
+                        var LegPoints = new Array(); 
+                        var map;   
+                        var directionsService;  
+                        var geocoder = new google.maps.Geocoder(); 
+                        var infowindow = new google.maps.InfoWindow({maxWidth : 230}); 
+                        var bounds; 
+                        var delay = 100; 
+                        var latlng = new google.maps.LatLng(55.751, 37.656); 
+                        var nextAddress = -1;
+                        var markers = [];
+                        var visitsScope = [];
+                        var realRouteInterval;
+                        var realRouteIntervalStep;
+                        var piligrim;
+    //------------------------------------------------------------------------------
+                        
+                    </script>    
+                    
+                    <style>
+                        #map {
+                            font-family: Arial;
+                            font-size:12px;
+                            line-height:normal !important;
+                            height:600px;
+                            background:transparent;
+                        }
+                    </style>  
+                    
+                </head>                                                                                                                                                                                      
+                <body>
+                    <apex:outputPanel styleClass="" rendered="{!IF(ISBLANK(gmapskey), false, true)}" id="opMapPanel" layout="block">  
+                        <script type="text/javascript">
+                            console.log('gmapskey not blank');
+                        </script> 
+                        <div id="cMapContainer" class="slds-grid slds-wrap slds-grid--pull-padded">
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <!-- google-карта - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -->
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <div id="map" class="slds-col--padded slds-size--1-of-2 slds-medium-size--5-of-6 slds-large-size--8-of-12"></div>
+
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <!-- список с activity - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <div id="ActivitiesContainer" style=" padding-left: 20px" class="slds-col--padded slds-size--1-of-2 slds-medium-size--1-of-6 slds-large-size--2-of-12">
+
+                                <!-- объекты activity, существующие в системе (здесь мы отмечаем, какие будут отображаться, а какие - нет) -->
+                                 <apex:outputPanel id="visitsMultiChbx"   style="display:{!JSENCODE(SelLabelsOnViewDisplay)};"  > <!--rendered="{!SelLabelsOnView.size > 1}"-->
+                                    <div style=" ">
+                                        <fieldset class="slds-form-element" style="    min-width: 200px;">
+                                            <legend class="form-element__legend slds-form-element__label">{!$Label.clm__uvm_availableobjects}</legend>
+                                            <div class="slds-form-element__control" id="objCheckBoxes">
+                                                <apex:repeat value="{!SelLabelsOnView}" var="item">
+                                                      <label class="slds-checkbox" id="{!item.apiName}">
+                                                        <apex:inputCheckbox id="chckbx" value="{!item.selected}"  onclick="chckBxClicked();"/> 
+                                                        <span class="slds-checkbox--faux"></span>
+                                                        <span class="slds-form-element__label">{!item.label}</span>
+                                                      </label>
+                                                </apex:repeat>
+                                            </div>
+                                        </fieldset>
+                                    </div> 
+                                </apex:outputPanel> 
+
+
+                                <!-- сам список с объектами! -->
+                                <apex:pageBlock id="VisitsBlock1" > 
+
+                                    <script type="text/javascript">
+                                        //вешаем нормальный стиль на элемент
+                                        $('div [id*="VisitsBlock1"]').find('.pbBody').css('margin','0px')
+                                        $('div [id*="VisitsBlock1"]').find('.pbBody').css('margin-top','5px')
+
+                                    </script>
+
+
+                                    <apex:pageBlockSection id="VisitsSection" columns="1" collapsible="true" title="{!tableLabel}" html-style="overflow-y: scroll; height: 500px;" >
+                                        <apex:outputPanel >
+
+
+                                            <apex:variable value="{!0}" var="count"/>
+                                            <apex:repeat value="{!sortedList}" var="sortwrapper">
+                                                <apex:variable var="count" value="{!count + 1}"/>
+                                                <div id="{!sortwrapper.sobjectName}-lineid" class="activity-container slds-box slds-theme--shade {!sortwrapper.sobjectName}lineobjectdiv" style="padding: 5px;">  
+                                                    <div class="activity-layout" style="display: flex;">
+                                                        <img title="{!objectLabels[sortwrapper.sobjectName]}" alt="{!objectLabels[sortwrapper.sobjectName]}" class="col-object {!sortwrapper.sobjectName}-icon"  onclick="gotoVisit('{!sortwrapper.sobj}',null,true, {!count})" style="background: #ccc;float: left;border-radius: 20%;"></img>
+                                                        <div class="activity-header" style="  float: left;max-width: 85%; cursor: pointer;">
+                                                           <div class="col" style="display: inline-block;margin: 3px;">
+                                                               <b>{!VisitHeaderWrapper[sortwrapper.sobj].Name}</b>
+                                                               <img src="/img/msg_icons/info16.png" onclick="window.open('/{!VisitHeaderWrapper[sortwrapper.sobj].id}', '_blank');" style="width: 10px; height: 10px"/>
+                                                           </div>
+                                                       </div>
+                                                        <div class="col" style="display: inline-block;margin: 3px; max-width: 15%;">{!VisitHeaderWrapper[sortwrapper.sobj].utime}</div> 
+                                                    </div>  
+                                                    <div class="activity-content" style="display:none;">
+                                                        {!VisitHeaderWrapper[sortwrapper.sobj].accountAddress}
+                                                       <table style="font-size: 11px;"> 
+                                                             <apex:repeat value="{!FieldSetList[sortwrapper.sobjectName]}" var="f">
+                                                                    <tr>
+                                                                       <td style="text-align: right;width: 90px;">{!fieldSetMap[sortwrapper.sobjectName][f]}&nbsp;&nbsp;</td> 
+                                                                       <td style="">
+                                                                            &nbsp;&nbsp;<apex:outputField style="font-weight: bold;" value="{!sobjectMap[sortwrapper['id']][f]}" rendered="{! NOT(ISBLANK(sobjectMap[sortwrapper['id']])) && NOT(ISBLANK(sobjectMap[sortwrapper['id']][f]))}"/> 
+                                                                            <!--<apex:outputPanel rendered="{! FieldTypesMap[sortwrapper.sobjectName][f] == 'Other'}">
+                                                                                <apex:outputText style="font-weight: bold;" value="{!sortwrapper.sobj[f]}" />
+                                                                            </apex:outputPanel>
+                                                                            <apex:outputPanel rendered="{! FieldTypesMap[sortwrapper.sobjectName][f] == 'DateTime'}">
+                                                                                <apex:outputField style="font-weight: bold;" value="{!sobjectMap[sortwrapper['id']][f]}" />  
+                                                                            </apex:outputPanel>
+                                                                            <apex:outputPanel rendered="{! FieldTypesMap[sortwrapper.sobjectName][f] == 'Date'}"> 
+                                                                                <apex:outputField style="font-weight: bold;" value="{!sobjectMap[sortwrapper['id']][f]}" /> 
+                                                                                <apex:outputText style="font-weight: bold;" value="{0, date, MMMM d','  yyyy}">
+                                                                                    <apex:param value="{!sortwrapper.sobj[f]}" /> 
+                                                                                </apex:outputText>
+                                                                            </apex:outputPanel>
+                                                                           -->
+                                                                       </td>
+                                                                    </tr>
+                                                            </apex:repeat>  
+                                                        </table>
+ 
+                                                        <apex:outputPanel rendered="{! FieldSetExist[sortwrapper.sobjectName] == false}"> 
+                                                            <div style="    margin-top: 5px;">
+                                                                <apex:pageMessage summary="{!$Label.clm__uvm_fieldseterror}" severity="fatal" strength="3" />
+                                                                <apex:pageMessages />
+                                                            </div>
+                                                        </apex:outputPanel>
+                                                    </div>  
+                                                </div>
+                                            </apex:repeat>
+                    
+                                        </apex:outputPanel> 
+
+                                       
+                                    <script>
+                                        //twistSection(document.getElementById('{!$Component.VisitsBlock1.VisitsSection}').getElementsByTagName('img')[0])
+                                    </script>
+                                    <script>colorPageBlock(document.getElementById('{!$Component.VisitsBlock1.VisitsSection}'), '#1797c0');</script>     
+                                    </apex:pageBlockSection>
+                                </apex:pageBlock>
+                            </div>
+
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <!--список с пользователями для отправки push и получения их текущей геолокации  -->
+                            <!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+                            <div id="UsersContainer" class="slds-col--padded slds-size--1-of-2 slds-medium-size--1-of-6 slds-large-size--2-of-12" style="display:none">
+                                <apex:outputPanel id="watchUsers"> 
+                                    <apex:outputPanel id="user4visitTablePanel">  
+                                         <div id="watchingUsersTable">  
+                                            <table class="slds-table slds-table--bordered" style="height: 600px; display: block;overflow: auto;">
+                                                <thead>
+                                                    <tr class="slds-text-heading--label" style="border-left: 1px solid #d8dde6; border-right:1px solid #d8dde6;"> 
+                                                          <th class="slds-is-sortable" scope="col" style="cursor: pointer;" onclick="massCheckboxClickPre();setDisabled();">
+                                                            <span class="slds-truncate">{!$Label.UVM_Watch}</span>
+                                                          </th> 
+                                                          <th class="slds-is-sortable" scope="col">
+                                                            <span class="slds-truncate">{!$Label.UVM_FullUserName}</span>
+                                                          </th> 
+                                                          <th class="slds-is-sortable" scope="col">
+                                                            <span class="slds-truncate"></span>
+                                                          </th> 
+                                                    </tr> 
+                                                </thead>
+                                              <tbody>  
+                                                <apex:repeat id="UsersWithChbs" value="{!users4wats}" var="user"> 
+                                                    <tr id="watchingUserRow" class="slds-hint-parent"  onclick="gotoUser('{!user.Id}',this);" style="border-left: 1px solid #d8dde6; border-right:1px solid #d8dde6;" > 
+                                                        <td data-label="label">
+                                                            <span class="slds-truncate"> 
+                                                               <apex:inputCheckbox id="coffinJackdaws" value="{!user.selected}" />
+                                                            </span>
+                                                        </td> 
+                                                        <td data-label="label">
+                                                            <span id="userName" class="slds-truncate"> 
+                                                               {!user.label}
+                                                            </span>
+                                                        </td>   
+                                                        <td data-label="label" style="text-align: center;">
+                                                            <span class="slds-truncate" > 
+                                                                <apex:outputPanel id="userStatus">
+                                                                   <apex:outputPanel rendered="{!user.statusImage == 'wait'}" >
+                                                                        <img src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/spinners/slds_spinner_brand.gif")}'  style="zoom:0.2;/*transform: scale(.2, .2)*/" />
+                                                                   </apex:outputPanel>
+                                                                   <apex:outputPanel rendered="{!user.statusImage == 'ok'}" >
+                                                                        <img src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/ok.png")}'  style=";transform: scale(.3, .3)" />
+                                                                   </apex:outputPanel>
+                                                                   <apex:outputPanel rendered="{!user.statusImage == 'x'}" >
+                                                                        <img src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/error.png")}'  style=";transform: scale(.3, .3)" />
+                                                                   </apex:outputPanel>
+                                                                </apex:outputPanel>
+                                                            </span>
+                                                        </td>     
+                                                    </tr> 
+                                                </apex:repeat> 
+                                              </tbody>  
+                                            </table>   
+                                        </div> 
+                                    </apex:outputPanel> 
+                                </apex:outputPanel>
+                            </div>
+                        </div> 
+                        <!-- <div id="map"></div> -->
+                    </apex:outputPanel>  
+                    <apex:outputPanel rendered="{!IF(ISBLANK(gmapskey), true, false)}"> 
+                         
+                        <div class="">
+                        <div class="slds-notify slds-notify--alert slds-theme--alert-texture" role="alert"> 
+                          <span class="slds-assistive-text">Info</span>
+                          <h2>{!$Label.MS_NoGMapsKeyFound}</h2>
+                        </div> 
+                        <div id="map" style="display:none"></div>
+                      </div>
+                    </apex:outputPanel>
+                </body>             
+            </apex:pageBlock>                 
+
+            <apex:outputPanel id="wrappers">
+                <script type="text/javascript">
+                    var visitsInObjMap   = JSON.parse('{!JSENCODE(jsonWrapperMap)}');
+                    var visitMap         = {};
+                    var realRouts        = JSON.parse('{!JSENCODE(jsonRealRouteList)}');
+                    var userPath         = null;
+                    var flightPath       = null;
+                    var timeZone         = JSON.parse('{!JSENCODE(selUsertimeZone)}');
+                    console.log('visitwrappers rerendered!');
+                </script>
+            </apex:outputPanel>
+        </apex:form>  
+        
+        <apex:outputPanel id="ErrorForm" rendered="{!IF(ISNULL(errorString) , false, true)}">  
+            <script type="text/javascript">
+                console.error('ERROR : ' + '{!JSENCODE(consoleError)}');
+            </script>
+            <apex:pageBlock id="ErrorBlock">  
+                <apex:pageMessage summary="{!errorString}" severity="fatal" strength="3" />
+                <apex:pageMessages />
+            <div><a href="#" onclick="showErrors();" style="margin-left: 5px;">{!$Label.clm__uvm_showmessagebutton}</a></div> 
+            <div id="hiddenMessage" style="display:none; font-size: 11px;"><apex:outputText value="{!consoleError}" /></div>
+            </apex:pageBlock>  
+        </apex:outputPanel>  
+    </div>
+</apex:page>

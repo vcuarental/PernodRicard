@@ -1,0 +1,344 @@
+<apex:page id="EUR_CRM_PIMImagesIntegration" controller="EUR_CRM_PIMImagesIntegrationController">
+
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_1_8_2, '/jquery-1.8.2.min.js')}"/>
+
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_JS_ZIP, '/jszip.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_JS_ZIP, '/jszip-load.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_JS_ZIP, '/jszip-deflate.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_JS_ZIP, '/jszip-inflate.js')}"/>
+
+    <script type="text/javascript">
+        function collectCountryCodes() {
+            function collectCountryCodesForBQS() {
+                var rows = document.querySelector('[id$="pbsBQSAttachment"]').children[1].children[0].children[0].children[0].children[0].children[0].children[2].children;
+                var countryCodes = [];
+                for(var i = 0; i < rows.length; i++) {
+                    countryCodes.push(rows[i].children[0].innerText);
+                }
+                return countryCodes;
+            }
+
+            function collectCountryCodesForBQ() {
+                var rows = document.querySelector('[id$="pbsBQAttachment"]').children[1].children[0].children[0].children[0].children[0].children[0].children[2].children;
+                var countryCodes = [];
+                for(var i = 0; i < rows.length; i++) {
+                    countryCodes.push(rows[i].children[0].innerText);
+                }
+                return countryCodes;
+            }
+
+            function collectCountryCodesForB() {
+                var rows = document.querySelector('[id$="pbsBAttachment"]').children[1].children[0].children[0].children[0].children[0].children[0].children[2].children;
+                var countryCodes = [];
+                for(var i = 0; i < rows.length; i++) {
+                    countryCodes.push(rows[i].children[0].innerText);
+                }
+                return countryCodes;
+            }
+
+            function collectCountryCodesForPOSM() {
+                var rows = document.querySelector('[id$="pbsPOSMAttachment"]').children[1].children[0].children[0].children[0].children[0].children[0].children[2].children;
+                var countryCodes = [];
+                for(var i = 0; i < rows.length; i++) {
+                    countryCodes.push(rows[i].children[0].innerText);
+                }
+                return countryCodes;
+            }
+
+            return {
+                'BQS': collectCountryCodesForBQS(),
+                'BQ': collectCountryCodesForBQ(),
+                'B': collectCountryCodesForB(),
+                'POSM': collectCountryCodesForPOSM(),
+            };
+        }
+
+        function compressFile(zipFile, name, data) {
+            zipFile.file(name, data, {base64: true});
+        }
+
+        function sendZip(zipFile, objectType, countryCode) {
+            var data = zipFile.generate();
+            sendZipArchiveToServer(objectType, countryCode, data);
+        }
+
+        function getAttachmentsForCountryCode(index, countryCodes, objectType) {
+            var zipFile = new JSZip();
+
+            var countryCode = countryCodes[index];
+
+            console.log('Getting attachments for ' + countryCode + ' of ' + objectType);
+            setLoadingDialogTitle('Getting attachments for ' + countryCode + ' of ' + objectType);
+            setLoadingDialogMessage('Downloading...');
+            showLoadingDialog();
+
+            EUR_CRM_PIMImagesIntegrationController.getAttachments(objectType, countryCode, function (result, event) {
+                console.log('result for ' + countryCode + ' => ', result);
+                if (event.status) {
+                    result.forEach(function (res) {
+                        compressFile(zipFile, res.attName, res.attEncodedBody);
+                    });
+
+                    sendZip(zipFile, objectType, countryCode);
+
+                    if (index + 1 < countryCodes.length) {
+                        getAttachmentsForCountryCode((index + 1), countryCodes, objectType);
+                    } else {
+                        console.log('finish downloading');
+                        setLoadingDialogTitle('Saving of archive');
+                        setLoadingDialogMessage('Finishing of saving...');
+
+                        setTimeout(function() {
+                            hideLoadingDialog();
+                        }, 20000);
+                    }
+                } else if (event.type === 'exception') {
+                    alert('Exception: ' + event.message);
+                    hideLoadingDialog();
+                } else {
+                    alert('Message: ' + event.message);
+                    hideLoadingDialog();
+                }
+            }, {buffer: true, escape: true, timeout: 120000});
+        }
+
+        var countryCodeCollections = null;
+
+        var j$ = jQuery.noConflict();
+        j$(document).ready(function () {
+            countryCodeCollections = collectCountryCodes();
+        });
+
+        function createArchiveFor(countryCode, objectType) {
+            if (countryCode === 'All') {
+                getAttachmentsForCountryCode(0, countryCodeCollections[objectType], objectType);
+            } else {
+                getAttachmentsForCountryCode(0, [countryCode], objectType);
+            }
+        }
+    </script>
+
+    <style>
+        hr {
+            margin: 20px 0;
+        }
+    </style>
+
+    <c:EUR_CRM_LoadingDialog />
+
+    <apex:form id="sizeForm">
+        <apex:actionfunction name="sendZipArchiveToServer" action="{!uploadZipActionFunction}" reRender="pbsBQSDocuments" onComplete="setLoadingDialogTitle('Saving of archive');setLoadingDialogMessage('Processing...');">
+            <apex:param name="sObjectType" value="" assignTo="{!sObjectType}"/>
+            <apex:param name="countryCode" value="" assignTo="{!countryCode}"/>
+            <apex:param name="zipContentLong" value="" assignTo="{!zipContentLong}"/>
+        </apex:actionfunction>
+        <apex:pageBlock title="Brand Quality Size Information">
+            <apex:pageBlockButtons >
+                <apex:commandButton value="Redownload images for all countries" action="{!reDownloadBQSAttachmentForAllCountries}" reRender="pbsBQSDocuments" disabled="{!disableReDownloadImagesForAllCountriesBQS}" />
+                <input type="button" onclick="createArchiveFor('All', 'BQS')" value="Recreate archive for all countries" class="btn" />
+            </apex:pageBlockButtons>
+
+            <apex:pageBlockSection title="Attachments" columns="1" id="pbsBQSAttachment">
+
+                    <apex:pageBlockTable value="{!attachmentStatisticWrapperBQS}" var="wrapper" columns="4">
+
+                        <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="40%"/>
+
+                        <apex:column value="{!wrapper.numberOfRecords}" headerValue="Number of Records" width="40%"/>
+
+                        <apex:column width="10%">
+                            <apex:commandButton value="Redownload images" action="{!reDownloadBQSAttachmentForSpecificCountry}" reRender="pbsBQSAttachment" disabled="{!wrapper.disableButton}">
+                                <apex:param name="countryCode" value="{!wrapper.countryCode}"/>
+                            </apex:commandButton>
+                        </apex:column>
+
+                        <apex:column width="10%">
+                            <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'BQS')" value="Recreate archive" class="btn" />
+                        </apex:column>
+
+                    </apex:pageBlockTable>
+
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Documents" columns="1" id="pbsBQSDocuments">
+                <apex:pageBlockTable value="{!documentsBQS}" var="wrapper" columns="5">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="5%"/>
+
+                    <apex:column headerValue="Name" width="55%">
+                        <apex:outputLink value="{!'/' + wrapper.doc.Id}" target="_blank">{!wrapper.doc.Name}</apex:outputLink>
+                    </apex:column>
+
+                    <apex:column value="{!wrapper.doc.BodyLength}" width="15%"/>
+
+                    <apex:column value="{!wrapper.doc.CreatedDate}" width="15%"/>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'BQS')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+    </apex:form>
+
+    <hr/>
+
+    <apex:form >
+        <apex:pageBlock title="Brand Quality Information">
+            <apex:pageBlockButtons >
+                <apex:commandButton value="Redownload images for all countries" action="{!reDownloadBQAttachmentForAllCountries}" reRender="pbsBQDocuments" disabled="{!disableReDownloadImagesForAllCountriesBQ}" />
+                <input type="button" onclick="createArchiveFor('All', 'BQ')" value="Recreate archive for all countries" class="btn" />
+            </apex:pageBlockButtons>
+
+            <apex:pageBlockSection title="Attachments" columns="1" id="pbsBQAttachment">
+
+                <apex:pageBlockTable value="{!attachmentStatisticWrapperBQ}" var="wrapper" columns="4">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="40%"/>
+
+                    <apex:column value="{!wrapper.numberOfRecords}" headerValue="Number of Records" width="40%"/>
+
+                    <apex:column width="10%">
+                        <apex:commandButton value="Redownload images" action="{!reDownloadBQAttachmentForSpecificCountry}" reRender="pbsBQAttachment" disabled="{!wrapper.disableButton}">
+                            <apex:param name="countryCode" value="{!wrapper.countryCode}"/>
+                        </apex:commandButton>
+                    </apex:column>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'BQ')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Documents" columns="1" id="pbsBQDocuments">
+                <apex:pageBlockTable value="{!documentsBQ}" var="wrapper" columns="5">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="5%"/>
+
+                    <apex:column headerValue="Name" width="55%">
+                        <apex:outputLink value="{!'/' + wrapper.doc.Id}" target="_blank">{!wrapper.doc.Name}</apex:outputLink>
+                    </apex:column>
+
+                    <apex:column value="{!wrapper.doc.BodyLength}" width="15%"/>
+
+                    <apex:column value="{!wrapper.doc.CreatedDate}" width="15%"/>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'BQ')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+    </apex:form>
+
+    <hr/>
+
+    <apex:form >
+        <apex:pageBlock title="Brand Information">
+            <apex:pageBlockButtons >
+                <apex:commandButton value="Redownload images for all countries" action="{!reDownloadBAttachmentForAllCountries}" reRender="pbsBDocuments" disabled="{!disableReDownloadImagesForAllCountriesB}" />
+                <input type="button" onclick="createArchiveFor('All', 'B')" value="Recreate archive for all countries" class="btn" />
+            </apex:pageBlockButtons>
+
+            <apex:pageBlockSection title="Attachments" columns="1" id="pbsBAttachment">
+
+                <apex:pageBlockTable value="{!attachmentStatisticWrapperB}" var="wrapper" columns="4">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="40%"/>
+
+                    <apex:column value="{!wrapper.numberOfRecords}" headerValue="Number of Records" width="40%"/>
+
+                    <apex:column width="10%">
+                        <apex:commandButton value="Redownload images" action="{!reDownloadBAttachmentForSpecificCountry}" reRender="pbsBAttachment" disabled="{!wrapper.disableButton}">
+                            <apex:param name="countryCode" value="{!wrapper.countryCode}"/>
+                        </apex:commandButton>
+                    </apex:column>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'B')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Documents" columns="1" id="pbsBDocuments">
+                <apex:pageBlockTable value="{!documentsB}" var="wrapper" columns="5">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="5%"/>
+
+                    <apex:column headerValue="Name" width="55%">
+                        <apex:outputLink value="{!'/' + wrapper.doc.Id}" target="_blank">{!wrapper.doc.Name}</apex:outputLink>
+                    </apex:column>
+
+                    <apex:column value="{!wrapper.doc.BodyLength}" width="15%"/>
+
+                    <apex:column value="{!wrapper.doc.CreatedDate}" width="15%"/>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'B')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+    </apex:form>
+
+    <hr/>
+
+    <apex:form >
+        <apex:pageBlock title="POSM Information">
+            <apex:pageBlockButtons >
+                <apex:commandButton value="Redownload images for all countries" action="{!reDownloadPOSMAttachmentForAllCountries}" reRender="pbsPOSMDocuments" disabled="{!disableReDownloadImagesForAllCountriesPOSM}" />
+                <input type="button" onclick="createArchiveFor('All', 'POSM')" value="Recreate archive for all countries" class="btn" />
+            </apex:pageBlockButtons>
+
+            <apex:pageBlockSection title="Attachments" columns="1" id="pbsPOSMAttachment">
+
+                <apex:pageBlockTable value="{!attachmentStatisticWrapperPOSM}" var="wrapper" columns="4">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="40%"/>
+
+                    <apex:column value="{!wrapper.numberOfRecords}" headerValue="Number of Records" width="40%"/>
+
+                    <apex:column width="10%">
+                        <apex:commandButton value="Redownload images" action="{!reDownloadPOSMAttachmentForSpecificCountry}" reRender="pbsPOSMAttachment" disabled="{!wrapper.disableButton}">
+                            <apex:param name="countryCode" value="{!wrapper.countryCode}"/>
+                        </apex:commandButton>
+                    </apex:column>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'POSM')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Documents" columns="1" id="pbsPOSMDocuments">
+                <apex:pageBlockTable value="{!documentsPOSM}" var="wrapper" columns="5">
+
+                    <apex:column value="{!wrapper.countryCode}" headerValue="Country" width="5%"/>
+
+                    <apex:column headerValue="Name" width="55%">
+                        <apex:outputLink value="{!'/' + wrapper.doc.Id}" target="_blank">{!wrapper.doc.Name}</apex:outputLink>
+                    </apex:column>
+
+                    <apex:column value="{!wrapper.doc.BodyLength}" width="15%"/>
+
+                    <apex:column value="{!wrapper.doc.CreatedDate}" width="15%"/>
+
+                    <apex:column width="10%">
+                        <input type="button" onclick="createArchiveFor('{!wrapper.countryCode}', 'POSM')" value="Recreate archive" class="btn" />
+                    </apex:column>
+
+                </apex:pageBlockTable>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+    </apex:form>
+
+</apex:page>

@@ -1,0 +1,704 @@
+<!--
+/**********************************************************************************
+* Name : ASI_KOR_KeymanAllocation
+* Created : Kevin Choi
+*
+* Version History
+* Date             Developer               Comments
+* ---------------  --------------------    ----------------------------------------
+* 31-07-2017		[Laputa]Kevin			Created
+**********************************************************************************/
+-->
+<apex:page sidebar="false" controller="ASI_KOR_KeymanAllocationCtrl">
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_KOR_VFPageResources, 'PR_KOR_Resouce/css/demo_table.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.dataTables.js')}"/> 
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/FixedColumns.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+    <style>
+        input.error-input {
+        border-color: red;
+        }
+        .wrap{  
+        width:100%;
+        }
+        textarea {
+        height: 3em;
+        }
+        .leftXX{
+        width: 15%;
+        float: left;
+        display:none;
+        position:absolute;
+        var currentVenue ='';
+        left:10px;
+        top: 320px;
+        z-index:999;
+        }
+        .right{
+        float: left;
+        width: 100%;
+        }
+        
+        .unitCostInput{
+        width:65px;
+        text-align: right;
+        }
+        .targetVolume{
+        width:65px;
+        text-align: right;
+        }
+        .dataTables_empty {
+        text-align: center;
+        height:100px !important;
+        }
+        table.display {
+        
+        }
+        th {
+        overflow:hidden;
+        }
+        
+        .gradeA{
+        text-align:center;
+        }
+        .gradeD{
+        text-align:center;
+        }
+        
+        .venueStatus {
+        width:80px;
+        text-align: center;
+        }
+        
+        .totalbasicca{
+        width:65px;
+        }
+        .capunitcost{
+        width:65px;
+        }
+        .propUnitCost{
+        
+        }
+        
+        .businessRationale{
+        
+        width: 100px;
+        
+        }
+        
+        .required {
+        border-color: red;
+        }
+        .totalCA {
+        text-align: right;
+        }
+        input.btn[name="del"] {
+        display: none;
+        }
+        input.btn[name="clone"] {
+        display: none;
+        }
+        input.btn[name="edit"] {
+        display: none;
+        }
+        input.btn[name="edit_proposal"] {
+        display: none;
+        }
+        
+        .overlay {
+        display: none;
+        height: 100%;
+        left: 0;
+        position: fixed;
+        top: 0;
+        opacity: 0.3;
+        -moz-opacity: 0.3;
+        width: 100%;
+        -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+        filter: alpha(opacity=30);
+        background: #000;
+        -khtml-opacity: 0.3;
+        z-index: 1000;
+        }
+        
+        .loader {
+        width: 32px;
+        height: 32px;
+        position: absolute;
+        left: 50%;
+        }
+        
+        table.display tr:nth-child(odd).gradeCA{
+        background-color: #CEF1FF;
+        }
+        table.display tr:nth-child(even).gradeCA{
+        background-color: #BEECFE;
+        }
+        table.display tr:nth-child(odd).gradeCB{
+        background-color: #ddddff;
+        }
+        table.display tr:nth-child(even).gradeCB{
+        background-color: #EFEFFF;
+        }
+    </style>  
+    <script type="text/javascript" charset="utf-8">
+    
+    if (!window.console) console = {log: function() {}};
+    
+    var filterToggle = true;
+    var quickSaveFlag = false;
+    var changeFlag = false;
+	var keymanCodeMap;
+    
+    $(document).ready( function () {
+        
+        initializeKeymanTable();
+        initializeVenueSummary();
+        /*var filterTable = $('#filterTable').dataTable({
+            "sScrollY" : "300px",
+            "bScrollCollapse" : true,
+            "bPaginate" : false,
+            "lengthMenu": [[5, 10, 25, -1], [5, 10, 25, "All"]],
+            "bJQueryUI": false,
+            "bSort": false,
+            "bAutoWidth": false,
+            "oLanguage": {
+                "sSearch": ""
+            }
+        });        
+        $('#select_all_').click(function(){
+            if($('#select_all_').is(':checked')){
+                $(".check_").attr ( "checked" ,"checked" );
+            }
+            else
+            {
+                $(".check_").removeAttr('checked');
+            }
+            //applyFilter();
+        });
+        $('.leftXX').find('.dataTables_filter').css('float','left');*/
+        
+    });
+    
+    function initializeKeymanTable(){
+        var dtable = $('#keymanAllocationTable').dataTable({
+            "bJQueryUI": false,
+            //"sScrollY": "250",
+            "sScrollX": "100%",
+            "bPaginate": false,
+            "bAutoWidth": false,
+            "bSort": false
+        } );
+        /*if($('#detailsTable').find('td').hasClass('dataTables_empty')){
+            $('#detailsTable').find('tbody tr').empty();
+            $('#detailsTable').find('tbody tr').append('<td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/>');
+        }
+        updateInputfields();
+        changeFlag = false;
+        enableSFButtons(changeFlag);
+        $(dtable).on('draw',colorStat);
+        colorStat();
+        */
+    }
+    
+    function initializeVenueSummary(){
+        console.log('Start initialize venueSummaryTable');
+        var oTable = $('#venueSummaryTable').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "250",
+            "sScrollX": "100%",
+            "bPaginate": true,
+            "lengthMenu": [5, 10, 25, -1],
+            "bAutoWidth": false,
+            "sPaginationType": "full_numbers",
+            "bSort":false
+        });
+        
+        $("#venueSummaryTable tbody").click(function(event) {
+            if(changeFlag){
+                var flag2 = confirm('You have made some changes without saving, switching to another venue will lose all the data you have entered. Do you want to continue?');
+                if(flag2){                    
+                    $(oTable.fnSettings().aoData).each(function (){
+                        $(this.nTr).removeClass('row_selected');
+                    });
+                    $(event.target.parentNode).addClass('row_selected');
+                    currentVenue = $(event.target.parentNode).attr('id'); 
+                    console.log('currentVenue:'+currentVenue);
+                    selectVenue(currentVenue);
+                }
+            }else{                
+                $(oTable.fnSettings().aoData).each(function (){
+                    $(this.nTr).removeClass('row_selected');
+                });
+                $(event.target.parentNode).addClass('row_selected');
+                currentVenue = $(event.target.parentNode).attr('id');
+                console.log('currentVenue:'+currentVenue);
+                selectVenue(currentVenue);                
+            }
+        });
+        var firstRow = $('#venueSummaryTable').find('tbody').find('tr').get(0);
+        $(firstRow).addClass('row_selected');
+        currentVenue = $(firstRow).attr('id');        
+    }
+    
+    function preProcessDataTable3(){
+        var oTable2 = $('#venueSummaryTable').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();
+        console.log('destroyed!');
+        
+    }
+    function processDataTable3(){
+        console.log('done loading' + $('#venueSummaryTable'));
+        initializeVenueSummary();
+        if(quickSaveFlag){
+            //selectVenue(currentVenue);
+            //handleSummary();
+            quickSaveFlag=false;
+        }else{
+            //selectVenue(currentVenue);
+        }
+    }
+    
+    function preProcessDataTable(){
+        console.log('Enter preProcessDataTable');
+        var oTable2 = $('#keymanAllocationTable').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();
+        console.log('destroyed! 2');
+        
+    }
+    function processDataTable(){
+        console.log('done loading' + $('#keymanAllocationTable'));
+        initializeKeymanTable();
+        if(quickSaveFlag){
+            //selectVenue(currentVenue);
+            //handleSummary();
+            quickSaveFlag=false;
+        }else{
+            //selectVenue(currentVenue);
+        }
+    }
+    
+    function filterBranchByRegion(regionCode){
+        console.log('Change Region:'+regionCode);
+        filterBranchOption();
+        console.log('Called Apex Function');
+    }
+    
+    function changeKeymanCode(keymanName){
+        var keymanCodeMapping = keymanCodeMap;
+        console.log(keymanCodeMapping);
+        console.log('Current keyman Name: '+keymanName.value);
+        //console.log('Input ' + $(keymanName).parent().parent().attr("id"));
+        var currentKeymanName = keymanName.value;
+        var vmsId =  $(keymanName).parent().parent().attr("id");
+        var vmsRecord= $('#keymanAllocationTable').find('#'+vmsId);
+        // console.log('vmsRecord');
+        //console.log(vmsRecord);
+        var keymanCode =  $(vmsRecord).find("span.totalVI");
+        //console.log('keymanCode');
+        //console.log(keymanCode);
+        var keymanCodeValue = keymanCodeMapping[currentKeymanName];      
+        console.log(keymanCodeValue);
+        $(keymanCode).text(keymanCodeValue);
+    }
+    
+    function handleSave(action){
+		var flag = checkRequiredFields();
+        //if (flag) doQuickSave();
+		if (flag){
+			switch (action){
+				//case 'Quick Save': doQuickSave(); break;
+				case 'Save': doSave(); break;
+				case 'Finalize': finalizedRecord(); break;
+			}
+			displaySaveButton(false);
+			displayCloneDeleteButton(false);
+		}
+		
+    }
+    
+	
+    function checkRequiredFields(){
+        var flag = true;
+        $('#keymanAllocationTable').find('tbody').find('tr').each(function(index){
+			var rowId = $(this).attr('id');
+			var editable = $(this).attr('attr-edit');
+			console.log(rowId);
+			console.log(editable);
+			if (rowId!='Subtotal' && editable=='true') {
+				var br  =  $(this).find(".businessRationale");
+				var vi_actual  =  $(this).find("input[id*='vi_actual']").val().replace(/\,/g,'');
+				var vi_original  =  $(this).find("input[id*='vi_original']").val().replace(/\,/g,'');
+				var keyman_actual  =  $(this).find("select[id*='keyman_actual']").val();
+				var keyman_original  =  $(this).find("input[id*='keyman_original']").val();
+				var isCloned  =  $(this).find("input[id*='isCloned']").val();
+				
+				console.log('=========' + $(br).val());
+				console.log('keyman');
+				console.log(keyman_actual);
+				console.log(keyman_original);
+				console.log('vi');
+				console.log(vi_actual);
+				console.log(vi_original);
+				console.log(isCloned);
+				
+				if((vi_actual != vi_original || keyman_actual != keyman_original || isCloned=='true') && ($(br).val() == null || $(br).val()=='')){
+					$(br).focus();
+					flag = false;
+					alert('Comment is required.');
+					return false;
+				}
+			}
+        });
+        return flag;
+    }
+    
+    function format(temp){
+        var jThis = $(temp);
+        CurrencyUtil.renderInput(jThis);
+        var inputNum = CurrencyUtil.currencyToFloat(jThis.val());
+        //console.log('Test currency: ' + inputNum);
+        validateInput(/^[\d|,]*\.?\d*$/.test(jThis.val()), jThis);
+    }
+    
+    function finalize(){
+		message = "Are you sure to finalize YOUR keyman allocation for Year: {!Year} and Month: {!Month} ?";
+		if (confirm(message)){
+            finalizedRecord();
+        }
+    }
+    
+	function vmsClone(externalID){
+		displayCloneDeleteButton(false);
+		doVmsClone(externalID);
+	}
+	
+	function vmsDelete(externalID, recordID){
+		displayCloneDeleteButton(false);
+		doVmsDelete(externalID, recordID);
+	}
+	
+	function displaySaveButton(yes){
+		if (yes){
+			$("#saveVMS").show();
+		} else {
+			$("#saveVMS").hide();
+		}
+	}
+	
+	function displayCloneDeleteButton(yes){
+		if (yes){
+			$(".vmsClone").show();
+			$(".vmsDelete").show();
+		} else {
+			$(".vmsClone").hide();
+			$(".vmsDelete").hide();
+		}
+	}
+	
+	function putKeymanCodeMap(keymanCodeMapJson){
+		keymanCodeMap = jQuery.parseJSON(keymanCodeMapJson);
+	}
+	
+    </script>  
+    <div class="wrap">
+        <div id="demo" class="right">
+            <apex:form >
+                <apex:actionFunction action="{!filterBranchOption}" name="filterBranchOption" rerender="branch">
+                    <!--apex:param name="firstParam"  assignTo="{!selectedRegion}" value="" /-->
+                </apex:actionFunction>
+                <apex:pageBlock >                    
+                    <apex:outputPanel id="topFilter">
+                        <center>
+                        <table colspan="9" width="100%">
+                            <thead>
+                                <tr>
+                                    <th width="5%" colspan="1"></th>
+                                    <th width="15%" colspan="1">
+                                        <apex:outputLabel >Year: </apex:outputLabel>
+                                        <apex:selectList size="1" value="{!yearAllocation}" required="true">
+                                            <apex:selectOptions value="{!yearOptions}"/>      
+                                        </apex:selectList>
+                                    </th>
+                                    <th width="15%" colspan="1">
+                                        <apex:outputLabel >Month: </apex:outputLabel>
+                                        <apex:selectList size="1" value="{!monthAllocation}" required="true">
+                                            <apex:selectOptions value="{!monthOptions}"/> 
+                                        </apex:selectList>
+                                    </th>
+                                    <th width="15%" colspan="1">
+                                        <apex:outputLabel >Region: </apex:outputLabel>
+                                        <apex:selectList size="1" value="{!regionAllocation}" onchange="filterBranchByRegion(this.value)" required="true">
+                                            <apex:selectOptions value="{!regionOptions}"/> 
+                                        </apex:selectList>
+                                    </th>
+                                    <th width="15%" colspan="1">
+                                        <apex:outputLabel >Branch: </apex:outputLabel>
+                                        <apex:selectList Id="branch" size="1" value="{!branchAllocation}" required="true">
+                                            <apex:selectOptions value="{!branchOptions}"/> 
+                                        </apex:selectList>
+                                    </th>                            
+                                    <th width="10%" colspan="1">
+                                        <apex:commandButton id="applySelection" action="{!filterVenues}" onclick="" value="Go"  style="width: 60px" status="idStatus3"/>
+                                    </th>                         
+                                    <th width="10%" colspan="1">    
+                                    	<input type="button" class="btn"  onclick="finalize();" value="Finalize" style="width:70px; margin:4px;" />
+                                    </th>                         
+                                    <th width="15%" colspan="1">
+                                        <input type="button" class="btn" onclick="window.open('/{!ReportLink}?pv0={!Year}&pv1={!Month}&pv2={!Branch}','_blank')" value="Go To Report" />
+                                    </th>
+                                    <th width="5%" colspan="1"></th>
+                                </tr>
+                            </thead>                            
+                        </table>
+                        </center>
+                    </apex:outputPanel>
+                </apex:pageBlock>
+            </apex:form>
+        </div>
+        <div id="demo2" class="right">
+            <apex:form >
+                <apex:actionFunction action="{!filterRecordByVenueId}" name="selectVenue" rerender="keymanAllocationTable, pageMsg" status="idStatus" onComplete="putKeymanCodeMap('{!JSENCODE(keymanCodeMapJson)}')">
+                    <apex:param name="firstParam"  assignTo="{!selectedRegion}" value=""/>
+                </apex:actionFunction>
+                <apex:actionStatus id="idStatus3"  onstop="processDataTable3()" onstart="preProcessDataTable3()">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:200px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus>
+                <apex:pageBlock title="Venues in Branch">     
+					<apex:commandButton action="{!refreshVenueSummary}" value="Refresh" reRender="venueSummaryTable" oncomplete="initializeVenueSummary()"  style="width: 70px; margin-left:4px;"/>
+                    <apex:outputPanel id="venueSummaryTable">                        
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" id="venueSummaryTable" colspan="4">
+                            <thead>
+                                <tr>
+                                    <th style='text-align: left' colspan="1">Region</th>
+                                    <th style='text-align: left' colspan="1">Branch</th>
+                                    <th style='text-align: left' colspan="1">Venue Code</th>
+                                    <th style='text-align: left' colspan="1">Venue Name</th>
+                                    <th style='text-align: left' colspan="1">Salesman Name</th>
+                                    <th style='text-align: right' colspan="1">Approved VI Total</th>
+                                    <th style='text-align: right' colspan="1">Final VI Total</th>
+                                    <th style='text-align: right' colspan="1">Diff.</th>
+                                </tr>
+                            </thead>
+                            <tfoot>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                            </tfoot>
+                            <tbody>
+                                <apex:repeat value="{!VenueSummaryList_split}" var="venueSummaryList">
+									<apex:repeat value="{!venueSummaryList}" var="venueSummary">
+										<tr class="gradeA" id="{!venueSummary.venueId}" style='text-align:right;'>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueRegion}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueBranch}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueCode}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueName}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.salesmanName}"/></td>
+											<td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!venueSummary.finalVI}"/>
+												</apex:outputText>
+                                            </td>
+											<td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!venueSummary.actualVI}"/>
+												</apex:outputText>
+                                            </td>
+											<td style="text-align: right; {!IF(venueSummary.Diff<>0,'background-color:#FF0000','')}">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!venueSummary.Diff}"/>
+												</apex:outputText>
+                                            </td>
+										</tr>
+									</apex:repeat>
+                                </apex:repeat>
+                            </tbody>
+                        </table>
+                    </apex:outputPanel>                    
+                    <br/><br/>                    
+                </apex:pageBlock>
+            </apex:form>
+        </div>
+        <div id="demo3" class="right">
+            <apex:form > 
+                <apex:actionFunction action="{!doSave}" name="doSave">
+                    <apex:param name="firstParam"  assignTo="{!syncFlag}" value=""/>
+                </apex:actionFunction>
+                <!--<apex:actionFunction action="{!doQuickSave}" name="doQuickSave" reRender="pageMsg, keymanAllocationTable" status="idStatus"></apex:actionFunction>-->
+                <apex:actionFunction action="{!doSave}" name="doSave" reRender="pageMsg, keymanAllocationTable" status="idStatus" oncomplete="displaySaveButton(true);displayCloneDeleteButton(true);"></apex:actionFunction>
+                <apex:actionFunction action="{!finalizedRecord}" name="finalizedRecord" reRender="pageMsg, keymanAllocationTable" status="idStatus"></apex:actionFunction>
+				
+                <apex:actionFunction action="{!vmsClone}" name="doVmsClone" reRender="pageMsg, keymanAllocationTable" oncomplete="displayCloneDeleteButton(true);" status="idStatus">
+					<apex:param name="externalID" value="" />
+				</apex:actionFunction>
+                <apex:actionFunction action="{!vmsDelete}" name="doVmsDelete" reRender="pageMsg, keymanAllocationTable" oncomplete="displayCloneDeleteButton(true);" status="idStatus">
+					<apex:param name="externalID" value="" />
+					<apex:param name="recordID" value="" />
+				</apex:actionFunction>
+				
+                <apex:actionStatus id="idStatus"  onstop="processDataTable()" onstart="preProcessDataTable()">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:50px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus>
+                
+                <apex:pageBlock title="Keyman Allocation">
+					<br/>
+                    <apex:pageMessages id="pageMsg" escape="false"></apex:pageMessages> 
+					<br/> 
+                    <center>
+                        <!--<apex:commandButton id="submitBtn2" action="{!finalizedRecord}" onclick="return handleSave();" value="Finalize" style="width:70px; margin-left:4px;" />-->
+						
+						<!--
+                        <apex:commandButton id="saveBtn2" action="{!doSave}" onclick="return handleSave();" value="Save" style="width:80px" status=""> 
+                        </apex:commandButton>
+                        <apex:commandButton id="quickSaveBtn2" onclick="return handleSave('Quick Save');" value="Quick Save" style="width:80px"/>
+						-->
+						<input id="saveVMS" type="button" class="btn"  onclick="handleSave('Save');" value="Save" style="width:70px; margin:4px;" />
+						<!--<input type="button" class="btn"  onclick="handleSave('Quick Save');" value="Quick Save" style="width:70px; margin:4px;" />-->
+                    </center>                   
+                    <apex:outputPanel id="keymanAllocationTable">                     
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" id="keymanAllocationTable" colspan="11">
+                            <thead>
+                                <tr>
+                                    <th style='text-align: left' colspan="1">Branch Name</th>
+                                    <th style='text-align: left' colspan="1">Venue Code</th>
+                                    <th style='text-align: left' colspan="1">Venue Name</th>
+                                    <th style='text-align: left' colspan="1">Salesman Name</th>
+                                    <th style='text-align: left' colspan="1">Item Group<br/>Name</th>
+                                    <th style='text-align: right' colspan="1">Final VI</th>
+                                    <th style='text-align: left' colspan="1">Keyman Name</th>
+                                    <th style='text-align: left' colspan="1">Keyman Code</th>
+                                    <th style='text-align: right' colspan="1">Actual Volume</th>
+                                    <th style='text-align: right' colspan="1">VI Amount<br/>By Keyman</th>
+                                    <th style='text-align: left' colspan="1">Comment</th>
+                                    <th style='text-align: left' colspan="1">Action</th>
+                                </tr>
+                            </thead>
+                            <tfoot>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                            </tfoot>
+                            <tbody>
+                                <apex:repeat value="{!keymanDetailList}" var="wrap">
+									<apex:repeat value="{!wrap.keymanDetailList}" var="keyman">
+										<tr class="gradeA" id="{!keyman.ASI_KOR_SYS_External_ID__c}" style='text-align:right;' attr-edit="{!IF(!keyman.ASI_KOR_VMS_Sync__c && ((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c),'true','false')}">
+											<td style='text-align: left'><apex:outputText value="{!keyman.ASI_KOR_Venue__r.Owner.ASI_KOR_User_Branch_Name__c}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!keyman.ASI_KOR_Venue__r.ASI_KOR_Customer_Code__c}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!keyman.ASI_KOR_Venue__r.name}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!keyman.ASI_KOR_Venue__r.owner.name}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!keyman.ASI_KOR_Item_Group__r.ASI_KOR_Item_Group_Name__c}"/></td>
+											<td style='text-align: right'>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!keyman.ASI_KOR_Final_VI__c}"/>
+												</apex:outputText>
+											</td>
+											<td style='text-align: left'>
+												<apex:selectList size="1" value="{!keyman.ASI_KOR_Keyman__c}" required="true" onchange="changeKeymanCode(this);" id="keyman_actual" rendered="{!!keyman.ASI_KOR_VMS_Sync__c && ((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}">
+													<apex:selectOptions value="{!keymanOptions}"/> 
+												</apex:selectList>
+												<apex:outputText value="{!keyman.ASI_KOR_Keyman__r.name}" rendered="{!keyman.ASI_KOR_VMS_Sync__c || !((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}"/>
+												<apex:inputHidden value="{!keyman.ASI_KOR_Keyman_Original__c}" id="keyman_original"/>
+											</td>
+											<td style='text-align: left'><apex:outputText Id="keymanCode" value="{!keyman.ASI_KOR_Keyman__r.ASI_KOR_Keyman_Code__c}" styleClass="totalVI"/></td>
+											<td style='text-align: right'>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!keyman.ASI_KOR_Actual_Volume__c}"/>
+												</apex:outputText>
+											</td>
+											<td style='text-align: right'>
+												<apex:inputHidden value="{!keyman.ASI_KOR_VI_Amount_Original__c}" id="vi_original"/>
+												<apex:inputField id="vi_actual" value="{!keyman.ASI_KOR_CA_Amount__c}" style="width:80px; text-align: right;" rendered="{!!keyman.ASI_KOR_VMS_Sync__c && ((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}" onKeyup="format(this)"/>
+												<apex:outputText value="{0, number, ###,###,###,##0}" rendered="{!keyman.ASI_KOR_VMS_Sync__c || !((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}"> 
+													<apex:param value="{!keyman.ASI_KOR_CA_Amount__c}"/>
+												</apex:outputText>
+											</td>
+											<!--td style='text-align: left'><input type="number" value="{!keyman.ASI_KOR_CA_Amount__c}" style="width:80px" readonly="{!keyman.ASI_KOR_VMS_Sync__c}" step='100'/></td-->
+											<td style='text-align: left'>
+												<apex:inputField id="comment"  styleClass="businessRationale" value="{!keyman.ASI_KOR_Comment__c}" rendered="{!!keyman.ASI_KOR_VMS_Sync__c && ((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}"/>
+												<apex:outputText value="{!keyman.ASI_KOR_Comment__c}" rendered="{!keyman.ASI_KOR_VMS_Sync__c || !((keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0) || keyman.ASI_KOR_Is_Cloned__c)}"/>
+											</td>
+											<td style='text-align: left'>
+												<apex:inputHidden value="{!keyman.ASI_KOR_Is_Cloned__c}" id="isCloned"/>
+												<apex:outputPanel rendered="{!!keyman.ASI_KOR_Is_Cloned__c && !keyman.ASI_KOR_VMS_Sync__c && (keyman.ASI_KOR_Actual_Volume__c!=null && keyman.ASI_KOR_Actual_Volume__c!=0 && keyman.ASI_KOR_Final_VI__c!=null && keyman.ASI_KOR_Final_VI__c!=0)}">
+												<input type="button" class="btn vmsClone" onclick="vmsClone('{!keyman.ASI_KOR_SYS_External_ID__c}')" value="Clone" style="margin:4px;" />
+												</apex:outputPanel>
+												<apex:outputPanel rendered="{!keyman.ASI_KOR_Is_Cloned__c && !keyman.ASI_KOR_VMS_Sync__c}">
+												<input type="button" class="btn vmsDelete" onclick="vmsDelete('{!keyman.ASI_KOR_SYS_External_ID__c}','{!keyman.id}')" value="Delete" style="margin:4px;" />
+												</apex:outputPanel>
+											</td>
+										</tr>
+									</apex:repeat>
+										<tr class="gradeCA" style='text-align:right; font-weight:bold' id="Subtotal">
+											<td style='text-align: left'>SubTotal</td>
+											<td style='text-align: left'>Brand</td>
+											<td style='text-align: left'><apex:outputText value="{!wrap.brand}"/></td>
+											<td style='text-align: left'></td>
+											<td style='text-align: left'></td>
+											<td style='text-align: right'>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!wrap.VI_approved}"/>
+												</apex:outputText>
+											</td>
+											<td style='text-align: left'></td>
+											<td style='text-align: left'></td>
+											<td style='text-align: right'>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!wrap.ActualVolume}"/>
+												</apex:outputText>
+											</td>
+											<td style='text-align: right'>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!wrap.VI_allocated}"/>
+												</apex:outputText>
+											</td>
+											<td style='text-align: left'></td>
+											<td style='text-align: left'></td>
+										</tr>
+                                </apex:repeat>
+                            </tbody>
+                        </table>
+                    </apex:outputPanel>                    
+                    <br/><br/>                    
+                </apex:pageBlock>
+            </apex:form>
+        </div>
+    </div> 
+</apex:page>

@@ -1,0 +1,1784 @@
+<!--
+/**********************************************************************************
+ * Name : ASI_KOR_SalesRepProposal
+ * Created : Vincent Lam
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * ??										Created
+ * 2017-02-14       Laputa: Vincent         [VL 1.0] also check channel when linking incentive scheme to proposal detail
+ * 2017-04-06		Laputa: Kevin			[KC 2.0] add loading screen blocker when the system is retrieving Incentive Scheme  
+ * 2017-05-04		Laputa: Vincent			[VL 2.0] P4.2 layout
+ * 2017-08-09		Laputa: Vincent			[VL 3.0] P4.2 
+ * 2017-08-09		Laputa: Vincent			[VL 4.0] P4.2 show >1000 venue summary
+ * 2017-08-14		Laputa: Vincent			[VL 5.0] P4.2 stop quick save refreshing venue summary
+ * 2017-09-08		Laputa: Vincent			[VL 6.0] P4.2 add function to refreshing venue summary only
+ * 2017-09-08		Laputa: Vincent			[VL 7.0] hide all save buttons on save, and redisplay after save
+ **********************************************************************************/
+-->
+<apex:page sidebar="false" standardController="ASI_KOR_SR_Proposal_Header__c" extensions="ASI_KOR_SalesRepProposalDetailController">
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_KOR_VFPageResources, 'PR_KOR_Resouce/css/demo_table.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.js')}"/>
+    <!--
+<apex:stylesheet value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+-->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.dataTables.js')}"/> <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/FixedColumns.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+    <style>
+        input.error-input {
+        border-color: red;
+        }
+        .wrap{  
+        width:100%;
+        }
+        textarea {
+        height: 3em;
+        }
+        .leftXX{
+        width: 15%;
+        float: left;
+        display:none;
+        position:absolute;
+    var currentVenue ='';
+        left:10px;
+        top: 320px;
+        z-index:999;
+        }
+        .right{
+        float: left;
+        width: 100%;
+        }
+        
+        .unitCostInput{
+        width:65px;
+        text-align: right;
+        }
+        .targetVolume{
+        width:65px;
+        text-align: right;
+        }
+        .dataTables_empty {
+        text-align: center;
+        height:100px !important;
+        }
+        table.display {
+        
+        }
+        th {
+        overflow:hidden;
+        }
+        
+        .gradeA{
+        text-align:center;
+        }
+        .gradeD{
+        text-align:center;
+        }
+        
+        .venueStatus {
+        width:80px;
+        text-align: center;
+        }
+        
+        .totalbasicca{
+        width:65px;
+        }
+        .capunitcost{
+        width:65px;
+        }
+        .propUnitCost{
+        
+        }
+        
+        .businessRationale{
+        
+        width: 100px;
+        
+        }
+        
+        .required {
+        border-color: red;
+        }
+        .totalCA {
+        text-align: right;
+        }
+        input.btn[name="del"] {
+        display: none;
+        }
+        input.btn[name="clone"] {
+        display: none;
+        }
+        input.btn[name="edit"] {
+        display: none;
+        }
+        input.btn[name="edit_proposal"] {
+        display: none;
+        }
+        
+        .overlay {
+            display: none;
+            height: 100%;
+            left: 0;
+            position: fixed;
+            top: 0;
+            opacity: 0.3;
+            -moz-opacity: 0.3;
+            width: 100%;
+            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+            filter: alpha(opacity=30);
+            background: #000;
+            -khtml-opacity: 0.3;
+            z-index: 1000;
+        }
+        
+		.loader {
+    	width: 32px;
+    	height: 32px;
+    	position: absolute;
+    	left: 50%;
+		}
+
+        table.display tr:nth-child(odd).gradeCA{
+        	background-color: #CEF1FF;
+        }
+        table.display tr:nth-child(even).gradeCA{
+        	background-color: #BEECFE;
+        }
+        table.display tr:nth-child(odd).gradeCB{
+        	background-color: #ddddff;
+        }
+        table.display tr:nth-child(even).gradeCB{
+        	background-color: #EFEFFF;
+        }
+    </style>
+    <script type="text/javascript" charset="utf-8">
+    if (!window.console) console = {log: function() {}};
+    
+    var filterToggle = true;
+    var quickSaveFlag = false;
+    var changeFlag = false;
+    
+    /*
+Change the background color of all element with venueStatus id;
+*/
+    function colorStat(){
+        $("[id$=venueStatus]").each(function(index){
+            
+            var stat = $(this).text();
+            var box = $(this).parent();
+            if(stat == 'OK' || stat == 'Within Budget' || stat == 'Within Scheme' || stat == 'Within Recommendation')
+                $(box).css( "background-color", "green" );
+            else if(stat == 'Exceed Budget' || stat == 'Exceeded Budget' || stat == 'Exceed Scheme' || stat == 'Exceed Recommendation')
+                $(box).css( "background-color", "red" );
+                else if(stat == 'Too Small' )
+                    $(box).css( "background-color", "yellow" );
+        });
+    }
+    
+    function showErrorMessage(message){
+        if(message == null || message == '')
+            $('[id$="customErrorMessage"]').empty();
+        else
+            $('[id$="customErrorMessage"]').append('<br/>' +message);
+    }
+    function inputChange(x){
+        /* [VL 2.0] BEGIN */
+		/*
+        var propUnitCost = $(x).val().replace(/\,/g,'');
+        console.log('Input ' + $(x).parent().parent().attr("id"));
+        var id =  $(x).parent().parent().attr("id");
+        var venueStat = $('#'+id).find("span.venueStatus"); 
+        var rowScroll= $('.right').find(".dataTables_scrollBody").find('#'+id);
+        var min =  $(rowScroll).find("span.capbasicunitcost").text().replace(/\,/g,'');
+		* [VL 2.0] BEGIN *
+		*
+        var max =  $(rowScroll).find("span.totalbasicca").text().replace(/\,/g,'');
+		*
+		var max = min;
+		* [VL 2.0] END *
+        
+        if(propUnitCost =='' || min==''|| max ==''){
+            clearRow(rowScroll,venueStat); 
+            return;
+        }
+        propUnitCost  = Number(propUnitCost);
+        $(rowScroll).find('input[id*="unitCostInput"]').val(propUnitCost);
+        var br  =  $('#'+id).find(".businessRationale");
+        var totalIncentive =  $(rowScroll).find("span.totalIncentive");
+        var totalCA =  $(rowScroll).find("span.totalCA");
+        var propUnitCostCA =   $(rowScroll).find("span.propUnitCost");
+        
+        console.log('min: ' + min);
+        console.log('max: ' + max); 
+        
+        var targetVolume = $('.DTFC_LeftBodyWrapper').find('#'+id).find('.targetVolume').val();
+        targetVolume = targetVolume.replace(/\,/g,'');
+        
+        var temp = propUnitCost * Number(targetVolume);
+        $(totalIncentive).text(CurrencyUtil.numToCurrency(temp));
+        
+        temp = propUnitCost - Number(min);
+        $(propUnitCostCA).text(CurrencyUtil.numToCurrency(temp));
+        
+        temp = temp * Number(targetVolume);
+        $(totalCA).text(CurrencyUtil.numToCurrency(temp));
+        
+        statChanger(propUnitCost,min,max,venueStat,br);
+        changeFlag = true;
+        enableSFButtons(changeFlag);
+		*/
+        var propUnitCost = $(x).val().replace(/\,/g,'');
+        console.log('Input ' + $(x).parent().parent().attr("id"));
+        var id =  $(x).parent().parent().attr("id");
+        var venueStat = $('#'+id).find("span.venueStatus"); 
+        var rowScroll= $('#detailsTable').find('#'+id);
+        var br  =  $('#'+id).find(".businessRationale");
+        var incentiveUnitCost =  $(rowScroll).find("input[id*='capbasicunitcost2']").val().replace(/\,/g,'');
+        
+        if(propUnitCost =='' || incentiveUnitCost==''){
+            clearRow(rowScroll,venueStat); 
+            return;
+        }
+        propUnitCost  = Number(propUnitCost);
+        var totalVI =  $(rowScroll).find("span.totalVI");
+        
+        var targetVolume = $(rowScroll).find('.targetVolume').val();
+        targetVolume = targetVolume.replace(/\,/g,'');
+        targetVolume  = Number(targetVolume);
+        
+        var temp = propUnitCost * Number(targetVolume);
+        $(totalVI).text(CurrencyUtil.numToCurrency(temp));
+        
+        statChangerP4(propUnitCost,incentiveUnitCost,venueStat);
+        changeFlag = true;
+        enableSFButtons(changeFlag);
+		
+        /* [VL 2.0] END */
+    }
+    
+    
+    function clearRow(rowScroll, venueStat){
+        $(rowScroll).find(".businessRationale").val('');
+        $(rowScroll).find("span.totalIncentive").text('');
+        $(rowScroll).find("span.totalCA").text('');
+        $(rowScroll).find("span.propUnitCost").text('');
+        $(venueStat).text('');
+        $(venueStat).parent().css( "background-color", "" );
+        $(venueStat).css( "background-color", "" );
+    }
+    function clearRowCA(rowScroll, venueStat){
+        $(rowScroll).find("span.capunitcost").text('');
+        $(rowScroll).find("span.capbasicunitcost").text('');
+        $(rowScroll).find("span.totalbasicca").text('');
+        clearRow(rowScroll, venueStat);
+    }
+    
+    function format(temp){
+        var jThis = $(temp);
+        inputChange(jThis);
+        CurrencyUtil.renderInput(jThis);
+        var inputNum = CurrencyUtil.currencyToFloat(jThis.val());
+        //console.log('Test currency: ' + inputNum);
+        validateInput(/^[\d|,]*\.?\d*$/.test(jThis.val()), jThis);
+    }
+    
+    function format2(temp){
+        var jThis = $(temp);
+        CurrencyUtil.renderInput(jThis);
+        var inputNum = CurrencyUtil.currencyToFloat(jThis.val());
+        console.log('Test currency: ' + inputNum);
+        validateInput(/^[\d|,]*\.?\d*$/.test(jThis.val()), jThis);
+        if(inputNum != null){
+            getRemoteCA(temp);
+        }else if(inputNum == null || temp.val() != null || temp.val() != ''){
+            console.log('clear');        
+            var rowId =  $(temp).parent().parent().attr("id");
+            clearRowCA( $('.right').find(".dataTables_scrollBody").find('#'+rowId ),$('#'+rowId ).find(".venueStatus"));
+            
+        }
+        changeFlag = true;
+        enableSFButtons(changeFlag);
+    }
+    function checkRequiredFields(){
+		/* [VL 2.0] BEGIN */
+		/*
+        var flag = true;
+        $('.right').find('.DTFC_RightBodyWrapper').find('tbody').find('tr').each(function(index){
+            var rowId = $(this).attr('id');
+            var row = $('.right').find(".dataTables_scrollBody").find('#'+rowId);
+            var br  =  $('#'+rowId).find(".businessRationale");
+            var stat = $('#'+rowId).find("span.venueStatus").text();
+            console.log('=========' + stat + $(br).val());
+            if(stat == 'Exceed Budget' && ($(br).val() == null || $(br).val()=='')){
+                $(br).focus();
+                flag = false;
+                alert('Business Rationale Required');
+                return false;
+            }
+            else if(stat == 'Too Low'){
+                $('.DTFC_LeftBodyWrapper').find('#'+rowId).find('.unitCostInput').focus();
+                flag = false;
+                alert('Proposal Unit Cost is too low');
+                return false;
+            }
+        });
+        return flag;
+		*/
+        var flag = true;
+        $('#detailsTable').find('tbody').find('tr').each(function(index){
+            var rowId = $(this).attr('id');
+            var row = $("#detailsTable").find('#'+rowId);
+            var br  =  $('#'+rowId).find(".businessRationale");
+            var stat = $('#'+rowId).find("span.venueStatus").text();
+            var isPrepayment = $('#'+rowId).find('input.isPrepayment').is(":checked");
+            console.log('=========' + stat + $(br).val());
+            if(stat == 'Exceed Scheme' && !isPrepayment && ($(br).val() == null || $(br).val()=='')){
+                $(br).focus();
+                flag = false;
+                alert('Business Rationale을 입력해주세요.');
+                return false;
+            }
+        });
+        return flag;
+		/* [VL 2.0] END */
+    }
+    
+    function statChanger(y,min,max,venueStat,br ){
+        console.log('y ' +y + ' min ' + min + 'max: '+ max); 
+        if(y!=='' && y<Number(min)){
+            console.log('low');
+            $(venueStat).text('Too Low');
+            $(venueStat).parent().css( "background-color", "yellow" );
+            $(venueStat).css( "background-color", "yellow" );
+            
+        }
+        else if(y!=='' && y <= Number(max)){
+			/* [VL 2.0] BEGIN */
+			/*
+            $(venueStat).text('Within Budget');
+			*/
+            $(venueStat).text('Within Scheme');
+			/* [VL 2.0] BEGIN */
+            $(venueStat).css( "background-color", "green" );
+            $(venueStat).parent().css( "background-color", "green" );
+            
+        }
+            else if(y > Number(max)){
+				/* [VL 2.0] BEGIN */
+				/*
+                $(venueStat).text('Exceed Budget');
+				*/
+				$(venueStat).text('Exceed Scheme');
+				/* [VL 2.0] BEGIN */
+                $(venueStat).parent().css( "background-color", "red" );
+                $(venueStat).css( "background-color", "red" );
+            }
+    }
+	
+	/* [VL 2.0] BEGIN */
+    function statChangerP4(y,incentiveUnitCost,venueStat){
+        if(y!=='' && y <= Number(incentiveUnitCost)){
+            $(venueStat).text('Within Scheme');
+            $(venueStat).css( "background-color", "green" );
+            $(venueStat).parent().css( "background-color", "green" );
+            
+        }
+            else if(y > Number(incentiveUnitCost)){
+                $(venueStat).text('Exceed Scheme');
+                $(venueStat).parent().css( "background-color", "red" );
+                $(venueStat).css( "background-color", "red" );
+            }
+    }
+	/* [VL 2.0] END */
+    
+    function updateInputfields(){
+		/* [VL 2.0] BEGIN */
+		/*
+        $('.right').find('.DTFC_LeftBodyWrapper').find('tbody').find('tr').each(function(index){
+            
+            var rowId = $(this).attr('id');
+            var row = $('.right').find(".dataTables_scrollBody").find('#'+rowId);
+            var min =  $(row).find("span.capbasicunitcost").text().replace(/\,/g,'');
+            var min2 =  $(row).find("span.capunitcost").text().replace(/\,/g,'');
+            var max =  Number(min) + Number(min2); //$(row).find("span.totalbasicca").text().replace(/\,/g,'');
+            var br  =  $('#'+rowId).find(".businessRationale");
+            //var venueStat = $('.right').find('.DTFC_RightBodyWrapper').find('tbody').find('#'+rowId).find('span.venueStatus');
+            var venueStat = $('#'+rowId).find("span.venueStatus");
+            var t = $(this).find('input.targetVolume').val();
+            var u = $(this).find('input.unitCostInput').val();
+            
+            if(t!=null && u!=null && Number(t.replace(/\,/g,'')) > 0 ){
+                u = u.replace(/\,/g,'');
+                t = t.replace(/\,/g,'');
+                //$(this).find('input.targetVolume').val(t);
+                //$(this).find('input.unitCostInput').val(u);
+                //format2($(this).find('input.unitCostInput'));
+                statChanger(Number(u),min,max,venueStat,br);
+            }
+            
+            console.log('row id: ' + rowId + ' ' + t + ' ' + u);
+            
+            $(row).find("span.totalbasicca").text(max);
+            var totalIncentive =  $(row).find("span.totalIncentive");
+            var totalCA =  $(row).find("span.totalCA");
+            var propUnitCost =   $(row).find("span.propUnitCost");
+            var temp = u * Number(t);
+            $(totalIncentive).text(CurrencyUtil.numToCurrency(temp));
+            temp = u - Number(min);
+            $(propUnitCost).text(CurrencyUtil.numToCurrency(temp));
+            temp = temp * Number(t);
+            $(totalCA).text(CurrencyUtil.numToCurrency(temp));
+            
+        });
+		*/
+        $('#detailsTable').find('tbody').find('tr').each(function(index){
+            
+            var rowId = $(this).attr('id');
+            console.log('rowId:'+rowId);
+            if (rowId != '' && rowId != null){
+                var row = $('#detailsTable').find('#'+rowId);
+                var incentiveUnitCost =  $(row).find("input[id*='capbasicunitcost2']").val().replace(/\,/g,'');
+                var br  =  $('#'+rowId).find(".businessRationale");
+                var venueStat = $('#'+rowId).find("span.venueStatus");
+                var t = $(this).find('input.targetVolume').val();
+                var u = $(this).find('input.unitCostInput').val();
+                
+                u = u.replace(/\,/g,'');
+                t = t.replace(/\,/g,'');
+                if(t!=null && u!=null && Number(t) > 0 ){
+                    statChangerP4(Number(u),incentiveUnitCost,venueStat,br);
+                }
+                
+                var totalVI =  $(row).find("span.totalVI");
+                var temp = Number(u) * Number(t);
+                $(totalVI).text(CurrencyUtil.numToCurrency(temp));
+            }
+        });
+		/* [VL 2.0] END */
+    }
+    
+    function validateInput(isValid, theInput) {
+        if (!isValid) theInput.addClass('error-input');
+        else theInput.removeClass('error-input');
+    }
+    
+    function initializeSummaryTable(){
+        var dtable = $('#summaryTableByBrand').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "100%",
+            "sScrollX": "100%",
+            "bPaginate": true,
+		/* [VL 2.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+			"lengthMenu": [25, 50, 100],
+			"pageLength": 50,
+		/* [VL 2.0] END */
+            "bJQueryUI": false,
+            "bSort": false,
+            "sPaginationType": "full_numbers"              
+            
+        } );
+        $(dtable).on('draw',colorStat);
+        colorStat();
+    }
+    function initializeVenueSummary(){
+        var oTable = $('#venueSummaryTable').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "250",
+            "sScrollX": "100%",
+            "bPaginate": true,
+		/* [VL 2.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+		/* [VL 2.0] END */
+            "sPaginationType": "full_numbers",
+            "bSort":false
+        });
+        
+        $("#venueSummaryTable tbody").click(function(event) {
+            if(changeFlag){
+                var flag2 = confirm('You have made some changes without saving, switching to another venue will lose all the data you have entered. Do you want to continue?');
+                if(flag2){
+                    
+                    $(oTable.fnSettings().aoData).each(function (){
+                        $(this.nTr).removeClass('row_selected');
+                    });
+                    $(event.target.parentNode).addClass('row_selected');
+                    currentVenue = $(event.target.parentNode).attr('id');
+                    
+                    selectVenue(currentVenue);
+                }
+            }else{
+                
+                $(oTable.fnSettings().aoData).each(function (){
+                    $(this.nTr).removeClass('row_selected');
+                });
+                $(event.target.parentNode).addClass('row_selected');
+                currentVenue = $(event.target.parentNode).attr('id');
+                selectVenue(currentVenue);
+                
+            }
+        });
+        var firstRow = $('#venueSummaryTable').find('tbody').find('tr').get(0);
+        $(firstRow).addClass('row_selected');
+        currentVenue = $(firstRow).attr('id');
+        
+    }
+    function initializeDetailTable(){
+        var dtable = $('#detailsTable').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "730px",
+            "sScrollX": "100%",
+            "bPaginate": false,
+		/* [VL 2.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+		/* [VL 2.0] END */
+            "bSort": false
+        } );
+        if($('#detailsTable').find('td').hasClass('dataTables_empty')){
+            $('#detailsTable').find('tbody tr').empty();
+            $('#detailsTable').find('tbody tr').append('<td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/>');
+        }
+		/* [VL 2.0] BEGIN */
+		/*
+        var o =  new FixedColumns( dtable,{
+            "iLeftColumns": 8,
+            "iLeftWidth": 650,
+            "iRightColumns":2,
+            "iRightWidth":250
+        });
+        $(o.dom.grid.wrapper).width($(o.dom.grid.wrapper).width());
+		*/
+		/* [VL 2.0] END */
+        
+        updateInputfields();
+        changeFlag = false;
+        enableSFButtons(changeFlag);
+        $(dtable).on('draw',colorStat);
+        colorStat();
+    }
+    function applyFilter(){
+        var selectedVenues = '';
+        console.log('Apply filter button clicked...');
+        $( ".check_" ).each(function( index ) {
+            if($( this ).is(':checked')){
+                selectedVenues = selectedVenues + $( this ).attr("id") + '|';
+                console.log( "checked"+ ": " + $( this ).attr("id") );
+            }
+        });
+        if(selectedVenues == ''){
+            $( ".check_" ).each(function( index ) {
+                selectedVenues = selectedVenues + $( this ).attr("id") + '|';
+                console.log( "checked"+ ": " + $( this ).attr("id") );
+                
+            });
+        }
+        filterVenues(selectedVenues);
+        
+    }
+    function showFilter(){
+        if(filterToggle){
+            filterToggle = !filterToggle;
+            $(".leftXX").css("display","inline");
+        }
+        else{
+            filterToggle = !filterToggle;
+            $(".leftXX").css("display","none");
+            
+        }
+    }
+    $(document).ready( function () {
+        
+		/* [VL 2.0] BEGIN */
+        //initializeSummaryTable();
+		/* [VL 2.0] END */
+        initializeVenueSummary();
+        initializeDetailTable();
+        var filterTable = $('#filterTable').dataTable({
+            "sScrollY" : "300px",
+            "bScrollCollapse" : true,
+            "bPaginate" : false,
+            "bJQueryUI": false,
+            "bSort": false,
+		/* [VL 2.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+		/* [VL 2.0] END */
+            "oLanguage": {
+                "sSearch": ""
+            }
+        });    
+        
+        
+        
+        $('#select_all_').click(function(){
+            if($('#select_all_').is(':checked')){
+                $(".check_").attr ( "checked" ,"checked" );
+            }
+            else
+            {
+                $(".check_").removeAttr('checked');
+            }
+            //applyFilter();
+        });
+        $('.leftXX').find('.dataTables_filter').css('float','left');
+        
+    });
+    
+    function handleFilterButton(){
+        console.log("filter button clicked!");
+        if(filterToggle){
+            filterToggle = !filterToggle;
+            $(".leftXX").css("display","inline");
+        }
+        else{
+            filterToggle = !filterToggle;
+            $(".leftXX").css("display","none");
+            
+        }
+    }
+    function preProcessDataTable(){
+        $('#select_all_').attr("disabled", true);
+        $(".check_").attr("disabled", true);
+        console.log('pre processing');
+        $('#applyFilterBtn').attr("disabled", true);
+        $('#filterBtn').attr("disabled", true);
+        $('#saveBtn').attr("disabled", true);
+        $('#submitBtn').attr("disabled", true);
+        
+        console.log('destroyed!');
+        var oTable2 = $('#detailsTable').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();
+        console.log('destroyed! 2');
+        
+    }
+    function processDataTable(){
+        console.log('done loading' + $('#detailsTable'));
+        initializeDetailTable();
+        
+        $('#applyFilterBtn').removeAttr("disabled");
+        $(".check_").removeAttr("disabled");
+        $('#select_all_').removeAttr("disabled");
+        $('#filterBtn').removeAttr("disabled");
+        $('#saveBtn').removeAttr("disabled");
+        $('#submitBtn').removeAttr("disabled");
+        
+        
+    }
+    function preProcessDataTable2(){
+        var oTable2 = $('#summaryTableByBrand').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();
+        console.log('destroyed! 2');
+        
+    }
+    function processDataTable2(){
+        initializeSummaryTable();
+        console.log('done loading' + $('#summaryTableByBrand'));
+        
+    }
+    function preProcessDataTable3(){
+        var oTable2 = $('#venueSummaryTable').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();
+        console.log('destroyed! 2');
+        
+    }
+    function processDataTable3(){
+        console.log('done loading' + $('#venueSummaryTable'));
+        initializeVenueSummary();
+        if(quickSaveFlag){
+            //selectVenue(currentVenue);
+            handleSummary();
+            quickSaveFlag=false;
+        }else{
+            selectVenue(currentVenue);
+        }
+    }
+    function getRemoteCA(x){
+        applyLoading();
+		/* [VL 2.0] BEGIN */
+		/*
+        var target = $(x).val().replace(/\,/g,'');
+        var rowId =  $(x).parent().parent().attr("id");
+        var rowScroll= $('.right').find(".dataTables_scrollBody").find('#'+rowId );
+        var branchId = $('input[id*="branchId"]').val();
+        var srMonth = $('input[id*="srMonth"]').val();
+        var srYear = $('input[id*="srYear"]').val();
+        var srCutOffDate = '1';
+        var srContractType = $(x).parent().find('input[id*="srContractType"]').val();
+        var srGrade = $('.DTFC_LeftBodyWrapper').find('#'+rowId).find('.srGrade').text();
+        var uom = $('.DTFC_LeftBodyWrapper').find('#'+rowId).find('.uom').text();
+        * [VL 1.0] BEGIN *
+        var srChannel = $('.DTFC_LeftBodyWrapper').find('#'+rowId).find('.srChannel').text();
+        * [VL 1.0] END *
+        var id = rowId;
+        id = id.substring(0,(id.length-10));
+        var brandId = id.substring(0,id.length/2)
+        var param = brandId + '|' + branchId  + '|' +target + '|' + uom + '|' +  srContractType + '|' + srMonth + '|' +srYear + '|' + srCutOffDate + '|' + srGrade;
+        * [VL 1.0] BEGIN *
+        param += '|' + srChannel;
+        * [VL 1.0] END *
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_KOR_SalesRepProposalDetailController.getCA}',
+            param,
+            function(result,event){
+                if (event.status) {
+                    handleCA(rowId,result,target );
+                    showErrorMessage('');
+                    $(x).removeClass('error-input');
+                    console.log(result);
+                } else if (event.type === 'exception') {
+                    clearRowCA( $('.right').find(".dataTables_scrollBody").find('#'+rowId ),$('#'+rowId ).find(".venueStatus"));
+                    showErrorMessage('');
+                    showErrorMessage('No incentive Scheme found.');
+                    $(x).addClass('error-input');
+                    $(x).focus();
+                    console.log(event.message);
+                } else {
+                    clearRowCA( $('.right').find(".dataTables_scrollBody").find('#'+rowId ),$('#'+rowId ).find(".venueStatus"));
+                    console.log(event.message);
+                }
+            }
+        );
+		*/
+        var target = $(x).val().replace(/\,/g,'');
+        var rowId =  $(x).parent().parent().attr("id");
+        var id = rowId;
+        id = id.substring(0,(id.length-10));
+        var brandId = id.substring(0,id.length/2)
+        var srVenueChannel = $(x).parent().find('input[id*="srVenueChannel"]').val();
+        var srMonth = $('input[id*="srMonth"]').val();
+        var srYear = $('input[id*="srYear"]').val();
+		var param = brandId + '|' + srVenueChannel + '|' + target + '|' + srMonth + '|' + srYear; 
+		
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_KOR_SalesRepProposalDetailController.getCA}',
+            param,
+            function(result,event){
+                if (event.status) {
+                    handleCA(rowId,result,target );
+                    showErrorMessage('');
+                    $(x).removeClass('error-input');
+                    console.log(result);
+                } else if (event.type === 'exception') {
+                    clearRowCA( $('#detailsTable').find('#'+rowId ),$('#'+rowId ).find(".venueStatus"));
+                    showErrorMessage('');
+                    showErrorMessage('No incentive Scheme found.');
+                    $(x).addClass('error-input');
+                    $(x).focus();
+                    console.log(event.message);
+                } else {
+                    clearRowCA( $('#detailsTable').find('#'+rowId ),$('#'+rowId ).find(".venueStatus"));
+                    console.log(event.message);
+                }
+            }
+        );
+		/* [VL 2.0] END */
+        
+        
+    }
+    function handleCA(id,result,targetVolume){
+		/* [VL 2.0] BEGIN */
+		/*
+        var rowScroll= $('.right').find(".dataTables_scrollBody").find('#'+id);
+        var temp = result.split('|');
+        var ca = temp[0];
+        var cabasic = temp[1];
+        var is = temp[2];
+        var uom = temp[3];
+        var x = Number(ca) + Number(cabasic);
+        $(rowScroll).find("span.capunitcost").text(ca);
+        $(rowScroll).find("span.capbasicunitcost").text(cabasic);
+        $(rowScroll).find('input[id*="incentiveScheme"]').val(is);
+        $(rowScroll).find('input[id*="targetVolume"]').val(targetVolume);
+        $(rowScroll).find('input[id*="capunitcost2"]').val(Number(ca));
+        $(rowScroll).find('input[id*="capbasicunitcost2"]').val(Number(cabasic));
+        $(rowScroll).find("span.totalbasicca").text(x);
+        
+        var f = $('.DTFC_LeftBodyWrapper').find('#'+id).find('.unitCostInput');
+        if( f != undefined && f.val() != null)
+            inputChange(f);
+        */
+        var rowScroll= $('#detailsTable').find('#'+id);
+        var temp = result.split('|');
+        var cabasic = temp[0];
+        var is = temp[1];
+        $(rowScroll).find('input[id*="incentiveScheme"]').val(is);
+        $(rowScroll).find('input[id*="targetVolume"]').val(targetVolume);
+        $(rowScroll).find('input[id*="capbasicunitcost2"]').val(Number(cabasic));
+        
+        var f = $('#detailsTable').find('#'+id).find('.unitCostInput');
+        if( f != undefined && f.val() != null)
+            inputChange(f);
+		/* [VL 2.0] END */
+    }
+    
+    function handleQuickSave(){
+        quickSaveFlag = true;
+        var flag = checkRequiredFields();
+        if(flag){
+            changeFlag = false;
+			displayButton(false);
+			/* [VL 5.0] BEGIN */
+			doQuickSave();
+			/* [VL 5.0] END */
+        }else{
+            quickSaveFlag = false;
+            
+        }
+        return flag;
+    }
+    function handleSave(){ 
+        quickSaveFlag = true;
+        var flag = checkRequiredFields();
+        if(flag){
+            changeFlag = false;
+			displayButton(false);
+            return true;
+        }else{
+            
+        }
+        return false;
+    }
+    function handleSubmit(){
+		/* [VL 2.0] BEGIN */
+		/*
+        if(confirm('Submit?')){
+		*/
+        if(confirm('전송하시겠습니까?')){
+		/* [VL 2.0] END */
+            quickSaveFlag = true;
+            var flag = checkRequiredFields();
+            if(flag){
+                changeFlag = false;
+			displayButton(false);
+                return true;
+            }else{
+                //
+            }
+            return false;
+        }else{
+            return false;
+        }
+    }
+    function handleRecall(){
+        return true;
+    }
+    
+    function enableSFButton(b,flag){
+        
+        if(flag){
+            $(b).removeClass('btnDisabled');
+            $(b).addClass('btn');
+            $(b).removeAttr('disabled');
+        }else{
+            $(b).removeClass('btn');
+            $(b).addClass('btnDisabled');
+            $(b).attr('disabled',true);
+        }
+    }
+    
+    function enableSFButtons(flag){
+        enableSFButton($('input[id*="quickSaveBtn1"]'),flag);
+        enableSFButton($('input[id*="saveBtn1"]'),flag);
+        enableSFButton($('input[id*="quickSaveBtn2"]'),flag);
+        enableSFButton($('input[id*="saveBtn2"]'),flag);
+    }
+    /*[KC 2.0] BEGIN*/
+    function loading(val) {
+    if (val) {
+      document.getElementById('contentLoading').style.display = 'block';
+      document.getElementById('contentLoaded').style.display = 'none';
+    }
+    else {
+      document.getElementById('contentLoading').style.display = 'none';
+      document.getElementById('contentLoaded').style.display = 'block';
+    }
+  }
+    
+    function startLoading(){
+        $('#load_scrl').css('top', $(document).scrollTop() + 200);
+        $('.loadingBox').show();
+    }
+    function endLoading(){
+             $('.loadingBox').hide();
+    }
+    /*[KC 2.0] END*/
+	
+	/* [VL 2.0] BEGIN */
+	var tableToExcel = (function() {
+	  var uri = 'data:application/vnd.ms-excel;base64,'
+		, template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><meta http-equiv="content-type" content="text/plain; charset=UTF-8"/></head><body><table>{table}</table></body></html>'
+		, base64 = function(s) { return window.btoa(unescape(encodeURIComponent(s))) }
+		, format = function(s, c) { return s.replace(/{(\w+)}/g, function(m, p) { return c[p]; }) }
+	  return function(table, name) {
+		if (!table.nodeType) table = document.getElementById(table)
+		var ctx = {worksheet: name || 'Worksheet', table: table.innerHTML}
+		window.location.href = uri + base64(format(template, ctx))
+	  }
+	})()
+	/* [VL 2.0] END */
+	
+	/* [VL 7.0] BEGIN */
+	function displayButton(yes){
+		if (yes){
+			$(".buttonPanel").show();
+		} else {
+			$(".buttonPanel").hide();
+		}
+	}
+	/* [VL 7.0] END */
+	
+    </script>
+    <apex:detail inlineEdit="false"  subject="{!SRProposalHeader.id}" title="true" relatedList="false" />
+    <div class="wrap">
+        <div class="leftXX">
+		
+            <apex:pageBlock title="Filter" >
+                <table cellpadding="0" cellspacing="0" border="0" class="display"
+                       id="filterTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left !important"><input id="select_all_" type="Checkbox"/> All</th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                    <tbody>
+						<!-- [VL 4.0] BEGIN -->
+                        <apex:repeat value="{!Venues_split}" var="venues">
+						<!-- [VL 4.0] END -->
+							<apex:repeat value="{!venues}" var="venue">
+								<tr class="gradeB">
+									<td> <input id="{!venue.id}" type="checkbox" class="check_" value='2'/>
+										<apex:outputText value="{!venue.name}"/>
+									</td>
+								</tr> 
+							</apex:repeat>
+						<!-- [VL 4.0] BEGIN -->
+                        </apex:repeat>
+						<!-- [VL 4.0] END -->
+                        
+                        
+                    </tbody>
+                </table>
+                
+                <br/>
+                <br/>
+                <input style='text-align:center' type='button' value='Apply Filter' id='applyFilterBtn' onclick='applyFilter()'/>
+            </apex:pageBlock>
+			
+        </div>
+        <div id="demo" class="right">
+            <apex:form >
+                <div id="extra"/>
+                <apex:actionStatus id="idStatus3"  onstop="processDataTable3()" onstart="preProcessDataTable3()">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:200px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus>
+               <!-- [KC 2.0] BEGIN -->
+				<apex:actionFunction action="{!doNothing}" name="applyLoading" rerender="" status="screenLoading"/>
+                <apex:actionStatus id="screenLoading" onstart="startLoading();" onstop="endLoading();" />
+                <!-- [KC 2.0] END -->
+                <apex:pageBlock title="Venue Summary" >
+					<!-- {VL 6.0} BEGIN -->
+					<apex:commandButton action="{!refreshVenueSummary}" value="Refresh" reRender="venueSummaryTable" oncomplete="initializeVenueSummary()"  style="width: 70px; margin-left:4px;"/>
+					<!-- {VL 6.0} END -->
+                    <apex:outputPanel id="venueSummaryTable">
+                        
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" id="venueSummaryTable">
+                            <thead>
+                                <tr>
+                                    <th style='text-align: left'>Venue Code</th>
+                                    <th style='text-align: left'>Venue Name</th>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <th style='text-align: right'>P3M Act. Volume</th> 
+                                    <th style='text-align: right'>Total Incentive (Proposal)</th>
+                                    <th style='text-align: right'>Total CA (excl. Basic)</th>
+									-->
+                                    <th style='text-align: right'>Total VI</th>
+									<!-- [VL 2.0] END -->
+                                </tr>
+                            </thead>
+                            <tfoot>
+                                <th></th>
+                                <th></th>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                <th></th>
+                                <th></th>
+                                <th></th> 
+									-->
+                                    <th></th>
+									<!-- [VL 2.0] END -->
+                            </tfoot>
+                            <tbody>
+								<!-- [VL 4.0] BEGIN -->
+                                <apex:repeat value="{!VenueSummaryList_split}" var="venueSummaryList">
+								<!-- [VL 4.0] END -->
+									<apex:repeat value="{!venueSummaryList}" var="venueSummary">
+										<tr class="gradeA" id="{!venueSummary.venueId}" style='text-align:right; '>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueCode}"/></td>
+											<td style='text-align: left'><apex:outputText value="{!venueSummary.venueName}"/></td>
+											<!-- [VL 2.0] BEGIN -->
+											<!--
+											<td>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!venueSummary.last3monthAveVol }"/>
+												</apex:outputText>
+											</td>
+											
+											<td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+												<apex:param value="{!venueSummary.totalIncentive }"/>
+												</apex:outputText></td>
+											<td>
+												<apex:outputText value="{0, number, ###,###,###,##0}"> 
+													<apex:param value="{!venueSummary.totalCAAmount }"/>
+												</apex:outputText></td>
+											-->
+											<td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+												<apex:param value="{!venueSummary.totalIncentive }"/>
+												</apex:outputText></td>
+										<!-- [VL 2.0] END -->
+										</tr>
+									</apex:repeat>
+								<!-- [VL 4.0] BEGIN -->
+                                </apex:repeat>
+								<!-- [VL 4.0] END -->
+                            </tbody>
+                        </table>
+                    </apex:outputPanel>
+                    
+                    <br/><br/>
+                    
+                    
+                </apex:pageBlock>
+                <apex:actionFunction action="{!filterVenues}" name="filterVenues" rerender="venueSummaryTable" status="idStatus3">
+                    <apex:param name="firstParam"  assignTo="{!selectedVenues}" value="" />
+                </apex:actionFunction>
+                <apex:actionFunction action="{!handleQuickSave}" name="saveHandler"  rerender="venueSummaryTable" status="idStatus3"/>
+                <!--</apex:form>
+<apex:form id="proposalForm">-->
+                    <!-- [VL 2.0] BEGIN -->
+                    <apex:pageMessages id="pageMsg" escape="false"></apex:pageMessages>
+                    <!-- [VL 2.0] END -->
+                <!-- [KC 2.0] BEGIN -->
+                <div id="contentLoading" style="display:none;">
+                    <div style="text-align: center;">
+                        <img src="/img/loading.gif" alt="Loading graphic" />
+                    </div>
+                </div>
+                
+                <div id="contentLoaded"></div>
+                
+                <div id="load_scrl" class="loadingBox loader" style="display:none">
+                    <div style="text-align: center;">
+                        <p>Loading...
+                            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+                    </div>
+                </div>
+                
+                <div class="loadingBox overlay"> </div>
+                <!-- [KC 2.0] END -->
+                <div id="extra"/>
+                <apex:actionStatus id="idStatus"  onstop="processDataTable()" onstart="preProcessDataTable()">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:200px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus> 
+                <apex:pageBlock title="SR Sales Planning Details" >
+					<!-- [VL 3.0] BEGIN -->
+					<apex:outputPanel rendered="{!!renderSubmit}">
+					<input type="button" onclick="window.open('/{!ExceptionalReport_unitCost}?pv3={!Year}&pv4={!Month}','_blank')" value="Exceptional Report (Unit Cost)" />
+					<br/>
+					<br/>
+					</apex:outputPanel>
+					<!-- [VL 3.0] END -->
+					<div class="buttonPanel">
+                    <center>
+                        <apex:commandButton id="submitBtn1" action="{!handleSubmit}" onclick="return handleSubmit();" value="Submit" rendered="{!renderSubmit}" style="width: 70px; margin-left:4px;"/>
+                        <apex:commandButton action="{!handleRecall}" onclick="return handleRecall();" value="Recall" rendered="{!renderRecall}"  style="width: 70px; margin-left:4px;"/>
+                        <br/>
+                        <input type = "button" onClick="handleFilterButton()" class="btn" value = "Filter" style="width: 70px" id="filterBtn"/>
+                        <apex:commandButton id="saveBtn1" action="{!handleSave}" onclick="return handleSave();" value="Save"  rendered="{!renderSave}" style="width: 70px" />
+						<!-- [VL 5.0] BEGIN -->
+						<!--
+                        <apex:commandButton id="quickSaveBtn1" action="{!handleQuickSave}" onclick="return handleQuickSave();" value="QuickSave"  rendered="{!renderSave}" style="width: 70px"/>
+						-->
+						<apex:outputPanel id="quickSaveBtn1_render"  rendered="{!renderSave}">
+						<input type="button" class="btn" id="quickSaveBtn1"  onclick="handleQuickSave();" value="Quick Save" style="width:70px;" />
+						</apex:outputPanel>
+						<!-- [VL 5.0] END -->
+                        
+                        <div id='customErrorMessage' class='pbError'/>
+                    </center>
+					</div>
+                    <apex:inputHidden value="{!ownerBranch }" id="branchId" />
+                    <apex:inputHidden value="{!srMonth}" id="srMonth" />
+                    <apex:inputHidden value="{!srYear}" id="srYear" />
+                    
+                    <apex:outputPanel id="detailsTableR">
+                        
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" style='width:100%'
+                               id="detailsTable">
+                            <thead>
+                                <tr>
+                                    <!-- <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c.Label}</th>-->
+                                    
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Venue_Code__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Venue__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Brand__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Grade__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Channel__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_UOM__c.Label}</th>
+                                    <th >{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Target_Volume__c.Label}</th>
+                                    <th> Proposal <br/> Unit Cost</th>                       
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Cap_Unit_Cost_Basic__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Cap_Unit_Cost_CA__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Cap_Total_Basic_CA__c.Label}</th>                        
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Proposal_Unit_Cost_CA_Only__c.Label}</th>
+                                    <th>P3M Act. Unit Cost</th>
+                                    <th>P3M Act. Volume</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Proposal_Detail__c.Fields.ASI_KOR_Growth__c.Label}</th>
+                                    <th>Total Incentive<br/>(Proposal)</th>
+                                    <th>Total CA<br/>(excl. Basic)</th>
+                                    <th style='text-align:center'>Budget Status</th>
+                                    <th style='text-align:center'>Rationale</th>
+									-->
+                                    <th style='text-align: left'>Venue<br/>Code</th>
+                                    <th style='text-align: left'>Venue Name</th>
+                                    <th style='text-align: left'>Brand</th>
+                                    <th style='text-align: left'>Venue Type</th>
+                                    <!--<th style='text-align: left'>UOM</th>-->
+                                    <th style='text-align: right'>Target<br/>Volume</th>
+                                    <th style='text-align: right'>Unit Cost</th>                       
+                                    <th style='text-align: right'>Total VI</th>
+                                    <th style='text-align: right'>Last Month<br/>Actual Volume</th>
+                                    <th style='text-align: right'>Last Month<br/>Unit Cost</th>                        
+                                    <th style='text-align: right'>Last Month<br/>Total VI</th>                      
+                                    <th style='text-align: center'>Is<br/>Prepayment</th>
+                                    <th style="display:none;"></th>
+                                    <th style='text-align:center'>Scheme<br/>Status</th>
+                                    <th style='text-align:center'>Rationale</th>
+									<!-- [VL 2.0] END -->
+                                </tr>                  
+                            </thead>
+                            <tfoot>
+                                <tr>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th> 
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+									-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th> 
+                                    <!--<th></th>-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th style="display:none;"></th>
+                                    <th></th>
+                                    <th></th>
+									<!-- [VL 2.0] END -->
+                                </tr>
+                            </tfoot>
+                            <tbody >
+                                <apex:repeat value="{!proposalDetails}" var="detail">
+                                    <tr id='{!detail.ASI_KOR_Brand__c}{!detail.ASI_KOR_Incentive_Scheme__c}_detailrow' class="gradeA"> 
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                        <td> <br/> <apex:outputField value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Customer_Code__c}" /> <br/> <br/></td>
+                                        <td> <apex:outputField value="{!detail.ASI_KOR_Venue__r.name}" /></td>
+                                        <td> <apex:outputField value="{!detail.ASI_KOR_Brand__c}" /></td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Grade__c}" styleClass="srGrade" /></td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Venue_Pillar__c }" styleClass="srChannel" /></td>                                
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Incentive_Scheme__r.ASI_KOR_UOM__c}" styleClass="uom" /></td>
+                                        <td> 
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Contract_Type__c}" id="srContractType"/>
+                                            <apex:inputField value="{!detail.ASI_KOR_Target_Volume__c}" styleClass="targetVolume"  onChange="format2(this)"/>   
+                                        </td>
+                                        <td> <apex:inputField value="{!detail.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"  styleClass="unitCostInput" onKeyup="format(this)" onchange="inputChange(this)" /></td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Cap_Unit_Cost_Basic__c}" styleClass="capbasicunitcost" />
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Cap_Unit_Cost_Basic__c}" id="capbasicunitcost2"/>
+                                        </td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Cap_Unit_Cost_CA__c}" styleClass="capunitcost" />
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Cap_Unit_Cost_CA__c}" id="capunitcost2" />
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Incentive_Scheme__c}" id="incentiveScheme" />
+                                            
+                                        </td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Cap_Total_Basic_CA__c}" styleClass="totalbasicca" /></td>
+                                        
+                                        <td> <span class="propUnitCost"></span></td>
+                                        <td> 
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!detail.ASI_KOR_Last_3_month_Actual_average_UC__c}"/>
+                                            </apex:outputText>        
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!detail.ASI_KOR_Last_3_month_Actual_Average_Volu__c}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td> <apex:outputText value="{!detail.ASI_KOR_Growth__c}" /></td>
+                                        <td style='text-align:right;'> <apex:outputText value="{!detail.ASI_KOR_Total_Incentive_Amount_Proposal__c}" styleClass="totalIncentive" /></td>
+                                        <td style='text-align:right;'> <apex:outputText value="{!detail.ASI_KOR_Total_CA_Amount_excl_Basic__c}" styleClass="totalCA" />
+                                            !-- <apex:outputText value="{!detail.ASI_KOR_Total_CA_Amount_excl_Basic__c}" styleClass="totalCA" /> --</td>
+                                        <td>
+                                            <div style="border: 1px; padding:10px 10px 10px 10px; width:90px; text-align:center">
+                                                <span class='venueStatus' style="font-weight:bold "></span> 
+                                            </div>
+                                        </td>
+                                        <td> <apex:inputTextarea rows="2" id="businessRat" onChange="enableSFButtons(true)" styleClass="businessRationale" value="{!detail.ASI_KOR_Business_Rationale__c}" /></td>
+									-->
+                                        <td style='text-align: left'> <br/> <apex:outputField value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Customer_Code__c}" /> <br/> <br/></td>
+                                        <td style='text-align: left'> <apex:outputField value="{!detail.ASI_KOR_Venue__r.name}" /></td>
+                                        <td style='text-align: left'> <apex:outputField value="{!detail.ASI_KOR_Brand__c}" /></td>
+                                        <td style='text-align: left'> <apex:outputText value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Venue_Type__c}" styleClass="srVenueType" /></td>                              
+                                        <!--<td style='text-align: left'> <apex:outputText value="{!detail.ASI_KOR_Brand__r.ASI_KOR_UOM__c}" styleClass="uom" /></td>-->
+                                        <td style='text-align: right'> 
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Venue__r.ASI_KOR_Venue_Pillar__c}" id="srVenueChannel"/>
+                                            <apex:inputField value="{!detail.ASI_KOR_Target_Volume__c}" styleClass="targetVolume"  onChange="format2(this)"/>   
+                                        </td>
+                                        <td style='text-align: right'> <apex:inputField value="{!detail.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"  styleClass="unitCostInput" onKeyup="format(this)" onchange="inputChange(this)" /></td>
+                                        <td style='text-align: right'> <apex:outputText value="{!detail.ASI_KOR_Total_Incentive_Amount_Proposal__c}"  styleClass="totalVI" /></td>
+										<td style='text-align: right'> 
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!detail.ASI_KOR_Actual_Volume_1_Month_Ago__c}"/>
+                                            </apex:outputText>
+										</td>
+										<td style='text-align: right'> 
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!ROUND(detail.ASI_KOR_Total_VI_1_Month_Ago__c/IF(detail.ASI_KOR_Actual_Volume_1_Month_Ago__c==0,1,detail.ASI_KOR_Actual_Volume_1_Month_Ago__c),0)}"/>
+                                            </apex:outputText>
+										</td>
+										<td style='text-align: right'> 
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!detail.ASI_KOR_Total_VI_1_Month_Ago__c}"/>
+                                            </apex:outputText>
+										</td>
+										<td style="display:none;">
+                                            <apex:inputHidden value="{!detail.ASI_KOR_Cap_Unit_Cost_Basic__c}" id="capbasicunitcost2"/>
+										</td>
+										<td style='text-align: center'>
+											<apex:inputField value="{!detail.ASI_KOR_Is_Pre_payment__c}" styleClass="isPrepayment" onchange="changeFlag = true; enableSFButtons(changeFlag);" /> 
+										</td>
+                                        <td>
+                                            <div style="border: 1px; padding:2px; width:60px; text-align:center">
+                                                <span class='venueStatus' style="font-weight:bold "></span> 
+                                            </div>
+                                        </td>
+                                        <td> <apex:inputTextarea rows="2" id="businessRat" onChange="enableSFButtons(true)" styleClass="businessRationale" value="{!detail.ASI_KOR_Business_Rationale__c}" /></td>
+									<!-- [VL 2.0] END -->
+                                    </tr>                             
+                                </apex:repeat>              
+                            </tbody>
+                                                       
+                        </table>
+                    </apex:outputPanel>
+                    <br/><br/>
+                    <apex:actionFunction action="{!selectVenue}" name="selectVenue" rerender="detailsTableR" status="idStatus">
+                        <apex:param name="firstParam"  assignTo="{!selectedVenues}" value="" />
+                    </apex:actionFunction>
+					<!-- {VL 5.0} BEGIN -->
+					<apex:actionFunction action="{!handleQuickSave}" name="doQuickSave" reRender="pageMsg, detailsTableR, quickSaveBtn1_render, quickSaveBtn2_render" status="idStatus" oncomplete="displayButton(true)"></apex:actionFunction>
+					<!-- {VL 5.0} END -->
+                    
+					<div class="buttonPanel">
+                    <center>
+                        <apex:commandButton id="submitBtn2" action="{!handleSubmit}" onclick="return handleSubmit();" value="Submit" rendered="{!renderSubmit}" style="width: 70px; margin-left:4px;"/>
+                        <apex:commandButton action="{!handleRecall}" onclick="return handleRecall();" value="Recall" rendered="{!renderRecall}" style="width: 70px; margin-left:4px;"/>
+                        <br/>
+                        <input type = "button" onClick="handleFilterButton()" class="btn" value = "Filter" style="width: 70px" id="filterBtn"/>
+                        <apex:commandButton id="saveBtn2" action="{!handleSave}" value="Save"  rendered="{!renderSave}"  style="width: 70px" status="idStatus"/>
+						<!-- [VL 5.0] BEGIN -->
+						<!--
+                        <apex:commandButton id="quickSaveBtn2" action="{!handleQuickSave}" onclick="return handleQuickSave();" value="QuickSave"  rendered="{!renderSave}" style="width: 70px"/>
+						-->
+						<apex:outputPanel id="quickSaveBtn2_render"  rendered="{!renderSave}">
+						<input type="button" class="btn" id="quickSaveBtn2"  onclick="handleQuickSave();" value="Quick Save" style="width:70px;" />
+						</apex:outputPanel>
+						<!-- [VL 5.0] END -->
+                        
+                    </center>
+					</div>
+                </apex:pageBlock>
+            </apex:form> 
+        </div>
+        
+        <div id="demo">
+            <apex:pageBlock title="SR Sales Planning By Brands" >
+                <apex:form >
+                    <apex:actionStatus id="idStatus2"  onstop="processDataTable2()" onstart="preProcessDataTable2()">
+                        <apex:facet name="start">
+                            <apex:outputPanel styleClass="waitingSearchDiv"
+                                              style=";height:100%;width:100%;display:block; position:relative;z-index:999">
+                                <apex:outputPanel styleClass="waitingHolder"
+                                                  style="top:100px; width:105px;">
+                                    <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                    <apex:outputText styleClass="waitingDescription"
+                                                     value=" Processing ..." />      
+                                </apex:outputPanel>
+                            </apex:outputPanel>
+                        </apex:facet>
+                    </apex:actionStatus> 
+                    <apex:outputPanel id="summaryTable">
+					
+									<!-- [VL 2.0] BEGIN -->
+					<input type="button" onclick="tableToExcel('summaryTableByBrand', 'W3C Example Table')" value="Export to Excel" />
+									<!-- [VL 2.0] END -->
+                        
+                        <table cellpadding="0" cellspacing="0" border="0" class="display"
+                               id="summaryTableByBrand">
+                            <thead>
+                                <tr >
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <th style="text-align:right"> </th>
+                                    <th style="text-align:right">UOM</th>          
+                                    <th style="text-align:right">Proposal <br/> Unit Cost</th>
+                                    <th style="text-align:right">Unit Cost</th>
+                                    <th style='text-align:left'>Recommendation</th>
+                                    <th style="text-align:right">Recommended <br/> Unit Cost</th>                        
+                                    <th style='text-align:right'>P3M Act. Volume</th> 
+                                    <th style="text-align:right">Target Volume <br/> (Base on UOM)</th>
+                                    <th style="text-align:right"> Growth %</th>
+                                    <th style="text-align:right">Total Incentive (Proposal) </th>
+                                    <th style="text-align:right">Total CA (excl. Basic)</th>
+									-->
+                                    <th style="text-align:left">Month</th>
+                                    <th style="text-align:center" colspan="4">{!Last2Month_year}-{!Last2Month_month}</th>
+                                    <th style="text-align:center" colspan="4">{!Last1Month_year}-{!Last1Month_month}</th>
+                                    <th style="text-align:center" colspan="4">{!ThisMonth_year}-{!ThisMonth_month} (This Month)</th>
+									<!-- [VL 2.0] END -->
+                                    
+                                </tr>
+									<!-- [VL 2.0] BEGIN -->
+                                <tr >
+                                    <th style="text-align:left">Brand</th>
+                                    <th style="text-align:right">No. of<br/>Venue</th>
+                                    <th style="text-align:right">Act Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                    <th style="text-align:right">No. of<br/>Venue</th>
+                                    <th style="text-align:right">Act Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                    <th style="text-align:right">No. of<br/>Venue</th>
+                                    <th style="text-align:right">Planning<br/>Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                </tr>
+									<!-- [VL 2.0] END -->
+                            </thead>
+                            <tbody>
+									<!-- [VL 2.0] BEGIN -->
+                                <tr class="gradeA" style="font-weight:bold; text-align:right">
+                                    <td style=" text-align:left">TOTAL</td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <!--<apex:param value="{!GrandTotalByBrand_venue_2M}"/>-->
+                                            <apex:param value="{!TotalVenueOwnedBySR}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <!--<apex:param value="{!GrandTotalByBrand_venue_1M}"/>-->
+                                            <apex:param value="{!TotalVenueOwnedBySR}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <!--<apex:param value="{!GrandTotalByBrand_venue_TM}"/>-->
+                                            <apex:param value="{!TotalVenueOwnedBySR}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                </tr> 
+									<!-- [VL 2.0] END -->
+                                <apex:repeat value="{!srProposalByBrandByCategoryList}" var="srProposalByBrandByCategory">
+									<!-- [VL 2.0] BEGIN -->
+                                    <tr class="gradeCA" style="font-weight:bold; text-align:right">
+                                        <td style="font-weight:bold; text-align:left"><apex:outputText value="{!srProposalByBrandByCategory.category }"/></td>
+                                        <td>
+											<!--
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_No_of_Venues_2_Months_Ago}"/>
+                                            </apex:outputText>    
+											-->                
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Actual_Volume_2M_Ago_All_Venue}"/>
+                                            </apex:outputText> 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.UnitCost_2MonthAgo}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Total_VI_2M_Ago_All_Venue}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+											<!--
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_No_of_Venues_1_Month_Ago}"/>
+                                            </apex:outputText>    
+											-->                                
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Actual_Volume_1M_Ago_All_Venue}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.UnitCost_1MonthAgo}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Total_VI_1M_Ago_All_Venue}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+											<!--
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_No_of_Records_Planned}"/>
+                                            </apex:outputText>    
+											-->                                
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Target_Volume}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.UnitCost_thisMonth}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.ASI_KOR_Total_Incentive_Amount_Proposal}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                    </tr>
+                                </apex:repeat>
+                                <apex:repeat value="{!srProposalByBrandByCategoryList}" var="srProposalByBrandByCategory">
+									<!-- [VL 2.0] END -->
+                                    <apex:repeat value="{!srProposalByBrandByCategory.srProposalByBrands}" var="srProposalByBrandEx">
+                                        <tr class="gradeCB" style="text-align:right">
+                                            
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                            <td style="text-align:left"><apex:outputText value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Brand__r.name}"/></td>
+                                            
+                                            <td><apex:outputText value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_UOM__c}"/></td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"/>
+                                                </apex:outputText></td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Proposal_Unit_Cost_CA_Only__c}"/>
+                                                </apex:outputText></td>
+                                            <td style=" text-align:center">
+                                                <div style="border: 1px; padding:2px 2px 2px 2px; width: 100px; text-align:center">
+                                                    <apex:outputText id="CostvenueStatus" value="{!srProposalByBrandEx.UnitCostStatus}"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.unitCostCap}"/>
+                                                </apex:outputText></td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Last_3_month_Actual_Average_Volu__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td><apex:outputText value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Target_Volume__c}"/></td>
+                                            <td><apex:outputText value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Growth__c}"/></td>
+                                            
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                                </apex:outputText></td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_CA_Amount_excl_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>
+									-->
+                                            <td style="text-align:left"><apex:outputText value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Brand__r.name}"/></td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_No_of_Venues_2_Months_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_2M_Ago_All_Venue__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_VI_2M_Ago_All_Venue__c/IF(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_2M_Ago_All_Venue__c=0,1,srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_2M_Ago_All_Venue__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_VI_2M_Ago_All_Venue__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_No_of_Venues_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_1M_Ago_All_Venue__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_VI_1M_Ago_All_Venue__c/IF(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_1M_Ago_All_Venue__c=0,1,srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Actual_Volume_1M_Ago_All_Venue__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_VI_1M_Ago_All_Venue__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_No_of_Records_Planned__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Target_Volume__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_Incentive_Amount_Proposal__c/IF(srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Target_Volume__c=0,1,srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Target_Volume__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!srProposalByBrandEx.srProposalByBrandsItem.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                                </apex:outputText>
+											</td>
+									<!-- [VL 2.0] END -->    
+                                        </tr>
+                                    </apex:repeat>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <tr class="gradeD" style="font-weight:bold; text-align:right">
+                                        <td style="font-weight:bold; text-align:left"><apex:outputText value="{!srProposalByBrandByCategory.category }"/></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.last3months}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td></td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.totalIncentiveAmount }"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srProposalByBrandByCategory.totalCAAmount }"/>
+                                            </apex:outputText></td>
+                                    </tr>
+									-->
+									<!-- [VL 2.0] END -->
+                                </apex:repeat>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                <tr class="gradeA" style="font-weight:bold; text-align:right">
+                                    <td style=" text-align:left">SALES REP TOTAL</td>
+                                    <td></td>
+                                    <td></td>
+                                    
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td><apex:outputText value="{!srTotalLast3Months}"/></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalIncentive}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalCAAmount}"/>
+                                        </apex:outputText></td>
+                                    
+                                </tr> 
+									-->
+									<!-- [VL 2.0] END -->
+                            </tbody>
+                            <tfoot>
+                                <tr>
+									<!-- [VL 2.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>   
+                                    <th></th>     
+                                    <th></th>  
+									-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+									<!-- [VL 2.0] END -->     
+                                </tr>
+                            </tfoot>
+                        </table>
+                        
+                    </apex:outputPanel>
+                    <apex:actionFunction action="{!handleSummary}" name="handleSummary" rerender="summaryTable" status="idStatus2">
+                    </apex:actionFunction>
+                </apex:form>
+                <br/><br/>
+                
+                
+            </apex:pageBlock>
+        </div>
+    </div>
+</apex:page>

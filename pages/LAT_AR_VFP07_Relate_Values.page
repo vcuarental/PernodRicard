@@ -1,0 +1,194 @@
+<!-------------------------------------------------------------------------------------------------------------
+* Company: Zimmic
+* Nombre del pagina: LAT_AR_VFP07_Relate_Values
+* Descripcion: Relaciona valores con depositos
+* Fecha: 12/08/2014
+-------------------------------------------------------------------------------------------------------------->
+
+<apex:page id="relateValuesToDeposits" name="relateValuesToDeposits" controller="BTN12_VlsBtnController_AR"    standardStylesheets="true" showHeader="true">
+    
+<html ng-app="relateValuesToDeposits" class="ng-app"  id="ng-app" xmlns:ng="http://angularjs.org">
+    <head>
+        
+
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/jquery-1.7.1.min.js"></script>
+              
+        <script src="{!$Resource.LAT_Resources}/js/json3.js"></script>
+        
+
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/angular.js"></script>
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/angular-animate.js"></script>
+        
+        
+       <style>    
+       .sf1button {
+        cursor: pointer;
+        margin-top: 5px;
+        margin-bottom: 11px;
+        margin-left: 5px;
+        width: 80px;
+        
+            }
+
+
+       
+       </style>
+
+
+
+        <!--[if lte IE 8]>
+            <script>
+                document.createElement('ng-include');
+                document.createElement('ng-pluralize');
+                document.createElement('ng-view');
+ 
+                // Optionally these for CSS
+                document.createElement('ng:include');
+                document.createElement('ng:pluralize');
+                document.createElement('ng:view');
+            </script>
+        <![endif]-->
+
+        <script type="text/javascript">
+            //Get configuration from environment variables (via heroku or localhost env)
+            var configFromEnv = {}; 
+            configFromEnv.client_id    = "<%= client_id %>";
+            configFromEnv.app_url = "<%= app_url %>";
+            configFromEnv.sessionId = "{!$API.session_Id}";
+        
+    
+            $(document).ready(function() {
+              
+                if(jQuery.browser.msie){
+                    if(jQuery.browser.version == '7.0' || jQuery.browser.version == '8.0' || jQuery.browser.version == '9.0'){
+                        angular.bootstrap(document);
+                    }
+                }
+            
+            });
+            var app = angular.module('relateValuesToDeposits',[]);
+            app.constant('SFConfig', getSFConfig());
+            
+            function getSFConfig() {
+                var location = document.location;
+                var href = location.href;
+                if (href.indexOf('file:') >= 0) { //Phonegap 
+                    return {};
+                } else {
+                    if (configFromEnv.sessionId) {
+                        return {
+                            sessionId: configFromEnv.sessionId
+                        }
+                    } else {
+                        if (!configFromEnv || configFromEnv.client_id == "" || configFromEnv.client_id == "undefined"
+                            || configFromEnv.app_url == "" || configFromEnv.app_url == "undefined") {
+                            throw 'Environment variable client_id and/or app_url is missing. Please set them before you start the app';
+                        }
+                        return {
+                            sfLoginURL: 'https://login.salesforce.com/',
+                            consumerKey: configFromEnv.client_id,
+                            oAuthCallbackURL: removeTrailingSlash(configFromEnv.app_url) + '/#/callback',
+                            proxyUrl: removeTrailingSlash(configFromEnv.app_url) + '/proxy/'
+                        }
+                    }
+                }
+            }
+        
+            //Helper
+            function removeTrailingSlash(url) {
+                return url.replace(/\/$/, "");
+            }
+            
+            function getURLParameter(name) {
+              return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,""])[1].replace(/\+/g, '%20'))||null
+            }
+            
+            function Ctrl($scope,$location) {
+                Visualforce.remoting.timeout = 120000;
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.BTN12_VlsBtnController_AR.getValues}', 
+                    getURLParameter('idDeposit'),
+                    function(result, event){ 
+                        if (event.status) {
+                            $scope.values = result;
+                            $scope.$apply();
+                        } else if (event.type == 'exception') {
+                            
+                        } 
+                    }, 
+                    {escape: false}
+                );
+                
+                $scope.relateValues = function(){
+                    var valArray = new Array();
+                     for(var i =0;i<$scope.values.length;i++){
+                        if($scope.values[i].Selected){
+                            valArray.push($scope.values[i].Id);
+                        }
+                     }
+                     Visualforce.remoting.timeout = 120000;
+                     Visualforce.remoting.Manager.invokeAction(
+                         '{!$RemoteAction.BTN12_VlsBtnController_AR.relateValues}', 
+                            getURLParameter('idDeposit'),
+                         valArray,
+                         function(result, event){
+                             if(result == 'OK'){
+                                 window.location.href = "/"+getURLParameter('idDeposit');
+                             }else{
+                                 alert(result);
+                             }
+                     
+                         });
+                };
+                
+                $scope.toggleSelection = function(a){
+                    a.Selected = !a.Selected;
+                };
+            }
+            
+            
+
+        </script>
+
+    </head>
+        
+    <apex:form >
+        <div ng-controller="Ctrl">
+            <apex:pageBlock >
+            <input class="sf1button" style="cursor:pointer;" type="button"  ng-click="relateValues();" value="Relacionar"/>
+            <table class="list" border="0" cellspacing="0" cellpadding="0">
+                <tbody>
+                    <tr class="headerRow">
+                        <th scope="col" class=" zen-deemphasize" style="width: 20px;"></th>
+                        <th scope="col" class=" zen-deemphasize">Cheque No.</th>
+                        <th scope="col" class=" zen-deemphasize">Receipt No.</th>
+                        <th scope="col" class=" zen-deemphasize">Value Type</th>
+                        <th scope="col" class=" zen-deemphasize">Amount</th>
+                        <th scope="col" class=" zen-deemphasize">Bank</th>
+                    </tr>
+                    <tr ng-repeat="v in values" class="dataRow even last first" onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}" onmouseout="if (window.hiOff){hiOff(this);}" onmouseover="if (window.hiOn){hiOn(this);}">
+                        <td><input 
+                            type="checkbox"
+                            value="{{v.Selected}}"
+                            ng-checked="{{v.Selected}}" 
+                            ng-click="toggleSelection(v);"
+                          /></td>
+                        <td class=" dataCell">
+                            <a href="/{{v.Id}}" target="_parent">{{v.Name}}</a>
+                        </td>
+                        <td class=" dataCell  ">
+                        <a href="/{{v.ReceiptNo_AR__c}}" target="_parent">{{v.ReceiptNo_AR__r.Name}}</a></td>
+                        <td class=" dataCell  ">{{v.ValueType_AR__c}}</td>
+                        <td class=" dataCell  ">{{v.Amount_AR__c}}</td>
+                        <td class=" dataCell  ">{{v.Bank_AR__c}}</td>
+                    </tr>
+                 </tbody>
+            </table>
+            
+            </apex:pageBlock>
+        
+        </div>
+    </apex:form>
+</html>
+    
+</apex:page>

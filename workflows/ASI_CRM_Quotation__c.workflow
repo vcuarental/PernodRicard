@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_Quotation_Applying_Notification_To_Vendor</fullName>
+        <description>Quotation Applying Notification to Vendor</description>
+        <protected>false</protected>
+        <recipients>
+            <field>ASI_CTY_CN_Vendor_Notification_User__c</field>
+            <type>userLookup</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_Quotation_Notification</template>
+    </alerts>
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_Quotation_Submit_Notification_to_Buyer</fullName>
+        <description>Quotation Submit Notification to Buyer</description>
+        <protected>false</protected>
+        <recipients>
+            <type>creator</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_Quotation_Submit</template>
+    </alerts>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Quotation_Notify_False</fullName>
+        <field>ASI_CTY_CN_Vendor_Quotation_Notification__c</field>
+        <literalValue>0</literalValue>
+        <name>Update Quotation Notification To False</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Quote_SubNotify_False</fullName>
+        <field>ASI_CTY_CN_Vendor_Quotation_SubmitNotify__c</field>
+        <literalValue>0</literalValue>
+        <name>Update Quotation Submit Notify To False</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_CTY_CN_Vendor_Quotation_Send_Notification</fullName>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Quotation_Applying_Notification_To_Vendor</name>
+            <type>Alert</type>
+        </actions>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Quotation_Notify_False</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Quotation__c.ASI_CTY_CN_Vendor_Quotation_Notification__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Quotation__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>CN Vendor Merge Quotation</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CTY_CN_Vendor_Quotation_Send_Submit_Notification</fullName>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Quotation_Submit_Notification_to_Buyer</name>
+            <type>Alert</type>
+        </actions>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Quote_SubNotify_False</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_Quotation__c.ASI_CTY_CN_Vendor_Quotation_SubmitNotify__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_Quotation__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>CN Vendor Merge Quotation</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

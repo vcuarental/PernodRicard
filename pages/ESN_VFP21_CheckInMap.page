@@ -1,0 +1,142 @@
+<apex:page standardController="ESN_CheckIn__c" sidebar="false" showHeader="false">
+    <head>
+        
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+        <meta charset="utf-8"/>
+        
+        <style>
+            html, body, #map-canvas {
+                margin: auto auto;
+                padding: 0;
+                height: 100%;
+                width: 95%;
+            }
+        </style>
+        
+        <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.JQuery_JS)}" />
+        <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_DateJS)}"></script>
+        <link href="{!URLFOR($Resource.CheckIn_Resources,'/CheckinMap.css')}" rel="stylesheet" type="text/css" />
+        <script>
+            var map;
+            var marker;
+            
+            /* 
+             *  Get the content of popup when click on a person to display her last location 
+             ****/
+            function getContentString(usrName, usrId, locName, locAddress, ciDate, usrPhoto){
+                var cidat = "";
+                var citim = "";
+                
+                if(ciDate != ""){
+                    cidat = new Date(ciDate).toLocaleDateString();
+                    citim = new Date(ciDate).toLocaleTimeString();
+                }
+            
+                var content = '<div id="popupcontent">';
+                
+                // Title of popup //
+                content += '<div class="popup-content-title">';
+                    // Add user Name //
+                    content += '<div style="font-weight: bold; font-size: 14px;" class="popup-content-title-name">'+ usrName +'</div>';
+                    // Add a link to the user profile //
+                    content += '<a target="_parent" href="/'+ usrId +'" style="font-size:10px;" class="popup-content-title-link">View profile</a>';
+                content += '</div>';
+                    
+                // Content of popup //
+                content += '<table><tbody><tr>';
+                    // First column //
+                    content += '<td style="width:50%"><table style="top: 20px; position: absolute; width: 142px;"><tbody>';
+                        // Add date //
+                        content += '<tr><td><div style="font-size: 11px;font-weight: lighter;" class="popup-content-date">'+ cidat +'&nbsp;'+ citim +'</div></td></tr>';
+                        // Line with address and icon //
+                        content += '<tr><td><i>';
+                            // Add pin icon //
+                            content += '<img class="popup-content-img" src="{!URLFOR($Resource.CheckIn_Resources,'img/places_pin_icon.png')}"/>';
+                            // Add Address //
+                            content += '<br/><div class="popup-content-location">'+ locAddress.replace(",","<br/>")+'</div>';
+                        content += '</i></td></tr>';
+                    content += '</tbody></table></td>';
+                    // Second column //
+                    content += '<td style="width:50%"><table><tbody><tr><td class="popup-content-photo">';
+                        // Add user photo //
+                        content += '<img width="150" src="'+ usrPhoto +'"/>';
+                    content += '</td></tr></tbody></table></td>';
+                content += '</tr></tbody></table></div>';
+                return content;
+            }
+                    
+            var infowindow = new google.maps.InfoWindow({
+                content: getContentString("{!ESN_CheckIn__c.ESN_User__r.Name}", "{!ESN_CheckIn__c.ESN_User__r.Id}", "{!ESN_CheckIn__c.ESN_LocationName__c}", "{!ESN_CheckIn__c.ESN_Address__c}", "{!ESN_CheckIn__c.ESN_Date__c}", "{!ESN_CheckIn__c.ESN_User__r.FullPhotoURL}")
+            });
+
+            /* Options enabled */
+            // Enable the visual refresh
+            google.maps.visualRefresh = true;
+            
+            /* Positions */
+            var currPosition;
+            var locAddrFormat;
+            currPosition = new google.maps.LatLng("{!ESN_CheckIn__c.ESN_Geolocation__Latitude__s}", "{!ESN_CheckIn__c.ESN_Geolocation__Longitude__s}");
+
+
+            /* Initialize the map */
+            function initialize() {
+                // Define options of the future map //
+                var mapOptions = {
+                    zoom: 15,
+                    center: currPosition,
+                    mapTypeId: google.maps.MapTypeId.ROADMAP,
+                };
+                
+                // Create the map //
+                map = new google.maps.Map(
+                    document.getElementById('map-canvas'),
+                    mapOptions
+                );
+
+                // Create markers //
+                marker = new google.maps.Marker({
+                    map: map,
+                    draggable: false,
+                    animation: google.maps.Animation.DROP,
+                    position: currPosition
+                });
+                infowindow.open(map,marker);
+                
+                // Define animations on events //
+                //google.maps.event.addListener(marker, 'click', toggleBounce);
+                google.maps.event.addListener(marker, 'click', function() {
+                    infowindow.open(map,marker);
+                });
+                google.maps.event.addListener(map, 'click', function() {
+                    infowindow.close(map,marker);
+                });
+
+            }
+
+            /* Animations of markers */
+            function toggleBounce() {
+                if (marker.getAnimation() != null) {
+                    marker.setAnimation(null);
+                } else {
+                    marker.setAnimation(google.maps.Animation.BOUNCE);
+                }
+            }
+            
+            /* Load the map with defined options */
+            google.maps.event.addDomListener(window, 'load', initialize);
+        </script>
+    </head>
+    
+    <body>
+        <div id="map-canvas"></div>
+        <apex:form id="myForm" >        
+            <apex:actionFunction name="saveGeolocation" action="{!save}" reRender="map-canvas">
+                <apex:param name="geolocLat" value="geolocLat" assignTo="{!ESN_CheckIn__c.ESN_Geolocation__Latitude__s}" />
+                <apex:param name="geolocLong" value="geolocLong" assignTo="{!ESN_CheckIn__c.ESN_Geolocation__Longitude__s}" />
+                <!--apex:param name="geoAddr" value="geoAddr" assignTo="{!ESN_CheckIn__c.ESN_Address__c}" /-->
+            </apex:actionFunction>
+        </apex:form>
+    </body>
+</apex:page>

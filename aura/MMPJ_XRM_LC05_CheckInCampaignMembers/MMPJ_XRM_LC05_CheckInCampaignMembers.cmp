@@ -1,0 +1,180 @@
+<aura:component
+    implements="flexipage:availableForAllPageTypes,force:lightningQuickActionWithoutHeader,lightning:actionOverride"
+    controller="MMPJ_XRM_LCR04_CheckIn">
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+
+    <aura:attribute name="recordId" type="String" />
+    <aura:attribute name="columns" type="List" />
+    <aura:attribute name="campaign" type="Campaign" />
+    <aura:attribute name="campaignMembers" type="List" />
+    <aura:attribute name="campaignMembersFiltered" type="List" />  
+    <aura:attribute name="SearchKeyWord" type="string" />
+    <aura:attribute name="sortBy" type="String" />
+    <aura:attribute name="sortDirection" type="String" />
+    <aura:attribute name="showOnlyParticipantsMembers" type="Boolean" default="false" />
+    <aura:attribute name="isQuickAddModalOpen" type="Boolean" default="false" />
+    <aura:attribute name="call" type="Boolean" default="false" />
+    <aura:attribute name="noNumber" type="Boolean" default="false" />
+    <!--will store campaignMembers we need to have, for updating the accompanist field-->
+    <aura:attribute name="draftValues" type="Object" default="[]" />
+    <!--will hel flag all rows where campaign member refused-->
+    <aura:attribute name="selectedRows" type="List" /> <!-- The rows to be displayed. -->
+    <aura:attribute name="rowsSelected" type="List" /> <!-- The rows to be saved and displayed -->
+    <aura:attribute name="campaignMemberToShow" type="Campaign" />
+    <aura:html tag="style">
+		.slds-popover_edit .slds-checkbox{ 
+            display: none;
+        }
+
+        .slds-is-edited:hover {
+             background-color: transparent !important;
+        }
+
+        .slds-is-edited {
+            background-color: #ecebea !important;
+       }
+
+       .slds-popover__footer .slds-button_neutral{
+           display:none;
+       }
+	</aura:html>
+
+    <ui:scrollerWrapper class="scrollerSize">
+        <lightning:button label="{!$Label.c.MMPJ_XRM_LC05_Screen2_BackButton}"
+            title="{!$Label.c.MMPJ_XRM_LC05_Screen2_BackButton}" onclick="{!c.handleReturn}"
+            class="slds-m-around_small" />
+        <lightning:card title="{!v.campaign.Name}" iconName="standard:campaign" class="slds-m-horizontal_small">
+
+            <div class="slds-m-horizontal_x-small">
+                <div class="slds-box">
+                    <div class="slds-grid slds-gutters_direct slds-truncate">
+                        <div class="slds-col slds-size_1-of-3">
+                            <b>{!$Label.c.MMPJ_XRM_LC05_Screen2_StartDate}</b>
+                            <lightning:formattedDateTime class="slds-m-left_x-small" value="{!v.campaign.StartDate}" />
+                        </div>
+                        <div class="slds-col slds-size_1-of-3">
+                            <b>{!$Label.c.MMPJ_XRM_LC05_Screen2_CheckedInContacts}</b><span
+                                class="slds-m-left_x-small">{!v.campaign.NbPresents}</span>
+                        </div>
+                        <div class="slds-col slds-size_1-of-3">
+                            <b>{!$Label.c.MMPJ_XRM_LC05_Screen2_EnrolledContacts}</b><span
+                                class="slds-m-left_x-small">{!v.campaign.NbInscrits}</span>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="slds-grid slds-gutters_direct slds-grid_vertical-align-center slds-m-vertical_small slds-truncate">
+                    <lightning:input aura:id="name-input" class="slds-col slds-m-around_none label-hidden" type="search"
+                        onchange="{!c.keyPressController }" value="{!v.SearchKeyWord}"
+                        placeholder="{!$Label.c.MMPJ_XRM_LC05_Screen2_PlaceHolder}" />
+                </div>
+                <div class="slds-grid slds-gutters">
+                    <div class="slds-col slds-size_2-of-3">
+                        <lightning:input aura:id="participants-input"
+                            class="slds-col  slds-size_1-of-2 slds-m-right_x-small" type="checkbox"
+                            label="{!$Label.c.MMPJ_XRM_LC05_Screen2_ShowEnrolledOnly}"
+                            onchange="{!c.showOnlyParticipantsMembers}" checked="{!v.showOnlyParticipantsMembers}"
+                            value="{!v.showOnlyParticipantsMembers}" />
+                    </div>
+                    <div class="slds-col slds-size_1-of-3 right">
+                        <lightning:button class="slds-m-right_x-small"
+                            label="{!$Label.c.MMPJ_XRM_LC05_Screen2_non_invite}" title="Contact non invité"
+                            onclick="{!c.openQuickAddModal}" />
+                    </div>
+                </div>
+                <div aura:id="searchRes" id="searchRes" class="contai" data-select="single">
+                    <lightning:datatable aura:id="lightningTable" 
+                                         keyField="Id" 
+                                         hideCheckboxColumn="true" 
+                                         data="{!v.campaignMembersFiltered}" 
+                                         columns="{!v.columns }" 
+                                         sortedBy="{!v.sortBy}"
+                                         sortedDirection="{!v.sortDirection}" 
+                                         onsort="{!c.handleSort}" 
+                                         onrowaction="{!c.handleRowAction}"
+                                         class="slds-is-relative slds-truncate" 
+                                         draftValues="{! v.draftValues }"
+                                         oncellchange="{! c.handleSaveEdition}" 
+                                         selectedRows="{!v.selectedRows}"
+                                         suppressBottomBar="true" />
+                </div>
+            </div>
+        </lightning:card>
+
+        <aura:if isTrue="{!v.isQuickAddModalOpen}">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true"
+                aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open slds-modal_large">
+                <div class="slds-modal__container slds-truncate">
+                    <header class="slds-modal__header">
+                        <lightning:buttonIcon iconName="utility:close" onclick="{!c.closeQuickAddModal}"
+                            alternativeText="close" variant="bare-inverse" class="slds-modal__close" />
+                        <h2 id="modal-heading-01" class="slds-hyphenate">
+                            {!$Label.c.MMPJ_XRM_LC05_Screen2_addCampainmember}</h2>
+                    </header>
+                    <div class="slds-modal__content" id="modal-content-id-01">
+                        <c:MMPJ_XRM_LC02_QuickAddCampaignMembers recordId="{!v.campaign.Id}" isCheckIn="true" />
+                    </div>
+                    <!--Modal/Popup Box Footer Starts here-->
+                    <footer class="slds-modal__footer">
+                        <lightning:button variant="neutral" label="{!$Label.c.MMPJ_XRM_LC05_Screen2_fermer}"
+                            title="Fermer" onclick="{!c.closeQuickAddModal }" />
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+        <aura:if isTrue="{!v.call}">
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small modalAppel"
+                aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            title="Close">
+                            <span class="slds-assistive-text">Close</span>
+                        </button>
+                        <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">
+                            {!$Label.c.MMPJ_XRM_LC05_Screen2_call}</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                        <p class="slds-text-align_center">{!$Label.c.MMPJ_XRM_LC05_Screen2_Mobile_Phone} :
+                            <lightning:formattedPhone value="{!v.campaignMemberToShow.Mobile}" />
+                        </p>
+                        <p class="slds-text-align_center">{!$Label.c.MMPJ_XRM_LC05_Screen2_fixe} :
+                            <lightning:formattedPhone
+                                value="{!v.campaignMemberToShow.Contact.MMPJ_Ext_Vign_Telephone_fixe__c}" />
+                        </p>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning:button variant="neutral" label="{!$Label.c.MMPJ_XRM_LC05_Screen2_fermer}"
+                            title="Fermer" onclick="{!c.closeSecondModal }" />
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+        <aura:if isTrue="{!v.noNumber}">
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small modalAppel"
+                aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            title="Close">
+                            <span class="slds-assistive-text">Close</span>
+                        </button>
+                        <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">
+                            {!$Label.c.MMPJ_XRM_LC05_Screen2_call}</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                        <p class="slds-text-align_center">{!$Label.c.MMPJ_XRM_LC05_Screen2_noPhoneNumber}</p>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning:button variant="neutral" label="{!$Label.c.MMPJ_XRM_LC05_Screen2_fermer}"
+                            title="Fermer" onclick="{!c.closethirdModal}" />
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+    </ui:scrollerWrapper>
+</aura:component>

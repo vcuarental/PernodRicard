@@ -1,0 +1,355 @@
+<aura:component description="EUR_CRM_AccountGroupCompound" implements="force:hasRecordId">
+
+    <ltng:require scripts="{!join(',',$Resource.EUR_CRM_jquery + '/jquery-1.8.2.min.js', $Resource.EUR_CRM_jQueryCSV + '/jquery-csv-master/src/jquery.csv.js')}"/>
+
+    <aura:method name="switchToFilters" />
+    <aura:method name="reset" />
+    <aura:method name="clearSearch" />
+    <aura:method name="closePreviewItem">
+        <aura:attribute name="id" type="String" />
+    </aura:method>
+
+    <aura:handler name="init" value="{!this}" action="{!c.onInit}"/>
+    <aura:handler name="change" value="{!v.groupId}" action="{!c.onGroupSelect}"/>
+    <aura:handler name="change" value="{!v.relatedGroup}" action="{!c.onRelatedGroupChange}"/>
+    <aura:handler name="change" value="{!v.previewRecords}" action="{!c.onPreviewRecordsChange}"/>
+
+    <aura:attribute name="selector" type="Object" />
+    <aura:attribute name="preview" type="Object" />
+    <aura:attribute name="revealRelated" type="Object" />
+    <aura:attribute name="previewRecords" type="Object[]" default="[]" />
+    <aura:attribute name="previewSearchRecords" type="Object[]" default="[]" />
+    <aura:attribute name="previewItems" type="Object[]" default="[]" />
+    <aura:attribute name="import" type="Object" />
+    <aura:attribute name="builder" type="Object" />
+    <aura:attribute name="relatedGroup" type="Object"  />
+    <aura:attribute name="groupName" type="String" />
+    <aura:attribute name="groupId" type="String" />
+    <aura:attribute name="storageAction" type="String" />
+    <aura:attribute name="sObjectName" type="String" />
+    <aura:attribute name="initialFilters" type="Object[]" />
+    <aura:attribute name="initialLogic" type="String" />
+    <aura:attribute name="codes" type="String[]" />
+    <aura:attribute name="dirtyCodes" type="String" />
+    <aura:attribute name="sapCodeRecordsByIds" type="Map" />
+    <aura:attribute name="resultTemplates" type="Object[]" />
+    <aura:attribute name="resultTemplateId" type="Object" />
+    <aura:attribute name="filterResult" type="Object" />
+    <aura:attribute name="filterResultRecords" type="Object[]" />
+    <aura:attribute name="fileData" type="Object" />
+    <aura:attribute name="hasChildItemsFilter" type="Boolean"  />
+    <aura:attribute name="isChildItemsFilterUpdated" type="Boolean"  />
+    <aura:attribute name="isDynamic" type="Boolean"  />
+    <aura:attribute name="dynamicGroupSize" type="Integer" default="0" />
+    <aura:attribute name="layoutType" type="String" required="true" />
+
+    <aura:attribute name="previewScope" type="Integer" default="10" />
+    <aura:attribute name="_previewStartIndex" type="Integer" default="0" access="private" />
+
+
+    <aura:attribute name="isReady" type="Boolean" default="true" />
+    <aura:attribute name="isSearch" type="Boolean" default="false" />
+    <aura:attribute name="L_GroupDefaultFilters" type="String" />
+    <aura:attribute name="disabled" type="Boolean" />
+    <aura:attribute name="selectorSectionSize" type="Integer" default="7" />
+    <aura:attribute name="previewSectionSize" type="Integer" default="5" />
+    <aura:attribute name="showGroupName" type="Boolean" default="true" />
+    <aura:attribute name="showPlvTemplateActions" type="Boolean" default="false" />
+    <aura:attribute name="popoverIsShown" type="Boolean" default="false" />
+    <aura:attribute name="popoverSelector" type="String" />
+    <aura:attribute name="popoverOverlay" type="Aura.Component[]" />
+    <aura:attribute name="menuIconName" type="String" default="utility:refresh"/>
+    <aura:attribute name="L_previewWarnBadge" type="String" default="Dynamic group will be updated only by filters' result (534 records for now)"/>
+
+    <aura:attribute name="parent" type="Object" />
+
+    <aura:attribute name="importMenuIndex" type="Integer" default="0" />
+
+    <div>
+        <lightning:layout >
+            <!--GROUP SOURCE SECTION-->
+            <lightning:layoutItem size="{!v.selectorSectionSize}">
+                <lightning:tabset aura:id="tabset" variant="scoped" selectedTabId="selector" onselect="{!c.handleTabSelect}">
+                    <!--PRE-SAVED GROUPS-->
+                    <lightning:tab id="selector" tabindex="1" label="All groups">
+                            {!v.selector}
+                    </lightning:tab>
+                    <aura:if isTrue="{!!v.disabled}">
+
+                        <!--IMPORT FROM EXTERNAL SOURCE-->
+                        <lightning:tab id="import" tabindex="2" label="Import from external source">
+                            <lightning:layout verticalAlign="start">
+                                <lightning:layoutItem size="4" class="slds-has-divider_right">
+                                    <lightning:verticalNavigation selectedItem="clipboard" onselect="{!c.onExternalSourceSelect}">
+                                        <!--<lightning:verticalNavigationItemIcon name="clipboard"
+                                                                              label="{!v.sObjectName == 'Account'
+                                                                                      ? $Label.c.AG_SelectCustomersBySapNationalCodes
+                                                                                      : $Label.c.AG_SelectProductsByEanSapNationalCodes}"
+                                                                              iconName="utility:copy_to_clipboard" />-->
+                                        <lightning:verticalNavigationItemIcon name="file"
+                                                                              label="{!$Label.c.AG_importFromCsvFile}"
+                                                                              iconName="doctype:csv" />
+                                    </lightning:verticalNavigation>
+                                </lightning:layoutItem>
+                                <lightning:layoutItem size="8" class="slds-p-left_small">
+
+                                    <!--IMPORT BY CODES-->
+                                    <!--<aura:if isTrue="{!v.importMenuIndex == 0}">
+                                        <lightning:layout verticalAlign="center" class="slds-has-flexi-truncate">
+                                            <lightning:layoutItem class="slds-p-right_x-small">
+                                                <lightning:button name="check-codes"
+                                                                  label="{!$Label.c.AG_checkCodes}"
+                                                                  onclick="{!c.checkCodes}"
+                                                                  disabled="{!v.disabled || empty(v.dirtyCodes)}"/>
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem >
+                                                <lightning:button name="clipboard"
+                                                                  variant="brand"
+                                                                  label="{!$Label.c.AG_AddRecordsToGroupPreview}"
+                                                                  onclick="{!c.onCodeRecordsSubmit}"
+                                                                  disabled="{!empty(v.codes) || v.disabled}"/>
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem class="slds-p-left_small">
+                                                <lightning:helptext content="{!v.sObjectName == 'Account'
+                                                        ? $Label.c.AG_LoadRecordsBySAPcodes
+                                                        : $Label.c.AG_LoadRecordsBySAPEANcodes}"/>
+                                            </lightning:layoutItem>
+                                        </lightning:layout>
+                                        <lightning:textarea label=" "
+                                                            name="clipboard"
+                                                            value="{!v.dirtyCodes}"
+                                                            onchange="{!c.onCodesTextareaChange}" maxlength="10000" />
+                                    </aura:if>-->
+                                    <!--/IMPORT BY CODES-->
+
+                                    <!--IMPORT FROM CSV-->
+                                    <aura:if isTrue="{!v.importMenuIndex == 1}">
+                                        <div class="file-placeholder">
+                                            <div class="slds-grid ">
+                                                <div>
+                                                    <lightning:button name="file"
+                                                                      label="{!$Label.c.AG_AddSelectedToGroupPreview}"
+                                                                      onclick="{!c.onCsvRecordsSubmit}"
+                                                                      disabled="{!empty(v.fileData.csvRows) || v.disabled}"/>
+                                                </div>
+                                                <div class="slds-p-left_small">
+                                                    <lightning:helptext content="{!format($Label.c.AG_csvRecordsCounter, v.fileData.total, v.fileData.matched, v.fileData.selected)}"/>
+                                                </div>
+                                            </div>
+                                            <div class="slds-p-top_small">
+                                                <lightning:input aura:id="csv-input"
+                                                                 type="file"
+                                                                 label="csv-file"
+                                                                 name="csv-file"
+                                                                 accept=".csv"
+                                                                 onchange="{!c.handleFilesChange}"
+                                                                 variant="label-hidden"/>
+                                            </div>
+                                        </div>
+                                    </aura:if>
+                                </lightning:layoutItem>
+                            </lightning:layout>
+                        </lightning:tab>
+
+                        <!--CONSTRUCT WITH FILTERS-->
+                        <lightning:tab id="builder" tabindex="3" label="Construct with filters" aura:id="filtersTab" onactive="{!c.presetFilters}">
+                            <div class="{!v.hasChildItemsFilter ? 'slds-hide' : 'slds-grid slds-p-bottom_small'}">
+                                <div>
+                                    <lightning:button name="validate"
+                                                      label="Validate &amp; Preview"
+                                                      onclick="{!c.validateFilters}" />
+                                </div>
+                                <div class="slds-p-left_small">
+                                    <div onmouseenter="{!c.showFilterWarning}" onmouseleave="{!c.hideFilterWarning}" class="{!v.popoverSelector}">
+                                        <lightning:icon iconName="utility:warning" variant="warning" size="small"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="{!v.hasChildItemsFilter ? 'slds-box' : 'slds-hide'}">
+                                <lightning:layout verticalAlign="center">
+                                    <lightning:layoutItem flexibility="shrink" class="slds-p-right_small">
+                                        <lightning:icon iconName="action:edit_relationship"/>
+                                    </lightning:layoutItem>
+                                    <lightning:layoutItem flexibility="no-shrink">
+                                        <p>The group has filters by related objects.</p>
+                                        <p>You can change the criteria in group record: <a href="{!'/' + v.groupId}" target="_blank" class="slds-text-title_caps">{!v.groupName}</a></p>
+                                    </lightning:layoutItem>
+                                </lightning:layout>
+                            </div>
+                            <div class="{!v.hasChildItemsFilter ? 'slds-hide' : 'slds-box'}">
+                                <c:EUR_CRM_FilterBuilder sObjectName="{!v.sObjectName}"
+                                                 aura:id="filterBuilder"
+                                                 filtersValidationEvent="{!c.handleFilterValidationResult}"
+                                                 restrictFieldsFromSelect="{!v.sObjectName == 'CTCPG__Product__c'
+                                                         ? '[\'Brandgl__c\',\'CTCPG__Brand__c\']'
+                                                         : '[]'}"/>
+                            </div>
+                        </lightning:tab>
+                        <!-- /CONSTRUCT WITH FILTERS-->
+                    </aura:if>
+                </lightning:tabset>
+            </lightning:layoutItem>
+            <!--/GROUP SOURCE SECTION-->
+
+            <!--RESULT PREVIEW SECTION-->
+            <lightning:layoutItem size="{!v.previewSectionSize}" class="slds-p-left_small">
+                <!--PREVIEW CONTROL-->
+                <div class="slds-box slds-box_x-small">
+                    <!--PLV TEMPLATE ACTION-->
+                    <aura:if isTrue="{!v.showPlvTemplateActions}">
+                        <lightning:layout class="slds-p-bottom_small">
+                            <lightning:layoutItem class="slds-p-right_xxx-small">
+                                <lightning:button label="Apply"
+                                                  name="apply-plv-template"
+                                                  onclick="{!c.applyPlvTemplate}"
+                                                  disabled="{!empty(v.previewRecords) || v.disabled || empty(v.resultTemplates) || empty(v.resultTemplateId)}" />
+                            </lightning:layoutItem>
+                            <!--SELECT TEMPLATE-->
+                            <lightning:layoutItem class="slds-p-right_x-small">
+                                <lightning:select name="select-plv-template"
+                                                  label="Choose a template"
+                                                  class="hide-label"
+                                                  value="{!v.resultTemplateId}"
+                                                  disabled="{!v.disabled}">
+                                    <option value="" label="{!'-- Choose a template --'}" style="font-style: italic"/>
+                                    <aura:iteration items="{!v.resultTemplates}" var="template">
+                                        <option value="{!template.id}" label="{!template.name}" />
+                                    </aura:iteration>
+                                </lightning:select>
+                            </lightning:layoutItem>
+                            <!--SEARCH-->
+                            <lightning:layoutItem >
+                                <div title="{!format($Label.c.EUR_CRM_SearchByField, 'name, SAP code')}">
+                                    <lightning:input aura:id="search-in-preview"
+                                                     type="search"
+                                                     name="previewSearch"
+                                                     onchange="{!c.searchInPreview}"
+                                                     placeholder="Search"
+                                                     variant="label-hidden"
+                                                     label="Preview search"
+                                                     disabled="{!empty(v.previewRecords) || v.disabled}" />
+                                </div>
+                            </lightning:layoutItem>
+                        </lightning:layout>
+                    </aura:if>
+
+                    <!--GROUP NAME AND STORAGE ACTION-->
+                    <aura:if isTrue="{!v.showGroupName}">
+                        <lightning:layout class="slds-p-bottom_small">
+                            <lightning:layoutItem  >
+                                <lightning:buttonMenu iconName="{!v.menuIconName}"
+                                                      name="previewStorageActionsMenu"
+                                                      title="{!v.storageAction}"
+                                                      onselect="{!c.onStorageActionMenuSelect}"
+                                                      aura:id="preview-storage-actions-menu"
+                                                      variant="container"
+                                                      disabled="{!v.disabled}"
+                                                      class="slds-p-right_x-small"
+                                                      value="{!v.storageAction}">
+                                    <aura:if isTrue="{!!empty(v.relatedGroup)}">
+                                        <lightning:menuItem iconName="utility:edit" label="Update related group" value="update" checked="{!v.storageAction == 'update'}"/>
+                                    </aura:if>
+                                    <lightning:menuItem iconName="utility:refresh" label="Assign selected group" value="assign" checked="{!v.storageAction == 'assign'}"/>
+                                    <lightning:menuItem iconName="utility:new" label="Create static group" value="create" checked="{!v.storageAction == 'create'}"/>
+                                    <lightning:menuItem iconName="utility:filterList" label="Create dynamic group (based on filters only)" value="createDynamic" checked="{!v.storageAction == 'createDynamic'}"/>
+                                </lightning:buttonMenu>
+                            </lightning:layoutItem>
+                            <lightning:layoutItem >
+                                <lightning:helptext content="Choose one of the options to provide storage action for the group: 'Update related group' means to update the group which has already been related to the Promotion; 'Assign selected group' is about to assign the group which is selected from the left tabset and change members composition with records from preview in the same time; 'Create static group' means that you create new group with records from the preview section and assign the last one to the Promotion; 'Create dynamic group' - create new dynamic group which is based only on the filters results."/>
+                            </lightning:layoutItem>
+                            <!--GROUP NAME-->
+                            <lightning:layoutItem class="slds-p-right_xx-small">
+                                <lightning:input aura:id="group-name"
+                                                 type="text"
+                                                 label="Group Name"
+                                                 name="groupName"
+                                                 onchange="{!c.handleGroupNameChange}"
+                                                 variant="label-hidden"
+                                                 placeholder="Type group name"
+                                                 disabled="{!v.disabled}"
+                                                 required="true" />
+                            </lightning:layoutItem>
+                            <!--SEARCH-->
+                            <lightning:layoutItem >
+                                <div title="{!format($Label.c.EUR_CRM_SearchByField, 'name, SAP code')}">
+                                    <lightning:input aura:id="search-in-preview"
+                                                     type="search"
+                                                     name="previewSearch"
+                                                     onchange="{!c.searchInPreview}"
+                                                     placeholder="Search"
+                                                     variant="label-hidden"
+                                                     label="Preview search"
+                                                     disabled="{!empty(v.previewRecords) || v.disabled}" />
+                                </div>
+                            </lightning:layoutItem>
+                        </lightning:layout>
+                    </aura:if>
+                    <!--STATISTIC AND RESET-->
+                    <aura:if isTrue="{!and(v.storageAction == 'update', v.isDynamic)}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnUpdateDynamic, v.filterResultRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnUpdateDynamic, v.filterResultRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <aura:if isTrue="{!and(v.storageAction == 'update', !v.isDynamic)}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnUpdateStatic, v.previewRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnUpdateStatic, v.previewRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <aura:if isTrue="{!and(v.storageAction == 'assign', v.isDynamic)}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnAssignDynamic, v.filterResultRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnAssignDynamic, v.filterResultRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <aura:if isTrue="{!and(v.storageAction == 'assign', !v.isDynamic)}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnAssignStatic, v.previewRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnAssignStatic, v.previewRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <aura:if isTrue="{!v.storageAction == 'create'}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnCreateStatic, v.previewRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnCreateStatic, v.previewRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <aura:if isTrue="{!v.storageAction == 'createDynamic'}">
+                        <div class="slds-p-bottom_x-small" title="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnCreateDynamic, v.filterResultRecords.length || 0)}">
+                            <lightning:badge label="{!format($Label.c.EUR_CRM_PreviewWarnMessageOnCreateDynamic, v.filterResultRecords.length || 0)}" class="slds-bade_inverse slds-theme_warning slds-truncate"/>
+                        </div>
+                    </aura:if>
+                    <div>
+                        <lightning:badge label="{!format($Label.c.EUR_CRM_ItemsInPreviewCounter, v.previewRecords.length || 0)}" class="slds-truncate" />
+                    </div>
+                    <lightning:layout class="slds-m-top_small">
+                        <lightning:layoutItem class="slds-p-right_xx-small">
+                                {!v.revealRelated}
+                        </lightning:layoutItem>
+                        <lightning:layoutItem class="slds-p-right_xx-small">
+                            <lightning:button label="Clear preview" iconName="utility:close" variant="neutral" disabled="{!empty(v.previewRecords) || v.disabled}" onclick="{!c.clearPreview}"/>
+                        </lightning:layoutItem>
+                        <aura:if isTrue="{!and(v.showPlvTemplateActions, and(v.relatedGroup, v.relatedGroup.length))}">
+                            <lightning:layoutItem >
+                                <lightning:button onclick="{!c.EUR_CRM_RemoveRelatedPlv}"
+                                                  label="{!format($Label.c.EUR_CRM_RemoveRelatedPlv, v.relatedGroup.length)}"
+                                                  variant="destructive"
+                                                  iconPosition="left"
+                                                  iconName="utility:delete"
+                                                  disabled="{!v.disabled}"/>
+                            </lightning:layoutItem>
+                        </aura:if>
+                    </lightning:layout>
+                </div>
+                <!--PREVIEW MEMBERS-->
+                <div class="slds-m-top_x-small slds-box slds-box_x-small">
+                    <p class="slds-p-horizontal_small slds-scrollable_y" style="height: 385px; padding-bottom: 1rem;" onscroll="{!c.onPreviewScroll}">
+                            {!v.preview}
+                    </p>
+                </div>
+            </lightning:layoutItem>
+            <!--/RESULT PREVIEW SECTION-->
+        </lightning:layout>
+        <!--SPINNER-->
+        <aura:if isTrue="{!!v.isReady}">
+            <lightning:spinner class="slds-align_absolute-center" size="small" alternativeText="Please wait..."/>
+        </aura:if>
+    </div>
+    <lightning:notificationsLibrary aura:id="notificationsLib"/>
+</aura:component>

@@ -1,0 +1,250 @@
+<aura:component controller="ASI_CRM_VisitationPlaceOrderController"
+                implements="lightning:isUrlAddressable,force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,force:lightningQuickActionWithoutHeader" access="global" >
+
+	<ltng:require scripts="{!join(',' , 
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/jquery.min.js', 
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/jquery-ui.min.js', 
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/moment.js', 
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/sweetalert2.min.js'
+        )}" styles="{!join(',' , 
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/jquery-ui.min.css',
+        $Resource.ASI_CRM_VisitationPlan_Resource  + '/sweetalert2.min.css'
+        )}" 
+    />
+
+    <lightning:navigation aura:id="navService"/>
+    <lightning:spinner aura:id="spinner" class="slds-hide" alternativeText="Loading" variant="brand" />
+    <aura:handler name="init" value="{!this}" action="{!c.init}" />
+    <aura:handler name="change" value="{!v.pageReference}" action="{!c.init}" />
+    <aura:handler event="force:refreshView" action="{!c.init}" />
+    
+    <aura:attribute name="showPlaceOrderPage" type="Boolean" default="true" />
+
+    <aura:attribute name="customer" type="Object" />
+    <aura:attribute name="wholesalers" type="List" default="[]" />
+
+    <aura:attribute name="displayDataList" type="List" />
+    <aura:attribute name="selectedDataList" type="List" />
+    <aura:attribute name="totalQuantity" type="Integer" />
+    <aura:attribute name="totalPrice" type="Double" />
+    <aura:attribute name="disableCheckout" type="Boolean" default="false" />
+    <aura:attribute name="isModalOpen" type="Boolean" default="false" />
+
+    <aura:attribute name="disabledSearchField" type="Boolean" default="false" />
+    <aura:attribute name="rowCount" type="Integer" default="0" />
+
+    <aura:attribute name="searchText" type="String" />
+    <aura:attribute name="searching" type="Boolean" default="false" />
+    <aura:attribute name="searchMethod" type="String" default="all" />
+    <aura:attribute name="filterButtonVariant" type="Map" default="{ all: 'brand', sku: 'brand-outline', sku_code: 'brand-outline', brand: 'brand-outline', brand_code: 'brand-outline', sub_brand: 'brand-outline', sub_brand_code: 'brand-outline' }" />
+
+    <aura:attribute name="limitPerPage" type="Integer" default="10"/>
+    <aura:attribute name="totalPages" type="Integer" default="1"/>
+    <aura:attribute name="currentPage" type="Integer" default="1"/>
+    <aura:attribute name="disabledPrevious" type="Boolean" default="true"/>
+    <aura:attribute name="disabledNext" type="Boolean" default="true"/>
+
+    <aura:attribute name="showTotalPrice" type="Boolean"/>
+    <aura:attribute name="checkWarehouseName" type="String" />
+    <aura:attribute name="formWarehouseId" type="String" />
+    <aura:attribute name="formWarehouseName" type="String" />
+    <aura:attribute name="formContactName" type="String" />
+    <aura:attribute name="formContactTelephone" type="String" />
+    <aura:attribute name="formExpectedDeliveryDate" type="String" />
+    <aura:attribute name="formRemark" type="String" />
+    <aura:attribute name="disabledSubmit" type="Boolean" default="false"/>
+    
+    <div aura:id="mainContainer">
+        <aura:renderIf isTrue="{!v.showPlaceOrderPage}">
+            <lightning:card class="vCard">
+                <ui:scrollerWrapper class="container-scroller-with-footer">
+                    <div class="slds-grid slds-grid_vertical slds-align_absolute-center container">
+                        <div class="slds-col slds-grid slds-grid_align-spread slds-grid_vertical-align-center header">
+                            <span class="header-title">Place an Order</span>
+                            <div class="slds-grid slds-grid_vertical slds-align_absolute-center header-filter-icon-container" onclick="{!c.openModal}">
+                                <lightning:icon class="header-filter-icon" iconName="action:filter" size="x-small" alternativeText="Filter" title="Filter" />
+                            </div>
+                        </div>
+                        <aura:if isTrue="{!v.rowCount == 0}">
+                            <div class="empty-list">
+                                No SKU Found
+                            </div>
+                            <aura:set attribute="else">
+                                <div class="slds-col slds-grid slds-grid_vertical sku-list-container">
+                                    <aura:iteration items="{!v.displayDataList}" var="data">
+                                        <div class="slds-grid slds-grid_vertical sku-item-container">
+                                            <div class="slds-grid">
+                                                <div class="slds-grid slds-grid_vertical">
+                                                    <p class="sku-item-sku-code">SKU : {!data.sku.ASI_MFM_SKU_Code__c}</p>
+                                                    <p class="sku-item-name">{!data.sku.Name}</p>
+                                                    <p class="sku-item-price">
+                                                        <lightning:formattedNumber value="{!data.sku.ASI_HK_CRM_Base_Price__c}" style="currency" />
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div class="slds-grid slds-grid_align-end quantity-container">
+                                                <lightning:buttonGroup>
+                                                    <lightning:button class="quantity-button" name="{!data.sku.Id}" label="-" title="Minus" onclick="{!c.handleMinusClick}"/>
+                                                    <lightning:input class="quantity-input" name="{!data.sku.Id}" type="number" variant="label-hidden" value="{!data.quantity}" onblur="{!c.handleQuantityBlur}"/>
+                                                    <lightning:button class="quantity-button" name="{!data.sku.Id}" label="+" title="Add" onclick="{!c.handleAddClick}"/>
+                                                </lightning:buttonGroup>
+                                            </div>
+                                        </div>
+                                    </aura:iteration>
+                                </div>
+                                <div class="slds-col slds-grid slds-grid_vertical-align-start slds-grid_align-center pagination-container">
+                                    <lightning:buttonIcon class="slds-input_height pagination-button" variant="container" iconName="utility:chevronleft" name="previous" onclick="{! c.handlePageClick }" alternativeText="Previous" title="Previous" size="small" disabled="{!v.disabledPrevious}" />
+                                    <lightning:input class="pagination-input" type="number" variant="label-hidden" value="{!v.currentPage}" min="1" max="{!v.totalPages}" onblur="{!c.handlePageBlur}"/>
+                                    <div class="slds-grid slds-grid_vertical-align-center">
+                                        <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-center">
+                                            <span class="pagination-text">of</span>
+                                            <span class="pagination-text">{!v.totalPages}</span>
+                                        </div>
+                                        <lightning:buttonIcon class="slds-input_height pagination-button" variant="container" iconName="utility:chevronright" name="next" onclick="{! c.handlePageClick }" alternativeText="Next" title="Next" size="small" disabled="{!v.disabledNext}" />
+                                    </div>
+                                </div>
+                            </aura:set>
+                        </aura:if>
+                    </div>
+                </ui:scrollerWrapper>
+                
+                <aura:set attribute="footer">
+                    <div class="slds-grid slds-grid_align-center">
+                        <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-spread footer-container">
+                            <div class="slds-grid slds-grid_vertical-align-center">
+                                <div class="footer-title">
+                                    Total Items<br />in this Order
+                                </div>
+                                <p class="footer-value">{!v.totalQuantity}</p>
+                            </div>
+                            <lightning:button variant="brand" label="Checkout" class="checkout-button" disabled="{!v.disableCheckout}" onclick="{!c.navigateToCheckout}" />
+                        </div>
+                    </div>
+                </aura:set>
+            </lightning:card>
+        
+            <aura:if isTrue="{!v.isModalOpen}">
+                <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-header" aria-describedby="modal-content" class="slds-modal slds-fade-in-open" style="height: 100vh;">
+                    <div class="slds-modal__container">
+                        <header class="slds-modal__header slds-modal__header_empty">
+                        </header>
+                        <div class="slds-modal__content slds-p-around_medium" id="modal-content">
+                            <div class="slds-grid slds-grid_vertical slds-grid_align-center">
+                                <div class="slds-grid slds-grid_align-center">
+                                    <lightning:input class="filter-input" name="searchInput" variant="label-hidden" type="search" value="{!v.searchText}" disabled="{!v.disabledSearchField}" />
+                                </div>
+                                <!-- <p class="filter-text">or</p> -->
+                                <div class="slds-grid slds-grid_align-center">
+                                    <lightning:button class="filter-button" name="all" label="All" title="All" variant="{!v.filterButtonVariant.all}" onclick="{!c.handleFilterByClick}"/>
+                                    <lightning:button class="filter-button" name="sku" label="SKU" title="By SKU" variant="{!v.filterButtonVariant.sku}" onclick="{!c.handleFilterByClick}"/>
+                                </div>
+                                <div class="slds-grid slds-grid_align-center">
+                                    <lightning:button class="filter-button" name="sku_code" label="SKU Code" title="By SKU Code" variant="{!v.filterButtonVariant.sku_code}" onclick="{!c.handleFilterByClick}"/>
+                                    <lightning:button class="filter-button" name="brand" label="Brand" title="By Brand" variant="{!v.filterButtonVariant.brand}" onclick="{!c.handleFilterByClick}"/>
+                                </div>
+                                <div class="slds-grid slds-grid_align-center">
+                                    <lightning:button class="filter-button" name="brand_code" label="Brand Code" title="By Brand Code" variant="{!v.filterButtonVariant.brand_code}" onclick="{!c.handleFilterByClick}"/>
+                                    <lightning:button class="filter-button" name="sub_brand" label="Sub-Brand" title="By Sub-Brand" variant="{!v.filterButtonVariant.sub_brand}" onclick="{!c.handleFilterByClick}"/>
+                                </div>
+                                <div class="slds-grid slds-grid_align-center">
+                                    <lightning:button class="filter-button" name="sub_brand_code" label="Sub-Brand Code" title="By Sub-Brand Code" variant="{!v.filterButtonVariant.sub_brand_code}" onclick="{!c.handleFilterByClick}"/>
+                                </div>
+                            </div>
+                        </div>
+                        <footer class="slds-modal__footer">
+                            <lightning:button variant="neutral" label="Cancel" title="Cancel" onclick="{!c.closeModal}"/>
+                            <lightning:button variant="brand" label="Filter" title="Filter" onclick="{!c.getFilteredSKU}"/>
+                        </footer>
+                    </div>
+                </section>
+                <div class="slds-backdrop slds-backdrop_open"></div>
+            </aura:if>
+        
+
+            <aura:set attribute="else">
+                <lightning:card class="vCard">
+                    <ui:scrollerWrapper class="container-scroller">
+                        <section class="slds-grid slds-grid_vertical slds-align_absolute-center container">
+                            <div class="slds-col slds-grid slds-grid_align-spread slds-grid_vertical-align-center header">
+                                <span class="header-title">Checkout</span>
+                            </div>
+                            <div class="slds-col slds-grid slds-grid_vertical sku-list-container">
+                                <aura:iteration items="{!v.selectedDataList}" var="data">
+                                    <c:ASI_CRM_VisitationOrderItem sku="{!data.sku}" quantity="{!data.quantity}" />
+                                </aura:iteration>
+
+                                <div class="slds-grid slds-grid_vertical sku-list-summary-container">
+                                    <div class="sku-list-summary-header-container">
+                                        <p>Total</p>
+                                    </div>
+
+                                    <div class="sku-list-summary-detail-container">
+                                        <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center sku-list-summary-detail">
+                                            <p>No. of items</p>
+                                            <p class="sku-list-summary-value">{!v.totalQuantity}</p>
+                                        </div>
+            
+                                        <aura:renderIf isTrue="v.showTotalPrice">
+                                            <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center sku-list-summary-detail">
+                                                <p>Total</p>
+                                                <lightning:formattedNumber value="{!v.totalPrice}" style="currency" class="sku_item-summary-value" />
+                                            </div>
+                                        </aura:renderIf>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        
+                        <section class="slds-grid slds-grid_vertical slds-align_absolute-center container delivery-container">
+                            <div class="slds-col slds-grid slds-grid_align-spread slds-grid_vertical-align-center header">
+                                <span class="header-title">Delivery Information</span>
+                            </div>
+                            <div class="slds-col slds-grid slds-grid_vertical form-container">
+                                <div class="slds-grid slds-grid_vertical form-field-container">
+                                    <lightning:input class="form-input" name="formWarehouse" label="Warehouse" onchange="{!c.searchWholesalers}" value="{!v.formWarehouseName}" />
+                                    <aura:renderIf isTrue="{!v.wholesalers.length > 0}">
+                                        <div role="listbox">
+                                            <ui:scrollerWrapper class="form-search-wrapper">
+                                                <ul class="slds-listbox slds-listbox_vertical" role="presentation">
+                                                    <aura:iteration items="{!v.wholesalers}" var="wholesaler">
+                                                        <li role="presentation" class="slds-listbox__item">
+                                                            <div class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                                                role="option" data-id="{!wholesaler.Id}" data-name="{!wholesaler.Name}" onclick="{!c.selectWholesaler}">
+                                                                {!wholesaler.Name}
+                                                            </div>
+                                                        </li>
+                                                    </aura:iteration>
+                                                </ul>
+                                            </ui:scrollerWrapper>
+                                        </div>
+                                    </aura:renderIf>
+                                </div>
+
+                                <div class="slds-grid slds-grid_vertical form-field-container">
+                                    <lightning:input class="form-input" name="formContactName" label="Contact Information" placeholder="Contact Person’s Name" value="{!v.formContactName}" />
+                                    <lightning:input class="form-input" type="tel" name="formContactTelephone" variant="label-hidden" placeholder="Contact Person’s Tel" value="{!v.formContactTelephone}" />
+                                </div>
+
+                                <div class="slds-grid slds-grid_vertical form-field-container">
+                                    <lightning:input class="form-input" type="date" name="formExpectedDeliveryDate" label="Expected Delivery Date" value="{!v.formExpectedDeliveryDate}" />
+                                </div>
+
+                                <div class="slds-grid slds-grid_vertical form-field-container">
+                                    <lightning:textarea class="form-input-textarea" name="formRemark" label="Any Specific Requirements for this Delivery?" value="{!v.formRemark}"/>
+                                </div>
+                            </div>
+                            <div class="slds-col slds-grid slds-grid_vertical slds-align_absolute-center button-view">
+                                <div class="button-container">
+                                    <lightning:button variant="brand" label="Submit" class="submit-button" disabled="{!v.disabledSubmit}" onclick="{!c.submit}" />
+                                </div>
+                                <div class="slds-grid slds-align_absolute-center button-container">
+                                    <lightning:button variant="base" label="Back" class="back-button" onclick="{!c.navigateBackToPlaceOrder}" />
+                                </div>
+                            </div>
+                        </section>
+                    </ui:scrollerWrapper>
+                </lightning:card>
+            </aura:set>
+        </aura:renderIf>
+    </div>
+</aura:component>

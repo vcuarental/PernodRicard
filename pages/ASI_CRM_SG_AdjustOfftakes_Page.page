@@ -1,0 +1,429 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_SG_AdjustOfftakes_Page
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2017-12-11       Tony/Billy              Created
+-->
+<apex:page controller="ASI_CRM_SG_AdjustOfftakesController" action="{!init}"
+    docType="html-5.0">
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/calx_js/numeral.min.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/jquery-calx-2.2.3.min.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/typeahead.bundle.js')}"
+    />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}"
+    />
+    <head>
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_SLDS, 'assets/styles/salesforce-lightning-design-system-vf.css')}"
+    />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/offtake-adjustment.css')}"
+    />
+    <style>
+        .bPageBlock .pbTitle {
+            width: 50px;
+            white-space: nowrap;
+        }
+        
+        .slds th {
+            padding: 3px;
+        }
+        
+        .slds-lookup {
+            width: 300px;
+        }
+        
+        .inputSearch input {
+            height: 33px;
+            width: 150px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        
+        .searchTable th {
+            padding: 5px 0 5px;
+            width: 120px;
+            margin: 5px;
+            border-bottom: solid 2px;
+        }
+        
+        .searchTable td {
+            padding: 5px 0 5px;
+            border-bottom: solid #cccccc 1px;
+        }
+
+    </style>
+    </head>
+    <body>
+        <div class="fullScreenLoading"></div>
+        <apex:form >
+            <apex:pageBlock title="Offtakes Adjustment">
+                <apex:outputPanel id="showMsg">
+                    <apex:pageMessages escape="false" rendered="{!showMsg}"></apex:pageMessages>
+                </apex:outputPanel>
+                <apex:pageBlockButtons location="bottom" style="font-size: 14px;">
+                    <apex:outputText value="{!ActualMonthString}<b>{!ActualMonthConfirmed}</b>" escape="false"></apex:outputText>
+                    <br/>
+                    <apex:outputLabel value="Year: " for="year" />
+                    <apex:selectList id="year" size="1" value="{!thisYear}">
+                        <apex:selectOptions value="{!years}" />
+                    </apex:selectList>
+                    <apex:outputLabel value="Month: " for="month" />
+                    <apex:selectList id="month" size="1" value="{!thisMonth}">
+                        <apex:selectOptions value="{!months}" />
+                    </apex:selectList>
+                    <apex:commandButton value="Confirm" action="{!confirmOfftakes}" reRender="myPanel,myButtons,myPageNum,showMsg"
+                            onclick="showLoading(true);" oncomplete="showLoading(false);"/>
+                </apex:pageBlockButtons>
+            </apex:pageBlock>
+            <apex:pageBlock >
+                <table>
+                    <tr class="slds">
+                        <th>
+                            <c:ASI_CRM_SG_SLDSDynamicLookup SLDSResourceName="{!$Resource.ASI_SLDS}" ObjectApiName="ASI_CRM_AccountsAdditionalField__c"
+                                DisplayFieldApiNames="Name,ASI_CRM_MY_CustomerCode__c" DisplayFieldsPattern="Name"
+                                LabelName="Customer" AddOnFilterStr=" RecordType.DeveloperName = \'ASI_CRM_SG_Outlet\' "
+                                SetValueToField="{!filterWrapper.ASI_CRM_SG_Customer__c}"
+                            />
+                        </th>
+                        <th>
+                            <c:ASI_CRM_SG_SLDSDynamicLookup SLDSResourceName="{!$Resource.ASI_SLDS}" ObjectApiName="ASI_CRM_AccountsAdditionalField__c"
+                                DisplayFieldApiNames="Name,ASI_CRM_MY_CustomerCode__c" DisplayFieldsPattern="Name"
+                                LabelName="From WS" AddOnFilterStr=" RecordType.DeveloperName = \'ASI_CRM_SG_Wholesaler\' "
+                                SetValueToField="{!filterWrapper.ASI_CRM_FromWS__c}" />
+                        </th>
+                        <th>
+                            <c:ASI_CRM_SG_SLDSDynamicLookup SLDSResourceName="{!$Resource.ASI_SLDS}" ObjectApiName="ASI_MFM_SKU_Code__c"
+                                DisplayFieldApiNames="Name,ASI_MFM_SKU_Code__c" DisplayFieldsPattern="Name"
+                                LabelName="SKU Code" AddOnFilterStr=" RecordType.DeveloperName like \'ASI_CRM_SG_SKU%\' "
+                                SetValueToField="{!filterWrapper.ASI_CRM_SKU__c}" />
+                        </th>
+                    </tr>
+                    <tr class="slds">
+                        <th class="inputSearch">
+                            <apex:outputLabel value="Batch ID: " for="" /><br/>
+                            <apex:inputText value="{!filterWrapper.ASI_CRM_CN_Batch_Id__c}" />
+                        </th>
+                        <th class="inputSearch">
+                            <apex:outputLabel value="From G/L Date: " for="" /><br/>
+                            <apex:input type="date" value="{!filterDateFrom}" html-placeholder="mm/dd/yyyy" />
+                        </th>
+                        <th class="inputSearch">
+                            <apex:outputLabel value="To G/L Date: " for="" /><br/>
+                            <apex:input type="date" value="{!filterDateTo}" html-placeholder="mm/dd/yyyy" />
+                        </th>
+                    </tr>
+                    <tr class="slds">
+                        <th colspan="3">
+                            <span style="width:150px">
+                            <apex:commandButton value="Search" action="{!runSearch}" reRender="myPanel,myButtons,myPageNum,showMsg"
+                            onclick="showLoading(true);" oncomplete="showLoading(false);"
+                            />
+                            </span>
+                            <span style="width:150px">
+                            <apex:commandButton value="Save" action="{!saveOfftakes}" reRender="myPanel,myButtons,myPageNum,showMsg" 
+                            onclick="showLoading(true);" oncomplete="showLoading(false);"/>
+                            </span>
+                            <span style="width:150px">
+                            <apex:commandButton value="Delete" action="{!deleteOfftakes}"  reRender="myPanel,myButtons,myPageNum,showMsg"
+                            onclick="showLoading(true);" oncomplete="showLoading(false);"/>
+                            </span>
+                        </th>
+                    </tr>
+                </table>
+            </apex:pageBlock>
+            <apex:pageBlock >
+                <apex:dataTable value="{!searchResult}" var="offtake" styleClass="searchTable" style="width: 100%"
+                    id="myPanel">
+                    <apex:column >
+                        <apex:facet name="header">
+                            <apex:inputCheckbox onclick="selectAll(this);">
+                                <apex:outputLabel value="Select All " for="selectAll" />
+                            </apex:inputCheckbox>
+                        </apex:facet>
+                        <apex:inputCheckbox id="checked" value="{!offtake.ASI_CRM_Temp_Checkbox__c}" rendered="{!(NOT offtake.ASI_CRM_Is_Previous_Month__c)}">
+                            <!--<apex:actionSupport event="onclick" action="{!GetSelected}"/>-->
+                        </apex:inputCheckbox>
+                    </apex:column>
+                    <apex:column headervalue="Offtake Ref." value="{!offtake.name}" />
+
+                    <apex:column >
+                        <apex:facet name="header">
+                            <apex:outputLabel value="Contract" />
+                        </apex:facet>
+                        <apex:inputField value="{!offtake.ASI_CRM_Contract__c}" rendered="{!(NOT offtake.ASI_CRM_Is_Previous_Month__c)}"/>
+                        <apex:outputLabel value="{!IF(offtake.ASI_CRM_Contract__c != null, offtake.ASI_CRM_Contract__r.Name, "(empty)")}" 
+                                        rendered="{!offtake.ASI_CRM_Is_Previous_Month__c}"/>
+                    </apex:column>
+
+                    <apex:column headervalue="From WS" value="{!offtake.ASI_CRM_FromWS__r.Name}" />
+                    <apex:column headervalue="Customer" value="{!offtake.ASI_CRM_SG_Customer__r.Name}"
+                    />
+                    <apex:column headervalue="Offtake G/L Date" value="{!offtake.ASI_TH_CRM_Offtake_G_L_Date__c}"
+                    />
+                    <apex:column headervalue="SKU" value="{!offtake.ASI_CRM_SKU__r.Name}" />
+                    <apex:column headervalue="Invoice No." value="{!offtake.ASI_CRM_InvoiceNumber__c}"
+                    />
+                    <apex:column headervalue="Original Quantity" value="{!offtake.ASI_CRM_Original_Quantity__c}" />
+                    <apex:column headervalue="Adjusted Quantity" value="{!offtake.ASI_CRM_Adjustment_Quantity__c}"
+                    />
+
+                    <apex:column >
+                        <apex:facet name="header">
+                            <apex:outputLabel value="Actual Quantity" />
+                        </apex:facet>
+                        <apex:inputField value="{!offtake.ASI_TH_CRM_Quantity__c}" onkeypress="return event.charCode >= 48 && event.charCode <= 57" 
+                            onchange="changeQuantity(this)" rendered="{!(NOT offtake.ASI_CRM_Is_Previous_Month__c)}" />
+                        <apex:outputLabel value="{!offtake.ASI_TH_CRM_Quantity__c}" 
+                                        rendered="{!offtake.ASI_CRM_Is_Previous_Month__c}"/>
+                    </apex:column>
+
+                </apex:dataTable>
+                <table style="width: 100%">
+                    <tr>
+                        <td>
+                            <apex:outputPanel id="myPageNum">
+                                <apex:outputLabel value="{!myMsg}" /> Page:
+                                <apex:outputText value=" {!pageNumber} of {! totalPages } "
+                                /> , Total Record(s):
+                                <apex:outputText value=" {!total_size}"
+                                />
+                            </apex:outputPanel>
+                        </td>
+
+                        <td align="center">
+                            <apex:outputPanel id="myButtons">
+                                <apex:commandButton action="{!Beginning}" title="Beginning" value="<<" disabled="{!disablePrevious}"
+                                    reRender="myPanel,myButtons,myPageNum,showMsg"
+                                    onclick="changePage(); showLoading(true);" oncomplete="showLoading(false);"
+                                />
+                                <apex:commandButton action="{!Previous}" title="Previous" value="<" disabled="{!disablePrevious}"
+                                    reRender="myPanel,myButtons,myPageNum,showMsg" 
+                                    onclick="changePage(); showLoading(true);" oncomplete="showLoading(false);"
+                                />
+                                <apex:commandButton action="{!Next}" title="Next" value=">" disabled="{!disableNext}"
+                                    reRender="myPanel,myButtons,myPageNum,showMsg" 
+                                    onclick="changePage(); showLoading(true);" oncomplete="showLoading(false);"
+                                />
+                                <apex:commandButton action="{!End}" title="End" value=">>" disabled="{!disableNext}"
+                                    reRender="myPanel,myButtons,myPageNum,showMsg" 
+                                    onclick="changePage(); showLoading(true);" oncomplete="showLoading(false);"
+                                />
+                            </apex:outputPanel>
+                        </td>
+                        <td align="right">
+                            Records per page:
+                            <apex:selectList value="{! list_size }" size="1">
+                                <apex:selectOption itemValue="10" itemLabel="10" />
+                                <apex:selectOption itemValue="25" itemLabel="25" />
+                                <apex:selectOption itemValue="50" itemLabel="50" />
+                                <apex:selectOption itemValue="100" itemLabel="100" />
+                                <apex:actionSupport reRender="myPanel,myButtons,myPageNum,showMsg" action="{!runSearch}"
+                                    event="onchange" />
+                            </apex:selectList>
+                        </td>
+                    </tr>
+                </table>
+
+            </apex:pageBlock>
+        </apex:form>
+    </body>
+    <script>
+        function selectAll(cb) {
+            $("input[type='checkbox']").prop("checked", cb.checked);
+        }
+
+        function changePage() {
+            $("input[type='checkbox']").prop("checked", false);
+        }
+
+        function changeQuantity(input) {
+
+            var ActualQuantity = parseInt($(input).closest("td").find("input").val());
+
+            var Quantity = parseInt($(input).closest("td").prev().prev().find(
+                "span").text());
+
+            var AdjustedQuantity = ActualQuantity - Quantity;
+
+            $(input).closest("td").prev().find("span").text(AdjustedQuantity);
+
+        }
+
+        function showLoading(show) {
+            if(show) $('body').addClass('savingRecord');
+            else $('body').removeClass('savingRecord');
+        }
+        //setup before functions
+        var typingTimer; //timer identifier
+        var doneTypingInterval = 1000;
+
+        /**
+         * Method to fire once user stop writing
+         */
+        function keyPressedOnLookup(componentId, objectName, fieldNames,
+            fieldsPattern, photo, objectPluralName, remoteMethod,
+            AddOnFilterStr) {
+            clearTimeout(typingTimer);
+            var selector = '#' + componentId;
+            if (document.querySelector(selector + " #lookup").value) {
+                typingTimer = setTimeout(startSearch(componentId, objectName,
+                    fieldNames, fieldsPattern, photo, objectPluralName,
+                    remoteMethod, AddOnFilterStr), doneTypingInterval);
+            } else {
+                var searchText = document.querySelector(selector + " #lookup");
+                var lstBox = document.querySelector(selector + " #list-box");
+                lstBox.style.display = 'none';
+            }
+        }
+
+        /**
+         * Function to get users from servers to display for Reviewers
+         */
+        function startSearch(componentId, objectName, fieldNames, fieldsPattern,
+            photo, objectPluralName, remoteMethod, AddOnFilterStr) {
+            var selector = '#' + componentId;
+            showLoader(componentId);
+            var searchText = document.querySelector(selector + " #lookup");
+            Visualforce.remoting.Manager.invokeAction(remoteMethod, objectName,
+                fieldNames, fieldsPattern, photo, searchText.value,
+                AddOnFilterStr,
+                function(result, event) {
+                    if (event.status) {
+                        var lstBox = document.querySelector(selector +
+                            " #list-box");
+                        lstBox.style.display = 'block';
+
+                        var recordLst = document.querySelector(selector +
+                            " #record-list");
+                        recordLst.innerHTML = '';
+                        for (var i = 0; i < result.length; i++) {
+                            var record = result[i];
+                            recordLst.appendChild(createRecordLi(
+                                componentId, record));
+                        }
+                        document.querySelector(selector +
+                                " #search-text-info").innerHTML =
+                            searchText.value + ' in ' + objectPluralName +
+                            ' - ' + result.length + ' results found';
+                    } else if (event.type === 'exception') {
+                        console.log(event.message);
+                        console.log(event.where);
+                    } else {
+                        console.log(event.message);
+                    }
+                    hideLoader(componentId);
+                }, {
+                    escape: true
+                }
+            );
+        }
+
+        /**
+         * Create li for every record to display
+         * @param  user
+         * @return li
+         */
+        function createRecordLi(componentId, record) {
+            var id = record.recordId;
+            var displayName = record.displayValue;
+            var photoUrl = record.photoUrl;
+            var li = document.createElement("li");
+            li.setAttribute("class", "slds-lookup__item");
+            li.setAttribute("onclick", "select('" + componentId + "', '" +
+                displayName + "', '" + photoUrl + "', '" + id + "')");
+            var inner = '<a id=s02 role=option>';
+            if (photoUrl) {
+                inner += '<img src="' + photoUrl +
+                    '" class="slds-icon slds-icon-text-default slds-icon--small"/>';
+            }
+            inner += displayName;
+            inner += '</a>';
+
+            li.innerHTML = inner;
+            return li;
+        }
+
+        /**
+         * Select record from list
+         * @param  {[type]} displayName     [description]
+         * @param  {[type]} photoUrl [description]
+         * @param  {[type]} id       [description]
+         * @return {[type]}          [description]
+         */
+        function select(componentId, name, photoUrl, id) {
+            var selector = '#' + componentId;
+            showLoader(componentId);
+            document.querySelector(selector + " #selected-name").innerHTML =
+                name;
+            if (photoUrl != 'undefined' && photoUrl != '' && photoUrl != null) {
+                document.querySelector(selector + " #select-image").style.display =
+                    'inline';
+                document.querySelector(selector + " #select-image").setAttribute(
+                    "src", photoUrl);
+            } else {
+                document.querySelector(selector + " #select-image").style.display =
+                    'none';
+            }
+            eval(componentId + "setOwnerId('" + id + "')");
+        }
+
+        /**
+         * User selected function
+         * @return {[type]} [description]
+         */
+        function recordSelected(componentId) {
+            var selector = '#' + componentId;
+            if (document.querySelector(selector + " #selected-record").style.display ==
+                'none') {
+                document.querySelector(selector + " #selected-record").style.display =
+                    'block';
+                document.querySelector(selector + " #input-text").style.display =
+                    'none';
+                document.querySelector(selector + " #lookup").value = '';
+                var lstBox = document.querySelector(selector + " #list-box");
+                lstBox.style.display = 'none';
+            } else {
+                document.querySelector(selector + " #input-text").style.display =
+                    'block';
+                document.querySelector(selector + " #selected-record").style.display =
+                    'none';
+            }
+            hideLoader(componentId);
+        }
+
+        /**
+         * remove selected record
+         * @return {[type]} [description]
+         */
+        function removeRecord(componentId) {
+            var selector = '#' + componentId;
+            eval(componentId + "setOwnerId(null)");
+        }
+
+        function showLoader(componentId) {
+            var selector = '#' + componentId;
+            document.querySelector(selector + " #loader").style.display =
+                'block';
+        }
+
+        function hideLoader(componentId) {
+            var selector = '#' + componentId;
+            document.querySelector(selector + " #loader").style.display =
+                'none';
+        }
+
+    </script>
+
+</apex:page>

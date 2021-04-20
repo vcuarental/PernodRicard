@@ -1,0 +1,99 @@
+<apex:page id="page" standardController="project_cloud__Project__c" extensions="project_cloud.ProjectTabResourcesExtension2,project_cloud.TokenInputHelper" title="Project Teams & Subscriptions - {!project_cloud__Project__c.Name}">
+
+	<c:walkme />
+	<c:include_jquery declareEsc="true" />
+	<apex:includeScript value="{!URLFOR($Resource.project_cloud__jquery_plugins_zip, '/tokeninput/jquery.tokeninput.js')}" />
+	<apex:stylesheet value="{!URLFOR($Resource.project_cloud__jquery_plugins_zip, '/tokeninput/token-input-mac.css')}" />
+	<style type="text/css">
+		input.remoting-loading {
+			background-image: url('/img/loading.gif');
+			background-position: center center;
+			background-repeat: no-repeat;
+		}
+	</style>
+
+	<c:tree projectId="{!project_cloud__Project__c.Id}" />
+
+	<apex:sectionHeader title="{!project_cloud__Project__c.Name}" subtitle="Project Teams & Subscriptions" />
+
+	<apex:pageMessages id="messages" />
+
+	<apex:form id="form">
+		<apex:pageBlock id="subsBlock" title="Project or Project Phase Subscriptions">
+			<apex:pageBlockSection id="subsSection" columns="1">
+				<apex:pageBlockSectionItem id="phasesItem" helpText="{!$Label.project_cloud__Project_Subscriptions_Phase}">
+					<apex:outputLabel value="Select Project or Project Phase" for="projectOrPhaseId" />
+					<apex:selectList id="projectOrPhaseId" value="{!projectOrPhaseId}" size="1">
+						<apex:selectOptions value="{!phaseOptions}" />
+					</apex:selectList>
+				</apex:pageBlockSectionItem>
+				<apex:pageBlockSectionItem id="workTypeItem" helpText="{!$Label.project_cloud__Project_Subscriptions_Subscribers}">
+					<apex:outputLabel value="Select Teams" />
+					<apex:outputPanel id="subscribersPanel">
+						<input type="text" id="project-phase-subscription" style="display: none;" />
+					</apex:outputPanel>
+				</apex:pageBlockSectionItem>
+			</apex:pageBlockSection>
+		</apex:pageBlock>
+
+		<apex:actionFunction action="{!addSubscription}" name="addSubscription" rerender="messages" oncomplete="jQuery('#token-input-project-phase-subscription').removeClass('remoting-loading');">
+			<apex:param name="parentId" assignTo="{!parentId}" value="" />
+			<apex:param name="subscriberId" assignTo="{!subscriberId}" value="" />
+		</apex:actionFunction>
+		<apex:actionFunction action="{!removeSubscription}" name="removeSubscription" rerender="messages" oncomplete="jQuery('#token-input-project-phase-subscription').removeClass('remoting-loading');">
+			<apex:param name="parentId" assignTo="{!parentId}" value="" />
+			<apex:param name="subscriberId" assignTo="{!subscriberId}" value="" />
+		</apex:actionFunction>
+
+	</apex:form>
+
+	<c:upsert_queue />
+
+	<script type="text/javascript">
+		jQuery(document).ready(function($) {
+			var projectOrPhase = esc$("{!$Component.page.form.subsBlock.subsSection.phasesItem.projectOrPhaseId}");
+			projectOrPhase.change(function(event, ui) {
+				var input = $("#project-phase-subscription");
+				$('#token-input-project-phase-subscription').addClass("remoting-loading");
+				//overwrite the default onDelete action so the actionfunctions are not called
+				input.tokenInput("clear", {onDelete: null});
+				Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.TokenInputHelper.getExistingTokens}', projectOrPhase.val(), { subscription: null }, function(result, event) {
+					if (event.status) {
+						input.tokenInput("add", result, {onAdd: null});
+					} else if (event.type === 'exception') {
+						alert(event.message);
+					}
+					input.prop("disabled", false);
+					$('#token-input-project-phase-subscription').removeClass("remoting-loading");
+				});
+			});
+
+			$("#project-phase-subscription").tokenInput(function(query, handle_results) {
+				Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.TokenInputHelper.getTokens}', query, { team: null }, function(result, event) {
+					if (event.status) {
+						handle_results(query, result);
+					} else if (event.type === 'exception') {
+						alert(event.message);
+					}
+				});
+			},{
+				//rest of the tokenInput options
+				theme: "mac",
+				preventDuplicates: true,
+				prePopulate: <apex:outputText value="{!existingTokens}" />,
+				onAdd: function(item) {
+					$('#token-input-project-phase-subscription').addClass("remoting-loading");
+					addSubscription(projectOrPhase.val(), item.id);
+					return true;
+				},
+				onDelete: function(item) {
+					$('#token-input-project-phase-subscription').addClass("remoting-loading");
+					removeSubscription(projectOrPhase.val(), item.id);
+					return true;
+				}
+			});
+
+		});
+	</script>
+
+</apex:page>

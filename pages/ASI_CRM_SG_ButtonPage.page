@@ -1,0 +1,748 @@
+<!--*********************************************************************************
+ * Name: ASI_CRM_SG_ButtonPage
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2017-11-06       Jeffrey Cheung          Created
+ * 2017-11-29       Wilken Lee              [WL 1.0] Add Payment Amount Validation when submit contract for approval
+ * 2018-03-28       Wilken Lee              [WL 2.0] Block user to submit non-RTM Proposal
+ * 2018-04-24       Wilken Lee              [WL 3.0] CHM117802599 Add mandatory comment before complete        
+ * 2018-07-13       Wilken Lee              [WL 4.0] CHM118591028 Skip Key Account 2 min Key Sub-brand checking if proposal is adhoc
+ * 2018-07-27       Wilken Lee              [WL 5.0] Hide Convert to Contract button on click to avoid duplicate contract created
+ * 2019-06-28       Wilson Chow             Add new button for handling 'Remove approval route when adding child outlets to contract'
+ * 2020-03-09       Wilken Lee              [WL 6.0] Change [Request Payment] and [Request Free Goods] to display as button
+ *********************************************************************************-->
+<apex:page standardController="ASI_TH_CRM_Contract__c" sidebar="false" showHeader="false" standardStyleSheets="false" extensions="ASI_CRM_SG_Payment_ValidationHelper_V2">
+    <apex:includeScript value="/soap/ajax/30.0/connection.js" />
+    <apex:includeScript value="/soap/ajax/30.0/apex.js" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+
+    
+    <style>
+        div {
+            height: 150px;
+            overflow: auto;
+        }
+        .title {
+           font-weight: bold;
+           font-size: 14px;
+        }
+        a.btn {
+          -webkit-appearance: button;
+          -moz-appearance: button;
+          appearance: button;
+          color: #333333;
+          padding: 1px 8px;
+          font-family: arial;
+          font-size: 10pt;
+          text-decoration:none;
+          margin: 3px;
+        }
+        button {
+          -webkit-appearance: button;
+          -moz-appearance: button;
+          appearance: button;
+          color: #333333;
+          padding: 0px 8px;
+          font-family: arial;
+          font-size: 10pt;
+          text-decoration:none;
+          margin: 1px;
+        }
+        input[type="button"] {
+          -webkit-appearance: button;
+          -moz-appearance: button;
+          appearance: button;
+          color: #333333;
+          padding: 0px 8px;
+          font-family: arial;
+          font-size: 10pt;
+          text-decoration:none;
+          margin: 1px;
+        }
+    </style>
+
+    <script>
+        function amendContracctPeriod(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+            
+            var queryFOC = 'SELECT Id FROM ASI_FOC_Free_Goods_Request__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\''; 
+            var queryPayment = 'SELECT Id FROM ASI_TH_CRM_PaymentRequest__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_TH_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\''; 
+            
+            var focArray = (sforce.connection.query(queryFOC)).getArray('records'); 
+            var paymentArray = (sforce.connection.query(queryPayment)).getArray('records'); 
+            
+            var focCount = focArray != null ? focArray.length : 0; 
+            var paymentCount = paymentArray != null ? paymentArray.length : 0;
+            
+            var revisingContractArray = getRevisingContractArray();
+            
+            if ("{!ASI_TH_CRM_Contract__c.OwnerId}" != "{!$User.Id}") {
+                alert('You cannot extend the contract because you are not the contract owner.');
+            } else
+            if (revisingContractArray != null && revisingContractArray.length > 0){ 
+                alert('Please continue your revision on ' + revisingContractArray[0].Name); 
+            }  
+            else if (focCount != 0 || paymentCount != 0) { 
+                alert('Please complete all Payment/FOC request before revise the contract.'); 
+            }
+            else if ("{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" != "Contract Approved") {
+                alert('You cannot extend the contract because the contract is not approved.');
+            } 
+            else {
+                try { 
+                    window.open('/flow/ASI_SG_Extend_Contract_Period?ASI_CRM_ContractID={!ASI_TH_CRM_Contract__c.Id}&retURL={!ASI_TH_CRM_Contract__c.Id}','_parent'); 
+                } 
+                catch(error) { 
+                    sforce.debug.log(error.faultcode); 
+                    sforce.debug.log(error.faultstring); 
+                } 
+            }
+        }
+        
+        function archiveContract(){
+            try { 
+                if ("{!ASI_TH_CRM_Contract__c.OwnerId}" != "{!$User.Id}") { 
+                    alert('You cannot archive this proposal because you are not the contract owner.'); 
+                } else 
+                if ("{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" != "Proposal Approved") { 
+                    alert('You cannot archive this proposal because the proposal is not approved.'); 
+                } else { 
+                    var isConfirmed = window.confirm('Are you sure to archive?'); 
+                    if (isConfirmed){
+                        var ob = new sforce.SObject("ASI_TH_CRM_Contract__c"); 
+                        ob.Id = '{!ASI_TH_CRM_Contract__c.Id}';
+                        ob.ASI_TH_CRM_Contract_Status__c = 'Archived';
+                        sforce.connection.update([ob]);
+                        location.reload(true);
+                    }
+                } 
+            } catch(error) { 
+                sforce.debug.log(error.faultcode); 
+                sforce.debug.log(error.faultstring);
+                alert('An error occurred. Details : ' + error); 
+            }
+        }
+            
+        function buildContract(){
+            // Also allow to edit contract target when Proposal Rejected
+            if(['Draft', 'Contract Rejected', 'Proposal Rejected'].includes('{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}')) {
+                if ({!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}){
+                    window.open("/apex/ASI_CRM_SG_BuildContractPage?IS_EDIT=True&Id={!ASI_TH_CRM_Contract__c.Id}",'_parent');
+                } else {
+                    window.open("/apex/ASI_CRM_SG_ContractManageAll_Page?isReadOnly=False&Id={!ASI_TH_CRM_Contract__c.Id}",'_parent');
+                }
+            } else {
+                alert('Cannot modify Proposal / Contract during approval or when approved');
+            }
+        }
+            
+        function deleteContract() {
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+            
+            var revisingContractArray = getRevisingContractArray();
+            
+            if (revisingContractArray != null && revisingContractArray.length > 0){ 
+                alert('Please continue your revision on ' + revisingContractArray[0].Name); 
+            } else {
+            
+                try {
+
+                    var queryString = 'SELECT Id, (SELECT Id FROM Free_Goods_Requests__r WHERE RecordType.DeveloperName IN (\'ASI_CRM_SG_FOC\',\'ASI_CRM_SG_FOC_Read_Only\',\'ASI_CRM_SG_POSM\',\'ASI_CRM_SG_POSM_Read_Only\')), (SELECT Id FROM ASI_TH_CRM_PaymentRequests_Contract__r WHERE RecordType.DeveloperName IN (\'ASI_CRM_SG_Payment_Request\',\'ASI_CRM_SG_Payment_Request_Read_Only\')) FROM ASI_TH_CRM_Contract__c WHERE Id = \'{!ASI_TH_CRM_Contract__c.Id}\'';
+                
+                    console.log(queryString);
+                    
+                    var relatedCharts = sforce.connection.query(queryString);
+                    
+                    console.log(relatedCharts);
+                    
+                    if(relatedCharts.getBoolean('done') && relatedCharts.getInt('size')>=0) {
+                        errorBlock : {
+                            
+                            chartRecords = relatedCharts.getArray('records');
+                            var isEligible = true;
+                            for(var index = 0; index < chartRecords.length; index++){
+                                
+                                console.log(chartRecords[index]);
+                                
+                                if(chartRecords[index].ASI_TH_CRM_PaymentRequests_Contract__r != null) {
+                                    isEligible = false;
+                                    break errorBlock;
+                                }
+                                if(chartRecords[index].Free_Goods_Requests__r != null) {
+                                    isEligible = false;
+                                    break errorBlock;
+                                }
+                            }
+                        }
+                    }
+                    if(isEligible) {
+                        var isConfirmed = window.confirm('Are you sure?');
+                        if(isConfirmed) {
+                
+                              var contractId = '{!ASI_TH_CRM_Contract__c.Id}';
+                              var object3digit = contractId.substr(0,3);
+                              
+                              if ('{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' || '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Contract') {
+                                 var recordtype = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? 'ASI_CRM_SG_Proposal_Read_Only' : 'ASI_CRM_SG_Contract_Read_Only';
+                                 var originalContractName1 = '{! ASI_TH_CRM_Contract__c.Name}';
+                                 var originalContractName = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? originalContractName1.substr(0,17) : originalContractName1.substr(0,15);
+                                 var contractStatus = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? 'Proposal Approved' : 'Contract Approved';
+                                 var queryRevisingContract = 'SELECT Id, Name from ASI_TH_CRM_Contract__c where recordtype.developername = \'' + recordtype + '\' and name like \'' + originalContractName + '%\' and ASI_TH_CRM_Contract_Status__c = \'' + contractStatus + '\' Limit 1';
+                                 var revisingContractArray = (sforce.connection.query(queryRevisingContract)).getArray('records'); 
+                                 
+                                 if (revisingContractArray.length>0){
+                                  window.open("/apex/ASI_CRM_SG_RollbackContract_Page?id={!ASI_TH_CRM_Contract__c.Id}","_parent");  
+                                 } else {         
+                                  sforce.connection.deleteIds(['{!ASI_TH_CRM_Contract__c.Id}']);
+                                  //window.top.location.href = '/' + object3digit + '/o';
+                                  window.open('/' + object3digit + '/o',"_parent");  
+                                 }
+                              } else {      
+                                  sforce.connection.deleteIds(['{!ASI_TH_CRM_Contract__c.Id}']);
+                                  //window.top.location.href = '/' + object3digit + '/o';
+                                  window.open('/' + object3digit + '/o',"_parent");  
+                              }
+                        }
+                    } else {
+                        window.alert('{!$Label.ASI_CRM_SG_ContractDeleteError}');
+                    }
+                } catch(error) {
+                    alert('An error occurred. Details : ' + error);
+                }
+            }
+        }
+
+        function completeContract(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+            
+            var queryFOC     = 'SELECT Id FROM ASI_FOC_Free_Goods_Request__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\'';
+            var queryPayment = 'SELECT Id FROM ASI_TH_CRM_PaymentRequest__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_TH_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\'';
+            
+            var focArray     = (sforce.connection.query(queryFOC)).getArray('records');
+            var paymentArray = (sforce.connection.query(queryPayment)).getArray('records');
+            
+            var focCount     = focArray != null ? focArray.length : 0;
+            var paymentCount = paymentArray != null ? paymentArray.length : 0;
+            
+            var revisingContractArray = getRevisingContractArray();
+            
+            if ("{!ASI_TH_CRM_Contract__c.OwnerId}" != "{!$User.Id}") {
+                alert('You cannot complete the contract because you are not the contract owner.');
+            } else
+            if (revisingContractArray != null && revisingContractArray.length > 0){ 
+                alert('Please continue your revision on ' + revisingContractArray[0].Name); 
+            }  else if ("{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" != "Contract Approved") {
+                alert('You cannot complete the contract because the contract is not approved.');
+            } else if (focCount != 0 || paymentCount != 0) {
+                    alert('Please complete all Payment/FOC request before complete the contract.');
+            } else {
+                try { 
+                    /*[WL 3.0] BEGIN*/
+                    //window.open('/flow/ASI_CRM_SG_Complete_Contract?ContractID={!ASI_TH_CRM_Contract__c.Id}&retURL={!ASI_TH_CRM_Contract__c.Id}','_parent'); 
+                    window.open('/apex/ASI_CRM_SG_SubmitApprovalPage?id={!ASI_TH_CRM_Contract__c.Id}');
+                    /*[WL 3.0] END*/
+                } 
+                catch(error) { 
+                    sforce.debug.log(error.faultcode); 
+                    sforce.debug.log(error.faultstring); 
+                } 
+            }
+        }
+
+        function copyContract(){
+            window.open('/apex/ASI_CRM_SG_ContractClonePage?id={!ASI_TH_CRM_Contract__c.Id}&copy=1')
+        }
+    
+        function contractSummary(id, options){
+            var external = options.external ? 1 : 0;
+            var type = options.type;
+            var existBeforeRTM = options.existBeforeRTM ? 1 : 0;
+            window.open(`/apex/ASI_CRM_SG_ContractSummary?id=${id}&external=${external}&type=${type}&existBeforeRTM=${existBeforeRTM}`)
+        }
+        
+        function convertToContract(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+            try {               
+                var hasAttachment = false;
+                var isOutletReady = false;
+                var queryString = "SELECT Id, ParentId FROM Attachment WHERE ParentId = '{!ASI_TH_CRM_Contract__c.Id}' AND (NOT name like 'SFDC - %')";
+                var relatedCharts = sforce.connection.query(queryString); 
+                records = relatedCharts.getArray('records'); 
+                if (records.length > 0){
+                    hasAttachment = true;
+                }
+            	var filesQueryString = "SELECT ContentDocumentId, LinkedEntityId, contentDocument.title  FROM ContentDocumentLink where LinkedEntityId = '{!ASI_TH_CRM_Contract__c.Id}' and LinkedEntity.Type='ASI_TH_CRM_Contract__c' and (NOT contentDocument.title like 'SFDC - %')";
+	var relateFiles = sforce.connection.query(filesQueryString); 
+	records = relateFiles.getArray('records');
+	 if (records.length > 0){
+        hasAttachment = true;
+    }
+	
+                var queryString1 = "SELECT Id, recordtype.DeveloperName FROM ASI_CRM_AccountsAdditionalField__c WHERE id = '{!ASI_TH_CRM_Contract__c.ASI_CRM_CN_Outlet_WS__c}'";
+                var relatedCharts1 = sforce.connection.query(queryString1); 
+                records1 = relatedCharts1.getArray('records'); 
+                if (records1.length > 0){
+                    if (records1[0].RecordType.DeveloperName == "ASI_CRM_SG_Outlet") isOutletReady = true;
+                }
+            
+                if ("{!ASI_TH_CRM_Contract__c.OwnerId}" != "{!$User.Id}") { 
+                    alert('You cannot convert this proposal to contract because you are not the contract owner.'); 
+                } else 
+                if ("{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" == "Proposal Converted") { 
+                    alert('You cannot convert this proposal to contract because it has been converted.'); 
+                } else
+                if ("{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" != "Proposal Approved" && "{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}" != "Archived") { 
+                    alert('You cannot convert this proposal to contract because the proposal is not approved.'); 
+                } else  
+                if (!isOutletReady ) { 
+                    alert('You cannot convert this proposal to contract because the outlet is not converted.'); 
+                } else 
+                if (!hasAttachment ) { 
+                    alert('You cannot convert this proposal to contract because no printed contract is attached.'); 
+                } else { 
+                    var isConfirmed = window.confirm('Are you sure to convert?'); 
+                    if (isConfirmed){
+                        /*[WL 5.0] BEGIN*/
+                        $('#btnConvertToContract').hide();
+                        /*[WL 5.0] END*/
+                        window.open('/apex/ASI_CRM_SG_ContractClonePage?id={!ASI_TH_CRM_Contract__c.Id}&copy=3','_parent'); 
+                    }
+                } 
+            } catch(error) { 
+                sforce.debug.log(error.faultcode); 
+                sforce.debug.log(error.faultstring);
+                alert('An error occurred. Details : ' + error); 
+            }
+        }
+    
+        /*[WL 1.0] BEGIN*/
+        function validatePaymentAmountExceeded(){
+            console.log('start validatePaymentAmountExceeded');
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_SG_Payment_ValidationHelper_V2.validateAmountExceedRTMContract}',
+                '{!ASI_TH_CRM_Contract__c.Id}',
+                false,
+                function(result, event){
+                    if(result=='OK'){
+                    
+                        submitForApproval();
+                        
+                    }
+                    else {
+                        alert(result);
+                    }
+                }, 
+                {escape: true}
+            );  
+            
+            
+        }
+        /*[WL 1.0] END*/
+        
+        function submitForApproval() {
+            console.log('start submitForApproval');
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+
+            var currentHeaderDetails = sforce.connection.query("Select Id from ASI_CRM_ContractTarget__c where ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' ");
+            var detailRecords = currentHeaderDetails.getArray("records");
+
+            var cashScheduleDetails = sforce.connection.query(
+                "Select sum(ASI_CRM_Sponsorship__c) totalCash from ASI_CRM_Payment_Schedule__c where ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' and ASI_CRM_Type__c = 'Cash Sponsorship' and recordtype.developername = 'ASI_CRM_SG_Payment_Schedule'"
+            );
+            var cashScheduleRecords = cashScheduleDetails.getArray("records");
+            var totalCashSchedule = parseFloat(cashScheduleRecords[0].totalCash) || 0.0;
+            var totalCashContracted =
+                '{!ASI_TH_CRM_Contract__c.ASI_CRM_Total_Cash_Sponsorship_Cash__c}' ==
+                '' ?
+                0.0 : parseFloat(
+                    '{!ASI_TH_CRM_Contract__c.ASI_CRM_Total_Cash_Sponsorship_Cash__c}'
+                    .replace(',', ''));
+
+            var contractScheduleDetails = sforce.connection.query(
+                "Select sum(ASI_CRM_Sponsorship__c) totalContract from ASI_CRM_Payment_Schedule__c where ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' and ASI_CRM_Type__c = 'Contract Sponsorship' and recordtype.developername = 'ASI_CRM_SG_Payment_Schedule'"
+            );
+            var contractScheduleRecords = contractScheduleDetails.getArray("records");
+            var totalContractSchedule = parseFloat(contractScheduleRecords[0].totalContract) || 0.0;
+
+            var contractTargetDetails = sforce.connection.query(
+                "Select sum(ASI_CRM_SG_Cont_Sponsor_Target_Incentive__c) totalContract from ASI_CRM_ContractTarget__c where ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' and recordtype.developername = 'ASI_CRM_SG_Contract_Target'"
+            );
+            var contractTargetRecords = contractTargetDetails.getArray("records");
+            var totalContractContracted = parseFloat(contractTargetRecords[0].totalContract) || 0.0;
+            
+            var contractType = '{!ASI_TH_CRM_Contract__c.ASI_CRM_Type__c}';
+            var existBeforeRTM = '{!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}' == 'true' ? true : false;
+            
+            /*[WL 4.0] BEGIN*/
+            var isAdHoc = '{!ASI_TH_CRM_Contract__c.ASI_CRM_Ad_hoc_Contract__c}' == 'true' ? true : false;
+            /*[WL 4.0] END*/
+            if(!existBeforeRTM && contractType == 'Partner'){
+                var contractTargetsWithPreset = sforce.connection.query("SELECT Id, ASI_CRM_TargetCase__c,  ASI_CRM_Minimum_Sales_Cases__c FROM ASI_CRM_ContractTarget__c WHERE ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' AND ASI_CRM_SKU__r.ASI_CRM_Preset__c = TRUE").getArray('records');
+                if((contractTargetsWithPreset.length == 0 || contractTargetsWithPreset.filter((element) => (parseFloat(element.ASI_CRM_TargetCase__c) || 0) >= (parseFloat(element.ASI_CRM_Minimum_Sales_Cases__c) || 0)).length < 1)
+                        /*[WL 4.0] BEGIN*/
+                        && !isAdHoc
+                        /*[WL 4.0] END*/
+                    ){
+                    alert('For Partner contract type, please select at least one SKU from the preset SKU list with Target case >= Minimum case.');
+                    return;
+                }
+                var contractTargetsWithKeyBrand = sforce.connection.query("SELECT Id, ASI_CRM_TargetCase__c,  ASI_CRM_Minimum_Sales_Cases__c FROM ASI_CRM_ContractTarget__c WHERE ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' AND ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_CRM_Key_Account_Brand__c = TRUE AND ASI_CRM_SKU__r.ASI_CRM_Preset__c = TRUE").getArray('records');
+                if(contractTargetsWithKeyBrand.length >= 2 && contractTargetsWithKeyBrand.filter((element) => (parseFloat(element.ASI_CRM_TargetCase__c) || 0) >= (parseFloat(element.ASI_CRM_Minimum_Sales_Cases__c) || 0)).length >= 2){
+                    isConfirmedPartner = window.confirm('This contract is able to be a Key Account. Do you still want to submit it as Partner? Otherwise, please change contract type to Key Account and re-submit.');
+                    if (!isConfirmedPartner){
+                        return;
+                    }
+                }
+            }
+            if(!existBeforeRTM && contractType == 'Key Account'){
+                var contractTargetsWithKeyBrand = sforce.connection.query("SELECT Id, ASI_CRM_TargetCase__c,  ASI_CRM_Minimum_Sales_Cases__c FROM ASI_CRM_ContractTarget__c WHERE ASI_CRM_Contract__c = '{!ASI_TH_CRM_Contract__c.Id}' AND ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_CRM_Key_Account_Brand__c = TRUE AND ASI_CRM_SKU__r.ASI_CRM_Preset__c = TRUE").getArray('records');
+                if((contractTargetsWithKeyBrand.length < 2 || contractTargetsWithKeyBrand.filter((element) => (parseFloat(element.ASI_CRM_TargetCase__c) 
+                    || 0) >= (parseFloat(element.ASI_CRM_Minimum_Sales_Cases__c) || 0)).length < 2)
+                        /*[WL 4.0] BEGIN*/
+                        && !isAdHoc
+                        /*[WL 4.0] END*/
+                    ){
+                    alert('For Key Account contract type, please select at least two SKUs of Chivas, Martell or Glenlivet from the preset SKU list with Target case >= Minimum case.');
+                    return;
+                }
+
+            }
+
+            /* Patched by Laputa Vincent 20160315
+             * For SG CRM, check required fields before submit
+             * [VL 1.0] BEGIN
+             */
+             
+            /*[WL 2.0] BEGIN*/
+            var isProposal = '{!ASI_TH_CRM_Contract__c.ASI_CRM_Is_Proposal__c}' == 'true' ? true : false;
+            if (isProposal && existBeforeRTM){
+                alert("Only RTM Proposal can be submitted, please delete this proposal and create an RTM Proposal for the outlet.");
+            }
+            /*[WL 2.0] END*/
+            else if ('{!JSENCODE(ASI_TH_CRM_Contract__c.ASI_CRM_CN_Outlet_WS__c)}' == '' ||
+                '{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Start_Date__c}' == '' ||
+                '{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_End_Date__c}' == '' ||
+                '{!JSENCODE(ASI_TH_CRM_Contract__c.ASI_CRM_Remarks__c)}' == ''
+            ) {
+                alert("Please input all required fields (Outlet, Remarks, Start and End Date) before submit.");
+            } else
+            /* [VL 1.0] END */
+            if (detailRecords == null || detailRecords.length <= 0) {
+                alert("No Contract Target lines! You cannot submit for approval.");
+            }
+            /* 
+             * Move Remarks checking to [VL 1.0]
+             * [VL 1.1] BEGIN 
+             */
+            /*
+            else if ('{!ASI_TH_CRM_Contract__c.ASI_CRM_Remarks__c}'== ''){
+                alert("Please enter Remarks before submit.");
+            } 
+            */
+            else if (totalCashSchedule != totalCashContracted) {
+                alert("Total cash payment amount in Payment Schedule should be an exact match with the Total Cash Sponsorship Amount");
+            } else if (totalContractSchedule != totalContractContracted) {
+                alert("Total contract sponsorship cases in Payment Schedule should be an exact match with the Total Contract Sponsorship / Target Incentive cases.");
+            }
+            /* [VL 1.1] END */
+            else if (['Draft', 'Contract Rejected', 'Proposal Rejected'].includes('{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}')) {
+                try {
+
+                    var recordtype = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? 'ASI_CRM_SG_Proposal_Read_Only' :'ASI_CRM_SG_Contract_Read_Only';
+                    var originalContractName1 ='{! ASI_TH_CRM_Contract__c.Name}';
+                    var originalContractName = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? originalContractName1.substr(0, 17) : originalContractName1.substr(0, 15);
+                    var contractStatus = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal' ? 'Proposal Approved' :'Contract Approved';
+                    var queryRevisingContract =
+                        'SELECT Id from ASI_TH_CRM_Contract__c where recordtype.developername = \'' +
+                        recordtype + '\' and name like \'' +
+                        originalContractName +
+                        '%\' and ASI_TH_CRM_Contract_Status__c = \'' +
+                        contractStatus + '\' Limit 1';
+                    var revisingContractArray = (sforce.connection.query(queryRevisingContract)).getArray('records');
+
+                    var lastversion = '';
+                    if (revisingContractArray.length > 0) {
+                        lastversion = revisingContractArray[0].Id;
+                    } else if ('{!ASI_TH_CRM_Contract__c.ASI_CRM_Converted_From__c}' != '') {
+                        lastversion = '{!ASI_TH_CRM_Contract__c.ASI_CRM_Converted_From__c}';
+                    }
+
+                    var ob = new sforce.SObject("ASI_TH_CRM_Contract__c");
+                    ob.Id = '{!ASI_TH_CRM_Contract__c.Id}';
+                    ob.ASI_CRM_Sys_Allow_Submit_Approval__c = true;
+                    result = sforce.connection.update([ob]);
+
+                    if (!result[0].getBoolean('success')) {
+                        alert('An error occurred. Details : ' + result[0].errors.message);
+                    } else {
+                        if (existBeforeRTM){
+                            window.open('/apex/ASI_CRM_SG_ContractComparison_Page?BASE_CONTRACT_ID={!ASI_TH_CRM_Contract__c.Id}&CONTRACT_ONE=' + lastversion +'&submitRTM=1', '_parent');
+                        } else {
+                            window.open('/apex/ASI_CRM_SG_ContractComparison_Page?BASE_CONTRACT_ID={!ASI_TH_CRM_Contract__c.Id}&CONTRACT_ONE=' + lastversion, '_parent');
+                        }
+                    }
+                } catch (error) {
+                    sforce.debug.log(error.faultcode);
+                    sforce.debug.log(error.faultstring);
+                }
+            }
+        }
+        
+        function startSimulation(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+  
+            var queryFOC = 'SELECT Id FROM ASI_FOC_Free_Goods_Request__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\''; 
+            var queryPayment = 'SELECT Id FROM ASI_TH_CRM_PaymentRequest__c WHERE ASI_CRM_Sync_to_JDE__c = false AND ASI_TH_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\''; 
+            
+            var focArray = (sforce.connection.query(queryFOC)).getArray('records'); 
+            var paymentArray = (sforce.connection.query(queryPayment)).getArray('records'); 
+            
+            var focCount = focArray != null ? focArray.length : 0; 
+            var paymentCount = paymentArray != null ? paymentArray.length : 0; 
+            
+            // move this to a common function
+            /*
+            // P3 check if there is an draft / submit / rejected contract 
+            var recordtype = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal_Read_Only' ? 'ASI_CRM_SG_Proposal' : 'ASI_CRM_SG_Contract'; 
+            var originalContractName1 = '{!ASI_TH_CRM_Contract__c.Name}'; 
+            var originalContractName = originalContractName1.substr(0,15); 
+            var queryRevisingContract = 'SELECT Id, Name from ASI_TH_CRM_Contract__c where recordtype.developername = \'' + recordtype + '\' and name like \'' + originalContractName + '%\' and ASI_TH_CRM_Contract_Status__c in (\'Draft\',\'Submitted\',\'Contract Rejected\') Limit 1'; 
+            var revisingContractArray = (sforce.connection.query(queryRevisingContract)).getArray('records'); 
+            
+            console.log(queryRevisingContract); 
+            */
+            
+            var revisingContractArray = getRevisingContractArray();
+            
+            if (revisingContractArray != null && revisingContractArray.length > 0){ 
+                alert('Please continue your revision on ' + revisingContractArray[0].Name); 
+            } else if ('{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}'!= 'Contract Approved' && '{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}'!= 'Proposal Approved' && '{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}'!= 'Archived') { 
+                alert('This contract cannot start simulation.'); 
+            } else if (focCount != 0 || paymentCount != 0) { 
+                alert('Please complete all Payment/FOC request before simulate the contract.'); 
+            } else { 
+                try { 
+                    if({!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}){
+                        window.open('/apex/ASI_CRM_SG_ContractTargetSim_Page?id={!ASI_TH_CRM_Contract__c.Id}', '_parent'); 
+                    } else {
+                        window.open('/apex/ASI_CRM_SG_ContractManageAll_Page?id={!ASI_TH_CRM_Contract__c.Id}&isSimulation=true&isReadOnly=false', '_parent'); 
+                    }
+                } catch(error) { 
+                    sforce.debug.log(error.faultcode); 
+                    sforce.debug.log(error.faultstring); 
+                } 
+            }
+        }
+
+        // 20190628 Wilson Chow
+        // this function will only allow contract whose status is contract approved to edit the contract outlets
+        function editContractChildOutlets() {
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+
+            var revisingContractArray = getRevisingContractArray();
+
+            var simulationRecordType = 'ASI_CRM_SG_Contract_Target_Simulation';
+            var querySimulationLineItem = 'SELECT Id from ASI_CRM_ContractTarget__c where ASI_CRM_Contract__c = \'{!ASI_TH_CRM_Contract__c.Id}\' and recordtype.developername = \'' + simulationRecordType + '\' Limit 1';
+            var simulationContractLineItemArray = (sforce.connection.query(querySimulationLineItem)).getArray('records');
+
+            if (revisingContractArray != null && revisingContractArray.length > 0) {
+                alert('Please continue your revision on ' + revisingContractArray[0].Name);
+            }
+            else if ('{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c}'!= 'Contract Approved') {
+                alert('This contract cannot edit contract outlets. Only approved contract is allow to click.');
+            }
+            else if (simulationContractLineItemArray != null && simulationContractLineItemArray.length > 0) {
+                alert('This contract has existed simulation data. It cannot edit contract outlets.');
+            }
+            else {
+                try {
+                    window.open('/apex/ASI_CRM_SG_ContractManageAll_Page?id={!ASI_TH_CRM_Contract__c.Id}&isSimulation=false&isEditContractOutlets=true&isReadOnly=false', '_parent');
+                } catch(error) {
+                    sforce.debug.log(error.faultcode);
+                    sforce.debug.log(error.faultstring);
+                }
+            }
+        }
+        // 20190628 Wilson Chow
+
+        function outletPLSeeThroughReport(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}";
+            try { 
+                var queryString = "select id from GroupMember where UserOrGroupId='{!$User.Id}' and groupid in (select id from Group where developername='ASI_CRM_SG_Access_Management_Report')";
+                var relatedCharts = sforce.connection.query(queryString); 
+                records = relatedCharts.getArray('records'); 
+                
+                // user is not System Admin or Finance or BA user, cannot go to the report
+                if ('{!$Profile.Name}' != 'System Administrator' && records.length <= 0) {
+                    alert('You are not allowed to access this report.');
+                } else {
+                    window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=/shared/PRSG/Report/Outlet%20P%26L%20See%20Through%20Report&P0=1&P1=eq&P2="ASI_TH_CRM_CONTRACT"."ROWID"&P3="{!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}"');
+                }
+                
+            } catch(error) { 
+                sforce.debug.log(error.faultcode); 
+                sforce.debug.log(error.faultstring); 
+                alert('An error occurred. Details : ' + error); 
+            }
+        }
+        
+        function performanceReview(){
+            if({!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}){
+                window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=/shared/PRSG/Report/Till%20Date%20Performance%20Summary%20Report&P0=1&P1=eq&P2="ASI_TH_CRM_CONTRACT"."ROWID"&P3="{!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}"');           
+            } else {
+                window.open('/apex/ASI_CRM_SG_ContractComparison_Page?BASE_CONTRACT_ID={!ASI_TH_CRM_Contract__c.Id}&showComparison=true&submitRTM=1');
+            }
+        }
+        
+        function viewOfftake(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}"; 
+
+            var reportHeader = sforce.connection.query("Select ID from Report where DeveloperName = 'ASI_CRM_SG_CRM_Offtake_Report'"); 
+            
+            var records = reportHeader.getArray("records"); 
+            
+            var recordtypeReport = records[0].Id; 
+            var headerID = '{!ASI_TH_CRM_Contract__c.Id}'; 
+            
+            if(headerID.length == 18) { 
+                headerID = headerID.substring(0, headerID.length - 3); 
+            } 
+            
+            window.open("/"+recordtypeReport+"?pv0="+headerID);
+        }
+        
+        function getRevisingContractArray(){
+            // P3 check if there is an draft / submit / rejected contract 
+            var recordtype = '{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName}' == 'ASI_CRM_SG_Proposal_Read_Only' ? 'ASI_CRM_SG_Proposal' : 'ASI_CRM_SG_Contract'; 
+            var originalContractName1 = '{!ASI_TH_CRM_Contract__c.Name}'; 
+            var originalContractName = originalContractName1.substr(0,15); 
+            var queryRevisingContract = 'SELECT Id, Name from ASI_TH_CRM_Contract__c where id <> \'{!ASI_TH_CRM_Contract__c.Id}\' and recordtype.developername = \'' + recordtype + '\' and name like \'' + originalContractName + '%\' and ASI_TH_CRM_Contract_Status__c in (\'Draft\',\'Submitted\',\'Contract Rejected\') Limit 1'; 
+            var revisingContractArray = (sforce.connection.query(queryRevisingContract)).getArray('records'); 
+            
+            console.log(queryRevisingContract); 
+            return revisingContractArray;
+        }
+        
+        function viewSummary(){
+            sforce.connection.sessionId = "{!$Api.Session_ID}"; 
+
+            var reportHeader = sforce.connection.query("Select ID from Report where DeveloperName = 'ASI_CRM_SG_Contract_Target_Summary'"); 
+
+            var records = reportHeader.getArray("records"); 
+
+            var recordtypeReport = records[0].Id; 
+            var headerID = '{!ASI_TH_CRM_Contract__c.Id}'; 
+
+            if(headerID.length == 18) { 
+            headerID = headerID.substring(0, headerID.length - 3); 
+            } 
+
+            window.open("/"+recordtypeReport+"?pv0="+headerID);
+        }
+        
+    </script>
+    
+    <apex:form >
+    
+    <div class="col-xs-6">
+        <h4 class="title">Actions</h4>
+        <!-- Iframe sucks -->
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName == 'ASI_CRM_SG_Proposal'}">
+            <button onclick="window.top.location.href='{!URLFOR($Action.ASI_TH_CRM_Contract__c.Edit, ASI_TH_CRM_Contract__c.Id)}'">Edit</button>
+            <input type="button"  onclick="deleteContract()" value="Delete" />
+            <!--<button onclick="copyContract()">Copy</button>-->
+            <input type="button"  onclick="submitForApproval()" value="Submit for Approval" />
+            <button onclick="buildContract()">Build Contract</button>
+        </apex:outputPanel>
+    
+        
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName == 'ASI_CRM_SG_Proposal_Read_Only'}">
+            <input type="button"  onclick="deleteContract()" value="Delete" />
+            <!--<button onclick="copyContract()">Copy</button>-->
+            <input type="button" onclick="convertToContract()" value="Convert To Contract" id="btnConvertToContract"/>
+            <input type="button" onclick="archiveContract()" value="Archive" />
+            <input type="button" onclick="startSimulation()" value="Start Simulation" />
+        </apex:outputPanel>
+        
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName == 'ASI_CRM_SG_Contract'}">
+            <button onclick="window.top.location.href='{!URLFOR($Action.ASI_TH_CRM_Contract__c.Edit, ASI_TH_CRM_Contract__c.Id)}'">Edit</button>
+            <button onclick="window.top.location.href='/p/share/CustomObjectSharingDetail?parentId={!ASI_TH_CRM_Contract__c.Id}'">Sharing</button>
+            <input type="button"  onclick="deleteContract()" value="Delete" />
+            <!--[WL 1.0] BEGIN-->
+            <input type="button" onclick="validatePaymentAmountExceeded()" value="Submit for Approval"/>
+            <!--<button onclick="submitForApproval()">Submit for Approval</button>-->
+            <button onclick="buildContract()">Build Contract</button>
+        </apex:outputPanel>
+    
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName == 'ASI_CRM_SG_Contract_Read_Only'}">
+            <input type="button"  onclick="deleteContract()" value="Delete" />
+            <!--<button onclick="copyContract()">Copy</button>-->
+            <input type="button" onclick="amendContracctPeriod()" value="Amend Contract Period" />
+            <input type="button" onclick="completeContract()" value="Complete Contract" />
+            <input type="button" onclick="startSimulation()" value="Start Simulation" />
+            <!-- 20190628 Wilson Chow -->
+            <input type="button" onclick="editContractChildOutlets()" value="Edit Contract Outlets" />
+            <!-- 20190628 Wilson Chow -->
+        </apex:outputPanel>
+        
+        <h4 class="title">Other Actions</h4>
+        <button onclick="window.open('/apex/ASI_CRM_SG_Contract_Printout_Page?id={!ASI_TH_CRM_Contract__c.Id}&edit=1')">Sales Agreement</button>
+    
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.RecordType.DeveloperName == 'ASI_CRM_SG_Contract_Read_Only'}">
+            <button onclick="viewOfftake()">View Offtake</button>
+        </apex:outputPanel>
+        
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c == 'Contract Approved'}">
+            <!--[WL 6.0] BEGIN-->
+            <!--<apex:commandLink action="{!URLFOR($Action.ASI_TH_CRM_Contract__c.ASI_CRM_SG_Request_Payment, ASI_TH_CRM_Contract__c.id)}" target="_parent" value="Request Payment" styleClass="btn" />-->
+            <button onclick="window.top.location.href='{!URLFOR($Action.ASI_TH_CRM_Contract__c.ASI_CRM_SG_Request_Payment, ASI_TH_CRM_Contract__c.Id)}'">Request Payment</button>
+            <!--<apex:commandLink action="{!URLFOR($Action.ASI_TH_CRM_Contract__c.ASI_CRM_SG_Request_Free_Goods, ASI_TH_CRM_Contract__c.id)}" target="_parent" value="Request Free Goods" styleClass="btn" />-->
+            <button onclick="window.top.location.href='{!URLFOR($Action.ASI_TH_CRM_Contract__c.ASI_CRM_SG_Request_Free_Goods, ASI_TH_CRM_Contract__c.Id)}'">Request Free Goods</button>
+            <!--[WL 6.0] END-->
+            <!--
+            <button onclick="window.open('/a8h/e?CF00NM0000000t8dd={!ASI_TH_CRM_Contract__c.Name}&nooverride=1&RecordType=012M00000000ZoEIAU&CF00NM0000000u6Om={!ASI_TH_CRM_Contract__c.ASI_CRM_CN_Outlet_WS__r.Name}&Name=%5BAuto-generated%5D')">Request Payment</button>
+            <button onclick="window.open('/a7Y/e?RecordType=012M00000000dN2&retURL=%2F{!ASI_TH_CRM_Contract__c.Id}&CF00NM0000001A6Gh={!ASI_TH_CRM_Contract__c.ASI_CRM_CN_Outlet_WS__r.Name}&CF00NM0000001A9Pm={!ASI_TH_CRM_Contract__c.Name}&CF00NM0000001A9Pm_lkid={!ASI_TH_CRM_Contract__c.Id}')">Request Free Goods</button>
+            -->
+        </apex:outputPanel>
+
+    </div>
+
+    <div class="col-xs-6">
+            <h4 class="title">Reports</h4>
+        <apex:outputPanel rendered="{!CONTAINS(ASI_TH_CRM_Contract__c.recordtype.developername, 'Proposal')}">
+            <!--
+            <button onclick="window.open('/apex/ASI_CRM_SG_ContractSummary?id={!ASI_TH_CRM_Contract__c.Id}&external=1&type=p&existBeforeRTM={!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}')">Proposal Summary for Customer</button>
+            <button onclick="window.open('/apex/ASI_CRM_SG_ContractSummary?id={!ASI_TH_CRM_Contract__c.Id}&external=0&type=p&existBeforeRTM={!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}')">Proposal Summary for Internal Review</button>
+            -->
+            <button onclick="window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=/shared/PRSG/Report/Outlet%20P%26L%20FOB%20Report&P0=1&P1=eq&P2=ASI_TH_CRM_CONTRACT.ROWID&P3={!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}');">Outlet P&amp;L FOB Report</button>
+            <input type="button"  onclick="outletPLSeeThroughReport()" value="Outlet P&L See Through Report" />
+            <button onclick="contractSummary('{!ASI_TH_CRM_Contract__c.Id}', {external: true, type: 'p', existBeforeRTM: {!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}})">Proposal Summary for Customer</button>
+            <button onclick="contractSummary('{!ASI_TH_CRM_Contract__c.Id}', {external: false, type: 'p', existBeforeRTM: {!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}})">Proposal Summary for Internal Review</button>
+        </apex:outputPanel>
+    
+        <apex:outputPanel rendered="{!CONTAINS(ASI_TH_CRM_Contract__c.recordtype.developername, 'ASI_CRM_SG_Contract')}">
+            <button onclick="window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=/shared/PRSG/Report/Outlet%20P%26L%20FOB%20Report&P0=1&P1=eq&P2=ASI_TH_CRM_CONTRACT.ROWID&P3={!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}');">Outlet P&amp;L FOB Report</button>
+            <input type="button"  onclick="outletPLSeeThroughReport()" value="Outlet P&L See Through Report" />
+            <button onclick="window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=/shared/PRSG/Report/Till%20Date%20Achievement%20By%20Sub-Brand%20Report&P0=1&P1=eq&P2=ASI_TH_CRM_CONTRACT.ROWID&P3={!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}');">Volume Achievement (Till Date)</button>
+            <button onclick="window.open('https://hkazap05.pernod-ricard-asia.com:443/analytics/saw.dll?GO&Action=Extract&Path=%2Fshared%2FPRSG%2FReport%2FVolume%20Achievement%20By%20Sub%20Brand%20(Till%20date)&P0=1&P1=eq&P2=%22ASI_TH_CRM_CONTRACT%22.%22ROWID%22&P3=%22{!CASESAFEID(ASI_TH_CRM_Contract__c.Id)}%22');">Volume Achievement By Sub Brand (Till date)</button>
+            <button onclick="performanceReview()">Performance Review (Till Date P&amp;L)</button>
+            <button onclick="contractSummary('{!ASI_TH_CRM_Contract__c.Id}', {external: true, type: 'c', existBeforeRTM: {!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}})">Contract Summary for Customer</button>
+            <button onclick="contractSummary('{!ASI_TH_CRM_Contract__c.Id}', {external: false, type: 'c', existBeforeRTM: {!ASI_TH_CRM_Contract__c.ASI_CRM_Contract_Exist_Before_RTM__c}})">Contract Summary for Internal Review</button>
+            <button onclick="viewSummary()">Summary Report</button>
+        </apex:outputPanel>
+    
+        <button onclick="window.open('/apex/ASI_CRM_SG_ContractComparison_Page')">Contract Comparison</button>
+        
+        <apex:outputPanel rendered="{!ASI_TH_CRM_Contract__c.ASI_TH_CRM_Contract_Status__c == 'Contract Approved'}">
+            <button onclick="window.open('/apex/ASI_CRM_SG_OutstandingFOCReport?id={!ASI_TH_CRM_Contract__c.Id}')">Outstanding A&amp;P Report</button>
+        </apex:outputPanel>
+
+    </div>
+    </apex:form>
+
+</apex:page>

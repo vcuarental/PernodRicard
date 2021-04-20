@@ -1,0 +1,381 @@
+<apex:page standardController="Opportunity" extensions="opportunityProductEntryExtension" action="{!initAction}" >
+
+    <apex:styleSheet value="http://yui.yahooapis.com/2.6.0/build/assets/skins/sam/skin.css" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/yahoo-dom-event/yahoo-dom-event.js" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/container/container-min.js" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/animation/animation-min.js" />
+
+
+    <apex:includeScript value="/soap/ajax/20.0/connection.js"/> 
+    <apex:includeScript value="/soap/ajax/20.0/apex.js"/> 
+
+
+ 
+    <apex:sectionHeader Title="Gerenciar {!$ObjectType.Product2.LabelPlural}" subtitle="{!opportunity.Name}"/>
+    <apex:messages style="color:red"/>
+
+    <style>
+   <!--Estilo do campo de pesquisa-->
+        .search{
+            font-size:14pt;
+            margin-right: 20px;    
+        }
+        .fyi{
+            color:red;
+            font-style:italic;
+        }
+        .label{
+            margin-right:10px;
+            font-weight:bold;
+        }
+        .bigButton {margin-left: 15px;}        
+   
+    <!-- Estilo para centralizar o select na lista de produtos -->
+        .centraliza {
+            text-align: center;
+        }
+    </style>
+    
+    
+    <!--Configuração do POPUP (showPopup)-->
+     <style type="text/css">
+       .customPopup{
+            background-color: white;
+            border-style: solid;
+            border-width: 2px;
+            left: 50%;
+            padding:10px;
+            position: absolute;
+            z-index: 9999;
+            width: 550px;
+            margin-left: -250px;
+            top:100px;
+        }
+            font1{font-family: arial, helvetica, serif; font-weight: normal}
+            font2{font-family: arial, helvetica, serif; font-weight: bold}
+            font3{font-family: arial, helvetica, serif; font-weight: lighter}
+
+    </style>
+    
+   
+    <script type='text/javascript'>
+        
+    
+    function setSelectTodas(aObj, aText){
+      var lSelect = document.getElementById(aText);
+      lSelect.selectedIndex = 0;
+    }
+    
+    
+    function getPriceCalculation( aText ){   
+      var msg = document.getElementById( aText );
+      if ( msg.value == '' )
+      {
+        var aId = '{!Opportunity.Id}';
+        sforce.connection.sessionId = '{!$Api.Session_ID}';
+        sforce.apex.execute("PriceCalculationInterface","PriceCalculation",{idSalesforce:aId, oppParam:null, olisParam:null});
+        validateCreditoDisponible();
+        window.location.href=window.location.href;
+      }
+    }
+
+
+    function validateCreditoDisponible(){ 
+        var aId = '{!Opportunity.Id}';
+        var accId = '{!Opportunity.AccountId}';
+        sforce.connection.sessionId = '{!$Api.Session_ID}';
+        var ret = sforce.apex.execute("LAT_BR_VFC12_CreditoDisponivelController","validateCreditoDisponible",{opptyId:aId, accId:accId});
+        if(ret != ''){
+            alert(ret);
+        }
+    }
+
+    // This script assists the search bar functionality
+    // It will execute a search only after the user has stopped typing for more than 1 second
+    // To raise the time between when the user stops typing and the search, edit the following variable:
+    
+    var waitTime = 1;
+    
+
+    var countDown = waitTime+1;
+    var started = false;
+    
+    function resetTimer(){
+    
+        countDown=waitTime+1;
+        
+        if(started==false){
+            started=true;
+            runCountDown();
+        }
+    }
+    
+    function runCountDown(){
+    
+        countDown--;
+        
+        if(countDown<=0){
+            fetchResults();
+            started=false;
+        }
+        else{
+            window.setTimeout(runCountDown,1000);
+        }
+    }
+    
+    function guardaValor( aQtde )
+    {
+      var qtde = document.getElementById( aQtde );
+      qtde.oldValue = getNumber( qtde.value );
+    }
+    
+    function limpaBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var novoValor = getNumber( qtde.value );
+      if ( novoValor != qtde.oldValue )
+      {
+        var qtBonus = document.getElementById( aQtBonus );
+        var percBonus = document.getElementById( aPercBonus );
+        qtBonus.value="";
+        percBonus.value="";
+      }
+    }
+    
+    function getNumber( aValue )
+    {
+      if ( !aValue ) return 0;
+      else return Number( aValue.replace( ".", "" ).replace(",", "." ) );
+    }
+    
+    function calculaPercBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var qtBonus = document.getElementById( aQtBonus );
+      var nQtBonus = getNumber( qtBonus.value );
+      if ( nQtBonus > 0 )
+      {
+        var percBonus = document.getElementById( aPercBonus );     
+        var nQtde = getNumber( qtde.value );
+        var total = Math.floor( ( nQtBonus * 100 ) / nQtde ); 
+        percBonus.value = total;
+      }
+    }
+    
+    function calculaQtBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var qtBonus = document.getElementById( aQtBonus );
+      var percBonus = document.getElementById( aPercBonus );     
+      var nQtBonus = getNumber( qtBonus.value );
+      var nPercBonus = getNumber( percBonus.value );
+      if ( nQtBonus==0 && nPercBonus>0 )
+      {
+        var nQtde = getNumber( qtde.value );
+        var total = Math.floor( ( nPercBonus * nQtde ) / 100 );
+        qtBonus.value = total;
+      }
+    }
+    
+    function openWindow(){
+        var left = (screen.width/2-(700/2));
+        var top = (screen.height/2-(250/2));
+        window.open("/apex/LAT_BR_VFP12_CreditoDisponivel?accId={!Opportunity.AccountId}", "MsgWindow","top="+top+", left="+left+", width=800,height=280");
+    
+    }
+
+      
+    </script>
+   
+    <!--Inicio do formulário-->
+    <apex:form id="form">
+        
+     <apex:outputPanel id="msgPnl" >
+            <apex:pageMessages id="mensagens"/>
+            <apex:inputHidden value="{!erroSave}" id="errSave"/>      
+        </apex:outputPanel>
+        <script type="text/javascript">
+            function onCompleteError(){
+                var msgFld = document.getElementById("{!$Component.errSave}").value;
+                if(msgFld != 'SEM ERRO'){
+                    alert( msgFld );
+                } 
+            }
+        </script>
+
+        <apex:outputPanel id="mainBody">
+        
+           <!-- <apex:outputLabel styleClass="label">Grupo de preços: </apex:outputLabel>
+            <apex:outputText value="{!theBook.Name}"/>&nbsp;
+            <apex:commandLink action="{!changePricebook}" value="Alterar" immediate="true"/>
+            <br/>
+             not everyone is using multi-currency, so this section may or may not show 
+            <apex:outputPanel rendered="{!multipleCurrencies}">
+                <apex:outputLabel styleClass="label">Moeda: </apex:outputLabel>
+                <apex:outputText value="{!chosenCurrency}"/>
+                <br/>
+            </apex:outputPanel>
+            <br/> -->
+            <div style="margin-bottom:10px;">
+            <apex:outputLabel styleClass="label" style="font-size: 14px;">{!$Label.LAT_BR_VFP12_00008}</apex:outputLabel>
+            </div>
+<!-- this is the upper table... a.k.a. the "Shopping Cart"-->
+            
+
+            <!-- notice we use a lot of $ObjectType merge fields... I did that because if you have changed the labels of fields or objects it will reflect your own lingo -->
+            <apex:pageBlock title="{!$ObjectType.Product2.LabelPlural} selecionados" id="selected">
+                       
+                <apex:pageblockTable value="{!shoppingCart}" var="s">
+                 
+                    
+                     <!--Campos dos itens da oportunidade que foram selecionados-->
+                    
+                    <apex:column headerValue="{!$ObjectType.Product2.LabelPlural}" value="{!s.PriceBookEntry.Product2Id}"/>
+                    <apex:column headerValue="Qt Múltiplo" value="{!s.LAT_MultipleQuantity__c}"/>
+                    <apex:column headerValue=" % Bonif" value="{!s.LAT_PercentualBonus__c}"/>
+                    <apex:column headerValue="Qt Venda">
+                        <apex:inputField value="{!s.Quantity}" style="width:50px" required="true" id="edQtde" onfocus="guardaValor('{!$Component.edQtde}')" onblur="limpaBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                    </apex:column>                    
+                    <apex:column headerValue="Qt Bonif">
+                        <apex:inputField value="{!s.QT_Bonus__c}" style="width:50px" id="edQtBonus" onblur="calculaPercBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                    </apex:column>
+                    <apex:column headerValue="% Bonif">
+                        <apex:inputField value="{!s.Percentual_de_bonus__c}" style="width:50px" id="edPercBonus" onblur="calculaQtBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                    </apex:column>
+                    <apex:column headerValue="Qt Total" value="{!s.Qt_total__c}"/>
+                    
+                    
+                    <apex:column headerValue="Cond Pagto" value="{!s.LAT_PaymentConditionDescription__c}"/>
+                    <apex:column headerValue="Preço" value="{!s.UnitPrice}"/>
+                    <apex:column headerValue="Preço Total" value="{!s.Preco_total__c}"/>
+                    <apex:column headerValue="G/Caixa" style="text-align:center;" value="{!s.BottlesPerBox__c}"/>
+                    <apex:column headerValue="Preço Garrafa" value="{!s.preco_garrafa__c}"/>
+                    <apex:column headerValue="Peso Kg" style="text-align:center;" value="{!s.UnitWeight__c}"/>  
+                    
+                    <apex:column headerValue="Status" style="text-align:center;" value="{!s.cd_line_status__c}"/>
+                    <apex:column headerValue="Descrição Status" value="{!s.Descricao_do_status__c}"/>
+                    
+                    
+                    <!--Botão do POPUP-->
+                    <apex:column >
+                        <apex:commandButton value="Resumo" action="{!showPopup}" rerender="popup">
+                            <apex:param value="{!s.Id}" assignTo="{!idOppOli}" name="idOppOli"/>
+                        </apex:commandButton>
+                    </apex:column>
+                    <apex:column >
+                        <!--again we use apex:param to be able to tell the controller which row we are working with -->
+                         <apex:commandButton rendered="{!ISNULL(s.NR_order_line__c) || s.NR_order_line__c == ''}" action="{!removeFromShoppingCart}" value="Remover" id="btRemove" reRender="msgPnl,selected, searchResults" >
+                             <apex:param value="{!s.PricebookEntryId}" assignTo="{!toUnselect}" name="toUnselect"/>
+                         </apex:commandButton>
+                    </apex:column>
+                    <apex:column headerValue="Cancelar" styleClass="centraliza">
+                        <apex:inputField rendered="{!!ISNULL(s.NR_order_line__c) && s.NR_order_line__c != ''}" value="{!s.Remover__c}" id="check"/>
+                        
+                    </apex:column>
+                </apex:pageblockTable>
+                
+                <apex:pageBlockButtons >
+                    <apex:commandButton action="{!onSave}"  value="Salvar" disabled="{!!isStandardPricebook}"/>
+                    <apex:commandButton action="{!onCancel}" value="Cancelar" immediate="true"/>
+  
+                    <apex:actionStatus id="mySaveStatus1">                    
+                      <apex:facet name="start">
+                          <apex:image value="/img/loading.gif" title="Consultando..."/>
+                      </apex:facet>
+                      <apex:facet name="stop"> 
+                          <apex:commandButton action="{!onSaveRefresh}" value="Obter Preços" styleClass="bigButton" status="mySaveStatus1" disabled="{!!isStandardPricebook}" rerender="msgPnl" oncomplete="getPriceCalculation('{!$Component.errSave}');"/>
+                      </apex:facet> 
+                   </apex:actionStatus>
+                   <input  type="button" onClick="openWindow();" value="Crédito Disponível" class="btn"></input>
+
+
+          
+                </apex:pageBlockButtons>
+            </apex:pageBlock>
+            
+            <apex:outputtext >Nota: Tab preço à vista aplica-se a todos os itens do pedido</apex:outputtext>
+    
+            <!-- this is the lower table: search bar and search results -->
+            <apex:pageBlock >
+            
+                <apex:outputPanel styleClass="busca">
+                    <b>Busca por {!$ObjectType.Product2.LabelPlural}: </b>
+                </apex:outputPanel>
+
+                <apex:actionRegion renderRegionOnly="false" immediate="true">
+                
+                    <apex:actionFunction name="fetchResults" action="{!updateAvailableListCheck}" reRender="searchResults" status="searchStatus"/>
+                    
+                    <!-- here we invoke the scripting to get out fancy 'no button' search bar to work -->
+                    <apex:inputText value="{!searchString}" onkeydown="if(event.keyCode==13){this.blur();}else{resetTimer();}" style="width:300px"/>
+                    &nbsp;&nbsp;
+                    
+                    
+                    
+                    <!-- Combo de seleção da condição de pagamento.-->
+                    <apex:selectList id="theSite"  size="1" value="{!varPaymentVal}" >
+                        <apex:selectOptions value="{!condicao}"/> 
+                        <apex:actionSupport event="onchange" action="{!PaymentValues}" reRender="searchResults"/>
+                        <apex:actionSupport />
+                    </apex:selectList>
+                    &nbsp;&nbsp;&nbsp;
+                    
+                    <apex:commandButton value="Selecionar Todas" id="btTodas" action="{!paymentValues}" onclick="setSelectTodas(this,'{!$Component.theSite}');">
+                    
+                    </apex:commandButton>
+                    
+                    <i>
+                        <!-- actionStatus component makes it easy to let the user know when a search is underway -->
+                        <apex:actionStatus id="searchStatus" startText="searching..." stopText=" "/>
+                    </i>
+                </apex:actionRegion>
+                
+                <!-- Botão para inserir os itens selecionados no carrinho -->
+                <apex:commandButton style="float:right" value="Adicionar Itens" action="{!addItensToShoppingCart}" reRender="selected,searchResults,mensagens"/>
+                            
+                <br/>
+                <br/>
+            
+                <apex:outputPanel id="searchResults">                
+                <apex:pageBlockTable value="{!lstWProducts}" var="a">                    
+                        <apex:column headerValue="Produtos" value="{!a.app.Product__r.Name}" />
+                        <apex:column headerValue="{!$ObjectType.Product2.Fields.SKU__c.Label}" value="{!a.app.Product__r.SKU__c}" />
+                        <apex:column headerValue="Cond Pagto" value="{!a.app.PaymentConditionDescription__c}"/>
+                        <apex:column headerValue="Qt Múltiplo" value="{!a.app.MultipleQuantity__c}"/>
+                        <apex:column headerValue="Unidade" value="{!a.app.Product__r.CD_Unit__c}"/>
+                        <apex:column headerValue="% Bonif" value="{!a.app.PercentualBonus__c}"/>
+                        
+                        <apex:column headerValue="Selecionar" styleClass="centraliza" headerClass="centraliza">
+                            <apex:inputCheckbox value="{!a.isSelected}" />
+                        </apex:column>
+                        
+                    </apex:pageBlockTable>
+                    
+                    <!-- We put up a warning if results exceed 100 rows -->
+                    <apex:outputPanel styleClass="fyi" rendered="{!overLimit}">
+                        <br/>
+                        Sua busca retornou mais 100 produtos, por favor restrinja ainda mais sua busca caso não veja os produtos desejado.
+                        <br/>
+                    </apex:outputPanel>
+                    
+                </apex:outputPanel>
+            
+            </apex:pageBlock>
+            
+        </apex:outputPanel>
+        
+        <!-- Tela com o conteúdo do POPUP -->
+        <apex:outputPanel id="popup">
+            
+            <apex:outputPanel styleClass="customPopup" layout="block" rendered="{!displayPopUp}">
+               <apex:pageBlock >
+                    <apex:pageBlockTable value="{!itemOpp}" var="item" >
+                        <apex:column headerValue="Composição de Preços" value="{!item.Campo_de_formatacao__c}"/>
+                        <br/><br/>
+                    </apex:pageBlockTable>
+                <apex:commandButton value="Fechar" action="{!closePopup}" rerender="popup"/>
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </apex:outputPanel>        
+    </apex:form> 
+</apex:page>

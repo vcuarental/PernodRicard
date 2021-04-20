@@ -1,0 +1,201 @@
+<apex:page controller="ASI_HK_CRM_PromotionCalendarMonthCON" action="{!initPage}" title="Promotion Calendar" showHeader="true" sidebar="false" showChat="false">
+	<apex:stylesheet id="fullCalStyleSheet" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/fullcalendar/fullcalendar.css')}"/>
+	<apex:stylesheet id="hpiStyleSheet" value="{!URLFOR($Resource.ASI_HK_CRM_HoverPopupInfo, '/hover-popup-info/css/common.css')}"/>
+	<apex:includeScript id="jqueryScript" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/jquery/jquery-1.8.1.min.js')}"/>
+	<apex:includeScript id="fullCalScript" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/fullcalendar/fullcalendar.min.js')}"/>
+	<apex:includeScript id="hpiScript" value="{!URLFOR($Resource.ASI_HK_CRM_HoverPopupInfo, '/hover-popup-info/js/common.js')}"/>
+	
+	<style type="text/css">
+		#calendar {
+			margin-top:0px;
+		}
+		#calendar .fc-widget-header {
+			background-color:#F2F3F3;
+		}
+		#calendar .fc-widget-content {
+			background-color:#FFFFFF;
+			cursor:pointer
+		}
+		#calendar .fc-sun {
+			background-color:#FFD2D4;
+		}
+		#calendar .fc-sat {
+			background-color:#E9E9E9;
+		}
+		#calendar .fc-widget-content:hover {
+			background-color:#E3F3FF;
+		}
+		#calendar .pmtEvent {
+			background-color:#6777CC;
+			color:#FFFFFF;
+			cursor:pointer;
+		}
+	</style>
+	
+	<apex:form id="wholeForm" style="width:1220px">
+		<apex:outputPanel id="dummyPanel"></apex:outputPanel>
+		<apex:actionFunction name="renderClickEvent" action="{!redirectToViewPage}" reRender="dummyPanel">
+			<apex:param name="pmtId" value=""/>
+		</apex:actionFunction>
+		<apex:actionFunction name="renderClickDate" action="{!URLFOR($Action.ASI_HK_CRM_Promotion__c.New)}" reRender="dummyPanel">
+			<apex:param name="startDate" value=""/>
+		</apex:actionFunction>
+		<apex:actionFunction name="renderCalenderTypeChange" action="{!redirectToAnotherCalendarType}" reRender="dummyPanel"/>
+		<apex:pageMessages id="pageMessages"/>
+		<apex:pageBlock id="mainPageBlock">
+			<apex:outputPanel id="calTypeSelectPanel" layout="block" style="float:left;height:25px;">
+				<apex:outputLabel value="{!$Label.ASI_HK_CRM_VF_PROMOTION_CalendarType}: " for="calTypeSelectList" style="font-weight:bold;vertical-align:middle"/>
+				<apex:selectList id="calTypeSelectList" value="{!selectedCalendarType}" size="1" multiselect="false"
+					style="vertical-align:middle"
+					onchange="renderCalenderTypeChange()">
+					<apex:selectOptions value="{!calendarViewTypeList}"/>
+				</apex:selectList>
+			</apex:outputPanel>
+			<apex:commandButton action="{!URLFOR($Action.ASI_HK_CRM_Promotion__c.New)}" value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_New}" reRender="dummyPanel" style="margin-left:300px"/>
+			<apex:outputPanel id="calendarPanel" layout="block">
+				<apex:inputHidden id="curYearHidden" value="{!curYearStr}"/>
+				<apex:inputHidden id="curMonthHidden" value="{!curMonthStr}"/>
+				<c:ASI_HK_CRM_HoverPopupInfo popupId="__ACM_TEMPLATE" popupData="{!pmtPopupTemplate}"/>
+				<apex:outputPanel id="popupPanel" layout="block" style="height:20px">
+				</apex:outputPanel>
+				<div id='calendar'>
+				</div>
+				<script type="text/javascript">
+					var popupBaseX = 0;
+					var popupBaseY = 36;
+					function formatDateForSubmit(theDate) {
+						if (theDate) {
+							return '' + theDate.getFullYear()
+								+ '-' + (theDate.getMonth() + 1)
+								+ '-' + theDate.getDate();
+						}
+						return '';
+					}
+					function createDateFromMillisecondsAccordingUTC(milliseconds) {
+						var tempDate = new Date(milliseconds);
+						return new Date(tempDate.getUTCFullYear(), tempDate.getUTCMonth(), tempDate.getUTCDate()
+							, tempDate.getUTCHours(), tempDate.getUTCMinutes(), tempDate.getUTCSeconds());
+					}
+					
+					function getPromotions(start, end, callback) {
+						ASI_HK_CRM_PromotionCalendarMonthCON.retrievePromotionsByTimeRange(
+							formatDateForSubmit(start)
+							, formatDateForSubmit(end)
+							, function (result, event) {
+								if (event.status) {
+									if (result && result.length) {
+										for (var i = 0; i < result.length; i++) {
+											var theEvent = result[i];
+											theEvent.start = createDateFromMillisecondsAccordingUTC(theEvent.startDT);
+											theEvent.end = createDateFromMillisecondsAccordingUTC(theEvent.endDT);
+										}
+									}
+									callback(result);
+								} else {
+									// TODO: show error message (event.message)
+								}
+							}
+							, {escape: false}
+						);
+						return null;
+					}
+					function clearAllPromotionPopupElements() {
+						var popupPanel = document.getElementById('{!$Component.popupPanel}');
+						if (popupPanel) popupPanel.innerHTML = '';
+					}
+					function createPromotionPopupElement(event) {
+						var popupId = event.sObjId;
+						var pmtPopupEleId = 'hpi_popupDiv' + popupId;
+						var pmtPopupEle = document.getElementById(pmtPopupEleId);
+						if (!pmtPopupEle) {
+							var templateId = '__ACM_TEMPLATE';
+							var templatePmtPopupEle = document.getElementById('hpi_popupDiv' + templateId);
+							var templateHTML = templatePmtPopupEle.innerHTML;
+							
+							pmtPopupEle = document.createElement('div');
+							pmtPopupEle.id = templatePmtPopupEle.id.replace(templateId, popupId);
+							pmtPopupEle.className = templatePmtPopupEle.className;
+							pmtPopupEle.style.display = 'none';
+							pmtPopupEle.onmouseover = function() {
+								hpi_renderPopupMouseover(popupId);
+							};
+							pmtPopupEle.onmouseout = function() {
+								hpi_renderPopupMouseout(popupId);
+							};
+							pmtPopupEle.innerHTML = templateHTML.replace(/__ACM_TEMPLATE/g, popupId);
+							
+							var popupPanel = document.getElementById('{!$Component.popupPanel}');
+							popupPanel.appendChild(pmtPopupEle);
+							pmtPopupEle = document.getElementById(pmtPopupEleId);
+							var pmtPopupEleJQuery = $(pmtPopupEle);
+							for (var fName in event.otherValues) {
+								pmtPopupEleJQuery.find('#hpi_popupRowValue' + popupId + '_' + fName).text(event.otherValues[fName]);
+							}
+						}
+						return pmtPopupEle;
+					}
+					function createPromotionElement(event) {
+						var pmtEle = document.createElement('div');
+						pmtEle.className = 'pmtEvent pmtPopupTrigger';
+						pmtEle.id = 'pmtEle_' + event.sObjId;
+						if (event.hasOwnProperty('backgroundColor') && event.backgroundColor)
+							pmtEle.style.backgroundColor = event.backgroundColor;
+						if (event.hasOwnProperty('textColor') && event.textColor)
+							pmtEle.style.color = event.textColor;
+						var title = document.createTextNode(event.title);
+						pmtEle.appendChild(title);
+						pmtEle.onclick = function() { renderClickEvent(event.sObjId); };
+						createPromotionPopupElement(event);
+						pmtEle.onmouseover = function() {
+							var baseY;
+							var calHeader = $('#calendar .fc-header')
+							if (calHeader) baseY = calHeader.height();
+							if (!baseY) baseY = popupBaseY;
+							baseY += 60;
+							hpi_showPopup(this, event.sObjId, popupBaseX, baseY);
+						};
+						pmtEle.onmouseout = function() { hpi_hidePopup(this, event.sObjId); };
+						return pmtEle;
+					}
+					function updateCurrentYearAndMonth(start, end) {
+						var curYearHidden = document.getElementById('{!$Component.curYearHidden}');
+						var curMonthHidden = document.getElementById('{!$Component.curMonthHidden}');
+						if (curYearHidden && curMonthHidden) {
+							if (start.getDate() > 1) {
+								start.setDate(32);
+							}
+							curYearHidden.value = start.getFullYear();
+							curMonthHidden.value = start.getMonth();
+						}
+					}
+					
+					$(document).ready(function() {
+						theCalendar.fullCalendar({
+							header: {
+								left: ''
+								, center: 'title'
+								, right: 'today prev next'
+							}
+							, height: 600
+							, weekMode: 'liquid'
+							, year: {!curYearStr}
+							, month: {!curMonthStr}
+							, events: function(start, end, callback) {
+								updateCurrentYearAndMonth(start, end);
+								clearAllPromotionPopupElements();
+								getPromotions(start, end, callback);
+							}
+							, eventRender: function(event, element) {
+								return createPromotionElement(event);
+							}
+							, dayClick: function(date, allDay, jsEvent, view) {
+								renderClickDate(formatDateForSubmit(date));
+							}
+						});
+					});
+					var theCalendar = $('#calendar');
+				</script>
+			</apex:outputPanel>
+		</apex:pageBlock>
+	</apex:form>
+</apex:page>

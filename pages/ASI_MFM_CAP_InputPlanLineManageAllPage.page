@@ -1,0 +1,755 @@
+<apex:page standardController="ASI_MFM_Plan_Line_Item__c" extensions="ASI_MFM_CAP_InputPlanLineManageAllExt" recordSetVar="planLineItems" sideBar="false">
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <!-- JavaScript <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>  -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    
+    <apex:includescript value="{!URLFOR($Resource.ASI_CRM_TW_jQuery_ui, 'jquery-ui-1.12.1/jquery-ui.js')}"/>
+    <style>
+        .working{
+            background: white url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}') no-repeat;
+            background-size: 200px;
+            background-position: center left 75px;
+        }
+
+        .link-button {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        .error {
+            border: 2px solid red;
+        }
+        
+        .requiredField {
+            border-left: 3px solid red !important;
+        }
+        
+        th, td {
+                padding-top    : 5px;
+                padding-bottom : 5px;
+                padding-right  : 7px;
+                padding-left   : 7px;
+            }
+            
+        table { 
+        }
+        
+        <!-- Datatable Styling -->
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+        
+        .inputField_short {
+            width: 50px;
+        }
+
+        .inputField_medium {
+            width: 75px;
+        }
+
+        .inputField_long {
+            width: 150px;
+        }
+        
+        .inputField_x_long {
+            width: 200px;
+        }
+        
+        .alignRight {
+            text-align: right;
+        }
+    </style>
+    <script>
+        const numFormater = new Intl.NumberFormat();
+        const NEW_LINE_PREFIX = 'NEW_PLAN_LINE';
+        const READ_ONLY = '{!isReadOnly}' == 'true';
+        const ISCAPEX = '{!isCAPEX}' == 'true';
+        const CONST_DATA_TABLE_PROPERTIES    = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : false,
+            "iDisplayLength":1000,
+            "bSort" : false,
+            "bPaginate": false,
+            "bScrollCollapse": true,
+            "bJQueryUI": true,
+            drawCallback: function(settings, json){
+                initAutoComplete();
+            }
+        };
+        const PLAN_ID = '{!plan.Id}';
+        const PLAN_LINE_ITEM_RECORD_TYPE_ID = '{!PLAN_LINE_ITEM_RECORD_TYPE_ID}';
+        
+        //Define Variable - Picklist Value / Auto Complete Value
+        const AP_CODE_MAP = jQuery.parseJSON('{!JSENCODE(apCodeMapJson)}');
+        const BU_CODE_MAP = jQuery.parseJSON('{!JSENCODE(buCodeMapJson)}');
+        const QUOTATION_MAP = jQuery.parseJSON('{!JSENCODE(quotationJson)}');
+        const SUPPLIER_LIST = jQuery.parseJSON('{!JSENCODE(supplierListJson)}');
+        
+        //Define Variable - Others
+        var NEW_LINE_INDEX = 1;
+        var deletePlanLineItemIdList = [];
+        var supplierList = [];
+        
+        const FIELD_CONFIG_MAPPING = {
+            "CLONE": {
+                "title" : "Clone",
+                "data" : "",
+                "render" :  
+                    function(data, type, row, meta) {
+                        if (READ_ONLY) return "";
+                        return "<a class='link-button' onClick='ClonePlanLine(this.parentNode.parentNode)'>Clone</a>";
+                    }
+            },
+            "DELETE": {
+                "title" : "Delete",
+                "data" : "",
+                "render" : 
+                    function(data, type, row, meta) {
+                        if (READ_ONLY) return "";
+                        return "<a class='link-button' onClick='DeletePlanLine(this.parentNode.parentNode, " + meta.row + ")'>Delete</a>";
+                    }
+            },
+            "ASI_MFM_Supplier_Name__c" : {
+                "title" : "Supplier Name",
+                "data" : "ASI_MFM_Supplier_Name__r.Name",
+                "tabIndex" : 1,
+                "render" : 
+                    function(data, type, row, meta) {                                       
+                        var fieldAPIName = 'ASI_MFM_Supplier_Name__c';
+                        var inputId = 'supplier-input-'+meta.row;
+                        var accountid = '';
+                        if(row.ASI_MFM_Supplier_Name__c) {
+                            accountid = row.ASI_MFM_Supplier_Name__c;
+                        }
+                        data = data || '';
+                        if(READ_ONLY) return data;
+                        return "<input id='" + inputId + "' class='" + fieldAPIName + " inputField_x_long form-control' type='text' value=\"" + htmlEncode(data) + "\" accountid=\"" + accountid + "\" onChange='updatePlanLineItemValueSupplier(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value)'/>";
+                    }
+            },
+            "ASI_MFM_Dummy_PO__c" : {
+                "title" : "Dummy",
+                "data" : "",
+                "tabIndex" : 2,
+                "render" : 
+                    function(data, type, row) {
+                        var fieldAPIName = 'ASI_MFM_Dummy_PO__c';
+                        if(row.ASI_MFM_Dummy_PO__c) {
+                            data = row.ASI_MFM_Dummy_PO__c;
+                        } else {
+                            data = "";
+                        }
+                        if(READ_ONLY) return "<input type='checkbox'" + ((data == 1 || data == 'true') ? 'checked':'') + " disabled = true/>";
+                        return "<input class='" + fieldAPIName + " form-control' type='checkbox' " + ((data == 1 || data == 'true') ? 'checked':'') + " onChange='updatePlanLineItemCheckbox(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.checked)'/>";
+                    }
+            },
+            "ASI_MFM_AP_Code__c" : {
+                "title" : "AP Code",
+                "data" : "",
+                "tabIndex" : 3,
+                "render" : function(data, type, row) {
+                    if(READ_ONLY){
+                        if (row.ASI_MFM_AP_Code__c) return row.ASI_MFM_AP_Code__r.Name;
+                        else return '';
+                    }
+                    var fieldAPIName = 'ASI_MFM_AP_Code__c';
+                    var selectOptionTag = "<select class='selector " + fieldAPIName + " form-control requiredField' onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value);' style='width:180px;' required>"
+                    selectOptionTag += "<option value=''></option>";
+                    if (row.ASI_MFM_AP_Code__c){
+                        for(var label in AP_CODE_MAP) {
+                            if(AP_CODE_MAP[label] == row.ASI_MFM_AP_Code__c) {
+                                selectOptionTag += "<option value='" + AP_CODE_MAP[label] + "' selected>" + label + "</option>";
+                            } else {
+                                selectOptionTag += "<option value='" + AP_CODE_MAP[label] + "'>" + label + "</option>";
+                            }
+                        } 
+                    } else {
+                        for(var label in AP_CODE_MAP) {
+                            selectOptionTag += "<option value='" + AP_CODE_MAP[label] + "'>" + label + "</option>";
+                        }
+                    }
+                    selectOptionTag += "</select>";
+                    return selectOptionTag;
+                }
+           },
+           "ASI_MFM_BU_Code__c" : {
+                "title" : "BU Code",
+                "data" : "",
+                "tabIndex" : 4,
+                "render" : 
+                    function(data, type, row) {
+                        if(READ_ONLY){
+                            if (row.ASI_MFM_BU_Code__c) return row.ASI_MFM_BU_Code__r.Name;
+                            else return '';
+                        }
+                        var fieldAPIName = 'ASI_MFM_BU_Code__c';
+                        var selectOptionTag = "<select class='selector " + fieldAPIName + " form-control requiredField' onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value);' style='width:180px;' required>"
+                        selectOptionTag += "<option value=''></option>";
+                        for(var label in BU_CODE_MAP) {
+                            if(BU_CODE_MAP[label] == row.ASI_MFM_BU_Code__c) {
+                                selectOptionTag += "<option value='" + BU_CODE_MAP[label] + "' selected>" + label + "</option>";
+                            } else {
+                                selectOptionTag += "<option value='" + BU_CODE_MAP[label] + "'>" + label + "</option>";
+                            }
+                        }
+                        selectOptionTag += "</select>";
+                        return selectOptionTag;
+                     }
+           },
+            "ASI_MFM_List_Item_Description__c" : {
+                "title" : "List Item Description",
+                "data" : "",
+                "tabIndex" : 5,
+                "render" : 
+                    function(data, type, row) {
+                        var fieldAPIName = 'ASI_MFM_List_Item_Description__c';
+                        if(row.ASI_MFM_List_Item_Description__c) {
+                            data = row.ASI_MFM_List_Item_Description__c;
+                        } else {
+                            data = "";
+                        }
+                        if(READ_ONLY) return data;
+                        return "<input class='" + fieldAPIName + " inputField_x_long form-control requiredField' type='text' value=\"" + data + "\" onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value)' required/>";
+                     }
+            },
+            "ASI_MFM_Total_Cost__c":{
+                "title" : "Amount",
+                "data" : "ASI_MFM_Total_Cost__c",
+                "tabIndex" : 6,
+                "width": '5%',
+                "render" : 
+                    function(data, type, row) {
+                        var fieldAPIName = 'ASI_MFM_Total_Cost__c';
+                        data = data || '';
+                        console.log('ASI_MFM_Total_Cost__c ' + data)
+                        if(READ_ONLY) return "<span class='alignRight'> "+data+"</span>";
+                        return "<input class='" + fieldAPIName + " decimalField inputField_long form-control alignRight requiredField' min='0' type='number' step='.01' value=\"" + data + "\" onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value)' style='width:95px;' required/>";
+                    }
+            }, 
+            "ASI_MFM_Generate_PO__c" : {
+                "title" : "PO",
+                "data" : "",
+                "tabIndex" : 7,
+                "render" : 
+                    function(data, type, row) {
+                                var fieldAPIName = 'ASI_MFM_Generate_PO__c';
+                                if(row.ASI_MFM_Generate_PO__c) {
+                                    data = row.ASI_MFM_Generate_PO__c;
+                                } else {
+                                    data = "";
+                                }
+                                if(READ_ONLY) return data;
+                                return "<input class='" + fieldAPIName + " form-control' type='checkbox' " + ((data == 1 || data == 'true') ? 'checked':'') + " onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value)'/>";
+                            }
+            },
+            "ASI_MFM_T_E__c" : {
+                "title" : "T&E",
+                "data" : "",
+                "tabIndex" : 8,
+                "render" : 
+                    function(data, type, row) {
+                        var fieldAPIName = 'ASI_MFM_T_E__c';
+                        if(row.ASI_MFM_T_E__c) {
+                            data = row.ASI_MFM_T_E__c;
+                        } else {
+                            data = "";
+                        }
+                        if(READ_ONLY) return "<input type='checkbox'" + ((data == 1 || data == 'true') ? 'checked':'') + " disabled = true/>";
+                        return "<input class='" + fieldAPIName + " inputField_short form-control' type='checkbox' " + ((data == 1 || data == 'true') ? 'checked':'') + " onChange='updateTandE(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.checked)'/>";
+                    }
+            },
+            "ASI_MFM_Quotation__c" : {
+                "title" : "QUOT",
+                "data" : "",
+                "tabIndex" : 9,
+                "render" : 
+                    function(data, type, row) {
+                        if(READ_ONLY) return row.ASI_MFM_Quotation__c;
+                        var fieldAPIName = 'ASI_MFM_Quotation__c';
+                        var selectOptionTag = "<select class='selector " + fieldAPIName + " form-control' onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value);' style='width:60px;' required>"
+                        selectOptionTag += "<option value=''></option>";
+                        if (row.ASI_MFM_Quotation__c == 'Y'){
+                            selectOptionTag += "<option value='Y' selected>Y</option>";
+                        } else {
+                            selectOptionTag += "<option value='Y'>Y</option>";
+                        }
+                        if (row.ASI_MFM_Quotation__c == 'N'){
+                            selectOptionTag += "<option value='N' selected>N</option>";
+                        } else {
+                            selectOptionTag += "<option value='N'>N</option>";
+                        }
+                        selectOptionTag += "</select>";
+                        return selectOptionTag;
+                    }
+            },
+            "ASI_MFM_Quotation_Available_Date__c" : {
+                "title" : "Quotation Available Date",
+                "data" : "",
+                "tabIndex" : 10,
+                "render" : 
+                    function(data, type, row) {
+                        var fieldAPIName = 'ASI_MFM_Quotation_Available_Date__c';
+                        if(row.ASI_MFM_Quotation_Available_Date__c) {
+                            data = row.ASI_MFM_Quotation_Available_Date__c;
+                        } else {
+                            data = "";
+                        }
+                        if(READ_ONLY) return data;
+                        return "<input class='" + fieldAPIName + " inputField_long form-control' type='date' value=\"" + data + "\" onChange='updatePlanLineItemValue(this.parentNode ? this.parentNode.parentNode : null, \"" + fieldAPIName + "\", this.value)' style='width:150px;'/>";
+                    }
+            
+            },
+            "ASI_MFM_Justification__c" : {
+                "title" : "Justification",
+                "data" : "",
+                "tabIndex" : 11,
+                "render" : 
+                    function(data, type, row, meta) {
+                        var fieldAPIName = 'ASI_MFM_Justification__c';
+                        if(row.ASI_MFM_Justification__c) {
+                            data = row.ASI_MFM_Justification__c;
+                        } else {
+                            data = "";
+                        }
+                        if(READ_ONLY) return data;
+                        return "<input class='" + fieldAPIName + " inputField_x_long form-control' type='text' value=\"" + data + "\" onChange='updatePlanLineItemValue(" + meta.row + ", \"" + fieldAPIName + "\", this.value)'/>";
+                    }
+            }
+        };
+    
+        function addPlanLineItem() {
+            var newPlanLineItem = {};
+            newPlanLineItem["Id"] = NEW_LINE_PREFIX + NEW_LINE_INDEX;
+            newPlanLineItem["ASI_MFM_Plan__c"] = PLAN_ID;
+            newPlanLineItem["RecordTypeId"] = PLAN_LINE_ITEM_RECORD_TYPE_ID;
+            newPlanLineItem["ASI_MFM_Quotation__c"] = "Y";
+            
+            NEW_LINE_INDEX++;
+            
+            $("#planLineItemDataTable").DataTable().row.add(newPlanLineItem).draw();
+            $('#planLineItemDataTable').DataTable().page('last').draw('page');
+
+//            initAutoComplete();
+            //preventNegativeNumber();
+        }
+        
+        function ClonePlanLine(row){
+
+            var planLineItemData = $("#planLineItemDataTable").DataTable().row(row).data();
+            var newPlanLineItem = $.extend(true,{},planLineItemData);
+            console.log(newPlanLineItem);
+            //Overwrite the cloned value
+            newPlanLineItem["Id"] = NEW_LINE_PREFIX + NEW_LINE_INDEX;
+            newPlanLineItem["ASI_MFM_Plan__c"] = PLAN_ID;
+            newPlanLineItem["RecordTypeId"] = PLAN_LINE_ITEM_RECORD_TYPE_ID;
+            console.log(newPlanLineItem);
+            
+            NEW_LINE_INDEX++;
+            
+            $("#planLineItemDataTable").DataTable().row.add(newPlanLineItem).draw();
+            $('#planLineItemDataTable').DataTable().page('last').draw('page');
+            
+            //initAutoComplete();
+        }
+        
+        function DeletePlanLine(row){
+            var rowId = row.id;
+            //Check if the record is existing in database
+            if(!rowId.startsWith(NEW_LINE_PREFIX)) {
+                //Add to delete list
+                deletePlanLineItemIdList.push(rowId);
+            }
+            //Remove the row and redraw it
+            $("#planLineItemDataTable").DataTable().row(row).remove().draw();
+        }    
+    
+        function updatePlanLineItemValue(row, fieldName, newValue) {
+            var planLineItemData = $("#planLineItemDataTable").DataTable().row(row).data();
+            planLineItemData[fieldName] = newValue;
+            $("#planLineItemDataTable").DataTable().row(row).data(planLineItemData).draw();
+        }
+        
+        function updatePlanLineItemValueSupplier(row, fieldName, newValue) {
+            if(!row){
+                return;
+         }
+            var planLineItemData = $("#planLineItemDataTable").DataTable().row(row).data();
+            planLineItemData.ASI_MFM_Supplier_Name__c = $(row).find('.ASI_MFM_Supplier_Name__c').attr('accountid');
+            if (newValue){
+                if(!planLineItemData.ASI_MFM_Supplier_Name__r){
+                    planLineItemData.ASI_MFM_Supplier_Name__r = {};
+                }
+                planLineItemData.ASI_MFM_Supplier_Name__r.Name = newValue;
+            } else {
+                planLineItemData.ASI_MFM_Supplier_Name__c = '';
+                planLineItemData.ASI_MFM_Supplier_Name__r = {};
+            }
+            $("#planLineItemDataTable").DataTable().row(row).data(planLineItemData).draw();
+        }
+
+        function updatePlanLineItemCheckbox(row, fieldName, newCheckedValue){
+            var planLineItemData = $("#planLineItemDataTable").DataTable().row(row).data();
+            planLineItemData[fieldName] = ((newCheckedValue == true) ? 1 : 0);
+        }
+        
+        function updateTandE(row, fieldName, newCheckedValue){
+            var planLineItemData = $("#planLineItemDataTable").DataTable().row(row).data();
+            planLineItemData[fieldName] = newCheckedValue;
+            console.log(newCheckedValue);
+            if (newCheckedValue){
+                planLineItemData["ASI_MFM_Dummy_PO__c"] = true;
+                
+            }
+            $("#planLineItemDataTable").DataTable().row(row).data(planLineItemData).draw();
+        }
+    
+        /*  Any validation before Save
+                1. Required Field
+                2. (CAPEX only) Supplier is mandatory if Dummy PO is not checked
+        */
+        function validatePlanLineItem(planLineItemList) {
+            var errorMessage;
+            var haveError;
+            for(var index = 0 ; index < planLineItemList.length ; index++) {
+                
+                //If error, mark haveError = true and turn errorMessage = "" for first time
+                //Append error Message afterward
+                var requiredFieldList = [];
+                var planLineItem = planLineItemList[index];
+                
+                
+                //Pre-saving process
+                if (!planLineItem.ASI_MFM_Supplier_Name__c && planLineItem.ASI_MFM_Supplier_Name__r){
+                    planLineItem.ASI_MFM_Supplier_Name__c = planLineItem.ASI_MFM_Supplier_Name__r.Id;
+                }
+                // When save, only save things with __c not __r
+                delete planLineItem['ASI_MFM_Supplier_Name__r'];
+
+                if (!planLineItem.ASI_MFM_Quotation_Available_Date__c){
+                    delete planLineItem['ASI_MFM_Quotation_Available_Date__c'];
+                }
+                
+                if(!planLineItem.ASI_MFM_AP_Code__c) 
+                    requiredFieldList.push("AP Code");
+                if(!planLineItem.ASI_MFM_BU_Code__c)
+                    requiredFieldList.push("BU Code");
+                if(!planLineItem.ASI_MFM_List_Item_Description__c)
+                    requiredFieldList.push("List Item Description");
+                if(!planLineItem.ASI_MFM_Total_Cost__c || planLineItem.ASI_MFM_Total_Cost__c == 0)
+                    requiredFieldList.push("Plan Line Amount");
+                if ((ISCAPEX) && (!planLineItem.ASI_MFM_Supplier_Name__c) && (!planLineItem.ASI_MFM_Dummy_PO__c) && (!planLineItem.ASI_MFM_T_E__c))
+                    requiredFieldList.push("Supplier Name");
+                if(planLineItem.ASI_MFM_T_E__c && !planLineItem.ASI_MFM_Dummy_PO__c)
+                {
+                    requiredFieldList.push("Dummy PO");
+                }
+                
+                console.log(requiredFieldList);
+                console.log("errorMessage before: " + errorMessage);
+                if(requiredFieldList.length != 0) {
+                    if(!errorMessage) errorMessage = "";
+                    errorMessage += "Line " + (index + 1) + " missing required field [";
+                    errorMessage += requiredFieldList.join(', ');
+                    errorMessage += "]<br />";
+                } 
+            }
+            console.log("errorMessage: " + errorMessage);
+            return errorMessage;
+        }
+    
+        function saveRecord(isQuickSave) {
+
+            $(':input[class="btn saveBtn"]').prop('disabled', true);
+            $(':input[class="btn newRowBtn"]').prop('disabled', true);
+            $(':input[class="btn quickSaveBtn"]').prop('disabled', true);
+            $(':input[class="btn cancelBtn"]').prop('disabled', true);
+
+
+            var upsertPlanLineItemList = [];
+            var planLineItemList = $("#planLineItemDataTable").DataTable().rows().data();            
+            var errorMessage = validatePlanLineItem(planLineItemList.data());
+            
+            
+            if(errorMessage) {
+                console.log(errorMessage);
+                $("#warningPanel").show();
+                $("#warningMessage").html(errorMessage);
+
+                $(':input[class="btn saveBtn"]').prop('disabled', false);
+                $(':input[class="btn newRowBtn"]').prop('disabled', false);
+                $(':input[class="btn quickSaveBtn"]').prop('disabled', false);
+                $(':input[class="btn cancelBtn"]').prop('disabled', false);
+            } else {
+                $("#warningPanel").hide();
+                planLineItemList.rows().every(function(line){
+                    var lineItem = this.data();
+                    var clonedPlanLineItem = jQuery.extend({}, lineItem);
+                    if(clonedPlanLineItem.Id.startsWith(NEW_LINE_PREFIX)) {
+                        delete clonedPlanLineItem["Id"];
+                    }
+                    upsertPlanLineItemList.push(clonedPlanLineItem);
+                })
+                $("body").addClass("savingRecord");
+                savePlanLineItem(isQuickSave, JSON.stringify(upsertPlanLineItemList), JSON.stringify(deletePlanLineItemIdList));
+            }
+        }
+    
+        function setTable(planLineItemJSON, viewMode) {
+            var dataTableProperties = CONST_DATA_TABLE_PROPERTIES;
+            //Convert so detail list JSON to Object format
+            console.log('Data From Apex Controller : ');
+            console.log(jQuery.parseJSON(planLineItemJSON));
+            dataTableProperties["aaData"] = jQuery.parseJSON(planLineItemJSON);
+            //Set data table row id = detail id
+            dataTableProperties["rowId"] = "Id";
+
+            //Set the data table columns
+            var columns = [];
+            console.log(viewMode);
+            if(viewMode == 'DRAFT') {
+                columns.push(FIELD_CONFIG_MAPPING.CLONE);
+                columns.push(FIELD_CONFIG_MAPPING.DELETE);
+            }
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_AP_Code__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_BU_Code__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_List_Item_Description__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Total_Cost__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_T_E__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Dummy_PO__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Supplier_Name__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Quotation__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Quotation_Available_Date__c);
+            columns.push(FIELD_CONFIG_MAPPING.ASI_MFM_Justification__c);
+            
+            
+            dataTableProperties["aoColumns"] = columns;
+            
+            $("#planLineItemDataTable").DataTable(dataTableProperties);
+            
+//          $('input').trigger('change');
+        }
+
+        function searchSupplier(rowIndex){
+            RetrieveSupplier($('#supplier-input-'+rowIndex).val());
+            $('#supplier-input-'+rowIndex).focus();
+        }
+        
+        function initAutoComplete() {
+            console.log('initAutoComplete!!');
+            $(".ASI_MFM_Supplier_Name__c").autocomplete({
+                source    : function( request, response ) {
+
+                    var whereClause = '';
+                    if (request.term){
+                        whereClause = ' WHERE RecordType.DeveloperName = \'ASI_MFM_HK_Supplier\' AND Name like \'%'+request.term+'%\' ';
+                    }
+                    var statement = 'Id,Name';
+                    console.log('going to Visualforce.remoting')
+                    console.log(request.term)
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{!$RemoteAction.ASI_MFM_CAP_InputPlanLineManageAllExt.retrieveSupplierList}', statement, whereClause, 15
+                        , function(result, event){
+                            if(!result){
+                                return;
+                            }
+
+                            var resultForAutoComplete = result.map(function(res){
+                                return {
+                                    label: htmlEncode(res.Name),
+                                    value:  htmlEncode(res.Id)
+                                };
+                            })
+                            response(resultForAutoComplete)
+                        }
+                        , {escape: true}
+                    );
+
+                },
+                minLength : 1,
+                search  : function(){
+                    $(this).addClass('working');
+                },
+                response: function(event, ui) {
+                    $(this).removeClass('working');
+                    if (!ui.content || ui.content.length === 0) {
+                        console.log("No result found");
+                    }
+                },
+                change: function(event, ui) {
+                    if (!ui.item && typeof ui.item !== 'undefined') {
+                        console.log('remove  ' + this.value);
+                        this.value = '';
+                    }
+                },
+                focus: function(event, ui) {
+                    $(this).val(ui.item.label);
+                    event.preventDefault();
+                },
+                select: function(event, ui) {
+                    $(this).val(ui.item.label);
+                    $(this).attr("AccountId",ui.item.value);
+                    $(this).attr("DisplayName",ui.item.label);
+                    //if (event.keyCode == 13) {
+                        event.preventDefault();
+                    //}
+                }
+            }).focus(function() {
+                $(this).autocomplete("search", $(this).val());
+            });
+
+            $(".fullScreenLoading").hide();
+        }
+        
+        function RetrieveSupplier(namePhrase){
+            //setTimeout(function(){ $(".fullScreenLoading").show();}, 3000);
+            //$(".fullScreenLoading").show();
+            var whereClause = '';
+            if (namePhrase){
+                whereClause = ' WHERE RecordType.DeveloperName = \'ASI_MFM_HK_Supplier\' AND Name like \'%'+namePhrase+'%\' '; 
+            } 
+            var statement = 'Id,Name';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CAP_InputPlanLineManageAllExt.retrieveSupplierList}', statement, whereClause, 15 
+                , CallBackSupplier
+                , {escape: true}
+            );
+        }
+        
+            
+        function CallBackSupplier(result, event){
+            console.log('CallBackSupplier');
+            if (event.status) {
+                if (result) {
+                    supplierList=[];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        var supplier = new Object();
+                        
+                        supplier.label =  htmlEncode(result[i]["Name"]);
+                        supplier.value =  htmlEncode(result[i]["Id"]);
+                        supplierList.push(supplier);
+                        
+                   }
+                   initAutoComplete();
+                }
+            }
+            
+        }
+    
+        function htmlEncode( input ) {
+            var e = document.createElement('div');
+            e.innerHTML = input;
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        };
+        
+        function saveRecordComplete(planLineItemJSON) {
+            $("body").removeClass("savingRecord");
+            setTable(planLineItemJSON, '{!viewMode}');
+            $(':input[class="btn saveBtn"]').prop('disabled', false);
+            $(':input[class="btn newRowBtn"]').prop('disabled', false);
+            $(':input[class="btn quickSaveBtn"]').prop('disabled', false);
+            $(':input[class="btn cancelBtn"]').prop('disabled', false);
+        }
+        
+        $(document).ready(
+            function() {
+                setTable('{!JSENCODE(planLineItemJSON)}', '{!viewMode}');
+                
+                RetrieveSupplier('');
+                initAutoComplete();
+                //preventNegativeNumber();
+                //$('#planLineItemDataTable').DataTable();
+                //if(READ_ONLY) $('.btn').hide(); 
+            }
+        );
+        
+    </script>
+    <body>
+        <apex:form id="planLineItemForm">
+            <apex:actionFunction name="savePlanLineItem" action="{!savePlanLineItem}" reRender="errorMsg" 
+                                 onComplete="saveRecordComplete('{!JSENCODE(planLineItemJSON)}');">
+                <apex:param name="isQuickSave" value="" />
+                <apex:param name="upsertPlanLineItemListJson" value="" />
+                <apex:param name="deletePlanLineItemIdListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="cancel" action="{!cancel}"/>
+            <apex:pageBlock >
+                <apex:pagemessages id="errorMsg"/>
+            </apex:pageBlock>
+        </apex:form>
+        <apex:pageBlock >
+            
+            <apex:panelGrid columns="1" width="100%">         
+            <apex:pageBlockSection title="Plan Details">
+                <apex:outputField value="{!plan.ASI_MFM_Plan_Name__c}"/> 
+                <apex:outputField value="{!plan.name}"/> 
+                <apex:outputField value="{!plan.ASI_MFM_Plan_Description__c}"/> 
+                <apex:outputField value="{!plan.ASI_MFM_Plan_Type__c}"/>
+                <apex:outputField value="{!plan.ASI_MFM_Status__c}"/>
+                <apex:outputField value="{!plan.ASI_MFM_Start_Date__c}"/> 
+                <apex:outputField value="{!plan.ASI_MFM_Plan_Raised_Date__c}"/>     
+                <apex:outputField value="{!plan.ASI_MFM_End_Date__c}"/> 
+                <apex:outputField value="{!plan.ASI_MFM_Plan_Amount__c}"/>                                                                           
+            </apex:pageBlockSection>
+            </apex:panelGrid>
+        </apex:pageBlock>
+
+        <div class="fullScreenLoading"></div>
+        <div id="warningPanel" class="panel panel-danger" style="display:none">
+            <div class="panel-heading">Warning!</div>
+            <div id="warningMessage" class="panel-body"></div>
+        </div>
+        <apex:pageBlock id="detail_pageBlock">
+            
+            <apex:pageblockButtons >
+                <input type="button" class="btn newRowBtn" onclick="addPlanLineItem()" value="Add Plan Line Item" style="{! if((viewMode == 'DRAFT'),'','display:none') }"/>
+                <input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="Save" style="{! if((viewMode == 'DRAFT'),'','display:none') }"/>
+                <!-- <input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="Quick Save" style="{! if((viewMode == 'DRAFT'),'','display:none') }"/> -->
+                <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel" />
+            </apex:pageblockButtons>
+            <table id="planLineItemDataTable" width="100%" />
+        </apex:pageBlock>
+    </body>
+</apex:page>

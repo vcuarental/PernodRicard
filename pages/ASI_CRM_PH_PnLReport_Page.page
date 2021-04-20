@@ -1,0 +1,661 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_PH_PnLReport_Page
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2018-11-13       Vincent Lam             Created
+-->
+<apex:page controller="ASI_CRM_PH_PnLReport_PageCtrl" applyBodyTag="false">
+<head>
+<title>Contract Comparison Page</title>
+</head>
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/multiple-select.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/multiple-select.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    
+    <!-- Style -->
+    <style>
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        
+        .bold {
+            font-weight: bold;
+        }
+        
+        
+    </style>
+
+    <script>
+        /*****************
+        VF Page Config
+        *****************/
+        const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : true,
+            "aLengthMenu":[10,25,50],
+            "iDisplayLength":10,
+            "bSort" : false,
+            "bPaginate": true,
+            "bScrollCollapse": true,
+            "bJQueryUI": false
+        };
+        
+        const CUSTOMERID = '{!customerId}';
+        
+        const STYLE_TITLE_FOR_EXCEL_HEADER = 'width:300px; height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-left:20px; background-color:#EFEDEC;';
+        const STYLE_TITLE_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-right:20px; text-align:right; background-color:#EFEDEC; padding-left:20px;';
+        const STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-left:20px; background-color:#EFEDEC;';
+        const STYLE_TITLE_FOR_EXCEL_CONTENT_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-right:20px; text-align:right; background-color:#EFEDEC; padding-left:20px;';
+        const STYLE_SUBSECTION_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-left:20px; background-color:#256FBF; color:#FFFFFF;';
+        const STYLE_SUBSECTION_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-decoration:underline; padding-right:20px; text-align:right; background-color:#256FBF; color:#FFFFFF; padding-left:20px;';
+        const STYLE_SUBTITLE_FOR_EXCEL_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; padding-left:20px;';
+        const STYLE_SUBTITLE_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-align:right; padding-right:20px; padding-left:20px;';
+        const STYLE_YELLOW_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; padding-left:20px; background-color:#FBFF9E;';
+        const STYLE_YELLOW_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; font-weight:bold; text-align:right; padding-right:20px; padding-left:20px; background-color:#FBFF9E;';
+        const STYLE_NORMAL_FOR_EXCEL_HEADER = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; padding-left:40px;';
+        const STYLE_NORMAL_FOR_EXCEL_DATA = 'height:18px; font-size:10pt; border-bottom:1px solid #e0e0d1;  vertical-align:middle; text-align:right; padding-right:20px; padding-left:20px;';
+        
+        const PNL_TABLE_ROW = [
+            { 'displayName': 'Projected Sales Volume (Btls)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalBottle', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Selling price per bottle net of VAT (to PWS)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'listPrice', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Gross Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'grossSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            //{ 'displayName': 'A&D FOC (JDE)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'AnDFOC', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Purchase Incentive', 'headerStyleClass': 'dataTableItemHeader', 'data': 'purchaseIncentive', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Bottle Rebate', 'headerStyleClass': 'dataTableItemHeader', 'data': 'bottleRebate', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Staff Incentive', 'headerStyleClass': 'dataTableItemHeader', 'data': 'staffIncentive', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Allowance & Discount', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalAnD', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'netSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Cost of Goods Sold', 'headerStyleClass': 'dataTableItemHeader', 'data': 'COGS', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Standard Cost', 'headerStyleClass': 'dataTableItemHeader', 'data': 'standardCost', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Duties and Excise Tax', 'headerStyleClass': 'dataTableItemHeader', 'data': 'dutyAndTax', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Handling Cost', 'headerStyleClass': 'dataTableItemHeader', 'data': 'handlingCost', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Gross Margin - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'grossMarginST', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Distribution Cost', 'headerStyleClass': 'dataTableItemHeader', 'data': 'distributionCost', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution Margin - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'contributionMarginST', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Activation Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'activationFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'MFM FOC', 'headerStyleClass': 'dataTableItemHeader', 'data': 'mfmFOC', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contract Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'contractFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Merchandise', 'headerStyleClass': 'dataTableItemHeader', 'data': 'merchandise', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Marketing Support Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'marketingSupportFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total A&P', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalAnP', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'CAAP - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'caapST', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': '', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': '', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Gross Margin - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'grossMarginLocal', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution Margin - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'contributionMarginLocal', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'CAAP - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'caapLocal', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Avg CM per bottle', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'averageCMperBottle', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Fixed Costs', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalFixedCost', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Units to Breakeven', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalUnitsToBreakeven', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Product Mix Ratio', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'productMixRatio', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+            { 'displayName': 'Ideal Mix of Products', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'idealMix', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Ideal Gross Sales', 'headerStyleClass': 'dataTableItemHeader', 'data': 'idealGrossSales', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            
+        
+        ]
+
+        const SUMMARY_TABLE_ROW = [
+            { 'displayName': 'Purchase Incentive', 'headerStyleClass': 'dataTableItemHeader', 'data': 'purchaseIncentive', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Bottle Rebate', 'headerStyleClass': 'dataTableItemHeader', 'data': 'bottleRebate', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Staff Incentive', 'headerStyleClass': 'dataTableItemHeader', 'data': 'staffIncentive', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Activation Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'activationFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contract Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'contractFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Merchandise', 'headerStyleClass': 'dataTableItemHeader', 'data': 'merchandise', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Marketing Support Fund', 'headerStyleClass': 'dataTableItemHeader', 'data': 'marketingSupportFund', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'totalInvestment', 'dataStyle': STYLE_YELLOW_DATA, 'headerStyle': STYLE_YELLOW_HEADER, 'appendData': '' },
+            { 'displayName': '', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': '', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution Margin - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'contributionMarginST', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Profit/(Loss) - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'profitOrLossST', 'dataStyle': STYLE_YELLOW_DATA, 'headerStyle': STYLE_YELLOW_HEADER, 'appendData': '' },
+            { 'displayName': 'Investment % over CM - ST', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'investmentPercentOverCMST', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+            { 'displayName': '', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': '', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution Margin - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'contributionMarginLocal', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Profit/(Loss) - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'profitOrLossLocal', 'dataStyle': STYLE_YELLOW_DATA, 'headerStyle': STYLE_YELLOW_HEADER, 'appendData': '' },
+            { 'displayName': 'Investment % over CM - Local', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'investmentPercentOverCMLocal', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+            
+        
+            /*
+            { 'displayName': 'Sales Values', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'SalesValue', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Early Payment Discount', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A01', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Free Goods', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A02', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Free Goods (Sales Bulk Purchase)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A03', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'On Invoice Discount', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A04', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Annual Rebate', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A05', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Sales Incentives to Outlet Staff', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A06', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Volume Rebates / Incentives', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A07', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Volume Rebates / Incentives (KA)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A08', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Volume Rebates / Incentives (Fixed)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A09', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Annual Rebate (Fixed)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A17', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Exclusivity Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A10', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            //{ 'displayName': 'Free Goods STK4', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A11', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Incentive Trip', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A12', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Unknown', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A13', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Listing Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A14', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Pouring Fee', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A15', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Other Sales Reduction', 'headerStyleClass': 'dataTableItemHeader', 'data': 'A16', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Display Rental', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B01', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Investment before Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentBeforeNetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'NetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            //{ 'displayName': 'Costs', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'Cost', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution Margin (CM)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'CM', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Event Promotion', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B02', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Free Goods Non-Sales (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B04', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Trade Support (Others)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B05', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Other Fixed Investments', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B06', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Promoter Cost', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B07', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Trade Support (Free Goods Non-Sales)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B03', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Decoration Fee (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B08', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Event Promotion (Trade Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B09', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Event Promotion (Community Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B10', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Outdoor Advertising (Community Marketing)', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B11', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Other Trade Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B14', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Other Media Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B12', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Other Consumer A&P Expenses', 'headerStyleClass': 'dataTableItemHeader', 'data': 'B13', 'dataStyle': STYLE_NORMAL_FOR_EXCEL_DATA, 'headerStyle': STYLE_NORMAL_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Investment after Net Sales', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentAfterNetSales', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Contribution After A&P (CAAP)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'CAAP', 'dataStyle': STYLE_CAAP_DATA, 'headerStyle': STYLE_CAAP_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Total Investment % of Sales Values', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'TotalInvestmentPercentOfSalesValues', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+            { 'displayName': 'ROI % (CAAP / Total Investment)', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'ROIPercent', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '%' },
+            { 'displayName': 'Variable Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'VariableInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            { 'displayName': 'Fixed Investment', 'headerStyleClass': 'dataTableItemHeaderWithBold', 'data': 'FixedInvestment', 'dataStyle': STYLE_SUBTITLE_FOR_EXCEL_DATA, 'headerStyle': STYLE_SUBTITLE_FOR_EXCEL_HEADER, 'appendData': '' },
+            */
+        ]
+
+        /*****************
+        Vertical Datatable Field Config
+        *****************/
+        //Header
+        const TABLE_HEADER                   = {"title"           : "P&amp;L Report",
+                                                "data"            : ["sectionName"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_CODE          = {"title"           : "SKU Code",
+                                                "data"            : ["skuCode"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SUBBRAND_CODE     = {"title"           : "Sub-brand",
+                                                "data"            : ["subBrandDescription"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_DESC          = {"title"           : "Products",
+                                                "data"            : ["skuDescription"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_PACK          = {"title"           : "Pack",
+                                                "data"            : ["packagingSize"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_SIZE          = {"title"           : "Size (cl)",
+                                                "data"            : ["bottleSize"],
+                                                "defaultContent"  : [""],
+                                                "colspan"         : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_ROW_SUMMARY              = {"title"           : "Summary",
+                                                "subtitle"        : ["Contracted","Actual"],
+                                                "numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_SUBSECTION_HEADER,
+                                                "dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        
+        const TABLE_ROW_DETAILPNL            = {"title"           : "Details",
+                                                "subtitle"        : ["Contracted","Actual"],
+                                                "numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_SUBSECTION_HEADER,
+                                                "dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        const TABLE_ROW_BLANK                = {"title"           : " ",
+                                                "subtitle"        : [" "," "],
+                                                "numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_NORMAL_FOR_EXCEL_HEADER,
+                                                "dataStyle"       : STYLE_NORMAL_FOR_EXCEL_DATA
+                                               };
+        
+        const TABLE_ROW_SUMMARY_SINGLE       = {"title"           : "Summary",
+                                                "subtitle"        : ["Amt"],
+                                                //"numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_SUBSECTION_HEADER,
+                                                "dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        const TABLE_HEADER_SINGLE            = {"title"           : "P&amp;L Report",
+                                                "data"            : ["sectionName"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_CODE_SINGLE   = {"title"           : "SKU Code",
+                                                "data"            : ["skuCode"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SUBBRAND_CODE_SINGLE = {"title"           : "Sub-brand",
+                                                "data"            : ["subBrandDescription"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_DESC_SINGLE   = {"title"           : "Products",
+                                                "data"            : ["skuDescription"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_PACK_SINGLE   = {"title"           : "Pack",
+                                                "data"            : ["packagingSize"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_HEADER_SKU_SIZE_SINGLE   = {"title"           : "Size (cl)",
+                                                "data"            : ["bottleSize"],
+                                                "defaultContent"  : [""],
+                                                //"colspan"           : [2],
+                                                "headerStyle"     : STYLE_TITLE_FOR_EXCEL_CONTENT_HEADER,
+                                                "dataStyle"       : STYLE_TITLE_FOR_EXCEL_CONTENT_DATA
+                                               };
+        
+        const TABLE_ROW_DETAILPNL_SINGLE     = {"title"           : "Details",
+                                                "subtitle"        : ["Amt"],
+                                                //"numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_SUBSECTION_HEADER,
+                                                "dataStyle"       : STYLE_SUBSECTION_DATA
+                                               };
+        const TABLE_ROW_BLANK_SINGLE         = {"title"           : " ",
+                                                "subtitle"        : [" "],
+                                                //"numberOfRows"    : 2,
+                                                "headerStyle"     : STYLE_NORMAL_FOR_EXCEL_HEADER,
+                                                "dataStyle"       : STYLE_NORMAL_FOR_EXCEL_DATA
+                                               };
+        
+        var baseContractId;
+        var selectedContractIdList = [];
+        var toPDF = false;
+        
+        //Base Contract Object For Calculate the diff
+        var detailPnL_json = jQuery.parseJSON('{!JSENCODE(list_wrapper_detailPnL_json)}');
+        var summary_json = jQuery.parseJSON('{!JSENCODE(list_wrapper_summary_json)}');
+        
+        /****************
+        Define Page Standard Function
+        ****************/                          
+        $(document).ready(
+        function() {
+            if(CUSTOMERID == ''){
+                setSummary_contracted(summary_json);
+                setDetailPnL_contracted(detailPnL_json);
+            
+            } else {
+                setDatepicker();
+                setSummary_actual(summary_json);
+                setDetailPnL_actual(detailPnL_json);
+            }
+            
+        }
+       );
+
+        //Set Contract Comparsion Result Table
+        function setDetailPnL_contracted(list_detailPnL) {
+            
+            
+            //Set the Contract Comparsion Result Table Config
+            var verticalDataTableProperties = {};
+            verticalDataTableProperties["data"] = list_detailPnL;
+            console.log(list_detailPnL);
+           
+            //Set column
+            var column = [];
+            column.push(TABLE_HEADER);
+            column.push(TABLE_HEADER_SKU_CODE);
+			column.push(TABLE_HEADER_SUBBRAND_CODE);
+            column.push(TABLE_HEADER_SKU_DESC);
+            column.push(TABLE_HEADER_SKU_PACK);
+            column.push(TABLE_HEADER_SKU_SIZE);
+            column.push(TABLE_ROW_BLANK);
+            column.push(TABLE_ROW_DETAILPNL);
+            $.each(PNL_TABLE_ROW, function(index, value){
+                column.push(buildColumnType(value.displayName, value.data, value.headerStyleClass, value.headerStyle, value.dataStyle, value.appendData));
+            })
+            
+            verticalDataTableProperties["columns"] = column;
+            
+            $("#detailPnLTable").verticalDatatTable(verticalDataTableProperties);
+        }
+        
+        //Set Contract Comparsion Result Table
+        function setSummary_contracted(list_detailPnL) {
+            
+            
+            //Set the Contract Comparsion Result Table Config
+            var verticalDataTableProperties = {};
+            verticalDataTableProperties["data"] = list_detailPnL;
+            console.log(list_detailPnL);
+           
+            //Set column
+            var column = [];
+            column.push(TABLE_ROW_SUMMARY);
+            $.each(SUMMARY_TABLE_ROW, function(index, value){
+                column.push(buildColumnType(value.displayName, value.data, value.headerStyleClass, value.headerStyle, value.dataStyle, value.appendData));
+            })
+            
+            verticalDataTableProperties["columns"] = column;
+            
+            $("#summaryTable").verticalDatatTable(verticalDataTableProperties);
+        }
+        
+        function setDetailPnL_actual(list_detailPnL) {
+            
+            
+            //Set the Contract Comparsion Result Table Config
+            var verticalDataTableProperties = {};
+            verticalDataTableProperties["data"] = list_detailPnL;
+            console.log(list_detailPnL);
+           
+            //Set column
+            var column = [];
+            column.push(TABLE_HEADER_SINGLE);
+            column.push(TABLE_HEADER_SKU_CODE_SINGLE);
+			column.push(TABLE_HEADER_SUBBRAND_CODE_SINGLE);
+            column.push(TABLE_HEADER_SKU_DESC_SINGLE);
+            column.push(TABLE_HEADER_SKU_PACK_SINGLE);
+            column.push(TABLE_HEADER_SKU_SIZE_SINGLE);
+            column.push(TABLE_ROW_BLANK_SINGLE);
+            column.push(TABLE_ROW_DETAILPNL_SINGLE);
+            $.each(PNL_TABLE_ROW, function(index, value){
+                column.push(buildColumnTypeSingle(value.displayName, value.data, value.headerStyleClass, value.headerStyle, value.dataStyle, value.appendData));
+            })
+            
+            verticalDataTableProperties["columns"] = column;
+            
+            $("#detailPnLTable").verticalDatatTable(verticalDataTableProperties);
+        }
+        function setSummary_actual(list_detailPnL) {
+            
+            
+            //Set the Contract Comparsion Result Table Config
+            var verticalDataTableProperties = {};
+            verticalDataTableProperties["data"] = list_detailPnL;
+            console.log(list_detailPnL);
+           
+            //Set column
+            var column = [];
+            column.push(TABLE_ROW_SUMMARY_SINGLE);
+            $.each(SUMMARY_TABLE_ROW, function(index, value){
+                column.push(buildColumnTypeSingle(value.displayName, value.data, value.headerStyleClass, value.headerStyle, value.dataStyle, value.appendData));
+            })
+            
+            verticalDataTableProperties["columns"] = column;
+            
+            $("#summaryTable").verticalDatatTable(verticalDataTableProperties);
+        }
+        
+        function buildColumnType(displayName, storageName, headerStyleClass, headerStyle, dataStyle, appendData){
+            return {"title"            : displayName,
+                    "headerStyleClass" : headerStyleClass,
+                    "headerStyle"      : headerStyle, 
+                    "dataStyleClass"   : "numberTableColumn", 
+                    "dataStyle"        : dataStyle, 
+                    "data"             : [storageName,""],
+                    "defaultContent"   : ["0","0"],
+                    "numberOfRows"     : 2,
+                    "render"           : [function(data, type, full) {
+                                            var dataValue = data;
+                                            if (!dataValue) return '';
+                                            var diff = '<span> ';
+                                            if(dataValue < 0){
+                                                diff += ' (' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + ')';
+                                            } else {
+                                                diff += ' ' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + '';
+                                            }
+                                            diff += '</span>';
+                                            return diff;
+                                          },
+                                          function(data, type, full) {
+                                            var dataValue = full.actual[storageName];
+                                            if (!dataValue) return '';
+                                            var diff = '<span> ';
+                                            if(dataValue < 0){
+                                                diff += ' (' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + ')';
+                                            } else {
+                                                diff += ' ' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + '';
+                                            }
+                                            diff += '</span>';
+                                            return diff;
+                                          }
+                                         ]
+                   };
+        }
+        
+        function buildColumnTypeSingle(displayName, storageName, headerStyleClass, headerStyle, dataStyle, appendData){
+            return {"title"            : displayName,
+                    "headerStyleClass" : headerStyleClass,
+                    "headerStyle"      : headerStyle, 
+                    "dataStyleClass"   : "numberTableColumn", 
+                    "dataStyle"        : dataStyle, 
+                    "data"             : [storageName],
+                    "defaultContent"   : ["0"],
+                    "render"           : [function(data, type, full) {
+                                            var dataValue = data;
+                                            if (!dataValue) return '';
+                                            var diff = '<span> ';
+                                            if(dataValue < 0){
+                                                diff += ' (' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + ')';
+                                            } else {
+                                                diff += ' ' + Math.abs(dataValue).toLocaleString('en-US', {minimumFractionDigits: 0}) + appendData + '';
+                                            }
+                                            diff += '</span>';
+                                            return diff;
+                                          }
+                                         ]
+                   };
+        }
+
+        function setDatepicker(){
+            $("#inputStartDate").datepicker({
+                dateFormat: "yy-mm-dd",
+                onSelect: function () {
+                    var dt2 = $('#inputEndDate');
+                    var startDate = $(this).datepicker('getDate');
+                    var minDate = $(this).datepicker('getDate');
+                    //first day which can be selected in dt2 is selected date in dt1
+                    dt2.datepicker('option', 'minDate', minDate);
+                }
+            });
+            $('#inputEndDate').datepicker({
+                dateFormat: "yy-mm-dd",
+                minDate: $("#inputStartDate").datepicker('getDate'),
+                onSelect: function () {
+                    var dt2 = $('#inputStartDate');
+                    var startDate = $(this).datepicker('getDate');
+                    var maxDate = $(this).datepicker('getDate');
+                    //first day which can be selected in dt2 is selected date in dt1
+                    dt2.datepicker('option', 'maxDate', maxDate);
+                }
+            });
+        }
+
+        const SEARCH_ERROR = 'Please input From and To Date before search';
+        
+        function searchJS() {
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+            
+            $("#detailPnLTable").empty();
+            $("#summaryTable").empty();
+            
+            var statusList = [];
+            var startDate = $("#inputStartDate").val();
+            var endDate = $("#inputEndDate").val();
+            
+            if(startDate!='' && endDate!='') {
+                //Show loading gif
+                $("body").addClass("savingRecord");
+                searchContract(startDate, endDate);
+            } else {
+                var errorMessage = SEARCH_ERROR;
+
+                //Display the error message
+                   $('.errorMessage').html(errorMessage);
+                $('.saveErrorPanel').css("display","block");
+            }
+        }
+        
+        function searchComplete(detailPnL_json, summary_json){
+            $('body').removeClass('savingRecord');
+            setSummary_actual(summary_json);
+            setDetailPnL_actual(detailPnL_json);
+        }
+        
+    </script>
+
+    <body>
+        <!-- Call init attribute to init the page -->
+        <apex:form >
+            <apex:actionFunction name="searchContract" action="{!getPnLFromVF}" reRender="pageMsg" onComplete="searchComplete(jQuery.parseJSON('{!JSENCODE(list_wrapper_detailPnL_json)}'),jQuery.parseJSON('{!JSENCODE(list_wrapper_summary_json)}'))">
+                <apex:param name="startDate" value="" />
+                <apex:param name="endDate" value="" />
+            </apex:actionFunction>
+        </apex:form>
+        
+        <div class="fullScreenLoading"></div>
+        <div class="saveErrorPanel alert alert-danger" style="display: none;">
+            <strong>Error</strong> 
+            <br />
+            <p class="errorMessage"></p>
+        </div>
+        
+        <div id="basicInformation">
+            <div class="panel panel-primary">
+                <div class="panel-heading">Basic Information</div>
+                <table class="table">
+                    <colgroup>
+                        <col style="width:10%" />
+                        <col style="width:15%" />
+                        <col style="width:10%" />
+                        <col style="width:15%" />
+                        <col style="width:10%" />
+                        <col style="width:15%" />
+                        <col style="width:10%" />
+                        <col style="width:15%" />
+                    </colgroup>
+                    <tbody>
+                        <tr>
+                            <td class="bold">Customer Name</td>
+                            <td class="">{!customerName}</td>
+                            <td class="bold">Main Sector</td>
+                            <td class="">{!customerMainSector}</td>
+                            <td class="bold">Channel</td>
+                            <td class="">{!customerChannel}</td>
+                            <td class="bold">Local Channel</td>
+                            <td class="">{!customerLocalChannel}</td>
+                        </tr>
+                        <tr style="{! IF(customerId!=null, 'display:none;','')}">
+                            <td class="bold">Contract Period</td>
+                            <td class="">{!contractPeriod}</td>
+                            <td class="bold"></td>
+                            <td class=""></td>
+                            <td class="bold"></td>
+                            <td class=""></td>
+                            <td class="bold"></td>
+                            <td class=""></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div style="{! IF(customerId=null, 'display:none;','')}">
+            <label for="inputStartDate">From</label>
+            <input type="text" id="inputStartDate" value="{!inputStartDate}"/>
+            <label for="inputEndDate">To</label>
+            <input type="text" id="inputEndDate"  value="{!inputEndDate}"/>
+            <input type="button" class="btn newRowBtn" onClick="searchJS()" value="Search" id="searchButton" />
+        </div>
+        
+        <br/>
+
+        <ul class="nav nav-tabs" role="tablist">
+            <li role="presentation" class="active">
+                <a href="#tab1" aria-controls="tab1" role="tab" data-toggle="tab">Summary</a>
+            </li>
+            <li role="presentation">
+                <a href="#tab2" aria-controls="tab2" role="tab" data-toggle="tab">P&amp;L</a>
+            </li>
+        </ul>
+        <div class="tab-content">
+            <div role="tabpanel" class="tab-pane active" id="tab1">
+                <br/>
+                <table id="summaryTable" />
+            </div>
+            <div role="tabpanel" class="tab-pane" id="tab2">
+                <br/>
+                <table id="detailPnLTable" />
+            </div>
+        </div>
+        
+    </body>
+  
+</apex:page>

@@ -1,0 +1,286 @@
+<apex:page standardController="EUR_CRM_PRS_Segmentation__c" extensions="EUR_CRM_PRSegmentationPageController" showChat="false" standardStylesheets="true" cache="false" showHeader="true" sidebar="true">
+	<head>
+		<style type="text/css">
+
+			.emphasizeText{
+			    font-weight:bold;
+			    font-size: 13px;
+			    line-height:17px
+			}
+
+			.matrixTable {
+				width: 100%;
+				padding: 5px 5px;
+				align: center;
+				float: center;
+				font-color: #cccccc;
+				font-weight: bold;
+				font-size: 12px;
+				text-align: center;
+				vertical-align: middle !important;
+			}
+
+			.matrixTable td {
+				width: 15%;
+				vertical-align: middle !important;
+			}
+
+			.matrixTable tr:nth-child(even) {
+				background: #EBF5F4;
+			}
+
+			.matrixTable tr:nth-child(odd) {
+				background: #CEECF5;
+			}
+
+		</style>
+	</head>
+
+	<apex:actionStatus id="idStatus">
+	    <apex:facet name="start">
+	        <c:EUR_CRM_LoadingStatus BackColor="#ffffff"
+	                                borderColor="#6B6B6B"
+	                                borderSize="1"
+	                                height="50px"
+	                                width="150px"
+	                                margintop="-25px"
+	                                marginleft="-60px"
+	                                ImageUrl="{!$Resource.loadingStatus}"
+	                                Message=" Processing ..."/>
+	    </apex:facet>
+	</apex:actionStatus>
+
+	<apex:form >
+	   	<apex:pageMessages id="idMessages" escape="false" />
+	    <apex:outputPanel rendered="{!IF(prSegmentationId==null, false, true)}">
+
+		    <!-- PROFS Layout -->
+		    <apex:pageBlock rendered="{!isPROFS}">
+		    	<!-- Page Buttons  -->
+			    <apex:pageBlockButtons >
+					<div id="blockButtons">
+						<apex:commandButton action="{!gotoGroupOutletTypeSheet}" value="{!$Label.EUR_CRM_PRS_Set_Group_Outlet_Type}" status="idStatus" disabled="{!isGroupDisabled}" rendered="{!hasEditAccess}"/>
+						<apex:commandButton action="{!gotoBBPSheet}" value="{!$Label.EUR_CRM_PRS_Set_Brand_Building_Potential}" status="idStatus"  disabled="{!is_BBP_ButtonDisabled}" rendered="{!hasEditAccess}"/>
+						<apex:commandButton action="{!gotoBPSheet}" value="{!$Label.EUR_CRM_PRS_Set_Business_Potential}" status="idStatus" disabled="{!is_BP_ButtonDisabled}" rendered="{!hasEditAccess}"/>
+					</div>
+			 	</apex:pageBlockButtons>
+
+                <!--Warning Message If Question Has Changed-->
+                <apex:outputPanel styleClass="warnMsgPanel" rendered="{!IF(OR(EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_BBP_Modified__c, EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Business_Potential_Modified__c),true,false)}">
+                    <div style="display:inline-block; width:100%; float:center; align:center;">
+                    <table class="warnMsg" style="margin-left: auto;margin-right:auto;">
+                        <tr><td rowspan="2"><apex:image url="{!URLFOR($Resource.EUR_CRM_Icons,'warningIcon.png')}"/></td>
+                        <td><apex:outputText value="{!$Label.EUR_CRM_Brand_Building_Potential_Modified_Msg}" rendered="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_BBP_Modified__c}"/></td>
+                        </tr>
+                        <tr><td><apex:outputText value="{!$Label.EUR_CRM_Business_Potential_Modified_Msg}" rendered="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Business_Potential_Modified__c}"/></td>
+                        </tr>
+                    </table>
+                    </div>
+        		</apex:outputPanel>
+
+			 	<!-- Account and PR Segmentation Information  -->
+			 	<apex:pageBlockSection columns="1">
+			        <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.Name}"/>
+			        <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Account__c}"/>
+		        </apex:pageBlockSection>
+		        <!-- Group Outlet and Outlet Information  -->
+                <apex:pageBlockSection title="{!$Label.EUR_CRM_GroupOutlet_OutletType_Title}" columns="1">
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__c}"/>
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__r.EUR_CRM_Group_Outlet_Type_Name__c}"/>
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__c}"/>
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__r.EUR_CRM_PRS_Outlet_Type_Name__c}"/>
+					<apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Priority_Level_Criteria__c}"/>
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Priority_Level_Criteria__r.EUR_CRM_Priority_Level__c}"/>
+		        </apex:pageBlockSection>
+
+		        <!-- Results Matrix Section  -->
+		        <apex:pageBlockSection title="{!$Label.EUR_CRM_ImageLevel_VolPotential_Title}" columns="1" id="BPandBBPSection"
+		        						rendered="{!IF(
+		        										(
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__c != null 	&&
+														(EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__c != null || !isOutletTypeVisible)	&&
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_Brand_Building_Potential__c != null	&&
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_Business_Potential__c != null
+		        										)
+		        										,true, false
+		        									  )
+													}">
+			        <!-- The Matrix  -->
+			        <apex:outputPanel >
+			           	<div style="margin-left:auto;margin-right:auto;width:80%;">
+			               	<table class="matrixTable" style="text-align: center; align: center; padding: 5px 5px;">
+			               		<tr>
+				               		<td style="height:20px" rowspan="{!noOfRow + 2}"> {!$Label.EUR_CRM_PRS_Brand_Building_Potential_in_PR_Segmentation_Matrix}</td>
+				               		<td style="height:50px" colspan="{!noOfCol + 1}" rowspan="1"> {!$Label.EUR_CRM_PRS_Business_Potential_in_PR_Segmentation_Matrix}</td>
+			               		</tr>
+				                <tr>
+					                <td style="height:20px"></td>
+					                <apex:repeat value="{!businessPotentialLabels}" var="BP">
+					                    <td style="height:20px">{!BP}</td>
+					                </apex:repeat>
+				                </tr>
+				                <apex:repeat value="{!brandBuildingPotentialLabels}" var="BBP">
+				                	<tr>
+				                    	<td style="height:20px">{!BBP}</td>
+				                    	<!-- loop to create a proper number of columns according to the number of volume potentials  -->
+				                    	<apex:repeat value="{!businessPotentialLabels}" var="BP1">
+				                        	<td style="height:20px">
+				                         		<c:EUR_CRM_OutputCheckbox value="{!potentialMap[BBP+BP1]}" />
+				                         	</td>
+					                    </apex:repeat>
+					                </tr>
+				                </apex:repeat>
+			            	</table>
+			            </div>
+			        </apex:outputPanel>
+
+	           		<!-- Brand Building Potential Answers  -->
+		           	<apex:outputPanel id="BBP_Panel">
+		                <span class="emphasizeText">
+		                	<apex:outputField value="{!prSegmentation.EUR_CRM_Brand_Building_Potential__r.EUR_CRM_Segmentation_BBP_Aspect_Name__c}" styleClass="emphasizeText"/>
+		                </span>
+		                <apex:pageBlockTable value="{!prsBBPUserAnswers}" var="BBPCriteria">
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Statement}" value="{!BBPCriteria.EUR_CRM_PRS_Question__r.EUR_CRM_Question_Statement__c}" style="width:50%"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Answer}" value="{!BBPCriteria.EUR_CRM_Answer__c}"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Pros_Weight}" value="{!BBPCriteria.EUR_CRM_Weight__c}" rendered="{!isProsAdmin || isAdmin}"/>
+		                </apex:pageBlockTable>
+		           	</apex:outputPanel>
+
+	           		<br/>
+
+	           		<!-- Business Potential Answers  -->
+		           	<apex:outputPanel id="BP_Panel">
+		                <span class="emphasizeText">
+		                	<apex:outputField value="{!prSegmentation.EUR_CRM_Business_Potential__r.EUR_CRM_Segmentation_BP_Aspect_Name__c}"/>
+		                </span>
+		                <apex:pageBlockTable value="{!prsBPUserAnswers}" var="BPCriteria">
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Statement}" value="{!BPCriteria.EUR_CRM_PRS_Question__r.EUR_CRM_Question_Statement__c}" style="width:50%"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Answer}" value="{!BPCriteria.EUR_CRM_Answer__c}"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Pros_Weight}" value="{!BPCriteria.EUR_CRM_Weight__c}" rendered="{!isProsAdmin || isAdmin}"/>
+		                </apex:pageBlockTable>
+		           	</apex:outputPanel>
+
+        		</apex:pageBlockSection>
+		    </apex:pageBlock>
+
+		    <!-- PROS Layout -->
+		    <apex:pageBlock rendered="{!isPROS}">
+		    	<!-- Page Buttons  -->
+			    <apex:pageBlockButtons >
+					<div id="blockButtons">
+						<apex:commandButton action="{!gotoGroupOutletTypeSheet}" value="{!$Label.EUR_CRM_PRS_Set_Group_Outlet_Type}" status="idStatus" disabled="{!isGroupDisabled}" rendered="{!hasEditAccess}"/>
+						<apex:commandButton action="{!gotoILSheet}" value="{!$Label.EUR_CRM_PRS_Set_Image_Level}" status="idStatus"  disabled="{!is_IL_ButtonDisabled}" rendered="{!hasEditAccess}"/>
+						<apex:commandButton action="{!gotoVPSheet}" value="{!$Label.EUR_CRM_PRS_Set_Volume_Potential}" status="idStatus" disabled="{!is_VP_ButtonDisabled}" rendered="{!hasEditAccess}"/>
+					</div>
+			 	</apex:pageBlockButtons>
+
+                <!--Warning Message If Question Has Changed-->
+                <apex:outputPanel styleClass="warnMsgPanel" rendered="{!IF(OR(EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Image_Level_Changed__c, EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Volume_Potential_Changed__c),true,false)}">
+                    <div style="display:inline-block; width:100%; float:center; align:center;">
+                    <table class="warnMsg" style="margin-left: auto;margin-right:auto;">
+                        <tr><td rowspan="2"><apex:image url="{!URLFOR($Resource.EUR_CRM_Icons,'warningIcon.png')}"/></td>
+                    <td><apex:outputText value="{!$Label.EUR_CRM_ImageLevelModified_Msg}" rendered="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Image_Level_Changed__c}"/></td>
+                        </tr>
+                        <tr><td><apex:outputText value="{!$Label.EUR_CRM_VolPotentialModified_Msg}" rendered="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Is_Volume_Potential_Changed__c}"/></td>
+                        </tr>
+                    </table>
+                    </div>
+        		</apex:outputPanel>
+
+        		<!--Warning Message If Yearly Reperform PRS flag is true-->
+                <apex:outputPanel styleClass="warnMsgPanel2" rendered="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Perform_Yearly_Segmentation__c}">
+                    <div style="display:inline-block; width:100%; float:center; align:center;">
+                    <table class="warnMsg" style="margin-left: auto;margin-right:auto;">
+                        <tr>
+                        	<td><apex:image url="{!URLFOR($Resource.EUR_CRM_Icons,'warningIcon.png')}"/></td>
+                        	<td><apex:outputText value="{!$Label.EUR_CRM_Perform_yearly_Segmentation}"/></td>
+                        </tr>
+                    </table>
+                    </div>
+        		</apex:outputPanel>
+
+			 	<!-- Account and PR Segmentation Information  -->
+			 	<apex:pageBlockSection columns="1">
+			        <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.Name}"/>
+			        <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_Account__c}"/>
+		        </apex:pageBlockSection>
+		        <!-- Group Outlet and Outlet Information  -->
+                <apex:pageBlockSection title="{!$Label.EUR_CRM_GroupOutlet_OutletType_Title}" columns="1">
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__c}"/>
+	                <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__r.EUR_CRM_PRS_Group_Outlet_Name__c}"/>
+                    <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__c}" rendered="{!isOutletTypeVisible}"/>
+                    <apex:outputField value="{!EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__r.EUR_CRM_PRS_Outlet_Type_Name__c}" rendered="{!isOutletTypeVisible}"/>
+		        </apex:pageBlockSection>
+
+		        <!-- Results Matrix Section  -->
+		        <apex:pageBlockSection title="{!$Label.EUR_CRM_ImageLevel_VolPotential_Title}" columns="1" id="imageVolSection"
+		        						rendered="{!IF(
+		        										(
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Group_Outlet_Type__c != null 	&&
+														(EUR_CRM_PRS_Segmentation__c.EUR_CRM_PRS_Outlet_Type__c != null || !isOutletTypeVisible)	&&
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_Image_Level__c != null				&&
+		        										EUR_CRM_PRS_Segmentation__c.EUR_CRM_Volume_Potential__c != null
+		        										)
+		        										,true, false
+		        									  )
+													}">
+			        <!-- The Matrix  -->
+			        <apex:outputPanel >
+			           	<div style="margin-left:auto;margin-right:auto;width:80%;">
+			               	<table class="matrixTable" style="text-align: center; align: center; padding: 5px 5px;">
+			               		<tr>
+				               		<td style="height:20px" rowspan="{!noOfRow + 3}"> {!$Label.EUR_CRM_PRS_Image_Level_in_PR_Segmentation_Matrix}</td>
+				               		<td style="height:50px" colspan="{!noOfRow + 2}" rowspan="1"> {!$Label.EUR_CRM_PRS_Volume_Potential_in_PR_Segmentation_Matrix}</td>
+			               		</tr>
+				                <tr>
+					                <td style="height:20px"></td>
+					                <apex:repeat value="{!volumePotentialLabels}" var="VP">
+					                    <td style="height:20px">{!VP}</td>
+					                </apex:repeat>
+				                </tr>
+				                <apex:repeat value="{!imageLevelLabels}" var="IL">
+				                	<tr>
+				                    	<td style="height:20px">{!IL}</td>
+				                    	<!-- loop to create a proper number of columns according to the number of volume potentials  -->
+				                    	<apex:repeat value="{!volumePotentialLabels}" var="VP1">
+				                        	<td style="height:20px">
+				                         		<c:EUR_CRM_OutputCheckbox value="{!potentialMap[IL+VP1]}" />
+				                         	</td>
+					                    </apex:repeat>
+					                </tr>
+				                </apex:repeat>
+			            	</table>
+			            </div>
+			        </apex:outputPanel>
+
+	           		<!-- Image Level Answers  -->
+		           	<apex:outputPanel id="IL_Panel">
+		                <span class="emphasizeText">
+		                	<apex:outputField value="{!prSegmentation.EUR_CRM_Image_Level__r.EUR_CRM_Segmentation_IL_Aspect_Name__c}" styleClass="emphasizeText"/>
+		                </span>
+		                <apex:pageBlockTable value="{!prsILUserAnswers}" var="ILCriteria">
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Statement}" value="{!ILCriteria.EUR_CRM_PRS_Question__r.EUR_CRM_Question_Statement__c}" style="width:50%"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Answer}" value="{!ILCriteria.EUR_CRM_Answer__c}"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Pros_Weight}" value="{!ILCriteria.EUR_CRM_Weight__c}" rendered="{!isProsAdmin || isAdmin}"/>
+		                </apex:pageBlockTable>
+		           	</apex:outputPanel>
+
+	           		<br/>
+
+	           		<!-- Volume Potential Answers  -->
+		           	<apex:outputPanel id="VP_Panel">
+		                <span class="emphasizeText">
+		                	<apex:outputField value="{!prSegmentation.EUR_CRM_Volume_Potential__r.EUR_CRM_Segmentation_VP_Aspect_Name__c}"/>
+		                </span>
+		                <apex:pageBlockTable value="{!prsVPUserAnswers}" var="VPCriteria">
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Statement}" value="{!VPCriteria.EUR_CRM_PRS_Question__r.EUR_CRM_Question_Statement__c}" style="width:50%"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Answer}" value="{!VPCriteria.EUR_CRM_Answer__c}"/>
+		                    <apex:column headerValue="{!$Label.EUR_CRM_Pros_Weight}" value="{!VPCriteria.EUR_CRM_Weight__c}" rendered="{!isProsAdmin || isAdmin}"/>
+		                </apex:pageBlockTable>
+		           	</apex:outputPanel>
+
+        		</apex:pageBlockSection>
+		    </apex:pageBlock>
+		</apex:outputPanel>
+	</apex:form>
+</apex:page>

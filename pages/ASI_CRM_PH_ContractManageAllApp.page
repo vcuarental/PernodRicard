@@ -1,0 +1,664 @@
+<apex:page id="contractManageAlApp" showHeader="false" sidebar="false" standardStylesheets="false" cache="false">
+
+    <apex:include pageName="ASI_CRM_PH_ContractManageAllTemplates"/>
+
+    <script id="manageContract.app.js">
+
+        (function () {
+            'use strict';
+
+            angular.module('manageContract', []);
+
+            angular.module('manageContract').run(function ($rootScope) {
+                $rootScope.READ_ONLY_MODE = DataHelper.isReadOnlyMode();
+            });
+
+            angular.module('manageContract')
+                    .constant('RecordType', {
+                        PaymentSchedule: {
+                            PurchaseIncentive: 'ASI_CRM_PH_Purchase_Incentive',
+                            ContractFundScheme: 'ASI_CRM_PH_Contract_Fund'
+                        },
+                        Contract: {
+                            CONTRACT_READONLY_RT: 'CONTRACT_READONLY_RT',
+                            ASI_CRM_PH_Contract_Read_Only: 'ASI_CRM_PH_Contract_Read_Only'
+                        }
+                    })
+                    .constant('DateFormat', {
+                        DefaultFormat: 'YYYY-MM-DD'
+                    });
+
+            angular.module('manageContract')
+                    .filter('purchaseIncentiveSchemeItem', purchaseIncentiveSchemeItemFilter);
+
+            purchaseIncentiveSchemeItemFilter.$inject = ['DateFormat', 'moment'];
+
+            function purchaseIncentiveSchemeItemFilter(DateFormat, moment) {
+
+                return function (purchaseIncentiveSchemes, purchaseIncentiveSchemeHeader) {
+
+                    let headerStartDate = moment(purchaseIncentiveSchemeHeader.ASI_CRM_Target_Start_Date__c, DateFormat.DefaultFormat);
+                    let headerEndDate = moment(purchaseIncentiveSchemeHeader.ASI_CRM_Target_End_Date__c, DateFormat.DefaultFormat);
+
+                    return purchaseIncentiveSchemes.filter(scheme => {
+
+                        let schemeStartDate = moment(scheme.ASI_CRM_Target_Start_Date__c, DateFormat.DefaultFormat);
+                        let schemeEndDate = moment(scheme.ASI_CRM_Target_End_Date__c, DateFormat.DefaultFormat);
+
+                        let isNotParentRecord = (scheme.ASI_CRM_Sys_Parent_Record__c !== true);
+                        let isWithinHeaderDateRange = (
+                                schemeStartDate.isSameOrAfter(headerStartDate)
+                                && schemeStartDate.isSameOrBefore(headerEndDate)
+                                && schemeEndDate.isSameOrAfter(headerStartDate)
+                                && schemeEndDate.isSameOrBefore(headerEndDate)
+                        );
+
+                        return isNotParentRecord && isWithinHeaderDateRange;
+                    });
+                };
+            }
+        })();
+    </script>
+    <script id="manageContractMainController.controller.js">
+        (function () {
+            'use strict';
+
+            angular.module('manageContract')
+                    .controller('ManageContractController', ManageContract);
+
+            ManageContract.$inject = ['DataService', 'ContractFundSchemeService', 'IncentiveSchemeService'];
+
+            function ManageContract(DataService, ContractFundSchemeService, IncentiveSchemeService) {
+                let vm = this;
+
+                refreshData();
+
+                vm.validateSchemeHeaderItemCount = () => IncentiveSchemeService.validateSchemeHeaderItemCount(vm.purchaseIncentiveSchemes);
+                vm.validateSchemeHeaderWithoutIncentiveItemCount = () => IncentiveSchemeService.validateSchemeHeaderItemCount(vm.purchaseIncentiveSchemes);
+                vm.validateIncentiveToIssueValues = () => IncentiveSchemeService.validateIncentiveToIssueValues(vm.purchaseIncentiveSchemes);
+                vm.validatePurchaseIncentiveSchemeMissingFields = () => IncentiveSchemeService.validateMissingFields(vm.purchaseIncentiveSchemes);
+                vm.validatePurchaseIncentiveSchemeHeaderMissingFields = () => IncentiveSchemeService.validateHeaderMissingFields(vm.purchaseIncentiveSchemes);
+                vm.validatePurchaseIncentiveSchemeHeaderDates = () => IncentiveSchemeService.validateHeaderDates(vm.purchaseIncentiveSchemes);
+
+                vm.getContractFundSchemes = () => ContractFundSchemeService.parseContractFundSchemes(vm.contractFundSchemes);
+                vm.getDeleteContractFundSchemeIds = () => vm.deleteContractFundSchemeIds;
+                vm.getPurchaseIncentiveSchemes = () => IncentiveSchemeService.parsePurchaseIncentiveSchemes(vm.purchaseIncentiveSchemes);
+                vm.getDeletePurchaseIncentiveSchemeIds = () => vm.deletePurchaseIncentiveSchemeIds;
+
+                vm.refreshData = refreshData;
+
+                function refreshData() {
+                    vm.contractTargets = DataService.getContractTargets();
+                    vm.contract = DataService.getContract();
+                    vm.purchaseIncentiveSchemes = DataService.getPurchaseIncentiveSchemes();
+                    vm.deletePurchaseIncentiveSchemeIds = [];
+
+                    vm.contractFundSchemes = DataService.getContractFundSchemes();
+                    vm.deleteContractFundSchemeIds = [];
+                }
+            }
+        })();
+    </script>
+        <script id="purchaseIncentiveScheme.component.js">
+                (function () {
+                    'use strict';
+
+                    IncentiveSchemeComponentController.$inject = ['$rootScope', 'IncentiveSchemeService', 'DataService', 'RecordType', 'moment'];
+
+                    function IncentiveSchemeComponentController($rootScope, IncentiveSchemeService, DataService, RecordType, moment) {
+                        let vm = this;
+                        let contract = DataService.getContract();
+
+                        vm.purchaseIncentiveSchemeHeaders = [];
+                        vm.quarters = [];
+                        vm.READ_ONLY_MODE = $rootScope.READ_ONLY_MODE || contract.RecordType.DeveloperName === RecordType.Contract.ASI_CRM_PH_Contract_Read_Only;
+
+                        vm.$onInit = initialize;
+                        vm.addPurchaseIncentiveScheme = addPurchaseIncentiveScheme;
+                        vm.removePurchaseIncentiveScheme = removePurchaseIncentiveScheme;
+                        vm.updateSchemeDate = updateSchemeDate;
+                        vm.clonePurchaseIncentiveSchemeItems = clonePurchaseIncentiveSchemeItems;
+                        vm.updatePayoutAmount = updatePayoutAmount;
+
+                        function initialize() {
+                            IncentiveSchemeService.fixData(vm.purchaseIncentiveSchemes, vm.contract);
+
+                            let missingHeaders = IncentiveSchemeService
+                                    .getMissingHeaders(vm.purchaseIncentiveSchemes, vm.contract);
+
+                            if (missingHeaders.length > 0) {
+                                vm.purchaseIncentiveSchemes.push.apply(vm.purchaseIncentiveSchemes, missingHeaders);
+                            }
+
+                            updatePayoutAmount();
+                        }
+
+                        function addPurchaseIncentiveScheme(purchaseIncentiveSchemeHeader) {
+                            vm.purchaseIncentiveSchemes.push(IncentiveSchemeService.createPurchaseIncentiveScheme(purchaseIncentiveSchemeHeader));
+                        }
+
+                        function removePurchaseIncentiveScheme(purchaseIncentiveScheme) {
+                            let index = vm.purchaseIncentiveSchemes.findIndex(item => item.$$hashKey === purchaseIncentiveScheme.$$hashKey);
+
+                            if (purchaseIncentiveScheme.Id) {
+                                vm.deletePurchaseIncentiveSchemeIds.push(purchaseIncentiveScheme.Id);
+                            }
+
+                            vm.purchaseIncentiveSchemes.splice(index, 1);
+                        }
+
+                        function updateSchemeDate(header, oldHeaderDate, type) {
+
+                            let oldDate = new Date(oldHeaderDate.replace('"', '').replace('"', ''));//Improve
+                            let otherHeaders = vm.purchaseIncentiveSchemes
+                                    .filter(item => header.$$hashKey !== item.$$hashKey && item.ASI_CRM_Sys_Parent_Record__c === true);
+                            let headerStartDate = header.ASI_CRM_Target_Start_Date__c;
+                            let headerEndDate = header.ASI_CRM_Target_End_Date__c;
+                            let isValid = true;
+
+                            otherHeaders.forEach(item => {
+                                let startDate = moment(item.ASI_CRM_Target_Start_Date__c);
+                                let endDate = moment(item.ASI_CRM_Target_End_Date__c);
+
+                                if (type === 'START_DATE') {
+                                    if ((moment(headerStartDate).isSameOrAfter(startDate) && moment(headerStartDate).isSameOrBefore(endDate))) {
+                                        isValid = false;
+                                    }
+                                    if (!isValid) header.ASI_CRM_Target_Start_Date__c = oldDate;
+                                } else if (type === 'END_DATE') {
+                                    if ((moment(headerEndDate).isSameOrAfter(startDate) && moment(headerEndDate).isSameOrBefore(endDate))) {
+                                        isValid = false;
+                                    }
+                                    if (!isValid) header.ASI_CRM_Target_End_Date__c = oldDate;
+                                }
+                            });
+
+
+                            if (!isValid) {
+                                alert('Start or end date cannot overlap other with other quarter dates');
+                                return;
+                            }
+
+                            vm.purchaseIncentiveSchemes.forEach(item => {
+                                if (header.$$hashKey === item.parentId) {
+                                    if (type === 'START_DATE') {
+                                        item.ASI_CRM_Target_Start_Date__c = header.ASI_CRM_Target_Start_Date__c;
+                                    } else if (type === 'END_DATE') {
+                                        item.ASI_CRM_Target_End_Date__c = header.ASI_CRM_Target_End_Date__c;
+                                    }
+                                }
+                            });
+
+                        }
+
+                        function clonePurchaseIncentiveSchemeItems() {
+                            let schemeHeaders = vm.purchaseIncentiveSchemes.filter(item => item.ASI_CRM_Sys_Parent_Record__c === true);
+                            let mainSchemeHeader = schemeHeaders[0];
+
+                            for (let counter = vm.purchaseIncentiveSchemes.length - 1; counter >= 0; counter--) {
+                                let scheme = vm.purchaseIncentiveSchemes[counter];
+
+                                if (scheme.ASI_CRM_Sys_Parent_Record__c === true) continue;
+                                if (scheme.parentId === mainSchemeHeader.$$hashKey) continue;
+
+                                removePurchaseIncentiveScheme(vm.purchaseIncentiveSchemes[counter]);
+                            }
+
+                            vm.purchaseIncentiveSchemes
+                                    .filter(item => item.parentId === mainSchemeHeader.$$hashKey)
+                                    .forEach(item => {
+                                        schemeHeaders
+                                                .filter(header => header.$$hashKey !== mainSchemeHeader.$$hashKey)
+                                                .forEach(header => {
+
+                                                    let newItem = IncentiveSchemeService.createPurchaseIncentiveScheme(header);
+                                                    newItem.ASI_CRM_Incentive_to_issue__c = item.ASI_CRM_Incentive_to_issue__c;
+                                                    newItem.ASI_CRM_Target_Purchase_Amount_From__c = item.ASI_CRM_Target_Purchase_Amount_From__c;
+                                                    newItem.ASI_CRM_Target_Purchase_Amount_To__c = item.ASI_CRM_Target_Purchase_Amount_To__c;
+                                                    newItem.parentId = header.$$hashKey;
+                                                    vm.purchaseIncentiveSchemes.push(newItem);
+                                                });
+                                    });
+
+                            updatePayoutAmount();
+                        }
+
+                        function updatePayoutAmount() {
+                            vm.purchaseIncentiveSchemes
+                                    .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true)
+                                    .forEach(header => {
+                                        vm.purchaseIncentiveSchemes
+                                                .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === false && scheme.parentId === header.$$hashKey)
+                                                .forEach(scheme => {
+                                                    scheme.ASI_CRM_Payout_Amount__c = header.ASI_CRM_Sponsorship__c * (scheme.ASI_CRM_Incentive_to_issue__c / 100);
+                                                });
+                                    });
+                        }
+                    }
+
+                    angular.module('manageContract').component('manageContractPurchaseIncentiveScheme', {
+                        template: TemplateHelper.getPurchaseIncentiveSchemeComponentTemplate(),
+                        controller: IncentiveSchemeComponentController,
+                        bindings: {
+                            contract: '<',
+                            purchaseIncentiveSchemes: '<',
+                            deletePurchaseIncentiveSchemeIds: '<'
+                        }
+                    });
+                })();
+
+    </script>
+    <script id="purchaseIncentiveSchemeService.service.js">
+        (function () {
+            'use strict';
+
+            angular.module('manageContract').factory('IncentiveSchemeService', IncentiveSchemeService);
+
+            IncentiveSchemeService.$inject = ['DateFormat', 'moment'];
+
+            function IncentiveSchemeService(DateFormat, moment) {
+
+                const createPurchaseIncentiveScheme = (purchaseIncentiveSchemeHeader) => {
+                    return {
+                        ASI_CRM_Target_Start_Date__c: purchaseIncentiveSchemeHeader.ASI_CRM_Target_Start_Date__c,
+                        ASI_CRM_Target_End_Date__c: purchaseIncentiveSchemeHeader.ASI_CRM_Target_End_Date__c,
+                        ASI_CRM_Sys_Parent_Record__c: false,
+                        ASI_CRM_Sponsorship__c: 0,
+                        ASI_CRM_Target_Achievement_Amount__c: 0,
+                        ASI_CRM_Incentive_to_issue__c: 0
+                    };
+                };
+
+                const getMissingHeaders = (purchaseIncentiveSchemes, contract) => {
+                    let missingHeaders = [];
+                    let isSpecialContract = contract.ASI_CRM_Special_Contract__c;
+                    let quarters = getQuarters(contract.ASI_TH_CRM_Start_Date__c, contract.ASI_TH_CRM_End_Date__c, isSpecialContract);
+                    let purchaseIncentiveSchemeHeaders = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true);
+
+                    if (quarters.length === purchaseIncentiveSchemeHeaders.length) return missingHeaders;
+
+                    quarters.forEach(quarter => {
+
+                        let quarterStartDate = moment(quarter.startDate, DateFormat.DefaultFormat);
+                        let quarterEndDate = moment(quarter.endDate, DateFormat.DefaultFormat);
+
+                        let headers = purchaseIncentiveSchemeHeaders.filter(header => {
+
+                            let headerStartDate = moment(header.ASI_CRM_Target_Start_Date__c, DateFormat.DefaultFormat);
+                            let headerEndDate = moment(header.ASI_CRM_Target_End_Date__c, DateFormat.DefaultFormat);
+
+                            return (headerStartDate.isSame(quarterStartDate) && headerEndDate.isSame(quarterEndDate));
+                        });
+
+                        if (headers.length > 0) {
+                            return;
+                        }
+
+                        missingHeaders.push({
+                            ASI_CRM_Target_Start_Date__c: new Date(quarter.startDate),
+                            ASI_CRM_Target_End_Date__c: new Date(quarter.endDate),
+                            ASI_CRM_Sys_Parent_Record__c: true,
+                            ASI_CRM_Sponsorship__c: 0,
+                            ASI_CRM_Target_Achievement_Amount__c: 0
+                            // ASI_CRM_Incentive_to_issue__c: 0
+                        });
+                    });
+
+                    return missingHeaders;
+                };
+
+                const setDefaultValuesForSchemeItems = (purchaseIncentiveSchemes, contract) => {
+                    let isSpecialContract = contract.ASI_CRM_Special_Contract__c;
+
+                    purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true)
+                            .forEach(scheme => {
+                                scheme.ASI_CRM_Sponsorship__c = 0;
+                                if (isSpecialContract) {
+                                    scheme.ASI_CRM_Target_Start_Date__c = contract.ASI_TH_CRM_Start_Date__c;
+                                    scheme.ASI_CRM_Target_End_Date__c = contract.ASI_TH_CRM_End_Date__c;
+                                }
+                            });
+                };
+
+                const validateIncentiveToIssueValues = (purchaseIncentiveSchemes) => {
+                    let isValidIncentiveToIssueValue = true;
+
+                    purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true)
+                            .forEach(scheme => {
+                                if (isNaN(scheme.ASI_CRM_Incentive_to_issue__c)) {
+                                    isValidIncentiveToIssueValue = false;
+                                    return;
+                                }
+
+                                let value = parseInt(scheme.ASI_CRM_Incentive_to_issue__c);
+                                if (value < 0 || value > 100) isValidIncentiveToIssueValue = false;
+                            });
+
+                    return isValidIncentiveToIssueValue;
+                };
+
+                const validateSchemeHeaderItemCount = (purchaseIncentiveSchemes) => {
+                    let schemeHeaders = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true)
+                            .sort((scheme1, scheme2) => {
+                                let dateTime1 = new Date(scheme1.ASI_CRM_Target_Start_Date__c).getTime();
+                                let dateTime2 = new Date(scheme2.ASI_CRM_Target_Start_Date__c).getTime();
+                                return dateTime1 - dateTime2;
+                            });
+
+                    let schemeItems = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true);
+                    let itemsCount = getItemCountForSchemeHeaders(schemeHeaders, schemeItems);
+                    let invalidItems = itemsCount.filter((count, index) => {
+                        return (schemeHeaders[index].ASI_CRM_Sponsorship__c !== 0 && count < 1);
+                    });
+
+                    return (invalidItems.length === 0);
+                };
+
+                const validateSchemeHeaderWithoutIncentiveItemCount = (purchaseIncentiveSchemes) => {
+                    let schemeHeaders = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true)
+                            .sort((scheme1, scheme2) => {
+                                let dateTime1 = new Date(scheme1.ASI_CRM_Target_Start_Date__c).getTime();
+                                let dateTime2 = new Date(scheme2.ASI_CRM_Target_Start_Date__c).getTime();
+                                return dateTime1 - dateTime2;
+                            });
+
+                    let schemeItems = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true);
+                    let itemsCount = getItemCountForSchemeHeaders(schemeHeaders, schemeItems);
+                    let invalidItems = itemsCount.filter((count, index) => {
+                        return (schemeHeaders[index].ASI_CRM_Sponsorship__c === 0 && count > 0);
+                    });
+
+                    return (invalidItems.length === 0);
+                };
+
+                const validateHeaderMissingFields = (purchaseIncentiveSchemes) => {
+
+                    let headerWithMissingFields = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true)
+                            .find(scheme => (scheme.ASI_CRM_Sponsorship__c === null || scheme.ASI_CRM_Sponsorship__c === undefined || scheme.ASI_CRM_Sponsorship__c === ''));
+
+                    return !headerWithMissingFields;
+                };
+
+                const validateMissingFields = (purchaseIncentiveSchemes) => {
+
+                    let schemeWithMissingFields = purchaseIncentiveSchemes
+                            .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true)
+                            .find(scheme => !scheme.ASI_CRM_Incentive_to_issue__c || !scheme.ASI_CRM_Target_Purchase_Amount_From__c);
+
+                    return !schemeWithMissingFields;
+                };
+
+                const validateHeaderDates = (purchaseIncentiveSchemes) => {
+
+                    let purchaseIncentiveSchemeHeaders = purchaseIncentiveSchemes
+                            .filter(item => item.ASI_CRM_Sys_Parent_Record__c === true)
+                            .sort((scheme1, scheme2) => {
+                                let dateTime1 = new Date(scheme1.ASI_CRM_Target_Start_Date__c).getTime();
+                                let dateTime2 = new Date(scheme2.ASI_CRM_Target_Start_Date__c).getTime();
+                                return dateTime1 - dateTime2;
+                            });
+
+                    let isValid = true;
+                    purchaseIncentiveSchemeHeaders.forEach((scheme, index) => {
+                        let incentiveSchemeStartDate = moment(scheme.ASI_CRM_Target_Start_Date__c);
+                        let incentiveSchemeEndDate = moment(scheme.ASI_CRM_Target_End_Date__c);
+
+                        if (incentiveSchemeStartDate.isAfter(incentiveSchemeEndDate)) isValid = false;
+                        if (!isValid) return false;
+
+                        for (let counter = 0; counter < index; counter++) {
+                            let schemeStartDate = moment(purchaseIncentiveSchemeHeaders[counter].ASI_CRM_Target_Start_Date__c);
+                            let schemeEndDate = moment(purchaseIncentiveSchemeHeaders[counter].ASI_CRM_Target_End_Date__c);
+                            let overlapsWithOtherHeader = (
+                                    (incentiveSchemeStartDate.isSameOrAfter(schemeStartDate) && incentiveSchemeStartDate.isSameOrBefore(schemeEndDate))
+                                    || (incentiveSchemeEndDate.isSameOrAfter(schemeStartDate) && incentiveSchemeEndDate.isSameOrBefore(schemeEndDate))
+                            );
+
+                            if (overlapsWithOtherHeader) isValid = false;
+                        }
+                    });
+
+                    return isValid;
+                };
+
+                const getQuarters = (contractStartDate, contractEndDate, isSpecialContract) => {
+
+                    if (!contractStartDate || !contractEndDate) return [];
+
+                    let quarters = [];
+                    let startDate = moment(contractStartDate);
+                    let endDate = moment(contractEndDate);
+
+                    if (isSpecialContract) {
+                        let quarter = {
+                            startDate: startDate.format(DateFormat.DefaultFormat),
+                            endDate: endDate.format(DateFormat.DefaultFormat)
+                        };
+                        quarters.push(quarter);
+                        return quarters;
+                    }
+
+                    let markerDate = startDate;
+
+                    while (endDate.diff(markerDate, 'months', true) > 0) {
+                        let quarter = {};
+                        quarter.startDate = markerDate.startOf('month').format(DateFormat.DefaultFormat);
+                        quarter.endDate = markerDate.add(2, 'months').endOf('month').format(DateFormat.DefaultFormat);
+
+                        quarters.push(quarter);
+                        markerDate.add(1, 'months').startOf('month');
+                    }
+
+                    return quarters;
+                };
+
+                const getItemCountForSchemeHeaders = (purchaseIncentiveSchemeHeaders, purchaseIncentiveSchemeItems) => {
+                    let itemsCount = [];
+                    purchaseIncentiveSchemeHeaders.forEach((schemeHeader, index) => {
+                        let headerStartDate = moment(schemeHeader.ASI_CRM_Target_Start_Date__c, DateFormat.DefaultFormat);
+                        let headerEndDate = moment(schemeHeader.ASI_CRM_Target_End_Date__c, DateFormat.DefaultFormat);
+
+                        if (itemsCount[index] === undefined) itemsCount[index] = 0;
+
+                        purchaseIncentiveSchemeItems
+                                .forEach(scheme => {
+                                    let schemeStartDate = moment(scheme.ASI_CRM_Target_Start_Date__c, DateFormat.DefaultFormat);
+                                    let schemeEndDate = moment(scheme.ASI_CRM_Target_End_Date__c, DateFormat.DefaultFormat);
+
+                                    let isWithinHeaderDateRange = (
+                                            schemeStartDate.isSameOrAfter(headerStartDate)
+                                            && schemeStartDate.isSameOrBefore(headerEndDate)
+                                            && schemeEndDate.isSameOrAfter(headerStartDate)
+                                            && schemeEndDate.isSameOrBefore(headerEndDate)
+                                    );
+
+                                    if (isWithinHeaderDateRange) ++itemsCount[index];
+                                });
+                    });
+                    return itemsCount;
+                };
+
+                const parsePurchaseIncentiveSchemes = (purchaseIncentiveSchemes) => {
+                    let parsedSchemes = [];
+                    purchaseIncentiveSchemes.forEach(scheme => {
+                        scheme.ASI_CRM_Target_Start_Date__c = moment(scheme.ASI_CRM_Target_Start_Date__c).format(DateFormat.DefaultFormat);
+                        scheme.ASI_CRM_Target_End_Date__c = moment(scheme.ASI_CRM_Target_End_Date__c).format(DateFormat.DefaultFormat);
+                        parsedSchemes.push(scheme);
+                    });
+                    return parsedSchemes;
+                };
+
+                return {
+                    fixData: setDefaultValuesForSchemeItems,
+                    getMissingHeaders: getMissingHeaders,
+                    createPurchaseIncentiveScheme: createPurchaseIncentiveScheme,
+                    validateIncentiveToIssueValues: validateIncentiveToIssueValues,
+                    validateSchemeHeaderItemCount: validateSchemeHeaderItemCount,
+                    validateSchemeHeaderWithoutIncentiveItemCount: validateSchemeHeaderWithoutIncentiveItemCount,
+                    validateHeaderMissingFields: validateHeaderMissingFields,
+                    validateMissingFields: validateMissingFields,
+                    validateHeaderDates: validateHeaderDates,
+                    parsePurchaseIncentiveSchemes: parsePurchaseIncentiveSchemes
+                };
+            }
+        })();
+
+    </script>
+    <script id="contractFundScheme.component.js">
+        (function () {
+            'use strict';
+
+            ContractFundSchemeComponentController.$inject = ['$rootScope', 'DataService', 'RecordType'];
+
+            function ContractFundSchemeComponentController($rootScope, DataService, RecordType) {
+                let vm = this;
+                let contract = DataService.getContract();
+
+                vm.READ_ONLY_MODE = $rootScope.READ_ONLY_MODE || contract.RecordType.DeveloperName === RecordType.Contract.ASI_CRM_PH_Contract_Read_Only;
+                vm.NOW = $rootScope.NOW;
+                vm.targetTypes = [
+                    {value: 'Value', label: 'Value'},
+                    {value: 'Bottle', label: 'Bottle'},
+                    {value: 'Date', label: 'Date'}
+                ];
+                vm.targetType = vm.targetTypes[0];
+
+                vm.$onInit = initialize;
+                vm.add = addContractFundScheme;
+                vm.remove = removeContractFundScheme;
+
+                function initialize() {
+                    if (vm.contractFundSchemes.length > 0) {
+                        vm.targetType = vm.targetTypes.find(targetType => targetType.value === vm.contractFundSchemes[0].ASI_CRM_Type__c);
+                    }
+                }
+
+                function addContractFundScheme() {
+                    let contractFundScheme = {
+                        ASI_CRM_Type__c: vm.targetType.value,
+                        ASI_CRM_Contract__c: null,
+                        ASI_CRM_Sys_Parent_Record__c: false,
+                        ASI_CRM_Sponsorship__c: 0,
+                        ASI_CRM_Target_Achievement_Amount__c: 0
+                    };
+
+                    vm.contractFundSchemes.push(contractFundScheme);
+                }
+
+                function removeContractFundScheme(index) {
+                    if (vm.contractFundSchemes[index].Id) {
+                        vm.deleteContractFundSchemeIds.push(vm.contractFundSchemes[index].Id);
+                    }
+
+                    vm.contractFundSchemes.splice(index, 1);
+                }
+            }
+
+            angular.module('manageContract').component('manageContractFundScheme', {
+                template: TemplateHelper.getContractFundSchemeComponentTemplate(),
+                controller: ContractFundSchemeComponentController,
+                bindings: {
+                    contractFundSchemes: '<',
+                    deleteContractFundSchemeIds: '<'
+                }
+            });
+        })();
+
+    </script>
+    <script id="contractFundScheme.service.js">
+        (function () {
+            'use strict';
+
+            angular.module('manageContract').factory('ContractFundSchemeService', ContractFundSchemeService);
+
+            ContractFundSchemeService.$inject = ['DateFormat', 'moment'];
+
+            function ContractFundSchemeService(DateFormat, moment) {
+
+                const parseContractFundSchemes = (contractFundSchemes) => {
+                    let parsedSchemes = [];
+                    contractFundSchemes.forEach(scheme => {
+                        if (scheme.ASI_CRM_Type__c === 'Date' && scheme.ASI_CRM_Schedule_Date__c) {
+                            scheme.ASI_CRM_Schedule_Date__c = moment(scheme.ASI_CRM_Schedule_Date__c).format(DateFormat.DefaultFormat);
+                        }
+                        parsedSchemes.push(scheme);
+                    });
+                    return parsedSchemes;
+                };
+
+                return {
+                    parseContractFundSchemes: parseContractFundSchemes
+                };
+            }
+        })();
+
+    </script>
+    <script id="dataService.service.js">
+        (function () {
+            'use strict';
+
+            angular.module('manageContract').factory('DataService', DataService);
+
+            DataService.$inject = ['RecordType', 'DateFormat', 'moment'];
+
+            function DataService(RecordType, DateFormat, moment) {
+
+                const getSkuList = () => DataHelper.getSkuList();
+                const getSkuMap = () => DataHelper.getSkuMap();
+                const getContract = () => DataHelper.getContract();
+                const getContractTargets = () => DataHelper.getContractTargets();
+                const getPurchaseIncentiveSchemes = () => {
+                    // return
+                    DataHelper.getPurchaseIncentiveSchemes()
+                            .forEach(item => {
+                                if (item.RecordType.DeveloperName !== RecordType.PaymentSchedule.PurchaseIncentive) return;
+
+                                item.ASI_CRM_Target_Start_Date__c = moment(item.ASI_CRM_Target_Start_Date__c).toDate();
+                                item.ASI_CRM_Target_End_Date__c = moment(item.ASI_CRM_Target_End_Date__c).toDate();
+                            });
+
+                    return DataHelper.getPurchaseIncentiveSchemes()
+                            .filter(item => item.RecordType.DeveloperName === RecordType.PaymentSchedule.PurchaseIncentive)
+                };
+                const getContractFundSchemes = () => {
+                    DataHelper.getContractFundSchemes().forEach(scheme => {
+                        if (scheme.ASI_CRM_Type__c === 'Date' && scheme.ASI_CRM_Schedule_Date__c) {
+                            scheme.ASI_CRM_Schedule_Date__c = moment(scheme.ASI_CRM_Schedule_Date__c).toDate();//.format(DateFormat.DefaultFormat)
+							var now = new Date();
+							scheme.ASI_CRM_Issuable__c = scheme.ASI_CRM_Schedule_Date__c < now ? true : false;
+                        }
+                    });
+                    return DataHelper.getContractFundSchemes();
+                };
+
+                return {
+                    getSkuList: getSkuList,
+                    getAllSKU: getSkuMap,
+                    getContract: getContract,
+                    getContractTargets: getContractTargets,
+                    getPurchaseIncentiveSchemes: getPurchaseIncentiveSchemes,
+                    getContractFundSchemes: getContractFundSchemes
+                };
+            }
+        })();
+
+    </script>
+    <script id="externalLibraries.service.js">
+        (function () {
+            'use strict';
+
+            angular.module('manageContract').factory('moment', function ($window) {
+                return $window.moment;
+            });
+
+        })();
+    </script>
+</apex:page>

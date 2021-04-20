@@ -1,0 +1,740 @@
+<apex:page controller="clm.AvailablePresPopUpController" showHeader="false" sidebar="false" pageStyle="slds">
+
+
+    <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'assets/styles/salesforce-lightning-design-system-vf.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'scss/GeolocationCenter.css')}" />
+    
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>    
+    
+    <style type="text/css">
+    
+    .btn{
+        margin: 0px;
+        padding: 0px;
+    }
+
+    .customTreeHeader{
+        font-size: .75rem;
+        line-height: 1.25;
+        color: #54698d;
+        text-transform: uppercase;
+        letter-spacing: .0625rem;
+    }
+
+    .addNameRow{
+        color: #16325c;
+    }
+
+    div[id*="sortDiv"]{ 
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+    }
+    .whiteSpaceStyle{
+        white-space: normal !important;    
+        word-break: break-word;
+        word-wrap: break-word;
+        word-spacing: normal;
+    }
+    .imgPreview > a > img {
+        width:50px ;
+        height: 50px;
+    }
+
+    .imgPreviewTree > a > img {
+        width: 30px;
+        height: 30px;
+        border-radius: 30%;
+    }
+
+    .imgPreviewTree:hover + .showOnHover {
+        display: block;
+        opacity:1;
+        display: block;
+    }
+
+    .showOnHover{
+        opacity:0;
+        display:none;
+        width: 250px;
+        height: 50px;
+    }
+
+    .showOnHover label > a > img {
+        /*border-radius: 10%;*/
+        border: 1px solid #c4c4c4;
+        border-radius: 6px;
+    }
+
+    .onRight{ 
+        /*position: absolute;*/
+        right: 25px;
+        padding: 10px;
+        float: right;
+    }
+
+    .imgPreviewTree > a {
+       /*pointer-events: none;
+       cursor: default;*/
+    }
+
+    .previewIcon{
+        cursor: pointer;
+    }
+
+    .previewIcon:hover{
+        transform: scale(0.7) !important;
+    }
+
+    .previewIconWithProblem:hover{
+            transform: scale(1.1) !important;
+    }
+
+    .treeView{
+        width: 90vw
+    }
+
+    .pbBody{
+        /*height: 100%;
+        min-height: 100px;*/
+        overflow-y: scroll;
+        max-height: 100vh;
+    }
+
+
+    </style>
+
+    <script>
+        var serviceUrl = 'https://www.ctclm.com/present/login/';
+        var visitId = '{!JSENCODE(visitId)}';
+        var renderAsPresentation = {!IF(renderAsPresentation, "true", "false")};
+        var userFirstName = '{!JSENCODE($User.FirstName)}';
+        var userLastName = '{!JSENCODE($User.LastName)}';
+        var activityStartTime = '{!JSENCODE(activity_StartTime)}';
+        var activityEndTime = '{!JSENCODE(activity_EndTime)}';
+        var baseUrl = '{!JSENCODE(baseUrl)}';
+        var activityParams = '{!JSENCODE(currentActivityFieldsToParams)}';
+        var isSelf = '{!JSENCODE(isSelf)}';
+        
+        var urlPosfix = '?user_firstName=' + userFirstName;
+        urlPosfix += '&user_lastName=' + userLastName;                    
+        urlPosfix += '&sf_base_url=' + baseUrl;
+        //Прокидываем ID организации, чтобы определять попытку старта показа с чужим sessionid
+        urlPosfix += '&org_id={!JSENCODE($Organization.Id)}' 
+        //Прокидываем username, чтобы помочь пользователю авторизоваться
+        urlPosfix += '&user_userName={!JSENCODE($User.Username)}'  
+                                                        
+        if('' != visitId && !renderAsPresentation){
+ 
+            urlPosfix += '&visitid=' + visitId;
+            
+            if('' != activityStartTime && '' != activityEndTime) {
+             urlPosfix += '&activity_start_time=' + activityStartTime;
+                urlPosfix += '&activity_end_time=' + activityEndTime;
+            }
+                                    
+            if('' != activityParams) {
+                var activityParamsMass = activityParams.split(',');
+                for(var i = 0; i < activityParamsMass.length; i++) {
+                    urlPosfix += '&' + activityParamsMass[i];
+                }
+            }
+        }
+ 
+        if (isSelf) {
+            urlPosfix += '&one=true';
+        }       
+        
+                
+        var isVideoEnabled = {!IF($Setup.clm__CLMSettings__c.clm__IsRDVideoStreamingEnabled__c, "true", "false")};
+        if (isVideoEnabled) {
+            urlPosfix += '&s=xVt1';
+        }
+        
+        var isChatEnabled = {!IF($Setup.clm__CLMSettings__c.clm__IsRDChatEnabled__c, "true", "false")};
+        if (isChatEnabled) {
+            var isChatLogEnabled = {!IF($Setup.clm__CLMSettings__c.clm__IsRDChatLogEnabled__c, "true", "false")};
+            if (isChatLogEnabled) {
+                urlPosfix += '&p=bSt3';
+            } else {
+                urlPosfix += '&p=uTd5';
+            }
+        }
+        
+        
+        //var serviceUrl = 'http://sforce2-dev.cloudapp.net/node/preview/app/';
+    </script>
+    
+    <apex:pageblock title="{!$ObjectType.clm__Application__c.label}" rendered="{!renderAsPresentation}">
+        <apex:pageMessages />
+        
+        <div class="slds">
+            <div style="/*width:20%;*/ display:inline; margin:0 auto;">
+                <apex:outputPanel rendered="{!NOT(IsFail)}">
+                    <apex:outputPanel >
+                        <img id="share-view-{!currentApp.id}" src='{!URLFOR($Resource.TreeViewImages,"img/Preview5.png")}' class="previewIcon" style=" transform: scale(0.6)" />
+                        <!--<input type="button" id="share-view-{!currentApp.id}" value="Start" class="btn startThree" style="    padding: 0px" />-->
+                    
+                        <script>
+                        $('#share-view-{!currentApp.id}').click(function(){
+                           /* var url = serviceUrl
+                            + '?appid={JSENCODE(currentApp.Id)}'
+                            + '&session_id={JSENCODE($Api.Session_ID)}'
+                            + '&room={JSENCODE($Organization.Id)}{JSENCODE($User.Id)}'
+                            + '&instance={JSENCODE(Instance)}'
+                            + '&owner=true';*/
+                            
+                            var url = serviceUrl + '{!JSENCODE(currentApp.Id)}' + urlPosfix;   
+                                                
+                            window.location.href = url;
+                            // window.open(url, 'CT Presenter', "height=760,width=1024");
+                        });
+                        </script>
+                    </apex:outputPanel>
+                </apex:outputPanel>
+                <h2 style="padding-right: 15%;
+                font-size: .75rem;
+                line-height: 1.25;
+                color: #54698d;
+                text-transform: uppercase;
+                letter-spacing: .0625rem;"><apex:outputField value="{!currentApp.name}" /></h2>
+            </div>
+            <apex:outputLabel styleClass="imgPreviewTree doImage" value="{!currentApp.clm__Preview__c}" escape="true" />
+            <div id="div-view-{!currentApp.id}" class="showOnHover" style=" z-index: 1; position: absolute; left: 170px;" >
+                <apex:outputLabel styleClass="doImage" value="{!currentApp.clm__Preview__c}" escape="true" />
+            </div>
+            <script>                           
+                $('#div-view-{!currentApp.id}').siblings('label').find('a').each(function(ind, el){ 
+                    $(el).click(function(){
+                        var url = serviceUrl + '{!JSENCODE(currentApp.Id)}' + urlPosfix;   
+                        window.location.href = url;
+                    });
+                    $(el).removeAttr('href')
+                })
+            </script>
+        </div>
+    </apex:pageblock>
+
+      <div class="slds">
+        <apex:pageblock title="{!$ObjectType.clm__CustomScenario__c.labelPlural}" rendered="{!renderAsPresentation}">
+
+            <apex:pageBlockTable html-class="slds-table slds-table--bordered slds-table--cell-buffer" id="scenarioTable" value="{!scenariosForCurrentApp}" var="scenario" rendered="{!scenariosForCurrentApp.size > 0}">
+                     
+                <apex:column style=" width: 40px;padding: 10px;" id="columnStartImage">
+                    <apex:outputPanel rendered="{!NOT(IsFail)}">
+                        <apex:outputPanel >
+                            <img id="share-view-{!scenario.id}" src='{!URLFOR($Resource.TreeViewImages,"img/Preview5.png")}'  class="previewIconWithProblem" style="/* transform: scale(0.6)*/" />
+                            <!--<input type="button" id="share-view-{!scenario.id}" value="Start" class="btn startFour" style="padding: 0px" />-->
+                            <script>
+                                $('#share-view-{!scenario.id}').click(function(){
+                                    /*var url = serviceUrl
+                                    + '?appid={JSENCODE(currentApp.Id)}'
+                                    + '&session_id={JSENCODE($Api.Session_ID)}'
+                                    + '&room={JSENCODE($Organization.Id)}{JSENCODE($User.Id)}'
+                                    + '&instance={JSENCODE(Instance)}'
+                                    + '&owner=true';*/
+                                                           
+                                    var url = serviceUrl + '{!JSENCODE(currentApp.Id)}' + urlPosfix; //is appId too? not scenario Id?   
+                                    url += "&scenid={!JSENCODE(scenario.Id)}";                        
+
+                                    window.location.href = url;
+                                    // window.open(url, 'CT Presenter', "height=760,width=1024");
+                                });
+                            </script>
+                        </apex:outputPanel>
+                    </apex:outputPanel>
+                </apex:column>
+
+                <apex:repeat value="{!$ObjectType.clm__CustomScenario__c.fieldsets.clm__RemoteDetailingScenarioFields}" var="fieldValue">
+                     <apex:column id="fColumn">
+                         <apex:facet name="header">{!fieldValue.Label}</apex:facet>
+                         <apex:outputField html-class="slds-truncate" style="color: #16325c;"  value="{!scenario[fieldValue]}"/>
+                     </apex:column>
+                 </apex:repeat>
+                    
+                <apex:column style="width: 80px;">
+                    <apex:outputLabel styleClass="imgPreviewTree doImage" value="{!previewMap[scenario.id]}" escape="true" />
+                    <div id="div-view-{!scenario.id}" class="showOnHover" style="right: 10px; z-index: 1; position: absolute;" >
+                        <apex:outputLabel styleClass="doImage" value="{!previewMap[scenario.id]}" escape="true" />
+                    </div> 
+                    <script>                                           
+                        $('#div-view-{!scenario.id}').siblings('label').find('a').each(function(ind, el){
+                            console.log('we find it!')
+                            var url = serviceUrl + '{!JSENCODE(scenario.clm__ApplicationId__c)}' + urlPosfix;   
+                            url += "&scenid={!JSENCODE(scenario.Id)}";                                                                  
+                            console.log('new location: ' + url);
+                            $(el).click(function(){
+                                window.location.href = url;
+                            });
+                            $(el).removeAttr('href')
+                        })
+                    </script>
+                </apex:column>
+            </apex:pageBlockTable>
+
+
+            <apex:outputPanel rendered="{!scenariosForCurrentApp.size == 0}" >
+                <apex:outputText value="No records" styleClass="slds" style="margin-left: 50px;"/>
+            </apex:outputPanel>
+        </apex:pageblock>
+    </div>
+    <apex:outputPanel rendered="{!NOT(IsFail)}">
+        <script>
+            //auto start presentation
+            $( document ).ready(function() {
+                //if presentation does not have sceanrios - start(click on button)
+                if($("table[id*='scenarioTable'] tr").length <= 1) {
+                    $('#share-view-{!currentApp.id}').click();
+                }
+                
+            });
+            
+        </script>
+    </apex:outputPanel>
+    
+    
+    <!-- visit page -->
+
+        <style type="text/css">
+
+        .Container{
+            padding: 0;
+            margin: 0;
+        }
+
+        .Container li{
+            list-style-type: none;
+        }
+
+
+        .Node {
+            margin-left: 18px;
+            zoom: 1; 
+        }
+
+
+        .IsRoot {
+            margin-left: 0;
+        }
+
+
+        .Expand {
+            width: 18px;
+            height: 18px;
+
+            float: left; 
+        }
+
+
+        .Content {
+            margin-left:18px;
+
+            min-height: 18px; 
+        }
+
+
+        * html .Content {
+            height: 18px;
+        }
+
+
+        .ExpandOpen .Expand {  
+            background-image: url("{!URLFOR($Resource.clm__TreeViewImages,'img/minus.gif')}"); 
+        }
+
+        /*ICONS*/
+
+        .ExpandClosed .Expand {
+            background-image: url("{!URLFOR($Resource.clm__TreeViewImages,'img/plus.gif')}"); 
+        }
+
+
+        .ExpandLeaf .Expand {
+            background-image: url("{!URLFOR($Resource.clm__TreeViewImages,'img/leaf.gif')}"); 
+        }
+
+        .Node {
+            margin-left: 18px;
+            zoom: 1;
+
+            background-image : url("{!URLFOR($Resource.clm__TreeViewImages,'img/i.gif')}"); 
+            background-position : top left;
+            background-repeat : repeat-y;
+        }
+
+
+        .IsLast {
+            background-image: url("{!URLFOR($Resource.clm__TreeViewImages,'img/i_half.gif')}");
+            background-repeat : no-repeat;
+        }
+
+        .ExpandOpen .Container {
+            display: block;
+        }
+
+        .ExpandClosed .Container {
+            display: none;
+        }
+
+        .ExpandOpen .Expand, .ExpandClosed .Expand {
+            cursor: pointer; 
+            background-color: #f7f6f6;
+        }
+
+        .ExpandLeaf .Expand {
+            cursor: auto; 
+        }
+    </style>
+    
+    <div class="slds">
+        <apex:pageblock title="{!$ObjectType.clm__Application__c.labelPlural}" rendered="{!NOT(renderAsPresentation)}">
+            <apex:pageMessage summary="{!$Label.clm__rd_applicationlistinfo}" severity="info" strength="3" />
+            <apex:pageMessages />
+            
+            <apex:pageBlockTable value="{!appList}" var="a">
+            
+                <apex:column width="85%" >
+                    <apex:outputPanel >
+                    
+                    <apex:facet name="header">{!$ObjectType.clm__Application__c.fields.Name.label}</apex:facet>
+                    
+                    <!-- TREE VIEW BEGIN -->
+                    <div class="treeView" onclick="tree_toggle(arguments[0])">
+                        
+                        <ul class="Container">
+                            <li class="Node IsRoot ExpandClosed IsLast">
+                                <div class="Expand"></div>
+                                <div class="Content">
+                                    <apex:outputPanel rendered="{!NOT(IsFail)}">
+                                        <apex:outputPanel >
+                                            <img id="share-view-{!a.id}" src='{!URLFOR($Resource.TreeViewImages,"img/Preview5.png")}' class="previewIcon"  style=" transform: scale(0.6)" />
+                                            <script>
+                                                $('#share-view-{!a.id}').click(function(){
+                                                  /*  var url = serviceUrl
+                                                    + '?appid={JSENCODE(a.Id)}'
+                                                    + '&session_id={JSENCODE($Api.Session_ID)}'
+                                                    + '&room={JSENCODE($Organization.Id)}{JSENCODE($User.Id)}'
+                                                    + '&visitid=' + visitId
+                                                    + '&instance={JSENCODE(Instance)}'
+                                                    + '&owner=true';*/
+                                                    
+                                                    var url = serviceUrl + '{!JSENCODE(a.Id)}' + urlPosfix;
+                                                    
+                                                    window.location.href = url;
+                                                    // window.open(url, 'CT Presenter', "height=760,width=1024");
+                                                });
+                                            </script>
+                                        </apex:outputPanel>
+                                    </apex:outputPanel>
+
+                                    <apex:outputField id="addNameRow" html-class="addNameRow" value="{!a.name}" />
+                                    <apex:outputLabel styleClass="imgPreviewTree onRight doImage" value="{!a.clm__Preview__c}" escape="true" />
+                                    <div id="div-view-{!a.id}" class="showOnHover onRight" style="">
+                                        <apex:outputLabel styleClass="doImage" value="{!a.clm__Preview__c}" escape="true" />
+                                    </div>
+
+                                    <script> 
+                                        console.log('selector: ' + '#div-view-{!a.id}')                               
+                                        $('#div-view-{!a.id}').siblings('label').find('a').each(function(ind, el){ 
+                                            $(el).click(function(){
+                                                var url = serviceUrl + '{!JSENCODE(a.Id)}' + urlPosfix;   
+                                                window.location.href = url;
+                                            });
+                                            $(el).removeAttr('href')
+                                        })
+                                    </script>
+
+                                    <ul class="Container">
+                                        <h2 class="header" style="color: #16325c;font-size: smaller;margin-top: 3px; margin-bottom: 6px; margin-left: 25px;">{!$ObjectType.clm__CustomScenario__c.labelPlural}: </h2>
+                                        <apex:variable value="{!appIdToScenarioIdMap[a.Id]}"  var="myMap"/  >
+
+                                        <apex:outputPanel rendered="{!appScenarioCount[a.Id] > 0}" >
+                                            <table style="table-layout: fixed; width: 100%;    margin-bottom: 10px;">
+                                                <tr>
+                                                     <td align="center" style="width : 8%; border: none">
+                                                     </td>
+                                                    <apex:repeat value="{!$ObjectType.clm__CustomScenario__c.fieldsets.clm__RemoteDetailingScenarioFields}" var="fieldValue">
+                                                         <td align="center" style="width : 18%; border: none">
+                                                            <span class="customTreeHeader">{!fieldValue.Label}</span>
+                                                         </td>
+                                                    </apex:repeat>
+                                                     <td align="center" style="width : 12%; border: none">
+                                                     </td>
+                                                </tr>
+                                            </table> 
+                                            
+                                            <apex:repeat value="{!appIdToScenarioIdMap[a.Id]}" var="scenario" >
+
+                                                <li class="Node ExpandLeaf">
+                                                    <div class="Expand"></div>
+                                                    <div class="Content">
+                                                        <table style="table-layout: fixed; width: 100%;"> 
+                                                            <tr>
+                                                                <td align="center" style="width : 6%; border: none">
+                                                                    <apex:outputPanel rendered="{!NOT(IsFail)}">
+                                                                        <apex:outputPanel >
+                                                                            <img id="share-view-{!scenario.id}" src='{!URLFOR($Resource.TreeViewImages,"img/Preview5.png")}'  class="previewIcon" style=" transform: scale(0.6)" />
+
+                                                                            <!--<input type="button" id="share-view-{!scenario.id}" value="Start" class="btn startone" style="    padding: 0px;border-bottom: 1px solid #e0e3e5;" />-->
+                                                                            <script>
+                                                                                $('#share-view-{!scenario.id}').click(function(){
+                                                                                    /*var url = serviceUrl
+                                                                                    + '?appid={JSENCODE(scenario.clm__ApplicationId__c)}'
+                                                                                    + '&session_id={JSENCODE($Api.Session_ID)}'
+                                                                                    + '&room={JSENCODE($Organization.Id)}{JSENCODE($User.Id)}'
+                                                                                    + '&visitid=' + visitId
+                                                                                    + '&instance={JSENCODE(Instance)}'
+                                                                                    + '&scenid={JSENCODE(scenario.Id)}'
+                                                                                    + '&owner=true';*/
+                                                                                    
+                                                                                    var url = serviceUrl + '{!JSENCODE(scenario.clm__ApplicationId__c)}' + urlPosfix;   
+                                                                                    url += "&scenid={!JSENCODE(scenario.Id)}";                                                                  
+                                                                                    console.log('new location: ' + url);
+                                                                                    window.location.href = url;
+                                                                                });
+                                                                            </script>
+                                                                        </apex:outputPanel>
+                                                                    </apex:outputPanel>
+                                                                </td>
+                                                                <apex:repeat value="{!$ObjectType.clm__CustomScenario__c.fieldsets.clm__RemoteDetailingScenarioFields}" var="fieldValue">
+                                                                     <td align="center" style="width : 18%; border: none; border-bottom: 1px solid #e0e3e5;">
+                                                                        <apex:outputField html-class="slds-truncate whiteSpaceStyle"  value="{!scenario[fieldValue]}" />
+                                                                     </td>
+                                                                </apex:repeat>
+                                                                
+                                                                <td style="width: 12%;">
+                                                                    <apex:outputLabel style="margin-left: 90px;" styleClass="imgPreviewTree doImage" value="{!previewMap[scenario.id]}" escape="true" />
+                                                                    <div id="div-view-{!scenario.id}" class="showOnHover" style=" position: absolute;  z-index: 1; right: 75px;">
+                                                                        <apex:outputLabel styleClass="doImage" value="{!previewMap[scenario.id]}" escape="true" />
+                                                                            <script> 
+                                                                                
+                                                                                $('#div-view-{!scenario.id}').siblings('label').find('a').each(function(ind, el){
+                                                                                    console.log('we find it!')
+                                                                                    var url = serviceUrl + '{!JSENCODE(scenario.clm__ApplicationId__c)}' + urlPosfix;   
+                                                                                    url += "&scenid={!JSENCODE(scenario.Id)}";                                                                  
+                                                                                    console.log('new location: ' + url);
+                                                                                    $(el).click(function(){
+                                                                                        window.location.href = url;
+                                                                                    });
+                                                                                    $(el).removeAttr('href')
+                                                                                })
+                                                                            </script>
+                                                                    </div>
+                                                                </td>
+                                                                
+                                                            </tr>
+                                                            
+                                                        </table>
+                                                        
+                                                    </div>
+
+                                                </li>
+                                            </apex:repeat>
+                                        </apex:outputPanel>
+
+                                        <apex:outputPanel rendered="{!appScenarioCount[a.Id] == 0}"  >
+                                            <apex:outputText value="No records" styleClass="slds" style="    margin-left: 50px;"/>
+                                        </apex:outputPanel>
+                                    </ul>
+                                </div>
+                            </li>   
+                        </ul>
+                        <br/>
+                        
+                    </div>
+                    <!-- TREE VIEW END -->
+                    </apex:outputPanel>
+                 </apex:column>
+                
+                 <apex:column >
+                    <!--<apex:facet name="header">{!$Label.MS_MLS_Action}</apex:facet>
+                    <apex:outputPanel rendered="{!NOT(IsFail)}">
+                        <input type="button" id="share-view-{!a.id}" value="Start" class="btn starttwoo" style="padding: 0px;margin-left: 89px;" />
+                        <script>
+                            $('#share-view-{!a.id}').click(function(){
+                              /*  var url = serviceUrl
+                                + '?appid={JSENCODE(a.Id)}'
+                                + '&session_id={JSENCODE($Api.Session_ID)}'
+                                + '&room={JSENCODE($Organization.Id)}{JSENCODE($User.Id)}'
+                                + '&visitid=' + visitId
+                                + '&instance={JSENCODE(Instance)}'
+                                + '&owner=true';*/
+                                
+                                var url = serviceUrl + '{!JSENCODE(a.Id)}' + urlPosfix;
+                                
+                                window.location.href = url;
+                                // window.open(url, 'CT Presenter', "height=760,width=1024");
+                            });
+                        </script>
+                    </apex:outputPanel>-->
+                 </apex:column>
+                 <!-- 
+                 <apex:column >
+                    <apex:facet name="header">Get Link</apex:facet>
+                    <input type="button" id="get-rd-link-{!a.id}" value="getRdLink" />
+                    <script>
+                        $('#get-rd-link-{!a.id}').click(function(){
+                          
+                            getRDLink('{!JSENCODE(a.Id)}', visitId, function(err, roomId) {
+                                if(err) {
+                                    console.log("getRdLinkError >> ", err);
+                                    alert(err);
+                                }else{
+                                    console.log("roomId >> ", roomId);
+                                    var url = 'https://www.ctclm.com/present/' + roomId;
+                                    alert("link: " + url);
+                                }
+                            });
+                          
+                        });
+                    </script>
+                 </apex:column>
+                   -->
+             </apex:pageBlockTable>
+             
+                 <script>
+                   
+                    $( document ).ready(function() {
+                        
+                        var lastElems = $('.treeView li:last-child').not('.IsLast');
+                    
+                        for(var i = 0; i < lastElems.length; i++){ 
+                            $(lastElems[i]).addClass('IsLast'); 
+                        }
+                    
+                    
+                        var headers = $('.header');
+                    
+                        for(var i = 0; i < headers.length; i++){
+                    
+                            var currentHeader = $(headers[i]);
+                    
+                            if( $(currentHeader).parent().children().length === 1 ){
+                    
+                                $(currentHeader).text('No available scenarios');
+                    
+                            }
+                    
+                        }
+                        
+                    
+                    });
+                      
+                </script>
+                 
+                <script>
+                
+                    //functions for treeView
+                    
+                    function tree_toggle(event) {
+                        event = event || window.event
+                        var clickedElem = event.target || event.srcElement
+                    
+                        if (!hasClass(clickedElem, 'Expand')) {
+                            return 
+                        }
+                    
+                    
+                        var node = clickedElem.parentNode
+                        if (hasClass(node, 'ExpandLeaf')) {
+                            return 
+                        }
+                    
+                    
+                        var newClass = hasClass(node, 'ExpandOpen') ? 'ExpandClosed' : 'ExpandOpen'
+                    
+                        var re =  /(^|\s)(ExpandOpen|ExpandClosed)(\s|$)/
+                        node.className = node.className.replace(re, '$1'+newClass+'$3')
+                    }
+                    
+                    
+                    function hasClass(elem, className) {
+                        return new RegExp("(^|\\s)"+className+"(\\s|$)").test(elem.className)
+                    }
+                    
+                    //
+                    function getRDLink(app_id, visit_id, cb) {
+                    
+                        var cloud_token = '{!JSENCODE(cloud_token)}';
+                        
+                        var url = 'https://www.ctclm.com/present/api/getRoomId';
+                        url += '/' + app_id;
+                        url += '/' + visit_id;
+                    
+                        url += '?cloud_token=' + cloud_token;
+                    
+                        (function(url) {
+                            var myXhr = new XMLHttpRequest();
+                        
+                            myXhr.open('GET', url, true);
+                        
+                            myXhr.onreadystatechange = function() {
+                                if(myXhr.readyState == 4) {
+                        
+                                    if (myXhr.status != 200) {
+                                        //console.error("error");
+                                        cb(myXhr.response, null);
+                                    } else {
+                                        //console.log("success");
+                                        //console.log("response >> ", myXhr.response);
+                                        if(myXhr.response.indexOf('error') == -1) {
+                                            cb(null, myXhr.response);
+                                        }else{
+                                            //room not finded error
+                                            cb(myXhr.response, null);
+                                        }
+                                    }
+                        
+                                }
+                                
+                            }
+                            
+                            myXhr.send();
+                        }) (url);
+                    
+                    }
+                </script>
+             
+         </apex:pageblock>
+    </div>
+     
+        <script>
+            //auto start presentation
+            function replaceOnclick(){
+                //imgPreviewTree - класс с превьюшкой
+                //previewIcon - класс с просмотром
+                $('.previewIcon').each(function(el,ind){
+
+                })
+            }
+
+            function doImage(){
+                 $('.doImage')
+                    .each(
+                        function(i, el) {    
+                            //console.log($(el).text())
+                            
+                            var text = $(el).text()
+                            $(el).text('')
+                            console.log(text)
+                            if (text){
+                                $(el).append( text );
+                            }
+                            
+                            }  
+                        )
+            }
+
+            $( document ).ready(function() {
+                replaceOnclick()
+                doImage()
+
+            });
+            
+
+
+        </script>
+    
+</apex:page>

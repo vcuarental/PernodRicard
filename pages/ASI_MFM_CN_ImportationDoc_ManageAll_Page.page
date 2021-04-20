@@ -1,0 +1,318 @@
+<apex:page standardController="ASI_MFM_Importation_Document_Detail__c" extensions="ASI_MFM_CN_ImportationDoc_ManageAll_Ctrl" recordSetVar="var" sidebar="true">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    
+    <meta charset="UTF-8" />
+    
+    <head>
+        <style type="text/css">
+            div.hid {display: none;}
+            /* highlight results */ 
+            .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+            }
+            
+            /* loading - the AJAX indicator */
+            .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+            }
+            
+            
+            .ui-autocomplete-input{ 
+            //border-left: 3px solid darkred !important;    
+            }
+            
+            .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            /* prevent horizontal scrollbar */
+            overflow-x: hidden;
+            overflow:auto;
+            /* add padding to account for vertical scrollbar */
+            padding-right: 20px;
+            left: 0;
+            }
+            /* IE 6 doesn't support max-height
+            * we use height instead, but this forces the menu to always be this tall
+            */
+            *html .ui-autocomplete {
+            height: 200x;
+            }
+        </style>
+        
+        <script>
+        var allocationline = [];
+        var countingline = 0;
+        var activelinecount = 0;
+        var ac = [];
+        var skumap = [];
+        var lineIdMap = [];
+        var skudescription = [];
+        
+        $(document).ready(function(){
+            $('#el_loading').show();
+            createHeaderCol();
+            ASI_MFM_CN_ImportationDoc_ManageAll_Ctrl.documentLine('{!pageId}', docLineCallBack);
+        });
+        
+        function skuAutoComplete(result, event){
+            if (event.status) {
+                if (result) {
+                    
+                    for(var i = 0; i < result.length ; i++){
+                        var e = {
+                            label : result[i].Name,
+                            value : result[i].Id,
+                            description : (result[i].ASI_FOC_SKU_Chinese_Description__c ? result[i].ASI_FOC_SKU_Chinese_Description__c : '') + ' (' + (result[i].ASI_FOC_Packing_Description__c ? result[i].ASI_FOC_Packing_Description__c : '') + ')'
+                        };
+                        
+                        ac.push(e);
+                    }
+                    
+                    $('td.skuCode input').each(function(){
+                        autoCompleteInit(this);
+                    });
+                }
+            }
+        }
+        
+        function autoCompleteInit(that){
+            
+            $(that).autocomplete({
+                source : ac,
+                select : function( event, ui ) {                                
+                    event.preventDefault();
+                    $(this).val(ui.item.label);
+                    $(this).closest('tr').find('td.skuDescription').html(ui.item.description);
+                    skumap[$(this).closest('tr').find('td.lineId').attr('allocationlineId')] = ui.item.value;
+                },
+                //minLength: 0
+            });
+        }
+        
+        var enlargeOrResume = {	
+            enlarge : function(e){
+                $(e).css('color','red');
+            }, 
+            resume : function(e){
+                $(e).css('color','black');
+            }
+        }
+        
+        var addOrRemoveLine = {
+            removeline : function(e) {
+                var lineId = lineIdMap[$(e).closest('tr').find('.lineId').attr('allocationlineId')] ? lineIdMap[$(e).closest('tr').find('.lineId').attr('allocationlineId')] : null;//$(e).closest('tr').find('.lineId').html();                
+                if(allocationline[lineId]){
+                    allocationline[lineId].isDelete = true;
+                }
+                $(e).closest('tr').remove();
+                activelinecount--;
+            },
+            addline : function(e){
+                if(activelinecount >= 10) {
+                    return;
+				}
+                var line = '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                                       + '<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-</td>';
+
+                line += '<td class="dataCell skuCode" style="border-left-width: 1px; border-left: solid #ff0000;"><input style="Width:95%" type="" value="" /></td>';
+                line += '<td class="dataCell skuDescription"></td>';
+                line += '<td class="dataCell remark" ><input style="Width:95%" type="" value="" /></td>';
+                line += '<td class="dataCell docType" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + '{!docTypePicklist}' + '</select></td>';
+                line += '<td class="dataCell docYear" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + '{!docYearPicklist}' + '</select></td>';
+                line += '<td class="dataCell contractNum"><input type="" value="" /></td>';
+                line += '<td class="dataCell useOfDoc" style="border-left-width: 1px; border-left: solid #ff0000;"><input type="" value="" /></td>';
+                line += '<td class="dataCell possibleReplace" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + '{!replacePicklist}' + '</select></td>';
+                line += '<td class="dataCell govProof" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + '{!govProofPicklist}' + '</select></td>';
+                line += '<td class="dataCell acceptPrice" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + '{!acceptPricePicklist}' + '</select></td>';
+                line += '<td style="" class="lineId" allocationlineId="' + 'allocation_' + countingline + '"></td>';
+                //line += '<td style="display:none" class="skuId"><input type="" value="" /></td>'
+                line += '</tr>';
+                
+                var appendLine = $(e).closest('table').find('tbody').last('tr').append(line);
+                
+                skumap['allocation_' + countingline] = null;
+                lineIdMap['allocation_' + countingline] = null;
+                
+                autoCompleteInit($(appendLine).find('td.skuCode input'));
+                countingline++;
+                activelinecount++;
+            }
+        }
+        
+        function createHeaderCol(){
+            var headercol = '<th onclick="addOrRemoveLine.addline(this)" class="headerRow" style="text-align:center; font-size:120%;" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">+</th>';
+            headercol += '<th class="headerRow" style="Width:15%">SKU Code</th>';
+            headercol += '<th class="headerRow" style="Width:10%">SKU 描述</th>';
+            headercol += '<th class="headerRow" style="Width:15%">备注</th>';
+            headercol += '<th class="headerRow">获取文件类型</th>';
+            headercol += '<th class="headerRow">所需文件年份</th>';
+            headercol += '<th class="headerRow">合同编号</th>';
+            headercol += '<th class="headerRow">文件用途</th>';
+            headercol += '<th class="headerRow">能否以其他文件代替</th>';
+            headercol += '<th class="headerRow">是否需要合同号和<br/>中华人民共和国<br/>出入境检验检疫入境<br/>货物检验检疫证明<br/>(卫生证书)的匹配</th>';
+            headercol += '<th class="headerRow">是否接受价格<br/>编号信息全部覆盖</th>';
+            headercol += '<th style="display:none">ID</th>';
+            //headercol += '<th style="display:none">SKUID</th>';
+            $('table.lineTable tr.headerRow').append(headercol);
+        }
+        
+        function docLineCallBack(line, event){
+            if (event.status) {
+                if (line) {
+                    allocationline = [];
+                    var size = line.length;
+                    activelinecount = size;
+                    var appendline = '';
+                    
+                    for (var i = 0; i < size; i++) {
+                        var lineItem = line[i];
+                        allocationline[lineItem.lineId] = lineItem;
+                        //console.log(allocationline[lineItem.lineId]);
+                        var dt = '{!docTypePicklist}'.replace('value="' + lineItem.docType + '"', 'value="' + lineItem.docType + '" selected');
+                        var dy = '{!docYearPicklist}'.replace('value="' + lineItem.docYear + '"', 'value="' + lineItem.docYear + '" selected');
+                        var re = '{!replacePicklist}'.replace('value="' + lineItem.possibleReplace + '"', 'value="' + lineItem.possibleReplace + '" selected');
+                        var gp = '{!govProofPicklist}'.replace('value="' + lineItem.govProof + '"', 'value="' + lineItem.govProof + '" selected');
+                        var ap = '{!acceptPricePicklist}'.replace('value="' + lineItem.acceptPrice + '"', 'value="' + lineItem.acceptPrice + '" selected');
+                        
+                        appendline += '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                        + '<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-</td>';
+                        appendline += '<td class="dataCell skuCode" style="border-left-width: 1px; border-left: solid #ff0000;"><input style="Width:95%" type="" value="' + lineItem.skuCode + '" /></td>';
+                        appendline += '<td class="dataCell skuDescription">' + lineItem.skuDescription + '</td>';
+                        appendline += '<td class="dataCell remark" ><input style="Width:95%" type="" value="' + lineItem.remark + '" /></td>';
+                        appendline += '<td class="dataCell docType" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + dt + '</select></td>';
+                        appendline += '<td class="dataCell docYear" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + dy + '</select></td>';
+                        appendline += '<td class="dataCell contractNum"><input type="" value="' + lineItem.contractNum + '" /></td>';
+                        appendline += '<td class="dataCell useOfDoc" style="border-left-width: 1px; border-left: solid #ff0000;"><input type="" value="' + lineItem.useOfDoc + '" /></td>';
+                        appendline += '<td class="dataCell possibleReplace" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + re + '</select></td>';
+                        appendline += '<td class="dataCell govProof" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + gp + '</select></td>';
+                        appendline += '<td class="dataCell acceptPrice" style="border-left-width: 1px; border-left: solid #ff0000;"><select>' + ap + '</select></td>';
+                        
+                        appendline += '<td style="display:none" allocationlineId="' + 'allocation_' + countingline + '" class="lineId">' + lineItem.lineId + '</td>'
+                        //appendline += '<td style="display:none" class="skuId"><input type="" value="' + lineItem.skuId + '" /></td>'
+                        appendline += '</tr>';
+                        
+                        skumap['allocation_' + countingline] = lineItem.skuId;
+                        lineIdMap['allocation_' + countingline] = lineItem.lineId;
+                        countingline++;
+                    }
+                    
+                    var body = $('.lineBody')
+                    
+                    body.append(appendline);
+                    $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'});
+                    $('#el_loading').hide();
+                    
+                    ASI_MFM_CN_ImportationDoc_ManageAll_Ctrl.getAllSKU(skuAutoComplete);
+                }
+            } else {
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert(event.message);
+            }
+            
+        }
+        
+        function saveResult(){
+            var submitlist = [];
+            var deleteList = [];
+            var tbody = $('.lineBody tr');
+            
+            tbody.each(function(){
+                var lineid = lineIdMap[$(this).find('td.lineId').attr('allocationlineId')] ? lineIdMap[$(this).find('td.lineId').attr('allocationlineId')] : '';//$(this).find('td.lineId').html();
+                var tmp = {remark : $(this).find('td.remark input').val() ? $(this).find('td.remark input').val() : ''
+                           , docType : $(this).find('td.docType select option:selected').val() ? $(this).find('td.docType select option:selected').val() : ''
+                           , docYear : $(this).find('td.docYear select option:selected').val() ? $(this).find('td.docYear select option:selected').val() : ''
+                           , contractNum : $(this).find('td.contractNum input').val() ? $(this).find('td.contractNum input').val() : ''
+                           , useOfDoc : $(this).find('td.useOfDoc input').val() ? $(this).find('td.useOfDoc input').val() : ''
+                           , possibleReplace : $(this).find('td.possibleReplace select option:selected').val() ? $(this).find('td.possibleReplace select option:selected').val() : ''
+                           , govProof : $(this).find('td.govProof select option:selected').val() ? $(this).find('td.govProof select option:selected').val() : ''
+                           , acceptPrice : $(this).find('td.acceptPrice select option:selected').val() ? $(this).find('td.acceptPrice select option:selected').val() : ''
+                           , lineId : lineid
+                           , skuId : skumap[$(this).find('td.lineId').attr('allocationlineId')] ? skumap[$(this).find('td.lineId').attr('allocationlineId')] : null//$(this).find('td.skuId input').val() ? $(this).find('td.skuId input').val() : ''
+                           , isDelete : false
+                          };
+                if(!allocationline[tmp.lineId]){
+                    allocationline[$(this).find('td.lineId').attr('allocationlineId')] = tmp;
+                }else{
+                    allocationline[tmp.lineId] = tmp;
+                }
+
+                //console.log(tmp);
+                
+                if(Object.keys(tmp).length > 0){
+                    submitlist.push(tmp);
+                }
+            });
+            
+            for(var key in allocationline){
+
+                if(allocationline[key].isDelete) {
+                    deleteList.push({lineId : key});
+                }
+            }
+            ASI_MFM_CN_ImportationDoc_ManageAll_Ctrl.saveDocumentLine(submitlist, deleteList, '{!pageId}', saveCallBack);
+        }
+        
+        function saveCallBack(returnMsg, event){
+            if (event.status) {
+                if (returnMsg === 'Success') {
+                    var redirectURL = '/{!pageId}';
+                    location.href = redirectURL;
+                    redirect = true;
+                    
+                }else{
+                    $('#el_loading').hide();
+                    alert(returnMsg);
+                }
+            }else{
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert(event.message);
+            }
+        }
+        </script>
+    </head>
+    
+    <apex:form >
+        <apex:pageMessages id="headerPageMsg" />
+        <!-- Action Status -->
+        <div class="waitingSearchDiv" id="el_loading" style="display : none; z-index:999;background-color: #fbfbfb; height: 100%;opacity:0.65;width:100%;"> 
+            <div class="waitingHolder" style="top: 74.2px; width: 91px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Please Wait...</span>
+            </div>
+        </div>
+        <!-- Action Status End -->
+        <apex:outputPanel >
+            <apex:pageblock title="Title" >
+                <apex:pageBlockButtons rendered="{!LOWER(importDoc.ASI_MFM_Status__c) == 'draft'}">
+                    <input type="button" value="Save" class="btn" onclick="$('#el_loading').show(); saveResult();" />
+                    <apex:commandButton action="{!cancel}" value="Cancel" />
+                </apex:pageBlockButtons>
+                
+                <apex:pageblocksection title="声明" columns="2">
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="获取文件目的" />
+                        <apex:outputField value="{!importDoc.ASI_MFM_Request_Purpose__c}" />
+                    </apex:pageblockSectionItem>
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Region" />
+                        <apex:outputField value="{!importDoc.ASI_MFM_Region__c}" />
+                    </apex:pageblockSectionItem>
+                </apex:pageblocksection>
+                
+                <apex:pageblocksection title="获取文件申请" columns="1">
+                    <table class="list lineTable" cellspacing="0" cellpadding="0" border="0">
+                        <tr class="headerRow">
+                        </tr>
+                        <tbody class="lineBody">
+                        </tbody>
+                    </table>
+                </apex:pageblocksection>
+                
+            </apex:pageblock>
+        </apex:outputPanel>
+    </apex:form>
+</apex:page>

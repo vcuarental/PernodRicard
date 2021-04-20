@@ -1,0 +1,152 @@
+<apex:page ></apex:page>
+<!--<apex:page id="page" controller="project_cloud.SubscriptionsController" extensions="project_cloud.TokenInputHelper" tabStyle="Subscriptions__tab" title="Resource Assignments - User Bulk Changes">
+
+	<c:walkme />
+	<c:include_jquery declareEsc="true" />
+	<apex:includeScript value="{!URLFOR($Resource.jquery_plugins_zip, '/tokeninput/jquery.tokeninput.js')}" />
+	<apex:stylesheet value="{!URLFOR($Resource.jquery_plugins_zip, '/tokeninput/token-input-mac.css')}" />
+	<style type="text/css">
+		input.remoting-loading {
+			background-image: url('/img/loading.gif');
+			background-position: center center;
+			background-repeat: no-repeat;
+		}
+	</style>
+
+	<apex:sectionHeader title="Resource Assignments" subtitle="User Bulk Changes" />
+
+	<apex:pageMessages id="messages" />
+
+	<apex:form id="form">
+		<apex:pageBlock id="block">
+			<apex:pageBlockButtons location="top">
+				<apex:commandButton value="Save" action="{!save}" />
+				<apex:commandButton value="Cancel" action="{!cancel}" />
+				<c:list_search tableSelector=".subscriptionsTable" tableSelectorUsesEsc="false" />
+			</apex:pageBlockButtons>
+			<apex:inputHidden id="capabilities" value="{!capabilitiesJson}" />
+			<apex:pageBlockSection columns="1" id="ownerSection">
+				<apex:inputField id="owner" value="{!placeholder.OwnerId}" label="Resource" required="false">
+					<apex:actionSupport event="onchange" action="{!changeUser}" rerender="capabilities, filteredPanel, messages" status="filteredStatus" onSubmit="jQuery('#token-input-capabilities-filter').addClass('remoting-loading')" onComplete="changedOwner();" />
+				</apex:inputField>
+				<apex:pageBlockSectionItem id="capabilitiesItem">
+					<apex:outputLabel value="Resource Capabilities" />
+					<apex:outputPanel id="capabilitiesPanel">
+						<input type="text" id="capabilities-filter" style="display: none;" />
+					</apex:outputPanel>
+				</apex:pageBlockSectionItem>
+			</apex:pageBlockSection>
+			<apex:actionStatus id="filteredStatus" layout="block">
+				<apex:facet name="start">
+					<c:loading />
+				</apex:facet>
+				<apex:facet name="stop">
+					<apex:outputPanel id="filteredPanel">
+						<apex:pageBlockSection title="Existing Subscriptions" columns="1">
+							<apex:pageBlockTable id="allocatedTable" var="row" value="{!allocated}" styleClass="subscriptionsTable">
+								<apex:column >
+									<apex:facet name="header">
+										<apex:outputPanel layout="none">
+											<apex:inputCheckbox id="subscribedCheckAll" selected="true" styleClass="checkAll" style="margin: 0 0 0 4px; vertical-align: top;" />&nbsp;
+											<apex:outputLabel value="Subscribed" for="subscribedCheckAll" />
+										</apex:outputPanel>
+									</apex:facet>
+									<apex:inputCheckbox value="{!row.subscribed}" styleClass="checkOne" />
+								</apex:column>
+								<apex:column headerValue="{!$ObjectType.Project_Phase__c.fields.Project__c.label}" value="{!row.parent.Project_Phase__r.Project__r.Name}" rendered="{!ISBLANK(projectId)}" />
+								<apex:column headerValue="{!$ObjectType.Project_Task__c.fields.Project_Phase__c.label}" value="{!row.parent.Project_Phase__r.Name}" />
+								<apex:column headerValue="Existing Project Task Subscriptions">
+									<c:lookup_hover_detail recordId="{!row.parent.Id}">
+										{!row.parent.Name}
+									</c:lookup_hover_detail>
+								</apex:column>
+								<apex:column headerValue="Fully Subscribed">
+									<apex:inputCheckbox value="{!row.parent.Subscribed__c}" />
+								</apex:column>
+							</apex:pageBlockTable>
+						</apex:pageBlockSection>
+
+						<apex:pageBlockSection title="Available Subscriptions" columns="1">
+							<apex:pageBlockSectionItem id="projectItem">
+								<apex:outputLabel value="Filter by Project" />
+								<apex:selectList id="projectId" value="{!projectId}" size="1">
+									<apex:selectOptions value="{!projectOptions}" />
+									<apex:actionSupport event="onchange" action="{!changeProject}" rerender="filteredPanel, messages" status="filteredStatus" />
+								</apex:selectList>
+							</apex:pageBlockSectionItem>
+							<apex:pageBlockTable id="filteredTable" var="row" value="{!filtered}" styleClass="subscriptionsTable">
+								<apex:column >
+									<apex:facet name="header">
+										<apex:outputPanel layout="none">
+											<apex:inputCheckbox id="filteredCheckAll" styleClass="checkAll" style="margin: 0 0 0 4px; vertical-align: top;" />&nbsp;
+											<apex:outputLabel value="Subscribed" for="filteredCheckAll" />
+										</apex:outputPanel>
+									</apex:facet>
+									<apex:inputCheckbox value="{!row.subscribed}" styleClass="checkOne" />
+								</apex:column>
+								<apex:column headerValue="{!$ObjectType.Project_Phase__c.fields.Project__c.label}" value="{!row.parent.Project_Phase__r.Project__r.Name}" rendered="{!ISBLANK(projectId)}" />
+								<apex:column headerValue="{!$ObjectType.Project_Task__c.fields.Project_Phase__c.label}" value="{!row.parent.Project_Phase__r.Name}" />
+								<apex:column headerValue="Matching Subscriptions">
+									<c:lookup_hover_detail recordId="{!row.parent.Id}">
+										{!row.parent.Name}
+									</c:lookup_hover_detail>
+								</apex:column>
+								<apex:column headerValue="Fully Project Task Subscribed">
+									<apex:inputCheckbox value="{!row.parent.Subscribed__c}" />
+								</apex:column>
+							</apex:pageBlockTable>
+						</apex:pageBlockSection>
+					</apex:outputPanel>
+				</apex:facet>
+			</apex:actionStatus>
+		</apex:pageBlock>
+
+		<apex:actionFunction name="changeCapability" action="{!changeCapability}" rerender="capabilities, filteredPanel, messages" status="filteredStatus" onComplete="jQuery('input.remoting-loading').removeClass('remoting-loading');">
+			<apex:param name="workType" value="" assignTo="{!workTypeId}" />
+		</apex:actionFunction>
+
+	</apex:form>
+
+	<script type="text/javascript">
+
+		function changedOwner() {
+			//clear the filter without calling the onDelete action
+			jQuery("#capabilities-filter").tokenInput("clear", { onDelete: null });
+			//Add the values for the newly selected user
+			jQuery("#capabilities-filter").tokenInput("add", esc$("{!$Component.page.form.block.capabilities}").val(), { onAdd: null });
+			jQuery('input.remoting-loading').removeClass('remoting-loading');
+		}
+
+		function onAddDeleteChangeCapability(item) {
+			jQuery("#token-input-" + jQuery(this).prop("id")).addClass("remoting-loading");
+			changeCapability(item.id);
+			return true;
+		}
+
+		jQuery(document).ready(function($) {
+			$("#capabilities-filter").tokenInput(function(query, handle_results) {
+				Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.TokenInputHelper.getTokens}', query, { work_type: null }, function(result, event) {
+					if (event.status) {
+						handle_results(query, result);
+					} else if (event.type === 'exception') {
+						alert(event.message);
+					}
+				});
+			}, {
+				//rest of the tokenInput options
+				theme: "mac",
+				preventDuplicates: true,
+				prePopulate: <apex:outputText value="{!capabilitiesJson}" />,
+				onAdd: onAddDeleteChangeCapability,
+				onDelete: onAddDeleteChangeCapability
+			});
+
+			//attach events to the checkAll checkboxes
+			esc$("{!$Component.page.form.block}").delegate(".checkAll", "change", function() {
+				var action = $(this).is(":checked");
+				$(this).closest("table").find("tbody .checkOne").prop("checked", action);
+			});
+		});
+	</script>
+</apex:page>
+-->

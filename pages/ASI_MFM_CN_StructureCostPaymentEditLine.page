@@ -1,0 +1,419 @@
+<apex:page standardController="ASI_MFM_Payment__c" extensions="ASI_MFM_CN_StructureCost_Main_Ctrl" docType="html-5.0" showChat="false" showHeader="false" sidebar="false">
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    
+    <meta charset="UTF-8" />
+    
+    <head>
+        <script>
+        
+        var allocationline = [];
+        var countingline = 0;
+        
+        $(document).ready(function(){
+            $('#el_loading').show();
+            
+            createHeaderCol();
+            ASI_MFM_CN_StructureCost_Main_Ctrl.paymentLine('{!ASI_MFM_Payment__c.id}', {!isAccrual}, {!isClassification}, paymentLineCallBack);
+            
+            window.top.scrollBy(0,1);
+        });
+        
+        var enlargeOrResume = {	enlarge : function(e){
+                                                        $(e).css('color','red');
+                                                    }, 
+                              	resume : function(e){
+                                    					$(e).css('color','black');
+                                				   }
+                             }
+        
+        var addOrRemoveLine = {		removeline : function(e){
+            							
+                                        var lineId = $(e).closest('tr').find('.lineId').html();
+                                        
+                                        if(allocationline[lineId]){
+                                            allocationline[lineId].isDelete = true;
+                                        }
+                                        $(e).closest('tr').remove();
+                                    },
+                               
+                                   addline : function(e){
+                                       var line = '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                                       + '<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-</td>';
+                                       
+                                       if({!isClassification}){
+                                           
+                                           line += '<td class="dataCell reclassification"><select>' + '{!classificationPicklist}' + '</select></td>'
+                                           + '<td class="dataCell classificationAmount"><input type="" value="" /></td>'
+                                           + '<td class="dataCell headCount"><input type="" value="" /></td>'
+                                           + '<td class="dataCell purpose"><select>' + '{!purposePicklist}' + '</select></td>'
+                                           + '<td class="dataCell classificationRemark"><input type="" value="" /></td>'; //20171110 Introv
+                                           
+                                       }else{
+                                           
+                                           if(!{!isAccrual}){
+                                               if('{!paymentHeader.ASI_MFM_Allocation_Method__c}' === 'Sales/Non-Sales'){
+                                                   
+                                                   if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                                                       line += '<td class="dataCell salesAmount"><input type="" value="" /></td>'
+                                                       + '<td class="dataCell nonSalesAmount"><input type="" value="" /></td>';
+                                                   }else{
+                                                       line += '<td class="dataCell salesPrecent"><input type="" value="" /></td>'
+                                                       + '<td class="dataCell nonSalesPrecent"><input type="" value="" /></td>';
+                                                   }
+                                               }else{
+                                                   line += '<td class="dataCell employeeCode"><input type="" value="" /></td>';
+                                                   
+                                                   if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                                                       
+                                                       line += '<td class="dataCell employeeAmount"><input type="" value="" /></td>';
+                                                   }else{
+                                                       
+                                                       line += '<td class="dataCell employeePrecent"><input type="" value="" /></td>';
+                                                   }
+                                               }
+                                           }else{
+                                               line += '<td class="dataCell reverseAmount"><input type="" value="" /></td>'
+                                               + '<td class="dataCell glDate"><input class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" value="" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });" /></td>';
+                                           }
+                                       }
+                                       
+                                       line += '<td style="display:none" class="lineId" allocationlineId="' + 'allocation_' + countingline + '"></td>'
+                                       + '</tr>';
+                                       
+                                       $(e).closest('table').find('tbody').last('tr').append(line);
+                                       $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'});
+                                       countingline++;
+                                  }
+        
+        
+        }
+        
+        function createHeaderCol(){
+            var headercol = '<th onclick="addOrRemoveLine.addline(this)" class="headerRow" style="text-align:center; font-size:120%;" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">+</th>';
+            
+            if({!isClassification}){
+                
+                headercol += '<th class="headerRow">Reclassification/分类</th><th class="headerRow">Reclassification Amount/金额</th><th class="headerRow">Headcount/人数</th><th class="headerRow">Purpose/目的</th><th class="headerRow">Remark/备注</th>';
+                
+            }else{
+                
+                if(!{!isAccrual}){
+                    if('{!paymentHeader.ASI_MFM_Allocation_Method__c}' === 'Sales/Non-Sales'){
+                        if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                            headercol += '<th class="headerRow">Sales Amount/销售人员分配金额</th>'
+                            + '<th class="headerRow">Non-Sales Amount/非销售人员分配金额</th>';
+                        }else{
+                            headercol += '<th class="headerRow">Sales Precentage/销售人员分配百分比</th>'
+                            + '<th class="headerRow">Non-Sales Precentage/非销售人员分配百分比</th>';
+                        }
+                    }else{
+                        
+                        headercol += '<th class="headerRow">Employee Code/员工代码</th>';
+                        
+                        if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                            headercol += '<th class="headerRow">Employee Allocated Amount/员工分配金额</th>';
+                        }else{
+                            headercol += '<th class="headerRow">Employee Allocated Precentage/员工分配百分比</th>';
+                        }
+                    }
+                }else{
+                    headercol += '<th class="headerRow">Accrual Reverse Amount</th>'
+                    + '<th class="headerRow">G/L Dtae</th>';
+                }
+            }
+            
+            headercol += '<th style="display:none">ID</th>';
+            
+            $('table.lineTable tr.headerRow').append(headercol);
+        }
+        
+        function paymentLineCallBack(line, event){
+            
+            if (event.status) {
+                if (line) {
+                    allocationline = [];
+                    var size = line.length;
+                    var appendline = '';
+                    
+                    /*for(key in line){
+                    console.log(key);
+                    }*/
+                    for (var i = 0; i < size; i++) {
+                        var lineItem = line[i];
+                        allocationline[lineItem.lineId] = lineItem;
+                        //console.log(lineItem);
+                        appendline += '<tr class="dataRow even first last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">';
+                        appendline += lineItem.ETL ? '<td class="dataCell"></td>' : '<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-</td>';
+                        
+                        if({!isClassification}){
+                            
+                            //console.log(lineItem.reclassification);
+                            
+                            var cp = '{!classificationPicklist}'.replace('value="' + lineItem.reclassification + '"', 'value="' + lineItem.reclassification + '" selected');
+                            var pp = '{!purposePicklist}'.replace('value="' + lineItem.purpose + '"', 'value="' + lineItem.purpose + '" selected');
+                            
+                            appendline += '<td class="dataCell reclassification"><select>' + cp + '<select></td>';
+                            appendline += '<td class="dataCell classificationAmount"><input type="" value="' + lineItem.classificationAmount + '" /></td>';
+                            appendline += '<td class="dataCell headCount"><input type="" value="' + lineItem.headCount + '" /></td>';
+                            appendline += '<td class="dataCell purpose"><select>' + pp + '<select></td>'
+                            appendline += '<td class="dataCell classificationRemark"><input type="" value="' + (lineItem.remark != null ? lineItem.remark : '') + '" /></td>'; //20171110 Introv
+                            
+                        }else{
+                            
+                            if(!{!isAccrual}){
+                                if('{!paymentHeader.ASI_MFM_Allocation_Method__c}' === 'Sales/Non-Sales'){
+                                    
+                                    if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                                        appendline += '<td class="dataCell salesAmount"><input type="" value="' + lineItem.salesAmount + '" /></td>'
+                                        + '<td class="dataCell nonSalesAmount"><input type="" value="' + lineItem.nonSalesAmount + '" /></td>';
+                                    }else{
+                                        appendline += '<td class="dataCell salesPrecent"><input type="" value="' + lineItem.salesPrecent + '" /></td>'
+                                        + '<td class="dataCell nonSalesPrecent"><input type="" value="' + lineItem.nonSalesPrecent + '" /></td>';
+                                    }
+                                }else{
+                                    appendline += '<td class="dataCell employeeCode"><input type="" value="' + lineItem.employeeCode + '" /></td>';
+                                    
+                                    if('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'){
+                                        
+                                        appendline += '<td class="dataCell employeeAmount"><input type="" value="' + lineItem.employeeAmount + '" /></td>';
+                                    }else{
+                                        
+                                        appendline += '<td class="dataCell employeePrecent"><input type="" value="' + lineItem.employeePrecent + '" /></td>';
+                                    }
+                                }
+                            }else{
+                                appendline += '<td class="dataCell reverseAmount"><input ' + (lineItem.ETL ? 'disabled' : '') + ' type="" value="' + lineItem.reverseAmount + '" /></td>'
+                                + '<td class="dataCell glDate"><input ' + (lineItem.ETL ? 'disabled' : '') + ' class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" value="' + lineItem.glDate + '" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });" /></td>';
+                            }
+                        }
+                        
+                        appendline += '<td style="display:none" class="lineId">' + lineItem.lineId + '</td>'
+                        + '</tr>';
+                        
+                    }
+                    
+                    var body = $('.lineBody')//!{!accrualPaymentform} ? $('.allocationLineBody') : $('.accrualLineBody');
+                    
+                    body.append(appendline);
+                    $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'});
+                    $('#el_loading').hide();
+                }
+            } else {
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert(event.message);
+            }
+        }
+        
+        function saveResult(){
+            
+            var submitlist = [];
+            var deleteList = [];
+            
+            var tbody = $('.lineBody tr')//!{!accrualPaymentform} ? $('.allocationLineBody tr') : $('.accrualLineBody tr');
+            
+            tbody.each(function(){
+                
+                var lineid = $(this).find('td.lineId').html();
+                var tmp = {salesAmount : $(this).find('td.salesAmount input').val() ? $(this).find('td.salesAmount input').val() : 0
+                           , nonSalesAmount : $(this).find('td.nonSalesAmount input').val() ? $(this).find('td.nonSalesAmount input').val() : 0
+                           , salesPrecent : $(this).find('td.salesPrecent input').val() ? $(this).find('td.salesPrecent input').val() : 0
+                           , nonSalesPrecent : $(this).find('td.nonSalesPrecent input').val() ? $(this).find('td.nonSalesPrecent input').val() : 0
+                           , employeeCode : $(this).find('td.employeeCode input').val() ? $(this).find('td.employeeCode input').val() : ''
+                           , employeeAmount : $(this).find('td.employeeAmount input').val() ? $(this).find('td.employeeAmount input').val() : 0
+                           , employeePrecent : $(this).find('td.employeePrecent input').val() ? $(this).find('td.employeePrecent input').val() : 0
+                           , isDelete : false
+                           , glDate : $(this).find('td.glDate input').val() ? $(this).find('td.glDate input').val() : ''
+                           , reverseAmount : $(this).find('td.reverseAmount input').val() ? $(this).find('td.reverseAmount input').val() : 0
+                           , reclassification : $(this).find('td.reclassification select option:selected').val() ? $(this).find('td.reclassification select option:selected').val() : ''
+                           , purpose : $(this).find('td.purpose select option:selected').val() ? $(this).find('td.purpose select option:selected').val() : ''
+                           , headCount : $(this).find('td.headCount input').val() ? $(this).find('td.headCount input').val() : 0
+                           , classificationAmount : $(this).find('td.classificationAmount input').val() ? $(this).find('td.classificationAmount input').val() : 0
+                           , lineId : lineid
+                           , ETL : (allocationline[lineid] ? allocationline[lineid].ETL : false)
+                           , remark : $(this).find('td.classificationRemark input').val() ? $(this).find('td.classificationRemark input').val() : ''
+                          };
+                
+                if(!allocationline[tmp.lineId]){
+                    //if(allocationline[$(this).find('td.lineId').attr('allocationlineId')])
+                    //delete allocationline[$(this).find('td.lineId').attr('allocationlineId')];
+                    allocationline[$(this).find('td.lineId').attr('allocationlineId')] = tmp;
+                }else{
+                    //delete allocationline[tmp.lineId];
+                    allocationline[tmp.lineId] = tmp;
+                }
+                    
+                if(Object.keys(tmp).length > 0){
+                    submitlist.push(tmp);
+                }
+            });
+            
+            for(var key in allocationline){
+                if(allocationline[key].isDelete)
+                    deleteList.push({lineId : key});
+            }
+            
+            //console.log(submitlist);
+            //console.log(deleteList);
+            //console.log({!paymentHeader.ASI_MFM_Total_Amount_Without_Tax__c});
+            
+            ASI_MFM_CN_StructureCost_Main_Ctrl.savePaymentLine(submitlist, deleteList, '{!ASI_MFM_Payment__c.id}', {!paymentHeader.ASI_MFM_Payment_Amount__c}, {!paymentHeader.ASI_MFM_Total_Amount_Without_Tax__c}, ('{!paymentHeader.ASI_MFM_Allocation_Method__c}' === 'Sales/Non-Sales'), ('{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}' === 'Amount'), {!isAccrual}, {!isClassification}, '{!JSENCODE(paymentHeader.ASI_MFM_Remarks__c)}', {!paymentHeader.ASI_MFM_Total_Sales_Allocated_Amount__c}, {!paymentHeader.ASI_MFM_Total_Non_Sales_Allocated_Amount__c}, saveCallBack);
+        }
+        
+        function saveCallBack(returnMsg, event){
+            
+            if (event.status) {
+                if (returnMsg === 'Success') {
+                    var redirectURL = '/apex/ASI_MFM_CN_StructureCost_MainPage?id={!ASI_MFM_Payment__c.id}';
+                    
+                    location.href = redirectURL;
+                    redirect = true;
+                    
+                }else{
+                    $('#el_loading').hide();
+                    alert(returnMsg);
+                }
+            }else{
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert(event.message);
+            }
+        }
+        
+        </script>
+    </head>
+    <apex:form rendered="{!paymentHeader.ASI_MFM_Status__c != 'Draft' && NOT(isAdmin)}">
+        <div class="message errorM3 overPaidMsg" >
+            <table class="messageTable" cellspacing="0" border="0" style="padding:0px;margin:0px;">
+                <tbody>
+                    <tr valign="top">
+                        <td><img class="msgIcon" title="Warning" src="/s.gif"/></td>
+                        <td class="messageCell">
+                            <div class="messageText">
+                                <span style="color:#cc0000">
+                                    <h4>
+                                        Warning:
+                                    </h4>
+                                </span>
+                                <span class="WarningMsg">
+                                    Only Draft Payment can edit Line
+                                </span>
+                                <br/>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </apex:form>
+    <apex:form rendered="{!paymentHeader.ASI_MFM_Status__c = 'Draft' || isAdmin}">
+        
+        <apex:pageMessages id="headerPageMsg" />
+        
+        <!-- Action Status -->
+        <div class="waitingSearchDiv" id="el_loading" style="display : none; z-index:999;background-color: #fbfbfb; height: 100%;opacity:0.65;width:100%;"> 
+            <div class="waitingHolder" style="top: 74.2px; width: 91px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Please Wait...</span>
+            </div>
+        </div>
+        <!-- Action Status End -->
+        <apex:outputPanel >
+            <apex:pageblock title="{!if( accrualPaymentform, 'Accrual', 'Payment')}" >
+                <apex:pageBlockButtons >
+                    <input type="button" value="Save" class="btn" onclick="$('#el_loading').show(); saveResult();" />
+                    <apex:commandButton action="{!cancel}" value="Cancel" />
+                </apex:pageBlockButtons>
+                
+                <apex:pageblocksection title="{!if( accrualPaymentform, 'Accrual Information', 'Payment Information')}">
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Fiscal Year/财政年度" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_CN_Fiscal_Year__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Currency/货币" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Currency__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="{!if( accrualPaymentform, 'Accrual Amount/总金额', 'Payment Amount/付款总金额')}" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Payment_Amount__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Total Amount Without Tax/付款总金额(不含税)	" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Total_Amount_Without_Tax__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <!--<apex:pageblockSectionItem rendered="{!NOT(accrualPaymentform)}">
+                        <apex:outputText value="{!$ObjectType.ASI_MFM_Payment__c.fields.ASI_MFM_Invoice_Amount__c.Label}" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Invoice_Amount__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <apex:pageblockSectionItem rendered="{!NOT(accrualPaymentform)}">
+                        <apex:outputText value="{!$ObjectType.ASI_MFM_Payment__c.fields.ASI_MFM_Normal_Invoice_Amount__c.Label}" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Normal_Invoice_Amount__c}" />
+                    </apex:pageblockSectionItem>-->
+                    
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Tax Code/税率" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_Tax_Code__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                    <!--<apex:pageblockSectionItem rendered="{!NOT(accrualPaymentform)}" >
+                        <apex:outputText value="No Invoice Amount" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_No_Invoice_Amount__c}" />
+                    </apex:pageblockSectionItem>-->
+                    
+                    <apex:pageblockSectionItem >
+                        <apex:outputText value="Tax Amount/增值税进项税税额" />
+                        <apex:outputField value="{!paymentHeader.ASI_MFM_VAT_Amount__c}" />
+                    </apex:pageblockSectionItem>
+                    
+                </apex:pageblocksection>
+                
+                <apex:pageblocksection title="{!if(isClassification, 'Reclassification Information', if(NOT(isAccrual), 'Allocation Information', 'Accrual Information'))}" columns="1">
+                    
+                    <apex:pageblocksection columns="2" rendered="{!NOT(isAccrual) && NOT(isClassification)}">
+                        <apex:pageblockSectionItem >
+                            <apex:outputText value="Allocation Method" />
+                            <apex:outputField value="{!paymentHeader.ASI_MFM_Allocation_Method__c}" />
+                        </apex:pageblockSectionItem>
+                        
+                        <apex:pageblockSectionItem >
+                            <apex:outputText value="Allocation Method Ratio" />
+                            <apex:outputField value="{!paymentHeader.ASI_MFM_Allocation_Method_Ratio__c}" />
+                        </apex:pageblockSectionItem>
+                    </apex:pageblocksection>
+                    
+                    <table class="list lineTable" cellspacing="0" cellpadding="0" border="0">
+                        <tr class="headerRow">
+                        </tr>
+                        <tbody class="lineBody">
+                        </tbody>
+                    </table>
+                </apex:pageblocksection>
+                
+                <!--<apex:pageblocksection title="Accrual Information" columns="1" rendered="false">
+                    
+                    <table class="list accrualTable" cellspacing="0" cellpadding="0" border="0">
+                        <tr class="headerRow">
+                        </tr>
+                        <tbody class="accrualLineBody">
+                        </tbody>
+                    </table>
+                    
+                </apex:pageblocksection>-->
+                
+            </apex:pageblock>
+        </apex:outputPanel>
+    </apex:form>
+</apex:page>

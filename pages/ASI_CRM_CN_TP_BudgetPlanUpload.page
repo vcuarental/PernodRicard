@@ -1,0 +1,501 @@
+<!-- Name:ASI_CRM_CN_TP_BudgetPlanUpload -->
+<apex:page doctype="HTML-5.0" showHeader="false" sidebar="false" controller="ASI_CRM_CN_TP_BudgetPlanUpload" standardStylesheets="false" cache="false">
+    <apex:slds />
+    <html dir="ltr" lang="en-US">
+        <head>
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+            <title>CN Budget Plan Upload</title>
+            <meta name="description" content=""/>
+            <meta name="viewport" content="width=device-width, initial-scale=1"/>
+            <meta name="google" content="notranslate"/>
+            
+            <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/papaparse.js')}" />
+            <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/angular.min.js')}" />
+            <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-3.4.1.min.js')}" />
+            <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-ui.min.js')}" />
+            <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/css/jquery-ui.min.css')}" />
+            <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/css/all.min.css')}" />
+
+            <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/xlsx.core.min.js')}" />
+        </head>
+
+        <body id="body" ng-app="BudgetPlanApp">
+            
+            <div ng-controller="uploadCtrl" id="wrap">
+                <div class="slds-scope">
+                    <div ng-show='showSpinner' class="demo-only">
+                      <div class="slds-spinner_container">
+                        <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand">
+                          <span class="slds-assistive-text">Loading</span>
+                          <div class="slds-spinner__dot-a"></div>
+                          <div class="slds-spinner__dot-b"></div>
+                        </div>
+                      </div>
+                    </div>
+                </div>
+                <div class="content">
+                    <div style="padding: 40px;background-color: white;max-width: 980px; margin: auto;">
+                        <div style="max-width: 980px; height: 100px;width: 1000px;">
+                            <p style="width: 35%;font-size: 24px;margin-bottom: 8px;font-weight: 900;">批量上传 Budget Plan</p>
+                                <div style="float:left;">
+                                    <a onclick="window.open('{!bpListViewURL}')" style="width:150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px; font-size: larger;text-decoration:none;">查看所有</a>
+                                    <a href="" ng-click="downloadOutlets()" style="width:150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px;font-size: larger;text-decoration:none;">下载店家列表</a>
+                                    <a href="" ng-click="downloadTemplate()" style="width:150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px;font-size: larger;text-decoration:none;">下载模板</a>
+                                    <input style="display: none;" id="csv-file" type="file" accept=".csv"></input>
+                                    <label tabindex="0" id="csv-select" for="csv-file" style="background-color: rgb(02, 52, 102);text-align: center;display: inline-block;color: white;line-height: 40px;width: 180px;cursor: pointer;font-size: larger;"><i class="fa fa-file" aria-hidden="true"></i> 上传文件...</label>
+                                    <!-- <a href="" ng-click="uploadCSV()" ng-show="showReload" style="width:150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px;font-size: larger;text-decoration:none;">重新加载</a> -->
+                                    <a href="" ng-click="submitAll()" style="width:150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px;font-size: larger;text-decoration:none;">保存</a>
+                                    <a href="" ng-click="downloadFailReport()" class="btn btn-style01 transit-02" style="width: 150px;background-color: rgb(02, 52, 102);cursor: pointer;display: inline-block;text-align: center;color: white;line-height: 40px; margin-top: 10px;font-size: larger;text-decoration:none;" ng-show="flag.reportBtnShow" >导出记录</a>
+                                </div>
+                        </div>
+                    </div>
+
+                    <div style="padding: 0 30px;" ng-show="upload.show">
+                            <div style="margin: 0;background-color: white;border-bottom: 1px solid #cccccc;">
+                                <p style="font-weight: 900;font-size: 24px;float: left;">整体上载</p>
+                                <div style="margin: 5px auto;padding-top: 5px;">
+                                    <p style="font-size: 14px;margin-left: 17px;margin-top: 3px;display: inline-block;">总数: {{batchCount}} 个记录</p>
+                                    <p style="font-size: 14px;margin-left: 17px;margin-top: 3px;display: inline-block;">成功: {{successCount}} 个记录</p>
+                                    <p style="font-size: 14px;margin-left: 17px;margin-top: 3px;display: inline-block;">失败: {{errorCount}} 个记录</p>
+                                </div>
+                            </div>
+                            <br/>
+
+                            <div class="" style="overflow: auto;height: 350px; border: 1px solid lightgrey;">
+                                <table class="fixed_header">
+                                    <thead>
+                                         <tr style="background-color: lightgrey;">
+                                            <th nowrap="nowrap" style="padding: 10px; text-align: center;" >#</th>
+                                            <apex:repeat value="{!bpHeaderSet}" var="header">
+                                                <th nowrap="nowrap" style="padding: 10px;  text-align: center;" >{!header}</th>
+                                            </apex:repeat>
+                                            <th nowrap="nowrap" style="padding: 10px;  text-align: center; color:blue;">状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fixed_header_tbody" >
+                                        <tr ng-repeat="order in uploadBatchs track by $index" ng-click="selectHeader($index)" class="{{order.selected}}">
+                                            <td style="text-align:center; padding: 10px;">{{order.index}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.kaAccount}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.fiscalYear}}</td>
+                                            <!-- <td style="text-align:center; padding: 10px;">{{order.CRM}}</td> -->
+                                            <td style="text-align:center; padding: 10px;">{{order.budgetAmount|number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.LYPromotionVol | number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.LYAmount | number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.LYDMDisplayAmount | number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.LYContMarginAmount | number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.LYGrossSalesAmount | number: 2}}</td>
+                                            <td style="text-align:center; padding: 10px;">{{order.note}}</td>
+                                            <td style="text-align:center; padding: 10px;" class="validation" >
+                                                <i class="fa fa-spinner fa-pulse fa-1x fa-fw" ng-show="order.status=='loading'"></i>
+                                                <i class="fa fa-exclamation-triangle" aria-hidden="true" style="color: orange;" ng-show="order.status=='caution'" title="{{order.errorStr}}"></i>
+                                                <i class="fa fa-check" aria-hidden="true" style="color: green;" ng-show="order.status=='ready'"></i>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+
+                                </table>
+                            
+                            </div>
+   
+                        </div>
+                </div>
+            </div>
+        </body>
+        <script>
+            var myApp;
+            let findDuplicates = arr => arr.filter((item, index) => arr.indexOf(item) != index)
+            myApp = angular.module("BudgetPlanApp", []);
+             myApp.controller('uploadCtrl', function($scope, $window, $location){
+                console.log('uploadCtrl');
+                $('td').tooltip();
+                $scope.upload = {show:false};
+                $scope.showReload = false;
+                $scope.flag = {reportBtnShow:false,pendingSubmit:0};
+                $('#csv-file').change(function(){
+                    if(this.files[0]!=null) {
+                        console.log((this.files[0].name));
+                        let fileName = this.files[0].name;
+                        if (fileName.length > 10) {
+                            $('#csv-select').html('<i class="fa fa-file" aria-hidden="true"></i> '+ fileName.substring(0,10));
+                        } else {
+                            $('#csv-select').html('<i class="fa fa-file" aria-hidden="true"></i> '+fileName);
+                        }
+                        $scope.uploadCSV();
+                    } else {
+                        $('#csv-select').html('<i class="fa fa-file" aria-hidden="true"></i> 选择文件...');
+                    }
+                });
+
+                $scope.back = () => {
+                    window.history.back();
+                }
+
+                $scope.downloadOutlets = () => {
+                    $scope.showSpinner = true;
+                    ASI_CRM_CN_TP_BudgetPlanUpload.downloadOutlets((result, event) => {
+                            console.log(event);
+                            if (event.status) {
+                                let resultJSON = JSON.stringify(result);
+                                resultJSON = resultJSON.includes('amp;') ? resultJSON.replace(/amp;/g, '') : resultJSON;
+                                resultJSON = resultJSON.includes('&#39;') ? resultJSON.replace(/&#39;/g, '\'') : resultJSON;
+
+                                var sheet1 = XLSX.utils.aoa_to_sheet(JSON.parse(resultJSON));
+                                var wb = XLSX.utils.book_new();
+                                XLSX.utils.book_append_sheet(wb, sheet1, "店家列表");
+                                const workbookBlob = workbook2blob(wb);
+                                openDownloadDialog(workbookBlob, '店家列表.xlsx');
+                                $scope.showSpinner = false;
+                                $scope.$apply();
+                            } else {
+                                $scope.showSpinner = false;
+                                $scope.$apply();
+                                alert('下载店家列表报错：' + event.message);
+                            }
+                        }
+                        ,{buffer: false,escape: true, timeout: 120000}
+                    );
+                }
+
+                //  download csv file template
+                $scope.downloadTemplate = () => {
+                    var bpheaderStr = '{!bpHeader}';
+                    var bpBodyStr = '{!bpBody}';
+                    var bpHeader = bpheaderStr.split(',');
+                    var bpBody = bpBodyStr.split(',');
+                    const rows = [[bpHeader],[bpBody]];
+                    downloadCsv(rows, "促销计划预算模板.csv");
+                    $scope.showSpinner = false;
+                }
+
+
+
+                $scope.downloadFailReport = () => {
+                    //console.log($scope.uploadBatchs);
+                    var errorStr = '{!errorHeader}';
+                    var errorHeader = errorStr.split(',');
+                    var rows = [[errorHeader]];
+                    $scope.uploadBatchs.forEach((item,index)=>{
+                        console.log(item.outputCSV());
+                        rows = rows.concat(item.outputCSV());
+                    });
+                    downloadCsv(rows, "促销计划预算Error.csv");
+                }
+
+                $scope.submitAll = () =>{
+                    var tmpList = [];
+                    for(var index = 0; index < $scope.uploadBatchs.length; index++) {
+                        if ($scope.uploadBatchs[index].status != 'ready') {
+                            alert('存在不合格导入数据或数据未检视完成，请检查后再导入');
+                            return;
+                        }
+                        tmpList.push($scope.uploadBatchs[index]);
+                    }
+
+                    $scope.showSpinner = true;
+                    ASI_CRM_CN_TP_BudgetPlanUpload.saveData(JSON.stringify(tmpList),(result, event) => 
+                        {
+                            // console.log(event);
+                            if (event.status) {
+                                // console.log(result);
+                                alert('Budget Plan 保存成功！');
+                                window.location = "{!bpListViewURL}";
+                                $scope.$apply();
+                            } else {
+                                $scope.showSpinner = false;
+                                $scope.$apply();
+                                alert('导入报错：' + event.message);
+                            }
+                        }
+                        ,{buffer: false,escape: true, timeout: 120000}
+                    );
+
+                    
+                }
+
+                // upload csv file method
+                $scope.uploadCSV = () => {
+                    let fileinput = $('#csv-file').prop('files')[0];
+                    if(fileinput == null) {
+                        alert('请上传CSV文件');
+                        return;
+                    }
+                    var csvFile = document.getElementById('csv-file');
+                    csvFile.value = '';
+                    $scope.showReload = true;
+                    $scope.batchCount = 0;
+                    $scope.errorCount = 0;
+                    $scope.successCount = 0;
+                    $scope.uploadBatchs = [];
+                    
+                    //parse csv file
+                    Papa.parse(fileinput, {
+                        delimiter: "",  // auto-detect
+                        newline: "",    // auto-detect
+                        quoteChar: '"',
+                        escapeChar: '"',
+                        error: function(results, file) {
+                            console.log("Parsing error:", results, file);
+                        },
+                        beforeFirstChunk: undefined,
+                        header: false,
+                        transformHeader: undefined,
+                        dynamicTyping: false,
+                        preview: 0,
+                        encoding: "",
+                        worker: false,
+                        comments: false,
+                        step: undefined,
+                        complete: (results, file) => {
+                            // console.log(results);
+                            var product = [];
+                            
+                            for(var rowId = 1; rowId<results.data.length; rowId++){
+                                var row = results.data[rowId];
+                                if(rowId>1 && row[0]!=null && row[0]!='') {
+
+                                    $scope.uploadBatchs.push(new UploadedProduct(JSON.parse(JSON.stringify(product)),$scope.uploadBatchs.length+1,$scope));
+                                    product = [];
+                                }
+                                product.push(row);
+                            }
+                            $scope.uploadBatchs.push(new UploadedProduct(JSON.parse(JSON.stringify(product)),$scope.uploadBatchs.length+1,$scope));
+
+                            $scope.flag.reportBtnShow = false;
+                            var bpkeySet = new Set();
+                            $scope.uploadBatchs.forEach((budgetPlan,index)=>{
+                                budgetPlan.checkUploadData(bpkeySet,$scope);
+                                
+                            });
+                            $scope.upload.show = true;
+                            $scope.batchCount = $scope.uploadBatchs.length;
+                            $scope.showSpinner = false;
+                            $scope.$apply();
+                        }
+                        
+                    });
+                };
+
+            });
+
+            function downloadCsv(rows, csvName) {
+                let csvContent = rows.map(e => e.join(",")).join("\n");
+                var encodedUri = encodeURI(csvContent);
+                var universalBOM = "\uFEFF";
+                var link = document.createElement("a");
+                link.setAttribute('href', 'data:text/csv; charset=utf-8,' + encodeURIComponent(universalBOM+csvContent));
+                link.setAttribute("download", csvName);
+                document.body.appendChild(link); 
+
+                link.click();
+            }
+            function milliFormat(num) {
+                return num && num.toString()
+                    .replace(/\d+/, function(s){
+                         return s.replace(/(\d)(?=(\d{3})+$)/g, '$1,')
+                     })
+            }
+
+            function workbook2blob(workbook) {
+                var wopts = {
+                    bookType: "xlsx",
+                    bookSST: false,
+                    type: "binary"
+                };
+                var wbout = XLSX.write(workbook, wopts);
+                function s2ab(s) {
+                    var buf = new ArrayBuffer(s.length);
+                    var view = new Uint8Array(buf);
+                    for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xff;
+                    return buf;
+                }
+                var blob = new Blob([s2ab(wbout)], {
+                    type: "application/octet-stream"
+                });
+                return blob;
+            }
+
+            function openDownloadDialog(blob, fileName) {
+                if (typeof blob == "object" && blob instanceof Blob) {
+                    blob = URL.createObjectURL(blob);
+                }
+                var aLink = document.createElement("a");
+                aLink.href = blob;
+                aLink.download = fileName || "";
+                var event;
+                if (window.MouseEvent) event = new MouseEvent("click");
+                else {
+                    event = document.createEvent("MouseEvents");
+                    event.initMouseEvent( "click", true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null );
+                }
+                aLink.dispatchEvent(event);
+            }
+
+            class UploadedProduct {
+
+                constructor(data,index,$scope){
+                    var startIndex = 0;
+                    this.index         = index;
+                    this.show          = true;
+                    this.errors      = [];
+                    this.errorStr = '';
+                    this.selected      = '';
+                    this.loading       = true;
+                    this.status        = 'loading';
+                    this.kaAccId        = '';
+                    this.channelId        = '';
+                    this.regionId        = '';
+                    this.kaAccount        = data[startIndex][0];
+                    this.customerId = '';
+                    this.fiscalYear          = data[startIndex][1];
+                    // this.CRM = data[startIndex][2];
+                    this.budgetAmount      = data[startIndex][2];
+                    this.LYPromotionVol = data[startIndex][3];
+                    this.LYAmount = data[startIndex][4];
+                    this.LYDMDisplayAmount = data[startIndex][5];
+                    this.LYContMarginAmount = data[startIndex][6];
+                    this.LYGrossSalesAmount  = data[startIndex][7];
+                    this.budgetOwnerId      = '';
+                    this.note = data[startIndex][8];;
+                
+                    this.orgData = JSON.parse(JSON.stringify(this));
+
+                }
+
+                // check data
+                checkUploadData(bpkeySet,$scope){
+                    // console.log(JSON.stringify(this));
+                    
+                    // call the apex method of apex
+                    ASI_CRM_CN_TP_BudgetPlanUpload.checkUploadData(JSON.stringify(this),(result, event) => 
+                        {   
+                            // show the check results on page
+                            this.checkDbResult(bpkeySet,result, $scope);
+                            // alignPreviewTable();
+                            $('td').tooltip();
+                            // console.log('循环');
+                            $scope.$apply();
+                        }
+                        ,{buffer: false, escape: true, timeout: 120000}
+                    );
+
+                }
+
+                outputCSV() {   
+                    var rows = [];
+                    
+                    var firstRow = [this.orgData.kaAccount, this.orgData.fiscalYear,this.orgData.budgetAmount,this.orgData.LYPromotionVol,this.orgData.LYAmount,  this.orgData.LYDMDisplayAmount,this.orgData.LYContMarginAmount, this.orgData.LYGrossSalesAmount,   this.orgData.note, this.errors];
+                    
+                    rows.push(firstRow);
+                    
+                    return rows;
+                }
+
+                // show the check results on page
+                checkDbResult(bpkeySet,result, $scope){
+                    // console.log(result);
+                    // console.log('check');
+                    var error = false;
+
+                    if(result.kaAccount == '' || result.kaAccount == null) {
+                        this.errors.push('客户不存在');
+                        error = true;
+                    } else {
+                        // this.kaAccount = result.kaAccount;
+                    }
+                    // if(result.CRM == '' || result.CRM == null) {
+                    //     this.errors.push('CRM Code 不存在');
+                    //     error = true;
+                    // } else {
+                    //     this.CRM = result.CRM;
+                    // }
+                    if (result.fiscalYear == 'errorYear') {
+                        this.errors.push('财年错误');
+                        error = true;
+                    }
+                    if (result.duplicateBP != null && bpkeySet.has(result.duplicateBP)) {
+                        this.errors.push('重复Budget Plan记录');
+                        error = true;
+                    } else {
+                        bpkeySet.add(result.duplicateBP);
+                    }
+
+                    this.budgetAmount = this.budgetAmount.replace(/,/g, '');
+                    if (this.budgetAmount < 0 || this.budgetAmount == 0 || isNaN(this.budgetAmount) || this.budgetAmount == '') {
+                        this.errors.push('预算总金额错误');
+                        error = true;
+                    } 
+
+                    this.LYAmount = this.LYAmount.replace(/,/g, '');
+                    if (isNaN(this.LYAmount) || this.LYAmount == '') {
+                        this.LYAmount = 0;
+                    } else if (this.LYAmount < 0) {
+                        this.errors.push('去年促销金额错误');
+                        error = true;
+                    }
+
+                    this.LYContMarginAmount = this.LYContMarginAmount.replace(/,/g, '');
+                    if (isNaN(this.LYContMarginAmount) || this.LYContMarginAmount == '') {
+                        this.LYContMarginAmount = 0;
+                    } else if (this.LYContMarginAmount < 0) {
+                        this.errors.push('去年Cont. Margin 金额错误');
+                        error = true;
+                    } 
+
+                    this.LYDMDisplayAmount = this.LYDMDisplayAmount.replace(/,/g, '');
+                    if (isNaN(this.LYDMDisplayAmount) || this.LYDMDisplayAmount == '') {
+                        this.LYDMDisplayAmount = 0;
+                    } else if (this.LYDMDisplayAmount < 0) {
+                        this.errors.push('去年海报/陈列费错误');
+                        error = true;
+                    } 
+
+                    this.LYGrossSalesAmount = this.LYGrossSalesAmount.replace(/,/g, '');
+                    if (isNaN(this.LYGrossSalesAmount) || this.LYGrossSalesAmount == '') {
+                        this.LYGrossSalesAmount = 0;
+                    } else if (this.LYGrossSalesAmount < 0) {
+                        this.errors.push('去年Gross Sales金额错误');
+                        error = true;
+                    }
+
+                    this.LYPromotionVol = this.LYPromotionVol.replace(/,/g, '');
+                    if (isNaN(this.LYPromotionVol) || this.LYPromotionVol == '') {
+                        this.LYPromotionVol = 0;
+                    } else if (this.LYPromotionVol < 0) {
+                        this.errors.push('去年促销销量错误');
+                        error = true;
+                    } 
+                    if (result.BPAmount == 'error') {
+                        this.errors.push('预算总金额错误');
+                        error = true;
+                    } else if (result.BPAmount == 'invalid') {
+                        this.errors.push('当前客户该财年预计促销计划金额低于已存在的促销计划总金额');
+                        error = true;
+                    }
+                    
+                    this.errors.forEach((err) =>{
+                        this.errorStr += err + ';';
+                    });
+                    if (this.errorStr.length > 0) {
+                        this.errorStr = this.errorStr.substr(0, this.errorStr.length - 1);
+                    }
+                    // this.budgetOwnerId = result.budgetOwnerId;
+                    // this.customerId = result.customerId;
+                    // this.channelId = result.channelId;
+                    // this.regionId = result.regionId;
+                    
+                    this.loading = false;
+                    this.status  = error? 'caution':'ready';
+                    if (error) {
+                        $scope.flag.reportBtnShow = true;
+                        $scope.errorCount++;
+                    } else {
+                        $scope.successCount++;
+                    }
+                    // console.log('############# checked products ###############');
+                    
+                }
+
+            }       
+        </script>
+    </html>
+</apex:page>

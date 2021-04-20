@@ -1,0 +1,152 @@
+<apex:page language="pt_BR" showHeader="true" sidebar="true" controller="LAT_BR_TransferAccountsAndUDC" docType="html-5.0">
+    <apex:includeScript value="{!$Resource.LAT_BR_CreditAnalysisResources}/js/jquery.min.js" /> 
+
+      <style type="text/css">
+        .show {
+            display: block;
+        }
+        .hide {
+            display: none;
+        }
+        .dateSelect .textSelect{
+            width: 160px;
+        }
+    </style>
+    <apex:form >
+        <script type="text/javascript">
+             $(document).ready( function() {
+                // Select all checkbox on header of accounts list
+                $('input[id$="selectAll"]').click(function(){
+                    $('input.selectSingle').each(function(){
+                        if ($('input[id$="selectAll"]').prop('checked') == true) {
+                            $(this).prop('checked', true);
+                        } else {
+                            $(this).prop('checked', false);
+                        }
+                    })
+                });
+            });
+             function accountPerUserJS() {
+                accountsPerUser();
+             }
+             function loadSelectAllJs(){
+                // Select all checkbox on header of accounts list
+                $('input[id$="selectAll"]').click(function(){
+                    $('input.selectSingle').each(function(){
+                        if ($('input[id$="selectAll"]').prop('checked') == true) {
+                            $(this).prop('checked', true);
+                        } else {
+                            $(this).prop('checked', false);
+                        }
+                    })
+                });
+             }
+
+        </script>
+        
+        <apex:pageBlock title="{!$Label.LAT_VFP06_Message01}">
+                <apex:pageMessages escape="false" />
+
+                <apex:actionFunction action="{!getAccountsPerUser}" name="accountsPerUser" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" status="status" oncomplete="loadSelectAllJs();"/>
+
+                <apex:actionStatus id="status">
+                  <apex:facet name="start">
+                    <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_BR_VFP05_00023}"/>
+                    <!-- Label.LAT_BR_VFP05_00023 = Espere... -->
+                  </apex:facet>
+                </apex:actionStatus>
+
+                 <apex:pageBlockButtons location="top">
+                  <apex:commandButton value="{!$Label.LAT_VFP09_MessageSearch}" onclick="accountPerUserJS();return false;" immediate="true"/>
+                 </apex:pageBlockButtons>
+
+                 <apex:pageBlockSection id="lookupsSections" columns="2">
+                    <apex:inputField value="{!accOldLookup.OwnerId}" label="{!$Label.LAT_VFP09_OldOwner}"/>
+                    <apex:inputField value="{!accNewLookup.OwnerId}" label="{!$Label.LAT_VFP09_NewOwner}"  required="false" />
+                 
+                    <apex:inputField value="{!dummyOpp.LAT_DTDelivery__c}" label="{!$Label.LAT_Opportunities_From}"/>
+                    <apex:inputField value="{!dummyOpp.LAT_MX_PurchaseOrderUntil__c}" label="{!$Label.LAT_To}"/>
+                
+                    <apex:inputCheckbox value="{!transferOpps}" label="{!$ObjectType.LAT_Opportunity__c.labelPlural}"/>
+                    <apex:inputCheckbox value="{!transferContacts}"  label="{!$ObjectType.Contact.labelPlural}"/>
+                    <apex:inputCheckbox value="{!useNewVendorCode}" label="Transferir Zona Vendedor"/>
+                    <apex:inputCheckbox value="{!sendToJDE}" label="Integrar com JDE"/>
+                    <apex:inputCheckbox value="{!mantainVendorCode}" label="Manter Zona/Vendedor"/>
+                                    
+                    <apex:selectList size="1" value="{!shareOption}" label="{!$Label.LAT_Share_Options}"> 
+                        <apex:selectOptions value="{!ShareOptions}"/> 
+                    </apex:selectList>
+                    <apex:inputField value="{!udcNewLookup.LAT_UDCZonaVendedor__c}" label="Nova Zona"  required="false" />
+                </apex:pageBlockSection> 
+            </apex:pageBlock>
+
+            <apex:pageBlock title="">
+                
+                    <apex:pageBlockButtons location="top">
+                        <apex:commandButton id="buttonTransferId" value="{!$Label.LAT_VFP09_MessageTransfer}" status="status" action="{!transferAccounts}" disabled="{!OR(accOldLookup.OwnerId == null,listInnerAccount.size <= 0)}"/>
+    
+                        <apex:commandButton id="buttonShare" value="{!$Label.LAT_Share}" status="status" action="{!shareAccounts}" disabled="{!OR(accOldLookup.OwnerId == null,listInnerAccount.size <= 0)}"/>
+                        <apex:commandButton id="buttonUDCAssignment" value="Atualização masiva" status="status" action="{!assignUDCs}" disabled="{!OR(udcNewLookup.LAT_UDCZonaVendedor__c == null,listInnerAccount.size <= 0)}"/>
+                    </apex:pageBlockButtons>
+                    <apex:outputPanel layout="block" id="accountAssociated">
+                     <apex:pageBlockSection title="{!$Label.LAT_VFP09_AssociatedAccounts} - Código Vendedor del dueño: {!vendorCode}" columns="1" rendered="{!listInnerAccount.size != 0}">
+                            <apex:pageBlockTable value="{!listInnerAccount}" var="item" >
+                               
+                                <apex:column style="width: 20px;">
+                                    <apex:facet name="header">
+                                        <apex:outputPanel layout="block">
+                                            <apex:inputCheckbox value="{!selectAll}" id="selectAll" />
+                                        </apex:outputPanel>
+                                    </apex:facet>
+                                    <apex:inputCheckbox value="{!item.isSelected}" styleClass="selectSingle"/>
+                                </apex:column>
+                                
+                                <apex:column value="{!item.an8}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="AN8 {!IF(sortExpression=='Client_code_AN8__c',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="Client_code_AN8__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                                <apex:column value="{!item.razSocial}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="Nombre de fantasía {!IF(sortExpression=='Name',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="Name" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                                <apex:column value="{!item.nameFantasia}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="Razón Social {!IF(sortExpression=='Corporate_Name__c',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="Corporate_Name__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                                <apex:column value="{!item.Cuit}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="CUIT {!IF(sortExpression=='CNPJ__c',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="CNPJ__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                                <apex:column value="{!item.codigoSubcanal}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="Código Sub Canal {!IF(sortExpression=='Sub_Channel_Rating__r.Name',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="Sub_Channel_Rating__r.Name" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                                <apex:column value="{!item.jdeZoneCode}">
+                                    <apex:facet name="header">
+                                        <apex:commandLink oncomplete="loadSelectAllJs();" action="{!getAccountsPerUser}" reRender="lookupsSections,accountAssociated,buttonTransferId,buttonUDCAssignment, buttonShare" value="Zona/Vendedor {!IF(sortExpression=='LAT_Account__r.LAT_JDEZone__c',IF(sortDirection='ASC','▲','▼'),'')}">
+                                        <apex:param value="LAT_Account__r.LAT_JDEZone__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                </apex:column>
+                            </apex:pageBlockTable>
+                       </apex:pageBlockSection>
+                   </apex:outputPanel>
+
+         </apex:pageBlock>
+    </apex:form>
+</apex:page>

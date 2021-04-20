@@ -1,0 +1,1109 @@
+<apex:page standardController="EUR_CRM_Route_Template__c" extensions="EUR_CRM_RouteTemplateControllerExt"
+standardstylesheets="true" cache="false">
+
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+
+<link href="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+<link href="{!URLFOR($Resource.EUR_CRM_Calendar_Resource, 'fullcalendar/fullcalendar.css')}" rel='stylesheet' />
+<link href="{!URLFOR($Resource.EUR_CRM_Calendar_Resource, 'fullcalendar/fullcalendar.print.css')}" rel='stylesheet' media='print' />
+
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Calendar_Resource, 'lib/jquery.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Calendar_Resource, 'lib/jquery-ui.custom.min.js')}"/>
+
+<!--
+//FOR DEBUG VERSION
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/extended.css" />﻿
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Calendar_Resource, 'fullcalendar/fullcalendar_EUR_CRM.js')}"/>
+-->
+
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'css/formbubble.css')}" media="screen" rel="stylesheet" type="text/css" />
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'css/viewmore.css')}" media="screen" rel="stylesheet" type="text/css" />
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/_loader.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/jquery.formbubble.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/date.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/fullcalendar.viewmore.js')}"/>
+<!--
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'fullcalendar/fullcalendar.css')}" rel='stylesheet' />
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'fullcalendar/fullcalendar.print.css')}" rel='stylesheet' media='print' />
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'lib/jquery.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'lib/jquery-ui.custom.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'fullcalendar/fullcalendar_EUR_CRM.js')}"/>
+-->
+
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+<script type="text/javascript">
+    $ = jQuery.noConflict();
+    
+    var viewOtherVisitsLocal = {!EUR_CRM_Route_Template__c.EUR_CRM_View_Other_Visits__c};
+    
+    var fixedDate = new Date(2013,3,1); //For generic view, fullCalendar needs specific date in setting events (date used in controller)
+    var currentPlanningPeriod = 0;
+    var currentAccount;
+    var currentDays;
+    var currentEventDay;
+    var currentIsComplete = false;
+    var currentEventSetCount = 0;
+    var allEventDays;
+    
+    var eventMap = {}; //Map of Events
+    var calEvents = new Array(); // Array of calendar events
+    var calendarWeekCount;
+    
+    //Drop variables
+    var accountEvents = new Array(); //Array of current account events
+    var dayOne = 0;
+    var parentDay = 0;
+    var eventDayArray = [];
+    var eventIdsArray = [];
+    var allEvents = [];
+    
+    //Event JSON
+    var routeEvents;
+    
+    //Account table
+    var oTable;
+    
+    $.fn.dataTableExt.oSort['string-case-asc']  = function(x,y) {
+        return ((x < y) ? -1 : ((x > y) ?  1 : 0));
+        };
+         
+    $.fn.dataTableExt.oSort['string-case-desc'] = function(x,y) {
+            return ((x < y) ?  1 : ((x > y) ? -1 : 0));
+        };
+    
+    (function($) {
+    /*
+     * Function: fnGetColumnData
+     * Purpose:  Return an array of table values from a particular column.
+     * Returns:  array string: 1d data array 
+     * Inputs:   object:oSettings - dataTable settings object. This is always the last argument past to the function
+     *           int:iColumn - the id of the column to extract the data from
+     *           bool:bUnique - optional - if set to false duplicated values are not filtered out
+     *           bool:bFiltered - optional - if set to false all the table data is used (not only the filtered)
+     *           bool:bIgnoreEmpty - optional - if set to false empty values are not filtered from the result array
+     * Author:   Benedikt Forchhammer <b.forchhammer /AT\ mind2.de>
+     */
+    $.fn.dataTableExt.oApi.fnGetColumnData = function ( oSettings, iColumn, bUnique, bFiltered, bIgnoreEmpty ) {
+        // check that we have a column id
+        if ( typeof iColumn == "undefined" ) return new Array();
+        
+        // by default we only wany unique data
+        if ( typeof bUnique == "undefined" ) bUnique = true;
+        
+        // by default we do want to only look at filtered data
+        if ( typeof bFiltered == "undefined" ) bFiltered = false;
+        
+        // by default we do not wany to include empty values
+        if ( typeof bIgnoreEmpty == "undefined" ) bIgnoreEmpty = true;
+        
+        // list of rows which we're going to loop through
+        var aiRows;
+        
+        // use only filtered rows
+        if (bFiltered == true) aiRows = oSettings.aiDisplay; 
+        // use all rows
+        else aiRows = oSettings.aiDisplayMaster; // all row numbers
+
+        // set up data array    
+        var asResultData = new Array();
+        
+        for (var i=0,c=aiRows.length; i<c; i++) {
+            iRow = aiRows[i];
+            var aData = this.fnGetData(iRow);
+            //console.log('aData: ' + aData);
+            var sValue = aData[iColumn];
+            
+            // ignore empty values?
+            if (bIgnoreEmpty == true && sValue.length == 0) continue;
+
+            // ignore unique values?
+            else if (bUnique == true && $.inArray(sValue, asResultData) > -1) continue;
+            
+            // else push the value onto the result data array
+            else asResultData.push(sValue);
+        }
+        
+        return asResultData;
+    }}($));
+
+
+    function fnCreateSelect( aData )
+    {
+        var r='<select><option value="">-None-</option>', i, iLen=aData.length;
+        for ( i=0 ; i<iLen ; i++ )
+        {
+            var aDataHolder = aData[i];
+            var tempStr = aData[i];
+            //console.log('DEBUG aData:' + aDataHolder + '-' + aDataHolder.substring(0,2));
+            if (aDataHolder.substring(0,2)=="<a"){
+                var temp = $(aDataHolder);
+                tempStr = $(temp).text();
+                //console.log('DEBUG aData 2:' + aDataHolder + '-' + $(temp).text());
+            }
+            r += '<option value="'+tempStr+'">'+tempStr+'</option>';
+        }
+        //console.log ('fnCreateSelect:' + r);
+        return r+'</select>';
+    }
+
+        
+    $(document).ready(function(){
+        console.log("Route Template - On ready");
+        
+        //viewOtherVisitsLocal = true;
+        //$('.visitOtherLocal').prop('checked', true);
+        //viewOtherVisitsLocal = "{!EUR_CRM_Route_Template__c.EUR_CRM_Other_Visits_Viewable__c}";
+        
+        initAccountList();
+        
+    });
+    
+    function setEventsJSON(evJSON){
+        //Set Events JSON
+        routeEvents = evJSON; //"{!eventsJSON}";
+        console.log('Flag - Events JSON:' + JSON.stringify(routeEvents));        
+    }
+    
+    function setAccountTable(){
+        //if (oTable) {
+            //console.log('About to destroy data table');
+            //oTable.fnDestroy();
+        //}
+        console.log('Init data table');
+        oTable = $('#accountTable').dataTable({
+            "bDestroy": true,
+            "bStateSave": true,
+            "iDisplayLength":100,
+            "asSorting": [[5,'asc'], [4,'asc'], [3,'asc'], [2,'asc']],
+            "aaSorting": [[6, 'desc']],
+            "aoColumns": [
+                { "bSortable": false },
+                { "bSortable": false },
+                { "bSortable": true },
+                { "sType": 'string' },
+                { "sType": 'string-case' },
+                { "sType": 'string-case' },
+                { "sType": 'string-case'  },
+                { "sType": 'date'}
+            ],
+            "bFilter":true,
+            "sPaginationType": "full_numbers",
+            "bSort": true,
+            "fnInitComplete": function() {
+                this.css("visibility", "visible");}
+        }); 
+        
+        var oSettings = oTable.fnSettings();
+        
+        /* Add a select menu for each TH element in the table footer */
+        $('tfoot th').each( function ( i ) {
+            if (i>=2){
+                this.innerHTML = fnCreateSelect( oTable.fnGetColumnData(i) );
+                
+                //Set value
+                //console.log('DEBUG - oSettings:' + oSettings.aoPreSearchCols[i]);
+                filter_val = oSettings.aoPreSearchCols[i].sSearch;
+                console.log('DEBUG - oSettings - filter Val:' + filter_val +'-'+filter_val.length);
+                if (filter_val.length>0){
+                    var isSelectedChanged = 0;
+                    //console.log("DEBUG Set Filter 0:" + $(this).find("option:contains('"+filter_val+"')"));
+                    $(this).find("option:contains('"+filter_val+"')").each(function()
+                    {
+                        console.log("DEBUG - Select Option Check:" +$(this).text() + filter_val);
+                        if( $(this).text() == filter_val)
+                        {
+                            $(this).attr("selected","selected");
+                            isSelectedChanged = 1;
+                        }
+                    });
+                    if (isSelectedChanged == 1){
+                        $(this).val(filter_val).change();
+                    }else{
+                        $(this).val("").change();
+                    }
+                    //$("this option[value='" + filter_val + "']").attr("selected","selected");
+                    console.log('DEBUG - Set Filter:' + $(this).val() + '-' + filter_val);
+                }
+                //On change
+                $('select', this).change( function () {
+                    oTable.fnFilter($(this).val(), i );
+                } );
+            }
+        } );
+    }
+    
+    function resetAccountTable(){
+        if (oTable != undefined){
+            console.log('Reset Account Table - ' + oTable);
+            //oTable.fnReloadAjax();
+            //oTable.fnClearTable();
+            //oTable.fnDraw();
+            //oTable.fnAddData();
+            
+            setAccountTable();
+        }
+    }
+    
+    function setExternalEventDate(selectedDate)
+    {   
+        console.log('Flag external event input:' + $('#externalEventDateInput') + '-' + selectedDate);
+        if(selectedDate !='' && selectedDate!=undefined){
+            var externalEventStartDate = new Date(selectedDate);
+            console.log('External Event Date:' + externalEventStartDate.getFullYear() + '-'+ 
+                externalEventStartDate.getMonth()+'-'+externalEventStartDate.getDate());
+            $('#externalEventDateInput').val(externalEventStartDate.toISOString().split('T')[0]);
+            
+            updateExternalEventList(externalEventStartDate.getFullYear(), externalEventStartDate.getMonth(), externalEventStartDate.getDate());
+        }
+    }
+    
+    function initCalendar(planningPeriod, ev, isRefetchEvents){
+        //Set Account DataTable
+        //setAccountTable();
+        resetAccountTable();
+        
+        //Set Calendar
+        console.log('Refresh View:' + JSON.stringify(ev));
+        if (ev != undefined && ev!=null){
+            calEvents = ev;
+            //refetchEvents();
+            //$("#calendar").fullCalendar('removeEvents'); 
+            //$("#calendar").fullCalendar('addEventSource', calEvents); 
+        }
+        setCalendar(planningPeriod, calEvents, isRefetchEvents);
+        
+        //resetAccountTable();
+    }
+
+    
+    function setCalendar(num, events, isRefetch){
+        currentDays = new Array();
+        currentEventDay = new Object();
+        allEventDays = new Object();
+        console.log('INIT CALENDAR ');//+ JSON.stringify(calEvents));
+        calendarWeekCount = num;
+        var hasViewMore = {!routeTemplate.EUR_CRM_Has_View_More__c};
+        calEvents = events;
+        
+        //get all days of events
+        for(var i=0;i<calEvents.length;i++) {
+            var arrayDays = [];
+            var account = calEvents[i].id.slice(0, -2);
+            var accDayNum = calEvents[i].dayNum;
+            arrayDays.push(parseInt(accDayNum));
+            if(allEventDays.hasOwnProperty(account)){
+                if(allEventDays[account].indexOf(parseInt(accDayNum)) < 0){
+                    allEventDays[account].push(parseInt(accDayNum));
+                }
+            }else{
+                allEventDays[account] = arrayDays;
+            }
+        }
+        
+        $('#external-events').hide(); //HIDE EVENT DIV
+        $('#calendar').fullCalendar('destroy');
+        /* initialize the calendar
+        -----------------------------------------------------------------*/
+        console.log("Flag - Planning Period2:"+ "{!routeTemplate.EUR_CRM_Planning_Period__c}");
+        console.log("Flag - Set Calendar - Check Has View More:" + hasViewMore);
+
+        //if (hasViewMore == true || hasViewMore.toString().toLowerCase=='true'){
+        $('#calendar').fullCalendar({
+            header: {
+                left: '',
+                center: '',
+                right: ''
+            },
+            defaultView:'genericMonth',
+            weekCount: num, //Route Template planning period
+            activeWeekCount: num,
+            firstDay:1, //Set first day to Monday
+            draggable:true,
+            droppable: true, // this allows things to be dropped onto the calendar !!!
+            events: calEvents, //{!eventsJS}, //calEvents,//{!eventsJS}, //calEvents
+            editable: false,
+            /*****************
+                EVENT DROP
+            *****************/
+            eventDrop: function(event, dayDelta, minuteDelta, allDay, revertFunc) {
+                console.log(
+                    "EventDrop1: " + event.id + " " + event.title + " was moved " + dayDelta + " days and " + minuteDelta + " minutes " + event.start + " start. \n" +
+                    "Duration: " + event.duration + " Order: " + event.order + " account: " + Object.keys(accountEvents).length
+                );
+                var copiedEventObject = $.extend({}, event);
+                
+                // assign it the date that was reported
+                copiedEventObject.start = event.start;
+                copiedEventObject.allDay = allDay;
+                
+                //Format start date to get only the day
+                var day = $.fullCalendar.formatDate(event.start, "d");
+                
+                var origDate = new Date("April 1, 2013 00:00:00");
+                origDate = Date.UTC(origDate.getFullYear(), origDate.getMonth(), origDate.getDate());
+                var currDate = Date.UTC(event.start.getFullYear(), event.start.getMonth(), event.start.getDate());
+                var diffDays = parseInt((currDate - origDate) / (1000 * 60 * 60 * 24)); 
+                
+                diffDays = parseInt(diffDays) + 1;
+                console.log('***diffDays: ' + diffDays + 'Selected Day: ' +day);
+                
+                if (event.start.getDay()!=0 && event.start.getDay()!=6){
+                    if((parseInt(diffDays) <= parseInt(event.duration))){
+                        if(Object.keys(accountEvents).length > 0){
+                            if(eventDayArray.indexOf(diffDays) > -1){
+                                alert('Invalid Date: Should not fall the same day.');
+                                revertFunc();
+                            }else{
+                                copiedEventObject.day = diffDays;
+                                
+                                $('#calendar').fullCalendar('renderEvent', event, true);
+                                currentEventSetCount += 1;
+                                
+                                eventDayArray.push(parseInt(diffDays));
+                                console.log('***PUSHINIT: ' + eventDayArray + ' ***oldDiffINIT: ' + oldDiff);
+                                var oldDiff = parseInt(diffDays) - parseInt(dayDelta);
+                                var index = eventDayArray.indexOf(parseInt(oldDiff));
+                                if (index > -1) {
+                                    eventDayArray.splice(index, 1);
+                                }
+                                
+                                currentDays[parseInt(event.order)-1] = diffDays;
+                                
+                                console.log('***REMOVEINIT: ' + eventDayArray + ' ***DROPEDIT: ' + " currentDay: " + currentDays + " = " + event.order);
+                            }
+                        }else{
+                            currentAccount = event.id.slice(0, -2);
+                            
+                            if(allEventDays[currentAccount].indexOf(diffDays) > -1){
+                                alert('Invalid Date: Should not fall the same day.');
+                                revertFunc();
+                            }else{
+                                var oldDiff = parseInt(diffDays) - parseInt(dayDelta);
+                                var eventId = currentAccount.toString();
+                                
+                                copiedEventObject.day = diffDays;
+                                currentDays[parseInt(event.order)] = diffDays;
+                                currentEventDay[eventId] = diffDays;
+                                
+                                $('#calendar').fullCalendar('renderEvent', event, true);
+
+                                eventDayArray.push(parseInt(diffDays));
+                                console.log('***PUSHINIT: ' + eventDayArray + ' ***oldDiffINIT: ' + oldDiff);
+                                
+                                var index = eventDayArray.indexOf(parseInt(oldDiff));
+                                if(index > -1){
+                                    eventDayArray.splice(index, 1);
+                                }
+                                
+                                //All Events Object
+                                allEventDays[currentAccount].push(diffDays);
+                                var indexAllEvent =  allEventDays[currentAccount].indexOf(oldDiff);
+                                if(indexAllEvent > -1){
+                                    allEventDays[currentAccount].splice(indexAllEvent, 1);
+                                }
+                                
+                                console.log('*currentEventDay: ' + currentEventDay[eventId]);
+                                console.log('*Account: ' + currentAccount + ' ***REMOVEINIT: ' + eventDayArray + ' ***DROPEDIT: ' + " currentDay: " + currentDays + " = " + event.order);
+                                currentEventSetCount += 1;
+                                currentIsComplete = true;
+                                
+                                saveAccEventsEventDrop('{!eventsJS}', '{!routeTemplate.EUR_CRM_Planning_Period__c}', event.order.toString());
+                            }
+                        }
+                    }else{
+                        alert('Invalid Date: Should be within the frequency duration, '+ event.duration + ' day/s')
+                        revertFunc();
+                    }
+                }else{
+                    alert('Invalid Date: Should not fall on weekend (Saturday and Sunday)');
+                    revertFunc();
+                }
+                
+                if(Object.keys(accountEvents).length > 0){
+                    if(currentEventSetCount == accountEvents[event.id].frequency){
+                        currentIsComplete = true;
+                    }
+                }
+            },
+            /*****************
+            INITIAL DROP EVENT ONLY
+            *****************/
+            drop: function(date, allDay, cell) { // this function is called when something is dropped
+                // retrieve the dropped element's stored Event Object
+                console.log('6 - ID:' + $(this).attr('id') + 'ID:' + $(this).attr('class') + "\n" + date);
+                var originalEventObject = accountEvents[$(this).attr('id')];//$j(this).data('eventObject');
+                
+                console.log('Event Dropped:' + originalEventObject.title +'|' + originalEventObject.order + '|' + Object.keys(accountEvents).length);
+                // we need to copy it, so that multiple events don't have a reference to the same object
+                var copiedEventObject = $.extend({}, originalEventObject);
+                
+                // assign it the date that was reported
+                copiedEventObject.start = date;
+                copiedEventObject.allDay = allDay;
+                
+                console.log('Flag - Check Cell:' + cell + '-'+cell.row+'-'+cell.col);
+                var day = (cell.row*7)+cell.col+1;
+                console.log('Selected Day:' + day + '- col:' + cell.col+1 + '- date:'+date +'- day:'+date.getDay());
+                
+                console.log('FLAG1 - DAY:' +day+'|'+ dayOne+'|'+ (parseInt(dayOne)+parseInt(originalEventObject.duration)) + '|' +originalEventObject.duration + ' | ' +originalEventObject.order);
+                if (date.getDay()!=0 && date.getDay()!=6){
+                    if(day <= originalEventObject.duration){
+                        if(eventDayArray.indexOf(day) > -1){
+                            alert('Invalid Date: Should not fall the same day.');
+                        }else{
+                            copiedEventObject.day = day;
+                            currentDays[parseInt(originalEventObject.order)-1] = day;
+                            $('#calendar').fullCalendar('renderEvent', copiedEventObject, true);
+                            $(this).remove();
+                            currentEventSetCount += 1;
+                            
+                            eventDayArray.push(parseInt(day));
+                            console.log('***PUSHINIT: ' + eventDayArray +' ***DROPINIT: ' + currentDays[originalEventObject.order-1] + " currentDay: " + currentDays + " = " + originalEventObject.order);
+                        
+                            //All Events Object
+                            allEventDays[currentAccount].push(parseInt(day));
+                        }
+                    }else{
+                        alert('Invalid Date: Should be within the frequency duration, '+ accountEvents[event.id].duration + ' day/s')
+                    }
+                }else{
+                    alert('Invalid Date: Should not fall on weekend (Saturday and Sunday)');
+                }
+                
+                if (currentEventSetCount == originalEventObject.frequency){
+                    currentIsComplete = true;
+                }
+                console.log('Flag - Current Days:' + currentDays + ' - ' + currentEventSetCount + ' - ' + currentIsComplete);
+            }
+        });//.limitEvents(3);
+        
+        $('#calendar').fullCalendar('gotoDate', fixedDate);
+        //console.log('2- Check FullCalendar'+  $('#calendar').fullCalendar())
+        
+        //if (isRefetch){
+           // refetchEvents();
+        //}
+        allEvents = $('#calendar').fullCalendar( 'clientEvents');
+    }
+    
+    function setEventCalendar(accountId, accountName, accountStreet, planningPeriod, frequency, duration, daysList, ev){
+        currentAccount = accountId;
+        currentDays = new Array();
+        currentIsComplete = false;
+        currentEventSetCount = 0;
+        
+        var weekNum;
+        var eventsDisplay = [];
+        
+        //reset Drop variables
+        accountEvents = new Array();
+        dayOne = 0;
+        parentDay = 0;
+        eventDayArray = [];
+        allEventDays[accountId] = [];
+        
+        var isOtherVisitsViewable =  viewOtherVisitsLocal;//"{!IF(OR(routeTemplate.EUR_CRM_Other_Visits_Viewable__c, AND(EUR_CRM_Route_Template__c.EUR_CRM_Has_Other_Visits_View_Option__c, EUR_CRM_Route_Template__c.EUR_CRM_View_Other_Visits__c)), true, false)}";
+        console.log('Flag - Check Route - Is other visits viewable:' + isOtherVisitsViewable +' - {!EUR_CRM_Route_Template__c.EUR_CRM_View_Other_Visits__c}'+'-'+ev);
+        
+        console.log('Flag - Set Event Calendar - Check Events:' + eventsDisplay);
+        var daysArray = daysList.split(",");
+        console.log('Flag - Test Route Item Wrapper:' + daysList);
+        console.log('Flag2 - Test Route Item Wrapper:' + daysArray);
+        if (typeof daysList=="string"){
+            console.log('Flag3 - Test Route Item Wrapper:' +daysList);
+        }
+        console.log('1- Set Event Calendar: ' +accountId +" - "+accountName+"-"+accountStreet+'|'+planningPeriod+'|'+frequency + '|'+ duration + '|' + calendarWeekCount);
+        
+        //reset external events
+        $('#external-events div.external-event').remove();
+        //create external events
+        for (i=1; i<=frequency; i++){
+            var eleName = i+"-"+accountName+"-"+accountStreet;
+            var eleId = 'account-'+i;
+            $("#external-events").append("<div id='"+eleId+"'class='external-event ui-draggable-handle'>"+eleName+"</div>");
+            
+            var eventObject = {
+                title: eleName,
+                order: i,
+                id: eleId,
+                accountId: accountId,
+                frequency: frequency,
+                duration: duration,
+                editable: true
+            };
+            accountEvents[eleId]=eventObject;
+
+            console.log('2- Create event Obj:' + eventObject + '|' + $('#'+eleId) + '| Duration:' + eventObject.duration);
+            console.log('3- ID:' + $(this).attr('id') + 'ID:' + $(this).attr('class'));
+            $('#external-events div.external-event').data('eventObject', eventObject);
+            //Set external events as draggable
+            $('#external-events div.external-event').draggable({
+                zIndex: 999,
+                revert: true,      // will cause the event to go back to its
+                revertDuration: 0  //  original position after the drag
+            });
+        }
+        
+        if(isOtherVisitsViewable==true || isOtherVisitsViewable.toString().toLowerCase()=='true'){
+            console.log('Flag- Set event Calendar - Include other visits');
+            eventsDisplay = ev;
+            resetCalendar('{!routeTemplate.EUR_CRM_Planning_Period__c}', eventsDisplay);
+            
+            for(var i=0; i < Object.keys(accountEvents).length; i++){
+                var accId = accountId + '-' + i;
+                $('#calendar').fullCalendar( 'removeEvents', accId);
+            }
+        }else{
+            $('#calendar').fullCalendar( 'removeEvents');
+        }
+        
+        //set active week count
+        weekNum = (duration/7);
+        if (weekNum>planningPeriod){
+            weekNum = planningPeriod;
+        }
+        console.log("Set Calendar event - Week Num:" + weekNum + "-"+planningPeriod);
+        //Test - Clear events
+        //$('#calendar').fullCalendar( 'removeEvents');
+        //refetchEvents(events);
+        //show external events
+        $('#external-events').show();
+        //rerender calendar
+        rerenderCalendar(weekNum);
+    }
+    function rerenderCalendar(weekCount){
+        //setAccountTable();
+        //FOR TEST- 0415: resetAccountTable();
+        setWeekCount(weekCount);
+        $('#calendar').fullCalendar('render');
+        
+        //resetAccountTable();
+    }
+    
+    function setWeekCount(weekCount){
+        try{
+        console.log('Set Week Count1:' + weekCount);
+        console.log('Set Week Count2:' + (weekCount-1));
+        $('#calendar').fullCalendar('setActiveWeekCount', (weekCount-1));
+      //renderCalendar();
+        }catch(err){
+            console.log('ERROR - setWeekCount:' + err);
+        }
+    }
+    
+    function resetCalendar(weekCount, events){
+        console.log('Reset Calendar');
+        console.log('Reset Calendar - Check Events:' + JSON.stringify(events));
+        //setAccountTable();
+        //resetAccountTable();
+        try{
+            $('#external-events').hide();
+            
+            setWeekCount(weekCount);
+            //$('#calendar').fullCalendar( 'removeEvents');
+            //$('#calendar').fullCalendar('addEventSource',calEvents);
+            
+            $('#calendar').fullCalendar('render');
+            
+            if (events == undefined){
+                //calEvents = events;
+                console.log('Reset Planning Period - null events');
+            }
+            
+            resetAccountTable();
+            
+            allEvents = $('#calendar').fullCalendar( 'clientEvents');
+            
+            refetchEvents(events);
+        }catch(err){
+            console.log('Error - Reset Calendar:' +err+' - '+err.message);
+        }
+    }
+ 
+    function saveAccountEvents(ev, planningPeriod){
+        //TODO: CHANGE
+        console.log('Flag - Save Account Event:'+currentIsComplete +' - '+currentEventSetCount+' - '+ currentAccount + ' - ' + currentDays.toString());
+        
+        if (currentIsComplete){
+            allEvents = $('#calendar').fullCalendar( 'clientEvents');
+            
+            eventMap[currentAccount] = currentDays;
+            console.log('Save Account Event - Event Map:' + eventMap);
+            
+            saveRouteDays(currentAccount, currentDays.toString(), JSON.stringify(eventMap));
+            
+            accountEvents = new Array();
+            eventDayArray = [];
+        }else{
+            //reset calendar
+            alert('Events set incomplete');
+            resetCalendar(planningPeriod);
+        }
+        //setCalendar("{!routeTemplate.EUR_CRM_Planning_Period__c}");
+    }
+    
+    function saveAccEventsEventDrop(ev, planningPeriod, order){
+        console.log('Flag - Save Account Event 2:'+currentIsComplete +' - '+currentEventSetCount+' - '+ currentAccount + ' - ' + currentEventDay[currentAccount] + ' - ' + order);
+        
+        if (currentIsComplete){
+            allEvents = $('#calendar').fullCalendar( 'clientEvents');
+            
+            eventMap[currentAccount] = currentEventDay[currentAccount];
+            console.log('Save Account Event - Event Map:' + eventMap[currentAccount]);
+            
+            saveRouteDayEvents(currentAccount, order, currentEventDay[currentAccount].toString(), JSON.stringify(eventMap));
+            
+            accountEvents = new Array();
+            eventDayArray = [];
+            currentEventDay = new Object();
+        }else{
+            //reset calendar
+            resetCalendar(planningPeriod);
+            alert('Events set incomplete');
+        }
+        //setCalendar("{!routeTemplate.EUR_CRM_Planning_Period__c}");
+    }
+    
+    function resetPlanningPeriod (weekCount, events){
+        console.log('Set Week Count:' + weekCount);
+        $('#calendar').fullCalendar('setOption', 'weekCount', weekCount);
+        //$('#calendar').fullCalendar('setActiveWeekCount', weekCount);
+        setWeekCount(weekCount);
+       
+        
+        if (events==undefined){
+            //calEvents = events;
+            console.log('Reset Planning Period - null events');
+        }
+        refetchEvents(events);
+        $('#calendar').fullCalendar('render');
+        //$('#calendar').fullCalendar('removeEvents');
+        //$('#calendar').fullCalendar('addEventSource',externalEvents);
+    }
+    
+    function refetchEvents(events){
+        //console.log("Refetch Events");
+        if(events!= undefined){
+            calEvents = events;
+        }
+        //console.log('Refetch Events:' + JSON.stringify(calEvents));
+        
+        //console.log('Refetch Events - eventsJS:' + JSON.stringify(events));
+        $('#calendar').fullCalendar( 'removeEvents');
+        $('#calendar').fullCalendar('addEventSource',calEvents);
+
+        //$('#calendar').fullCalendar('render');
+        //$('#calendar').fullCalendar('rerenderEvents');
+        //$("#calendar").fullCalendar('removeEvents'); 
+        //$("#calendar").fullCalendar('addEventSource', calEvents);
+        //$('#calendar').fullCalendar('rerenderEvents');
+        //console.log('Refetch events');
+    }
+    
+    function changeEditToDone(){
+        this.src = "{!URLFOR($Resource.EUR_CRM_Icons,'editDoneIcon.png')}";
+    }   
+    
+    function removeEventMapItem(key){
+        eventMap[key] = null;
+        
+        console.log('Event Map - Remove:' + key +'-' + JSON.stringify(eventMap));
+    }
+    
+    function blockPage(){   
+       $.blockUI({ message: '<img src="/img/loading32.gif" /><h1> Loading...</h1>',   
+         css: {   
+          border: 'none',   
+          padding: '15px',   
+          '-webkit-border-radius': '10px',   
+          '-moz-border-radius': '10px',   
+          opacity: .9  
+         }   
+       });   
+       return false;  
+     }  
+     //function to unblock the page  
+    function unblockPage(){  
+       $.unblockUI();  
+     }
+       
+    function loading(val) {
+        if (val) {
+          document.getElementById('contentLoading').style.display = 'block';
+          document.getElementById('contentLoaded').style.display = 'none';
+        }
+        else {
+          document.getElementById('contentLoading').style.display = 'none';
+          document.getElementById('contentLoaded').style.display = 'block';
+        }
+    }
+
+    function finalRedirect(){
+        window.location = "{!URLFOR($Action.EUR_CRM_Route_Template__c.View, EUR_CRM_Route_Template__c.Id)}";
+    }
+    
+    function redirectPage(rtID){
+        window.top.location = "/" + rtID;
+    }
+    
+</script>
+
+<style>
+    body {
+        margin-top: 40px;
+        font-size: 12px;
+        font-family: Helvetica,Arial,Verdana,sans-serif;
+        width:100%;
+        }
+
+
+    #accountTable{font-family:"Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+        font-size:12px;width:480px;text-align:left;
+        border-collapse:collapse;
+        margin:10px;
+        width:90%;
+        align:center;
+        text-align: center;
+        float:center;
+    }
+    #accountTable th{font-size:13px;font-weight:normal;
+        background:#b9c9fe;
+        border-top:4px solid #aabcfe;
+        border-bottom:1px solid #fff;
+        color:#039;padding:8px;
+        text-align: center;
+    }
+    #accountTable td{
+        background:#F2F3F4;
+        border-bottom:1px solid #fff;
+        color:#669;
+        border-top:1px solid transparent;
+        padding:8px;
+    }
+    #accountTable tr:hover td{
+        background:#ffffff;
+        color:#339;
+    }
+    
+    #accountTable th.sorting_asc {
+    background: #b9c9fe url("{!URLFOR($Resource.EUR_CRM_jQuery_DataTables,'images/sort_asc.png')}") no-repeat right center;
+    }
+ 
+    #accountTable th.sorting_desc {
+        background: #b9c9fe url("{!URLFOR($Resource.EUR_CRM_jQuery_DataTables,'images/sort_desc.png')}") no-repeat right center;
+    }
+    
+    #accountTable th.sorting {
+    background: #b9c9fe url("{!URLFOR($Resource.EUR_CRM_jQuery_DataTables,'images/sort_both.png')}") no-repeat right center;
+    }   
+    th.headerRow{
+         background-color:#E0E0E0 
+    }
+    #accountTable tr.rowhighlight td, tr.rowhighlight th{
+        background-color:#d0dafd;
+    }
+    #accountTable tr.rowhighlight:hover td, tr.rowhighlight th{
+        background-color:#ffffff;
+    }
+    
+    tr.dataRow {
+       background-color:white;
+    }
+    tr.dataRow:hover {
+       background-color: #e3f3ff;
+    }
+    
+    a.dataCell {
+        font-family:"Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+        font-size:12px;width:480px;text-align:left;
+    }
+    
+    #wrap {
+        width: 80%;
+        margin: 1 auto;
+        }
+    #fc-week-number{
+        width:5%;
+    }
+    #external-events {
+        float: left;
+        width: 150px;
+        padding: 0 10px;
+        border: 1px solid #ccc;
+        background: #eee;
+        text-align: left;
+        }
+        
+    #external-events h4 {
+        font-size: 16px;
+        margin-top: 0;
+        padding-top: 1em;
+        }
+        
+    .external-event { /* try to mimick the look of a real event */
+        margin: 10px 0;
+        padding: 2px 4px;
+        background: #3366CC;
+        color: #fff;
+        font-size: .85em;
+        cursor: pointer;
+        }
+    
+    .fc-day{
+         background: #E0DFF5;
+    }
+    
+    .activeWeek{
+        background: #ffffff;
+    }
+    #external-events p {
+        margin: 1.5em 0;
+        font-size: 11px;
+        color: #666;
+        }
+        
+    #external-events p input {
+        margin: 0;
+        vertical-align: middle;
+        }
+
+    #calendar {
+        float: center;
+        width: 80%;
+        }
+    #calendar thead{
+        margin: 2px;
+        border-bottom: 1px solid;
+    }
+    
+    .accountLink{
+        color:#669;
+    }
+</style>
+
+</head>
+
+<apex:actionStatus id="loading" >
+    <apex:facet name="start">
+        <c:EUR_CRM_LoadingStatus BackColor="#ffffff"
+                                    borderColor="#6B6B6B"
+                                    borderSize="1"
+                                    height="50px"
+                                    width="120px"
+                                    margintop="-25px"
+                                    marginleft="-60px"
+                                    ImageUrl="{!$Resource.loadingStatus}"
+                                    Message="Loading..."/>
+    </apex:facet>
+</apex:actionStatus>
+
+<apex:form style="width:100%">
+    
+    <apex:actionFunction name="initAccountList" action="{!retrieveRouteTemplateItems}" status="loading" 
+        rerender="rTemplateBlock" onComplete="console.log('Account List Done - '+{!eventsJS}); setAccountTable(); setCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS}, false);"/>
+    
+    <apex:actionFunction name="saveRouteDaysReset" action="{!extendActions}" status="loading" rerender="panel_AccountTable"
+        onComplete="console.log('Save Route Days- Event Map - ' + JSON.stringify(eventMap)); resetCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS});">
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="saveRouteDays" action="{!saveRouteDays}" status="loading" rerender="panel_AccountTable"
+        onComplete="saveRouteDaysReset();">
+        <apex:param name="selectedAccount" value="" assignTo="{!selectedInProcessAccount}" /> 
+        <apex:param name="selectedDays" value="" assignTo="{!selectedInProcessDays}" /> 
+        <apex:param name="PARAM_EVENT_MAP" value="" assignTo="{!eventMapFromPage}"/>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="saveRouteDayEventReset" action="{!extendActions}" status="loading" rerender="panel_AccountTable"
+        onComplete="console.log('Save Route Days- Event Map - ' + JSON.stringify(eventMap)); resetCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS});">
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="saveRouteDayEvents" action="{!saveRouteDayEvents}" status="loading" rerender="panel_AccountTable"
+        onComplete="saveRouteDayEventReset();">
+        <apex:param name="selectedAccount" value="" assignTo="{!selectedInProcessAccount}" /> 
+        <apex:param name="selectedOrder" value="" assignTo="{!selectedInProcessOrder}" />
+        <apex:param name="selectedDays" value="" assignTo="{!selectedInProcessDays}" /> 
+        <apex:param name="PARAM_EVENT_MAP" value="" assignTo="{!eventMapFromPage}"/>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="updateExternalEventList" action="{!updateExternalEventList}" status="loading"
+        onComplete="console.log('Done updating external'); resetCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS});"
+        rerender="none">
+        <apex:param name="externalEventStartYear" value="" assignTo="{!externalEventStartYear}" /> 
+        <apex:param name="externalEventStartMonth" value="" assignTo="{!externalEventStartMonth}" /> 
+        <apex:param name="externalEventStartDay" value="" assignTo="{!externalEventStartDay}" /> 
+    </apex:actionFunction>
+
+    <apex:actionFunction name="populateEventsDisplay" action="{!populateEventsDisplay}" status="loading" 
+        rerender="routeTemplate.EUR_CRM_Planning_Period__c" onComplete="console.log('Reset Events Display '+{!routeTemplate.EUR_CRM_Planning_Period__c}+'- '+{!eventsJS}); resetPlanningPeriod('{!routeTemplate.EUR_CRM_Planning_Period__c}', {!eventsJS});"/>
+    
+    <apex:actionFunction name="saveTemplate" action="{!saveTemplate}" rerender="none" oncomplete="redirectPage('{!routeTemplate.Id}');">
+        <apex:param name="PARAM_EVENT_MAP" value="" assignTo="{!eventMapFromPage}"/>
+    </apex:actionFunction>
+    
+    <apex:pageBlock id="rTemplateBlock">
+        <apex:pageMessages id="pageMessages">
+        </apex:pageMessages>
+    
+        <apex:pageblockButtons >
+            <apex:commandLink value="{!$Label.EUR_CRM_Save}"  status="loading" 
+                rendered="{!routeTemplateClass.isEditable}"
+                styleClass="btn" style="text-decoration:none"
+                onclick="console.log('Save Template - '+JSON.stringify(eventMap)); saveTemplate(JSON.stringify(eventMap));"
+                rerender="none">
+            </apex:commandLink>
+
+            <apex:commandLink value="{!$Label.EUR_CRM_Exit}" action="{!cancel}" 
+                status="loading" styleClass="btn" style="text-decoration:none"/>
+        </apex:pageblockButtons>
+        
+        <apex:pageBlockSection columns="1" id="eventDetailSection">
+            <apex:pageBlockSectionItem >
+            <apex:outputLabel value="{!$Label.EUR_CRM_RouteTemplate}"/>
+            <apex:outputLink value="/{!EUR_CRM_Route_Template__c.Id}">
+            <apex:outputText label="{!$Label.EUR_CRM_RouteTemplate}" value="{!routeTemplate.Name}"></apex:outputText>
+            </apex:outputLink>
+            </apex:pageBlockSectionItem>
+
+            <apex:selectList label="{!$Label.EUR_CRM_RT_PlanningPeriod}" value="{!routeTemplate.EUR_CRM_Planning_Period__c}" 
+                multiselect="false" size="1" onChange="currentPlanningPeriod=$(this).val(); console.log('Current Planning Period -'+currentPlanningPeriod); populateEventsDisplay();">
+                <apex:selectOptions value="{!planningPeriodOptions}"/>
+            </apex:selectList>
+            
+            <apex:selectList label="Ave. Visit Duration (Hours)" 
+                value="{!routeTemplate.EUR_CRM_Visit_Duration__c}" multiselect="false" size="1"
+                rendered="false">
+                <apex:selectOptions value="{!visitDurationOptions}"/>
+            </apex:selectList>
+            
+            <apex:pageBlockSectionItem id="eventCountItem" rendered="false">
+                <apex:outputLabel value="Total Events" rendered="false"/>
+                <apex:outputText value="{!eventCount}" rendered="false"/> 
+            </apex:pageBlockSectionItem>
+            
+            <apex:inputText label="{!$Label.EUR_CRM_RT_EEStartDate}" value="{!externalEventStartDate}" 
+                id="externalEventDateInput"
+                onfocus="DatePicker.pickDate(false, this, false);" 
+                onBlur="console.log('TEST:' + this.value); setExternalEventDate(this.value);"
+                rendered="{!routeTemplateClass.hasExternalEvents}"/>
+            
+            <apex:inputField value="{!EUR_CRM_Route_Template__c.EUR_CRM_View_Other_Visits__c}" 
+            rendered="{!EUR_CRM_Route_Template__c.EUR_CRM_Has_Other_Visits_View_Option__c}"
+            onchange="viewOtherVisitsLocal=this.checked;"/>
+                
+        </apex:pageBlockSection>
+        
+        <apex:pageBlockSection title="{!$Label.EUR_CRM_Calendar}" columns="1" id="calendarSection">
+            <apex:outputPanel id="wrap">
+                <div id='external-events'>
+                <h4>{!$Label.EUR_CRM_RT_AccountVisits}</h4>
+                <p>
+                <apex:commandButton value="{!$Label.EUR_CRM_Save}" 
+                    status="loading"
+                    onClick="saveAccountEvents({!eventsJS}, '{!routeTemplate.EUR_CRM_Planning_Period__c}');" rerender="none"/>
+                <apex:commandButton value="{!$Label.EUR_CRM_Exit}" status="loading"
+                    onClick="console.log('Exit account event setting');" 
+                    onComplete="resetCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS});"
+                    rerender="calEvents, panel_AccountTable, pageMessages"
+                    />
+                </p>
+                </div>
+
+                <div id='calendar'></div>
+                <div style='clear:both'></div>
+                <div>&nbsp;</div>
+            </apex:outputPanel>
+        
+        </apex:pageBlockSection>
+        
+        <apex:pageBlockSection title="Accounts" id="accountBlock" columns="1">
+        <apex:outputPanel style="width:100%; align=center;" layout="block" id="panel_AccountTable">      
+            <table id="accountTable" style="align=center; float:center; width: 98%;">
+                <thead class="headerRow">
+                    <th class="headerRow">{!$Label.EUR_CRM_Delete}</th>
+                    <th class="headerRow">{!$Label.EUR_CRM_Edit}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_AccountName}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_RT_Street}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_PostalCode}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_City}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_RT_VisitFrequency}</th>
+                    <th class="headerRow sorting">{!$Label.EUR_CRM_RT_LastScheduledVisit}</th>
+                </thead>
+                <tfoot>
+                    <th class="noFilter"></th>
+                    <th class="noFilter"></th>
+                    <th><select></select></th>
+                    <th><select></select></th>
+                    <th><select></select></th>
+                    <th><select></select></th>
+                    <th><select></select></th>
+                    <th><select></select></th>
+                </tfoot>
+                <tbody>
+                <apex:repeat var="key" value="{!routeItemsMap}">
+                    <apex:variable value="{!routeItemsMap[key]}" var="routeItem"/>
+                    <tr layout="none" style="layout:none;" class="{!IF(routeItem.isVisitFrequencyModified, 'rowhighlight dataRow', 'dataRow')}">
+                        <td colspan="1" class="dataCell">
+                            <apex:commandLink style="font-size:15px; font-weight:bold; text-align:center;color:red;" 
+                             rerender="panel_AccountTable" 
+                             rendered="{!IF(routeItem.hasFrequency && routeTemplateClass.isEditable, true, false)}"
+                             action="{!deleteRouteItems}" 
+                             onComplete="removeEventMapItem('{!key}'); resetCalendar({!routeTemplate.EUR_CRM_Planning_Period__c}, {!eventsJS});">
+                            <apex:param value="{!routeItem.accountId}" name="accountId" />
+                            <apex:image url="{!URLFOR($Resource.EUR_CRM_Icons,'closeIcon.png')}"/>
+                            </apex:commandLink>
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:commandLink style="font-size:11px; font-weight:bold; text-align:center;color:red;" 
+                             rerender="none"
+                             rendered="{!IF((routeItem.hasFrequency && routeTemplateClass.isEditable), true, false)}"
+                             onClick="console.log('Set Event - Planning Period:{!planningPeriod}'); 
+                                 return setEventCalendar('{!routeItem.accountId}',
+                                 '{!JSENCODE(routeItem.accountName)}',
+                                 '{!JSENCODE(routeItem.accountStreet)}',
+                                 'currentPlanningPeriod',
+                                 '{!routeItem.visitFrequency}',
+                                 '{!routeItem.visitSpan}',
+                                 '{!routeItem.routeDaysInt}', 
+                                 {!otherEventsJS});"
+                             onComplete="console.log('Done with set account event');">
+                            <apex:image url="{!URLFOR($Resource.EUR_CRM_Icons,IF(routeItem.isEventSet,'editDoneIcon.png','editIcon.png'))}"/>
+                            </apex:commandLink>
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <a class="accountLink" href="/{!routeItem.accountId}" id="{!routeItem.accountId}" target="_blank"
+                                onblur="LookupHoverDetail.getHover('{!routeItem.accountId}').hide();" 
+                                onfocus="LookupHoverDetail.getHover('{!routeItem.accountId}', '/{!routeItem.accountId}/m?retURL=%2F{!routeItem.accountId}&isAjaxRequest=1').show();" 
+                                onmouseout="LookupHoverDetail.getHover('{!routeItem.accountId}').hide();" 
+                                onmouseover="LookupHoverDetail.getHover('{!routeItem.accountId}', '/{!routeItem.accountId}/m?retURL=%2F{!routeItem.accountId}&isAjaxRequest=1').show();">
+                                {!routeItem.accountName}
+                                </a> 
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:outputText value="{!routeItem.accountStreet}"/>
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:outputText value="{!routeItem.accountPostCode}"/>
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:outputText value="{!routeItem.accountCity}"/>
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:outputText value="{!routeItem.visitFrequencyName}"/> 
+                        </td>
+                        <td colspan="1" class="dataCell">
+                            <apex:outputText value="{!routeItem.lastScheduleVisitStr}"/>
+                        </td>
+
+                    </tr>
+                </apex:repeat>
+                </tbody>
+
+            </table>
+
+        </apex:outputPanel>
+        </apex:pageBlockSection>              
+    </apex:pageBlock>
+
+</apex:form>
+</apex:page>

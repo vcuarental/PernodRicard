@@ -1,0 +1,120 @@
+<!--
+ - Created by bsavcı on 8/27/2020.
+ -->
+
+<aura:component description="EUR_TR_SurveyAssignment" controller="EUR_TR_SurveyAssignmentController"
+                implements="force:appHostable,flexipage:availableForAllPageTypes,force:hasRecordId,lightning:actionOverride,lightning:isUrlAddressable">
+
+    <aura:attribute name="accountDataPagerColumns" type="List"/>
+    <aura:attribute name="accountDataPagerFilter" type="String"/>
+    <aura:attribute name="assignSurveyRequest" type="Object"/>
+    <aura:attribute name="hideCheckboxColumn" type="Boolean" default="true"/>
+
+    <aura:attribute name="surveyDataPagerColumns" type="List"/>
+    <aura:attribute name="surveyDataPagerFilter" type="String"/>
+    <aura:attribute name="removeSurveyAssignmentRequest" type="Object"/>
+
+    <aura:attribute name="disableButtons" type="Boolean" default="false"/>
+    <aura:attribute name="loading" type="Boolean" default="false"/>
+
+    <aura:attribute name="batchProcessesLoading" type="Boolean" default="false"/>
+    <aura:attribute name="batchProcess" type="Object"/>
+
+    <aura:attribute name="hasPermissionToSurveyAssignment" type="Boolean" default="true"/>
+
+    <!-- Picklist values-->
+    <aura:attribute name="surveyOptions" type="Object[]" default="[]"/>
+
+    <!--Handlers-->
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:handler name="change" value="{!v.pageReference}" action="{!c.handlePageReferenceChange}"/>
+
+    <c:EUR_TR_CommonUtility aura:id="utility"/>
+    <lightning:notificationsLibrary aura:id="notifLib"/>
+
+    <lightning:layout multipleRows="true">
+        <aura:if isTrue="{!v.loading}">
+            <lightning:spinner aura:id="spinner" variant="brand" size="large" alternativeText="Yükleniyor..."/>
+        </aura:if>
+        <aura:if isTrue="{!not(empty(v.batchProcess))}">
+            <lightning:layoutItem size="12" largeDeviceSize="12"
+                                  class="slds-p-bottom--x-small slds-p-left--x-small slds-p-right--x-small">
+                <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_info" role="alert">
+                    <span class="slds-assistive-text">info</span>
+                    <aura:if isTrue="{!v.batchProcessesLoading}">
+                        <lightning:spinner aura:id="spinner" variant="brand" size="small"
+                                           alternativeText="Yükleniyor..."/>
+                    </aura:if>
+                    <h2 class="slds-p-right--x-small">Başlama Tarihi:
+                        <lightning:formattedDateTime value="{!v.batchProcess.CreatedDate}" year="numeric" month="long"
+                                                     day="numeric"
+                                                     hour="2-digit" minute="2-digit" second="2-digit" hour12="false"/>
+                    </h2>
+                    <h2 class="slds-p-right--x-small"> Durum: {!v.batchProcess.Status}</h2>
+                    <lightning:formattedNumber class="slds-p-right--x-small"
+                                               value="{!v.batchProcess.JobItemsProcessed/v.batchProcess.TotalJobItems}"
+                                               style="percent" maximumFractionDigits="2" minimumFractionDigits="2"/>
+                    <h2>Hata Sayısı: {!v.batchProcess.NumberOfErrors}</h2>
+                    <lightning:buttonIcon name="refresh" iconName="utility:refresh" alternativeText="Yenile"
+                                          variant="bare-inverse"
+                                          class="slds-p-left--xx-small"
+                                          onclick="{!c.updateBatchProcessStatus}"/>
+                </div>
+            </lightning:layoutItem>
+        </aura:if>
+        <lightning:layoutItem size="12" largeDeviceSize="12"
+                              class="slds-form-element slds-hint-parent slds-p-around--x-small">
+            <lightning:card title="Müşteriler" iconName="standard:account">
+                <aura:set attribute="actions">
+                    <lightning:button label="Tümüne Ata"
+                                      variant="brand"
+                                      title="Tümüne Ata"
+                                      disabled="{!v.disableButtons}"
+                                      iconPosition="right" onclick="{!c.bulkAssignSurveys}"/>
+                    <lightning:button label="Seçili Müşterilere Ata"
+                                      variant="brand"
+                                      title="Seçili Müşterilere Ata"
+                                      disabled="{!v.disableButtons}"
+                                      iconPosition="right" onclick="{!c.assignSurveys}"/>
+                </aura:set>
+                <lightning:layoutItem size="12" largeDeviceSize="6"
+                                      class="slds-form-element slds-hint-parent slds-p-around--x-small">
+                    <aura:if isTrue="{!not(empty(v.surveyOptions))}">
+                        <lightning:combobox name="surveyOption" placeholder="Anket Seçiniz" options="{!v.surveyOptions}"
+                                            value="{!v.assignSurveyRequest.SelectedSurveyId}"
+                                            onchange="{!c.handleSelectedSurveyChange}"/>
+                    </aura:if>
+                </lightning:layoutItem>
+                <c:EUR_TR_DataPager columns="{!v.accountDataPagerColumns}"
+                                    aura:id="accountDataPager"
+                                    objectName="EUR_TR_Account__c"
+                                    hideCheckboxColumn="{!v.hideCheckboxColumn}"
+                                    filterable="true"
+                                    loadingEnabled="true"
+                                    filter="{!v.accountDataPagerFilter}"/>
+            </lightning:card>
+            <lightning:card title="Anket Ataması Yapılan Müşteriler" iconName="standard:survey">
+                <aura:set attribute="actions">
+                    <lightning:button label="Tüm Anket Atamalarını Kaldır"
+                                      variant="brand"
+                                      title="Filtrelenmiş Tüm Anket Atamalarını Kaldırır. "
+                                      disabled="{!v.disableButtons}"
+                                      iconPosition="right" onclick="{!c.bulkRemoveSurveys}"/>
+                    <lightning:button label="Seçili Olanları Kadlır"
+                                      variant="brand"
+                                      title="Seçili Olanları Kadlır"
+                                      disabled="{!v.disableButtons}"
+                                      iconPosition="right" onclick="{!c.removeSurveyAssignments}"/>
+                </aura:set>
+                <c:EUR_TR_DataPager columns="{!v.surveyDataPagerColumns}"
+                                    aura:id="surveyDataPager"
+                                    objectName="EUR_TR_Survey__c"
+                                    hideCheckboxColumn="{!v.hideCheckboxColumn}"
+                                    filterable="true"
+                                    loadingEnabled="true"
+                                    filter="{!v.surveyDataPagerFilter}"/>
+            </lightning:card>
+        </lightning:layoutItem>
+
+    </lightning:layout>
+</aura:component>

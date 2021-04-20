@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fieldUpdates>
+        <fullName>CAN_Listing_Update_Delisted_Date</fullName>
+        <field>gvp__End_Date__c</field>
+        <formula>TODAY()</formula>
+        <name>CAN Listing Update Delisted Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>CAN_Listing_Update_End_Date</fullName>
+        <field>gvp__End_Date__c</field>
+        <formula>DATE(2050,12,31)</formula>
+        <name>CAN Listing Update End Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>CA_Status_Approved</fullName>
+        <field>gvp__Status__c</field>
+        <literalValue>Approved</literalValue>
+        <name>CA_Status_Approved</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>CA_Status_Presented</fullName>
+        <field>gvp__Status__c</field>
+        <literalValue>Presented</literalValue>
+        <name>CA_Status_Presented</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>CAN Listing Update End Date</fullName>
+        <actions>
+            <name>CAN_Listing_Update_End_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>gvp__Authorization__c.CreatedDate</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>CAN_Authorizations_Status - Delisted</fullName>
+        <actions>
+            <name>CAN_Listing_Update_Delisted_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>gvp__Authorization__c.gvp__Status__c</field>
+            <operation>equals</operation>
+            <value>Delisted</value>
+        </criteriaItems>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+</Workflow>

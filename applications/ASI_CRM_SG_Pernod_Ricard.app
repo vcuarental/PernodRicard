@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <defaultLandingTab>standard-home</defaultLandingTab>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <label>Pernod Ricard SG CRM</label>
+    <tabs>ASI_CRM_AccountsAdditionalField__c</tabs>
+    <tabs>standard-Contact</tabs>
+    <tabs>ASI_TH_CRM_Contract__c</tabs>
+    <tabs>ASI_FOC_Free_Goods_Request__c</tabs>
+    <tabs>ASI_TH_CRM_PaymentRequest__c</tabs>
+    <tabs>ASI_HK_CRM_Visitation_Plan__c</tabs>
+    <tabs>ASI_CRM_Budget__c</tabs>
+    <tabs>ASI_CRM_SG_FOC_Carry_Over__c</tabs>
+    <tabs>ASI_CRM_SG_Wine_Category__c</tabs>
+    <tabs>ASI_CRM_Pros_Segmentation__c</tabs>
+    <tabs>ASI_HK_CRM_Product_Category__c</tabs>
+    <tabs>ASI_KOR_Brand__c</tabs>
+    <tabs>ASI_MFM_SKU_Code__c</tabs>
+    <tabs>ASI_CRM_SG_FOC_Compute_FOC_Request</tabs>
+    <tabs>ASI_HK_CRM_Promotion_Detail__c</tabs>
+    <tabs>ASI_CRM_SG_Budget_Upload_SG</tabs>
+    <tabs>ASI_CRM_SG_SOTBCNTab</tabs>
+    <tabs>ASI_CRM_Group_Outlet_Type__c</tabs>
+    <tabs>standard-report</tabs>
+    <tabs>ASI_CRM_DAMD_Threshold__c</tabs>
+    <tabs>ASI_HK_CRM_Running_Number__c</tabs>
+    <tabs>BMCServiceDesk__SRM_FulfillmentInputs__c</tabs>
+    <tabs>ASI_CRM_SG_Mass_Edit_Converted_Outlet</tabs>
+    <tabs>ASI_CRM_SG_Mass_Verify_Payment_Request</tabs>
+    <tabs>ASI_CRM_SKU_Mapping__c</tabs>
+    <tabs>ASI_CRM_Blind_Bonus__c</tabs>
+    <tabs>ASI_CRM_SG_SO_FOC_Rules__c</tabs>
+    <tabs>ASI_CRM_Credit_Debit_Note__c</tabs>
+    <tabs>ASI_CRM_Invoice__c</tabs>
+    <tabs>ASI_CRM_Receipt__c</tabs>
+    <tabs>ASI_CRM_Product_Document__c</tabs>
+    <tabs>ASI_CRM_SG_Upload_Offtake</tabs>
+    <tabs>ASI_CRM_SG_Adjust_Offtakes</tabs>
+    <tabs>ASI_CRM_SG_Offtake_Report</tabs>
+    <tabs>ASI_CRM_ActualOfftakeHeader__c</tabs>
+    <tabs>ASI_CRM_Customer_Mapping__c</tabs>
+    <tabs>ASI_CRM_Promotion_Plan__c</tabs>
+    <tabs>ASI_CRM_Voucher__c</tabs>
+</CustomApplication>

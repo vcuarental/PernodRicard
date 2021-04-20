@@ -1,0 +1,1090 @@
+<apex:page standardController="ASI_MFM_Purchase_Request__c"  sidebar="false"  docType="html-5.0" showHeader="true" extensions="ASI_MFM_KR_PRManageAllController" action="{!init}">
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+       
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/SimpleTable.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        
+        
+        <script type="text/javascript">
+        
+        $j = jQuery.noConflict();
+        var headerId = null;
+        var resultTable;
+        var POLTable;
+        var budgetTable;
+        var datatableILength = 15;   
+        var api;
+        //Auto-complete
+        var SKU = [];
+        var APType = [];
+        var APCategory = [];
+        var APCodes= [];
+        var SubLedger= [];
+        
+        //Record Type
+        var APCodeTypeName = null;
+        var SKURCName = null;
+        
+        function htmlEncode( input ) {
+            var e = document.createElement('div');
+            e.innerHTML = input;
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        };
+        
+        
+        function initPage(config) {
+            if (config) {
+                headerId = config.headerId;
+                APCodeTypeName=config.APCodeTypeName;
+                SKURCName=config.SKURCName;
+                setResultTable(true);
+                setLineTable(true);
+                setBudgetTable(true);
+                retrieveSKUCode();
+                retrieveAPCode();
+                retrieveSubLedger();
+                //calulatealldata();
+            }
+        }  
+        
+        //SKU    
+        function retrieveSKUCode() {
+            
+            var whereClause =   ' WHERE RecordType.DeveloperName = \''+ SKURCName  + '\' and ASI_MFM_Sub_brand__r.Name like \'POS%\'';   //+ '\' and Name like \'9%\'';
+            var statement='id,name, ASI_MFM_Sub_brand__r.Name,ASI_MFM_Sub_brand__c,ASI_MFM_SKU_Description__c,ASI_HK_CRM_UOM1__c,ASI_MFM_SKU_Code__c ';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_PRManageAllController.findList}','ASI_MFM_SKU_Code__c', statement,whereClause 
+                , callbackSKUCode
+                , {escape: true, timeout: 10000}
+            );       
+        }
+        function callbackSKUCode(result, event){
+            if (event.status) {
+                if (result) {
+                    SKU=[];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        var skus = new Object();
+                        skus.label =  htmlEncode(result[i]["Name"]);
+                        skus.value =  htmlEncode(result[i]["Id"]);
+                        skus.sb =htmlEncode(result[i]["ASI_MFM_Sub_brand__r"]["Name"]);
+                        skus.Description= htmlEncode(result[i]["ASI_MFM_SKU_Description__c"]);
+                        skus.UOM= htmlEncode(result[i]["ASI_HK_CRM_UOM1__c"]);
+                        SKU.push(skus);
+                    }
+                    
+                }
+            }else {
+            }   
+            
+            initalizeAutoCompleteComponent();
+        }
+        
+        //SKU ------------END
+       
+        //AP Code
+        function retrieveAPCode() {
+            // [SH] 2018-11-21 Added inactive fileter 
+            var whereClause =   ' WHERE RecordType.DeveloperName = \''+ APCodeTypeName + '\' and ASI_MFM_PRPO_Needed__c =true and ASI_MFM_Inactive__c = false';
+            var statement='id,name,ASI_MFM_AP_Category__c,ASI_MFM_AP_Type__c,ASI_MFM_AP_Code__c ';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_PRManageAllController.findList}','ASI_MFM_AP_Code__c', statement, whereClause 
+                , callbackAPCode
+                , {escape: true}
+            );       
+        }
+        
+        function callbackAPCode(result, event){
+            if (event.status) {
+                if (result) {
+                    APCategory=[];
+                    APType=[];
+                    APCodes = [];
+                    var TempAPTypeList = [];
+                    var TempAPcateList = [];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        //Put AP Code
+                        var ap = new Object();
+                        ap.label =  htmlEncode(result[i]["Name"]);
+                        ap.value =  htmlEncode(result[i]["Id"]);
+                        ap.aptype=  htmlEncode(result[i]["ASI_MFM_AP_Type__c"]);
+                        ap.APCate=htmlEncode(result[i]["ASI_MFM_AP_Category__c"]);
+                        APCodes.push(ap);
+                        
+                        //AP Type
+                         var at = new Object();
+                        at.value =  htmlEncode(result[i]["ASI_MFM_AP_Type__c"]);
+                        if(TempAPTypeList.indexOf(at.value)== -1 && at.value !== 'undefined'){
+                            TempAPTypeList.push(at.value);
+                            APType.push(at);
+                        }
+                        
+                        //AP Category
+                        var apc = new Object();
+                        apc.value =  htmlEncode(result[i]["ASI_MFM_AP_Category__c"]);
+                        
+                        if(TempAPcateList.indexOf(apc.value)== -1 && apc.value!== 'undefined'){
+                            TempAPcateList.push(apc.value);
+                            APCategory.push(apc);
+                        }
+                    }
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+        
+
+
+//Sub Ledger
+        function retrieveSubLedger() {
+            
+            var whereClause =   ' ';
+            var statement='id,name ';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_PRManageAllController.findList}','ASI_TnE_Branch_Channel__c', statement, whereClause 
+                , callbackSubLedger
+                , {escape: true}
+            );       
+        }
+
+function callbackSubLedger(result, event){
+            if (event.status) {
+                if (result) {
+
+                    SubLedger=[];
+                    
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        //Put SubLedger
+                        var sl = new Object();
+                        sl.label =  htmlEncode(result[i]["Name"]);
+                        sl.value =  htmlEncode(result[i]["Id"]);
+                        
+                        SubLedger.push(sl);
+                        
+                        
+                    }
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+
+
+
+
+        //function applied when changing SKU 
+        function changesku(that,inputvalue){
+            
+            var uomid= that.attr('data-id'); //
+            //console.log($j('#UOM_manageAll_' + uomid + '_input select'));
+            var SKUDescription;
+            var SKUUom;
+            $j(SKU).each(function(iIndex, sElement) {
+                if(sElement.label==inputvalue){//console.log('Find');//console.log(sElement);  console.log(that.parent().prev().children().val()); // console.log(SKUDescription);// console.log(SKUUom);
+                       SKUDescription=sElement.Description;
+                       SKUUom=sElement.UOM;
+                    }
+            });
+            
+            // change SKU Description
+            if(! isNaN(that.parent().prev().children().val()) && SKUDescription!= 'undefined'){ // if it is null , change Description  
+                that.parent().prev().children().val(SKUDescription);
+            }
+            //change UOM
+            if(SKUUom!= 'undefined'){
+                $j('#UOM_manageAll_' + uomid + '_input select option:contains('+SKUUom+')').prop({selected: true});
+            }
+            
+           
+        } //end function applied when changing SKU
+        
+        function initalizeAutoCompleteComponent() {
+            // SKU           
+            $j(".skuCodeClass").autocomplete({
+                source: 
+                SKU,
+                search: function(event, ui) {
+                    var currentid = $j(this).attr('data-id');
+                    //Get Current Sub-Brand Name
+                    var sValue = $j(this).parent().prev().prev().children().html();
+                    //onsole.log('Current SB: '+sValue);
+                    var aSearch = [];
+                    $j(SKU).each(function(iIndex, sElement) {
+                        // if(sElement.sb==sValue){
+                            var skus = new Object();
+                            skus.label=sElement.label;
+                            skus.value=sElement.value;
+                            skus.desc=sElement.Description;
+                            aSearch.push(skus);
+                        // }
+                    });//console.log(aSearch.length);
+                    
+                    //showing no result information 
+                    if(aSearch.length==0){
+                        var message= new Object();
+                        message.label='No result';
+                        message.value='';
+                        aSearch.push(message);
+                    }
+                    $j(this).autocomplete('option', 'source', aSearch);
+                },
+                response: function(event, ui) 
+                {
+                    /*if(ui.content.length===0){ 
+                         console.log("No result found");
+                         $j(this).next().next().children().val('');  
+                    }*/
+                    if(ui.content.length===1){ 
+                        var detectflag= false;
+                        for(var key in ui.content) {//  console.log(key);//console.log(ui.content[key]);console.log(ui.content[key].label);
+                            //find the ui if exist 'No result'
+                            if(ui.content[key].label=='No result'){
+                                detectflag=true;// console.log("detect flag: No result found");
+                            }
+                        }
+                        if(detectflag){// exist 'No result'
+                            console.log("No result found");
+                            $j(this).next().next().children().val('');  
+                        }
+                    }
+                   
+                   //console.log(ui.content);
+                    
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.label = '';
+                        $j(this).val('');
+                       $j(this).next().next().children().val('');   
+                    }
+                  
+                },
+                select: function(event, ui){
+                    if(ui.item.label!='No result'){//if no select 'No result'
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);            
+                        $j(this).closest('.input').find('.value').val(ui.item.value);//console.log( $j(this).closest('.input').find('.value')+':' + ui.item.value);
+                        //  show Basic POSM item description - For default value, pls show pricing UOM
+                        changesku($j(this),ui.item.label);
+                        event.preventDefault();
+                    }
+                },
+                focus: function(event, ui){
+                    if(ui.item.label!='No result'){
+                        $j(this).val(ui.item.label);
+                        event.preventDefault();
+                    }
+                }  
+             }).focus(function () {
+                $j(this).autocomplete("search", "");
+                event.preventDefault();
+            }).each(function() {
+                $j(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                    
+                    if(item.label=='No result'){
+                         return $j("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong>   </span><a>").appendTo(ul); 
+                    }else{
+                        /*console.log(item.desc.length);
+                        var mestemp='';
+                        if(item.desc.length>40){
+                            mestemp=item.desc.substring(0, 40)+'...';
+                        }else{
+                            mestemp=item.desc;
+                        }*/
+                        return $j("<li style='width:300px' >").html("<a style='margin-left: 2px;  '><span><strong>" + item.label + "</strong>:    </span><span >" + item.desc+ "</span><a>").appendTo(ul); 
+                    }
+                    
+                };                        
+            });
+            
+            
+            
+            // AP Type 
+            $j(".APTypeClass").autocomplete({
+                source: 
+                APType,
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("No result found");
+                    }
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.value = '';
+                    }
+                    //Clear AP Category and AP Code Name and Id
+                    $j(this).parent().next().children().val('');
+                    $j(this).parent().next().next().children().val('');
+                    $j(this).parent().next().next().children().next().children().val('');
+                },
+                focus: function(event, ui){
+                    //$j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+             }).focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+            
+            // AP Category 
+            $j(".APCateClass").autocomplete({
+                source: 
+                APCodes,
+                search: function(event, ui) {
+                    var currentid = $j(this).attr('data-id');// console.log(currentid);
+                    var sValue = $j('#APType_manageAll_' + currentid + '_input')[0].innerText;//$j('#APType_manageAll_' + currentid + '_input').val();
+
+                    var aSearch = [];
+                     $j(APCodes).each(function(iIndex, sElement) {
+                         if(sElement.aptype==sValue){
+                             if(aSearch.indexOf(sElement.APCate)== -1){
+                                 aSearch.push(sElement.APCate);
+                             }
+                         }
+                        });    
+                        $j(this).autocomplete('option', 'source', aSearch);
+                    
+                },
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("APCateClass No result found");
+                    }
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.label = '';
+                    }
+                    //Clear AP Code Name and Id
+                    $j(this).parent().next().children().val('');
+                    $j(this).parent().next().children().next().children().val('');
+                },
+                focus: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+             }).focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+            
+            
+            //AP Code
+            $j(".APCodeClass").autocomplete
+            (
+                {
+                    source:
+                    APCodes,
+                    search: function(event, ui) {
+                        var currentid = $j(this).attr('data-id');
+                        var APtype =  $j('#APType_manageAll_' + currentid + '_input')[0].innerText;//$j('#APType_manageAll_' + currentid + '_input').val();
+                        var APcate = $j('#APCategory_manageAll_' + currentid + '_input input').val();
+                        var aSearch = [];
+                        var templist=[];
+                        $j(APCodes).each(function(iIndex, sElement) {
+                            if(sElement.aptype==APtype && sElement.APCate==APcate ){
+                                if(templist.indexOf(sElement.label)== -1){
+                                    templist.push(sElement.label);
+                                    aSearch.push(sElement);
+                                }
+                            }
+                        });    
+                        $j(this).autocomplete('option', 'source', aSearch);
+                        
+                    },
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("AP Code: No result found");
+                        }
+                    },
+                    minLength: 0,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        $j(this).closest('.input').find('.value').val(ui.item.value);
+                        console.log( $j(this).closest('.input').find('.value')+':' + ui.item.value);
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function()
+                    {
+                         $j(this).autocomplete("search", "");
+                    }
+                   )
+
+
+// SubLedger
+            $j(".SubLedgerClass").autocomplete({
+                source: 
+                SubLedger,
+                
+                
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("No result found");
+                    }
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                 
+                select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).closest('.input').find('.value').val(ui.item.value);
+                        console.log( $j(this).closest('.input').find('.value')+':' + ui.item.value);
+                        event.preventDefault();
+                    },           
+                focus: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+             }).focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+            
+
+            }
+        //autocomplete--End
+        
+        function setResultTable(newTable){
+            
+            resultTable =  $j('#dt_LineItems').on( 'init.dt', function () {
+                
+            }).DataTable({   
+                
+                "bDestroy":true,
+                "bSearch":false,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "bAutoWidth":false,                     
+                "bSort": false, 
+                "iDisplayLength":datatableILength,
+                "sPaginationType": "full_numbers",
+                "bLengthChange": false,
+                "order": [],
+                "columnDefs": [{
+                    "targets": [ 0 ],
+                    "searchable": false,
+                    "orderable": false
+                }]
+            });
+        }
+        
+        function setLineTable(newTable){
+            retrieveSKUCode();
+                retrieveAPCode();
+
+            POLTable =  $j('#dt_downLineItems').DataTable({
+                "bDestroy":true,
+                "bSort":true,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "iDisplayLength":datatableILength,
+                "order": [],
+                "columnDefs": [
+                    {
+                        "targets": [ 0 ], // action button
+                        "searchable": false,
+                        "orderable": false
+                    }
+                ]
+                
+                
+            });
+        }
+        
+        
+        function setBudgetTable(newTable){
+            
+            //dt_budgetLineItems
+            POLTable =  $j('#dt_budgetLineItems').DataTable({
+                "bDestroy":true,
+                "bSort":true,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "iDisplayLength":datatableILength,
+                "order": [],
+                "columnDefs": [
+                    
+                ]
+            });            
+            
+        }
+        
+        
+        
+        $j(document).on('mousemove', function(e){
+            $j('#loadtext').css({
+                left:  e.pageX,
+                top:   e.pageY
+            });
+        });
+        
+        $j(document).ready(function() {
+            
+            initPage({
+                headerId: '{!header.Id}',
+                APCodeTypeName:'{!AP_Code_RecordType_Developer_Name}',
+                SKURCName:'{!SKU_RecordType_Developer_Name}'
+            });
+        } );
+        </script>
+        <style type="text/css">
+            div.hid {display: none;}
+            
+            /* highlight results */ 
+            .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+            }
+            
+            /* loading - the AJAX indicator */
+            .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+            }
+                        
+            .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            /* prevent horizontal scrollbar */
+            overflow-x: hidden;
+            overflow:auto;
+            /* add padding to account for vertical scrollbar */
+            padding-right: 20px;
+            left: 0;
+            }
+            /* IE 6 doesn't support max-height
+            * we use height instead, but this forces the menu to always be this tall
+            */
+            *html .ui-autocomplete {
+            height: 200x;
+            }
+            
+            .dateFormat{
+            display:none;
+            }
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }
+            
+            
+            .requirefield{
+            border-left: 3px solid darkred !important;          
+            
+            }
+            
+            .dropdownDiv {
+            border-radius: 5px;
+            margin-bottom: 5px;
+            color: #666;
+            display: inline-block;
+            padding: 10px;
+            
+            }
+            .headsUpDiv {
+            padding: 5px; 
+            border-radius: 3px; 
+            background-color: rgb(217, 237, 247); 
+            color: #31708f; 
+            border: 1px solid #9acfea; 
+            display: inline-block;
+            }
+            .div-size {
+            height: 30px;
+            }
+            .btn-round {
+            align: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 100% !important;
+            font-size: 14px !important;
+            padding: 3px !important;
+            }
+            .btn-size {
+            height: 30px;
+            }
+            
+            
+            .btn-round.btn-lg {
+            width: 48px;
+            height: 48px;
+            }
+            
+            .btn-round.btn-sm {
+            width: 34px;
+            height: 34px;
+            }
+            
+            .btn-round.btn-xs {
+            width: 24px;
+            height: 24px;
+            }
+            
+            .lookupInput a{
+            display: block;
+            position: absolute !important;
+            top:0px !important;
+            }
+            
+            .lookupInput img{
+            float: right;
+            }
+            
+            span.lookupInput {
+            position: relative !important;
+            display:inherit !important;
+            }
+            
+            .lookupInput a, .lookupInput a{
+            border:none !important;
+            // border-left: 3px solid darkred !important;          
+            background: none !important;
+            }
+            
+            .bs.panel-heading.div-size {
+            border-radius: 10px;
+            }
+            
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }  
+            
+            .required {
+            border-left: 3px solid darkred !important;  
+            }
+            .centerNum {
+            font-weight:bold;
+            text-align: center;
+            }
+            .PlaceCenter{
+            text-align: center;
+            }
+            
+            .rightNum {
+            font-weight:bold;
+            text-align: right;
+            padding-right:7px !important;
+            }
+            .headerCen {
+            text-align: center !important;
+            }
+        </style>
+    </head>
+    
+    <apex:form id="frm_allForm" styleclass="objectFormCls" >
+        <div id="divForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-5">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="POReceiptDetailPanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title" >Purchase Request</h5>
+                        </div>
+                        <div class="bs panel-body">                                           
+                            <div class="bs table-responsive" > 
+                                <table class="bs table table-condensed">
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.Name.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 5px;"/></td>
+                                        <td>
+                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!Header.ID}" target="_blank">
+                                                <apex:outputField value="{!Header.Name}"></apex:outputField>
+                                            </apex:outputLink>
+                                        </td>
+                                        <td>
+                                            <apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_PR_Name__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/> </td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PR_Name__c}"></apex:outputField>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_Currency__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_Currency__c}"></apex:outputField>  </td>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_Exchange_Rate__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_Exchange_Rate__c}"></apex:outputField>  </td>
+                                    </tr>
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_Plan__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_Plan__c}"></apex:outputField>  </td>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_Type__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_Type__c}"></apex:outputField>  </td>
+                                    </tr> 
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_Purchase_Request__c.Fields.ASI_MFM_Service_Item_POSM__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_Service_Item_POSM__c}"></apex:outputField>  </td>
+                                    </tr>
+                                    
+                                    
+                                </table>
+                            </div>
+                        </div>
+                    </apex:outputPanel>
+                    </div>
+                    <div class="bs col-xs-12">
+                    <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title">Purchase Request Line Items</h5>
+                        </div>  
+                        <div class="bs panel-body">
+                             <div id="alertMeg"></div>
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                
+                                <strong>Error,Can not Save!</strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            
+                            
+                            <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Quick Save Success!</strong>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>    
+                            
+                            <div class='bs wrapper text-center' id='bs toolbar' >
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Save"
+                                                      style="font-weight: bold"
+                                                      action="{!saveLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="setResultTable(true);setLineTable(true);calulatealldata();"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="{!IF(header.ASI_MFM_Status__c=='Draft', true, false)}"
+                                                      target="_parent" >
+                                        <apex:param name="IS_QUICK_SAVE" value="false"/>
+                                    </apex:commandLink>
+                                </div>&nbsp; 
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Quick Save"
+                                                        action="{!onCommitted}"
+                                                        status="ActionStatus"
+                                                        onclick="resultTable.page.len( -1 ).draw(false);"
+                                                        oncomplete="setResultTable(true);setLineTable(true);"
+                                                        reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                        rendered="{!IF(header.ASI_MFM_Status__c=='Draft', true, false)}"
+                                                        html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                                    </apex:commandButton>
+                                </div>&nbsp;
+                               
+                                &nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Cancel"
+                                                        action="{!cancel}" 
+                                                        html-data-loading-text="Loading..."
+                                                        html-formnovalidate="formnovalidate"/>
+                                </div>                             
+                            </div>
+                            
+                            
+                            <table id="dt_LineItems" class="hover responsive no-wrap compact" style="width: 100%;" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th class="headerCen" colspan ="2" >Action</th>
+                                        <th>Plan Line No</th>
+                                        <th>Customer</th>
+                                        <th>Sub Ledger</th><!--2017-12-28-->
+                                        <th>Sub-brand</th>
+                                        <th class="headerCen">Item Description</th>
+                                        <th style="{!IF(Header.ASI_MFM_Service_Item_POSM__c='Item','','display:none;')}"  >Basic POSM</th>
+                                        
+                                        <th class="headerCen">AP Type</th>
+                                        <th class="headerCen">AP Category</th>
+                                        <th class="headerCen">A/P Code</th>
+                                        <th>Plan Amount </th>
+                                        
+                                        <th class="headerCen" >Quantity</th>
+                                        <th class="headerCen">UOM</th>
+                                          <th style="text-align: left;">Estimated PR Budget</th>
+                                        <th>Delivery Date</th>
+                                        <th>Consumer Prize</th>  <!-- 20180121 Introv -->
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <apex:variable value="{!0}" var="i"/>
+                                    <apex:repeat value="{!allPRLItemMap}" var="PolId">
+                                        <apex:variable var="i" value="{!i+1}"/>
+                                        <tr>
+                                            <td style="padding-bottom: 1em;">
+                                                <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-xs"
+                                                                  style="border: none;background-color: transparent;"
+                                                                  reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                                  action="{!cloneLine}"
+                                                                  status="ActionStatus"       
+                                                                  onclick="resultTable.page.len( -1 ).draw(false);"
+                                                                  oncomplete="setResultTable(true);setLineTable(true);initalizeAutoCompleteComponent();"
+                                                                  html-formnovalidate="formnovalidate" 
+                                                                  title="Clone line {!i}"
+                                                                  html-data-loading-text="Loading..." >
+                                                    <span class="bs glyphicon glyphicon-duplicate"  style="color:black;font-size: 20px;"></span>
+                                                    <apex:param name="PARAM_clone_ID" value="{!PolId}" />
+                                                </apex:commandLink>
+                                                </td>
+                                            <td>
+                                                <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                  style="border: none;background-color: transparent;"
+                                                                  reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                  action="{!removeLine}"
+                                                                  onclick="resultTable.page.len( -1 ).draw(false);"
+                                                                  oncomplete="setResultTable(true);setLineTable(true);"
+                                                                  status="ActionStatus"
+                                                                  immediate="false"
+                                                                  title="Remove line {!i}"
+                                                                  html-formnovalidate="formnovalidate"
+                                                                  html-data-loading-text="Loading..." >
+                                                    <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;"></span>
+                                                    <apex:param name="PARAM_PORLine_ID" value="{!PolId}" />
+                                                </apex:commandLink>
+                                                
+                                            </td>
+                                            <td><apex:outputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Plan_Line_Item__c}"></apex:outputField></td>
+                                            
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPRLItemMap[PolId].CustomerID}" target="_blank">
+                                                    <apex:outputText value="{!allPRLItemMap[PolId].Customer}"></apex:outputText>  </apex:outputLink>
+                                            </td>
+                                            
+                                            <!--- Modified by 2017-12-28 Linus@introv -->                                                      
+                                            <td  class="lookupCen" id="SubLedger_manageAll_{!PolId}_input">  
+                                                <apex:input value="{!allPRLItemMap[PolId].subLedger}"  styleClass="SubLedgerClass form-control searchcss input-sm requirefield" html-data-id="{!PolId}" style="width: 15em; " />
+                                                <div class="hid"  >
+                                                    <apex:inputText value="{!allPRLItemMap[PolId].subLedgerId}" styleclass="value"/>
+                                                </div>
+                                                    <!--  
+                                                    <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPRLItemMap[PolId].subLedgerId}" target="_blank">
+                                                    <apex:outputText value="{!allPRLItemMap[PolId].subLedger}"></apex:outputText>  </apex:outputLink> 
+                                                    -->
+                                            </td> <!--2015-12-22-->
+                                                    
+                                            <td id="SB_manageAll_{!PolId}_output" >
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPRLItemMap[PolId].SB_CodeID}" target="_blank">
+                                                    <apex:outputText value="{!allPRLItemMap[PolId].SB_Code}"></apex:outputText>  </apex:outputLink>
+                                            </td>     
+                                             
+                                            
+                                             <td><apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Description__c}"  styleClass="form-control searchcss input-sm requirefield"  ></apex:inputField></td>
+                                            
+                                            <td class="lookupCen" id="SKU_manageAll_{!PolId}_input"  style="{!IF(Header.ASI_MFM_Service_Item_POSM__c='Item','','display:none;')}"   >
+                                                <apex:input value="{!allPRLItemMap[PolId].SKU}" html-data-id="{!PolId}" styleClass="skuCodeClass form-control searchcss input-sm" style="width: 10em; " />
+                                                <div class="hid" >
+                                                    <apex:inputText value="{!allPRLItemMap[PolId].SKUID}" styleclass="value" />
+                                                </div>
+                                            </td> 
+                                            
+                                            <td class="lookupCen" id="APType_manageAll_{!PolId}_input" >
+                                                {!allPRLItemMap[PolId].APType}
+                                               <!--
+                                                <apex:input value="{!allPRLItemMap[PolId].APType}"  styleClass="APTypeClass form-control searchcss input-sm requirefield" html-data-id="{!PolId}" style="width: 10em; " />
+                                           -->
+                                            
+                                            </td>
+                                            
+                                            <td class="lookupCen" id="APCategory_manageAll_{!PolId}_input" >
+                                                <apex:input value="{!allPRLItemMap[PolId].APCategory}"  styleClass="APCateClass form-control searchcss input-sm requirefield" html-data-id="{!PolId}" style="width: 15em; " />
+                                            </td> 
+                                                
+                                            <td class="lookupCen" id="APCode_manageAll_{!PolId}_input" >
+                                                <apex:input value="{!allPRLItemMap[PolId].AP_Code}" styleclass="APCodeClass form-control searchcss input-sm requirefield" html-data-id="{!PolId}"  style="width: 18em; " />
+                                                <div class="hid"  >
+                                                    <apex:inputText value="{!allPRLItemMap[PolId].AP_CodeID}" styleclass="value"/>
+                                                </div>
+                                            </td>
+                                                
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,###,##0}" ><apex:param value="{!allPRLItemMap[PolId].PlanAmount}"/></apex:outputText>
+                                            </td>
+                                                                                       
+                                            <td>
+                                                <apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Quantity__c}" html-data-id="{!PolId}"  styleClass="UnitCost form-control searchcss input-sm requirefield" style="text-align: right; width: 6em; "  ></apex:inputField>
+                                            </td>
+                                            
+                                            <td id="UOM_manageAll_{!PolId}_input" >
+                                                <apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_UOM__c}" html-data-id="{!PolId}"  styleClass=" form-control searchcss input-sm requirefield" style="text-align: right; width: 6em;" ></apex:inputField>
+                                            </td>
+                                            
+                                            <td>
+                                                <apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Estimated_PR_budget__c}" html-data-id="{!PolId}"  styleClass="form-control searchcss input-sm requirefield" style="text-align: right;  width: 10em; "  ></apex:inputField>
+                                            </td>
+                                            <td>
+                                                <apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Delivery_Date__c}" html-data-id="{!PolId}"  styleClass=" form-control searchcss input-sm requirefield" style="text-align: right;  width: 8em; "  ></apex:inputField>
+                                            </td>
+                                            <td><!-- 20180121 Introv -->
+                                                <apex:inputField value="{!allPRLItemMap[PolId].line.ASI_MFM_Consumer_Prize__c}" html-data-id="{!PolId}" html-placeholder="Consumer Prize" ></apex:inputField>
+                                            </td> 
+                                        </tr>
+                                    </apex:repeat> 
+                                </tbody>
+                                
+                                
+                            </table>
+                            
+                        </div>
+                    </apex:outputPanel>
+                    
+                 
+                    
+                    <!-----------------------------Selected Line-------------------------------->
+                    <apex:outputPanel styleclass="bs panel-primary" id="poLinePanel" >
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">Plan Line Items</h5>
+                        </div>   
+                        
+                        <div class="bs panel-body">  
+                            <div class="bs btn-group " role="group" >
+                                <apex:commandButton styleClass="bs btn btn-success btn-size"
+                                                    style="font-weight: bold"
+                                                    value="Add all"
+                                                    action="{!addallLineItem}"
+                                                    status="ActionStatus"
+                                                    onclick="resultTable.page.len( -1 ).draw(false);"
+                                                    oncomplete="setResultTable(true);setLineTable(true);setBudgetTable(true);"
+                                                    reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel,budgetCheckingPanel"
+                                                    rendered="{!DisplayPOL}" 
+                                                    html-data-loading-text="Loading..." >
+                                </apex:commandButton>
+                            </div>
+                            
+                            
+                            <table id="dt_downLineItems" class="hover responsive no-wrap compact" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        
+                                        <th>Plan</th>
+                                        <th>Plan Line No</th>
+                                        <th>Sub-brand</th>
+                                        <th>Sub Ledger</th><!--2015-12-22-->
+                                        <th class="headerCen">Customer Name</th>
+                                        <th class="headerCen">A/C code</th>
+                                        <th class="headerCen">A/P code</th>
+                                        <th class="headerCen">Amount</th>
+                                        <th>Remark</th>
+                                    </tr>
+                                </thead>
+                                
+                                <tbody>
+                                    <apex:repeat value="{!allPlanLineMap}" var="PolIne">
+                                        <tr>
+                                            <td> <apex:commandLink styleClass="bs btn btn-success btn-round pull-left btn-sm" 
+                                                                   style="border: none;background-color: transparent;"
+                                                                   action="{!addLineItem}"
+                                                                   reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                   immediate="false"
+                                                                   status="ActionStatus"
+                                                                   onclick="resultTable.page.len( -1 ).draw(false);POLTable.page.len( -1 ).draw(false);"
+                                                                   oncomplete="setResultTable(true);setLineTable(true);calulatealldata();"
+                                                                   html-formnovalidate="formnovalidate">
+                                                <span class="bs glyphicon glyphicon-plus"  style="color:green;font-size: 20px;"></span>
+                                                <apex:param name="PARAM_POLINE_SOURCE_ITEM_ID" value="{!PolIne}" />
+                                                </apex:commandLink>
+                                                
+                                            </td>
+                                            
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPlanLineMap[PolIne].line.id}" target="_blank">
+                                                    <apex:outputField value="{!allPlanLineMap[PolIne].line.name}"></apex:outputField>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_Sub_brand_Code__c}"></apex:outputField></td>
+                                            <td><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_KR_subLedger__c}"></apex:outputField></td><!--2015-12-22-->
+                                            <td class="PlaceCenter"><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_AccountsAdditionalField__c}"></apex:outputField></td>
+                                            <td  class="PlaceCenter"><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_A_C_Code__c}"></apex:outputField></td>
+                                            
+                                            <td  class="PlaceCenter"><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_AP_Code__c}"></apex:outputField></td>
+                                            
+                                            <td class="rightNum">
+                                                
+                                                <apex:outputText value="{0, number, ###,###,###,###,##0}"><apex:param value="{!allPlanLineMap[PolIne].line.ASI_MFM_Total_Cost__c}"/></apex:outputText></td>
+                                            <td><apex:outputField value="{!allPlanLineMap[PolIne].line.ASI_MFM_List_Item_Description__c}"></apex:outputField></td>
+                                        </tr>
+                                        
+                                    </apex:repeat>
+                                </tbody>
+                            </table>
+                            
+                        </div>
+                    </apex:outputPanel>             
+                </div>
+            </div>
+        </div>
+        
+        
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+    </apex:form>
+    
+    
+</apex:page>

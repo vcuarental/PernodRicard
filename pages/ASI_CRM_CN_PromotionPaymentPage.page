@@ -1,0 +1,1764 @@
+<!--
+ - Created by Jeffrey Cheung on 21/11/2018.
+ -->
+<!--TODO add action="{!Calculation}" to page ctrl-->
+<apex:page id="ASI_CRM_CN_PromotionPaymentPage" standardController="ASI_TH_CRM_PaymentRequest__c" extensions="ASI_CRM_CN_PromotionPaymentCtrl" sidebar="false" action="{!Calculation}" standardStylesheets="false" docType="html-5.0">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.js')}"/>
+
+
+<!--     <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css" rel="stylesheet" media="screen"/> -->
+
+    <style>
+        .module-table td {
+            min-width: 15%;
+        }
+
+        .module-table tr td:nth-child(odd) {
+            font-weight: bold !important;
+            text-align: right !important;
+        }
+
+        .BSCommandButton {
+            color: #333 !important;
+            background-color: #fff !important;
+            border-color: #ccc !important;
+            margin-left: 0.5em !important;
+            margin-right: 0.5em !important;
+            margin-bottom: 0.5em !important;
+            padding: 3px 6px !important;
+        }
+
+        .PanelHeader {
+            color: #fff;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+            background-color: #337ab7;
+            border: 1px solid #337ab7;
+            padding: 10px 15px;
+            text-align: center;
+            width: 20%;
+        }
+
+        .PanelHeader2 {
+            color: #fff;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+            background-color: #828282;
+            border: 1px solid #828282;
+            padding: 10px 15px;
+            text-align: center;
+            width: 20%;
+        }
+
+        .PanelBody {
+            padding: 0.3em;
+            background-color: #fff;
+            border: 1px solid #337ab7;
+            border-bottom-left-radius: 3px;
+            border-bottom-right-radius: 3px;
+            border-top-right-radius: 3px;
+            margin-bottom: 20px;
+        }
+
+        .FontWeightCSS {
+            font-weight: bold;
+        }
+
+
+        .ApexInputDateField {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .ApexInputNumberField {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 10em !important;
+        }
+
+        .ApexInputRemarkField {
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .ApexPickListField {
+            width: 16em;
+            text-align: right;
+            padding: 3px 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .requiredField {
+            border-left: 3px solid red !important;
+        }
+
+        .overpaidIncentive {
+            color: red !important;
+        }
+
+        .toggleable-link-inactive {
+            background-color: #d0e4fe;
+            color: #C0C0C0 !important;
+        }
+
+        .free-goods-input {
+            width: 80% !important;
+        }
+
+        #handstontable {
+            width: 100%;
+            /*overflow-x: auto;*/
+        }
+    </style>
+
+
+    <script>
+        let isEdit = {!isEdit};
+        let deletedLines = [];
+
+        // Price Promotion
+        let hot;
+        let pricePromotionJSON = {};
+        let colHeaders;
+        let promotionType = '{!PH.ASI_CRM_CN_Promotion_Type__c}';
+        let dataSource = '{!ContractSelected.ASI_CRM_CN_Data_Source__c}';
+        let region = '{!PH.ASI_CRM_CN_Region__c}';
+
+        // Free goods
+        let freeGoodsJSON = {!freeGoodsInterimDataJSON};
+        let freeGoods = [];
+
+        $(document).ready(function () {
+            retrieveFreeGoods();
+        });
+
+        function changePricePromotionEndDate() {
+            if (confirm('After changing date, Volume will refresh, confirm?\n更改日期后，系统会自动刷新销量，确定？')) {
+                changePricePromotionEndDateApex();
+            }
+        }
+
+
+        function formatNumber(number) {
+            if (number && number.toLocaleString) {
+                return number.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+            return number;
+        }
+
+
+        function initAutoCompleteComponent() {
+
+            $(".free-goods-input").autocomplete({
+                source: freeGoods,
+                minLength: 0,
+                scroll: true,
+                select: function (event, ui) {
+                    $(this).val(ui.item.label);
+                    event.preventDefault();
+                },
+                focus: function (event, ui) {
+                    // event.preventDefault();
+                }
+            })
+
+
+        }
+
+        function retrieveFreeGoods() {
+            let whereClause = ' WHERE RecordType.DeveloperName = \'ASI_CRM_CN_CRM_Item_Group\' ';
+            if (promotionType != 'Consumer Promotion') {
+                whereClause = whereClause + ' AND ASI_CRM_CN_Consumer_Website__c = true AND ASI_CRM_Competitor__c = \'No\' AND (NOT ASI_MFM_Item_Group_Code__c like \'9L1%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9SC%\')  AND (NOT ASI_MFM_Item_Group_Code__c like \'9L2%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9H%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'Z%\') ' ;
+            }
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_CN_PromotionPaymentCtrl.retrieveFreeGoods}', 'ASI_MFM_Item_Group__c', whereClause
+                , function (result, event) {
+                    if (event.status && result) {
+                        freeGoods = result.map(function (res) {
+                            return {
+                                label: res["Name"],
+                                value: res["Id"],
+                                Name: res.Name,
+                                ASI_CRM_CN_Item_Group__r: res,
+                                unitPrice: res.T1_Price__r
+                            }
+                        });
+                    }
+                    initAutoCompleteComponent();
+                }
+                , {escape: true}
+            );
+        }
+
+
+        function drawTable(tableId) {
+            let freeGoodsColumns;
+
+            if (promotionType == 'Consumer Promotion')
+            {
+                freeGoodsColumns = [
+                    {
+                        title: isEdit ? '<button type="button" class="BSCommandButtonSM" onclick=\'addRow("' + tableId + '",' + JSON.stringify('') + ')\'>{!$Label.ASI_CRM_CN_Add_New}</button>' : '',
+                        render: function (data, type, row, meta) {
+                            if ($.isEmptyObject(row) || !isEdit) {
+                                return '';
+                            }
+                            return `<button type="button" class="BSCommandButtonSM" onclick="deleteRow(${meta.row},'${tableId}')"><span class="bs glyphicon glyphicon-trash" style="color:red;font-size: 20px;"></span></button>`;
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_MFM_Item_Group__c.fields.ASI_MFM_Item_Group_Code__c.Label}',
+                        data: 'ASI_CRM_CN_Item_Group__r.ASI_MFM_Item_Group_Code__c',
+                    },
+                    {
+                        //title: "{!$ObjectType.ASI_MFM_Item_Group__c.fields.Name.Label}",
+                        title: "赠品品类",
+                        data: 'ASI_CRM_CN_Item_Group__r.Name',
+                        render: function (data, type, row, meta) {
+                            data = data || '';
+                            if (isEdit) {
+                                return `<input value="${data}" class="ApexInputNumberField free-goods-input" onChange="onFreeGoodsChange(${meta.row}, this.value, '${tableId}')"/>`
+                            } else {
+                                return '<a href="/' + row.ASI_CRM_CN_Item_Group__c + '">' + data + '</a>';
+                            }
+                        },
+                    },
+                    {
+                        title: '参考单价',
+                        className: 'number',
+                        data: 'ASI_CRM_CN_Suggest_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+                            return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_CRM_Unit_Price__c', '${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_TH_CRM_Quantity__c.Label}',
+                        className: 'number summable',
+                        data: 'ASI_TH_CRM_Quantity__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_TH_CRM_Quantity__c','${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$Label.ASI_CRM_CN_CTD_Payable_Amount}',
+                        className: 'number summable',
+                        data: 'ASI_CRM_CN_Total_Payable__c',
+                    },
+                ];
+            }
+            else {
+                freeGoodsColumns = [
+                    {
+                        title: isEdit ? '<button type="button" class="BSCommandButtonSM" onclick=\'addRow("' + tableId + '",' + JSON.stringify('') + ')\'>{!$Label.ASI_CRM_CN_Add_New}</button>' : '',
+                        render: function (data, type, row, meta) {
+                            if ($.isEmptyObject(row) || !isEdit) {
+                                return '';
+                            }
+                            return `<button type="button" class="BSCommandButtonSM" onclick="deleteRow(${meta.row},'${tableId}')"><span class="bs glyphicon glyphicon-trash" style="color:red;font-size: 20px;"></span></button>`;
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_MFM_Item_Group__c.fields.ASI_MFM_Item_Group_Code__c.Label}',
+                        data: 'ASI_CRM_CN_Item_Group__r.ASI_MFM_Item_Group_Code__c',
+                    },
+                    {
+                        //title: "{!$ObjectType.ASI_MFM_Item_Group__c.fields.Name.Label}",
+                        title: "赠品品类",
+                        data: 'ASI_CRM_CN_Item_Group__r.Name',
+                        render: function (data, type, row, meta) {
+                            data = data || '';
+                            if (isEdit) {
+                                return `<input value="${data}" class="ApexInputNumberField free-goods-input" onChange="onFreeGoodsChange(${meta.row}, this.value, '${tableId}')"/>`
+                            } else {
+                                return '<a href="/' + row.ASI_CRM_CN_Item_Group__c + '">' + data + '</a>';
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_CN_Suggest_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_CN_Suggest_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+                            return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_CRM_Unit_Price__c', '${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_TH_CRM_Quantity__c.Label}',
+                        className: 'number summable',
+                        data: 'ASI_TH_CRM_Quantity__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_TH_CRM_Quantity__c','${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$Label.ASI_CRM_CN_CTD_Payable_Amount}',
+                        className: 'number summable',
+                        data: 'ASI_CRM_CN_Total_Payable__c',
+                    },
+                ];
+            }
+
+            let table = $(tableId).DataTable({
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                drawCallback: function () {
+                    initAutoCompleteComponent();
+                },
+                footerCallback: function (tfoot, data, start, end, display) {
+                    const api = this.api();
+                    let htmlString = '';
+
+                    const summableColumns = api.columns('.summable').indexes();
+
+                    api.columns().every(function () {
+                        const column = this;
+
+                        if (column.visible()) {
+                            htmlString += '<th>';
+
+                            let sum = '';
+                            if (summableColumns.indexOf(column.index()) !== -1) {
+                                sum = this
+                                    .data()
+                                    .reduce(function (a, b) {
+                                        const x = parseFloat(a) || 0;
+                                        const y = parseFloat(b) || 0;
+                                        return x + y;
+                                    }, 0);
+                                htmlString += formatNumber(sum);
+                            }
+                            htmlString += '</th>';
+
+                        }
+
+                    });
+                    $(tfoot).select('tr').html(htmlString);
+
+                },
+                columnDefs: [
+                    {
+                        targets: getColumnIndexesWithClass(freeGoodsColumns, 'number'),
+                        defaultContent: 0.00,
+                        render: function (data, type, row) {
+                            return formatNumber(data || 0);
+                        }
+                    },
+                    {
+                        targets: '_all',
+                        defaultContent: '',
+                    },
+                ],
+                data: freeGoodsJSON.paymentRequestLines,
+                columns: freeGoodsColumns
+            })
+            table.draw();
+        }
+
+        function saveRecord(isQuickSave) {
+            updateLinesBeforeApex();
+            var pricePromotionJSON2 = JSON.stringify(pricePromotionJSON).replace(new RegExp('"attributes":\\{"type":"[a-zA-Z_]+?","url":"/services/data/...../sobjects/.*?/.{18}"\\},',"g"),"");
+            saveRecordApex(isQuickSave, pricePromotionJSON2, JSON.stringify(freeGoodsJSON), JSON.stringify(deletedLines || []));
+        }
+
+        function updateLinesBeforeApex() {
+            freeGoodsJSON.paymentRequestLines = $('#free_goods_table').DataTable().data().toArray();
+            console.log(freeGoodsJSON)
+        }
+
+    </script>
+
+    <!--Price Promotion Functions-->
+    <script>
+        /**
+         * Validation key renderer. Render cell as red if it is not the same as the first row.
+         */
+        function validationKeyRenderer(instance, td, row, col, prop, value, cellProperties){
+            Handsontable.renderers.TextRenderer.apply(this, arguments);
+
+            if(value && value !== instance.getDataAtCell(row, 0)){
+                td.style.backgroundColor = 'red';
+            }
+            return td;
+        }
+
+        function CheckActualPayment(instance, td, row, col, prop, value, cellProperties){
+            Handsontable.renderers.TextRenderer.apply(this, arguments);
+
+            if(value && value > instance.getDataAtCell(row, col -3) - instance.getDataAtCell(row, col -2)){
+                td.style.backgroundColor = 'red';
+            }
+            var text = Number(value).toFixed(2);
+            td.innerHTML = text;
+            td.className +=' htRight htNumeric';
+
+            return td;
+        }
+
+        function CheckForSouth(instance, td, row, col, prop, value, cellProperties){
+            Handsontable.renderers.TextRenderer.apply(this, arguments);
+
+            var rowspan = cellProperties.rowspan;
+            console.log('rowspan:'+rowspan);
+            var totalOutlet = 0;
+            for (i = 0; i < rowspan; i++) {
+                console.log('Outlet:'+instance.getDataAtCell(row+i, col+7));
+                totalOutlet += instance.getDataAtCell(row+i, col+7);
+            }
+            console.log('WS:'+instance.getDataAtCell(row, col+3));
+               if(totalOutlet > instance.getDataAtCell(row, col+3)){
+                  td.style.backgroundColor = 'red';
+            }
+
+            return td;
+        }
+
+        function drawHustonTable() {
+            console.log('drawHustonTable!!');
+            // Data transform
+            for (let key in pricePromotionJSON) {
+                pricePromotionJSON[key].totalSuggestIncentive = 0;
+                pricePromotionJSON[key].historicalPaidAmount = 0;
+                pricePromotionJSON[key].suggestedPayment = 0;
+                pricePromotionJSON[key].totalPayment = 0;
+                pricePromotionJSON[key].actualIncentivePercent = 0;
+                pricePromotionJSON[key].vsSuggested = 0;
+
+                pricePromotionJSON[key].moduleWrappers.forEach(function (moduleWrapper) {
+                    pricePromotionJSON[key].totalSuggestIncentive += moduleWrapper.module.ASI_CRM_Application_Payment_Amount__c || 0;
+                    pricePromotionJSON[key].historicalPaidAmount += moduleWrapper.module.ASI_CRM_Historical_Paid_Amount__c || 0;
+                    pricePromotionJSON[key].totalPayment += moduleWrapper.module.ASI_CRM_Actual_Payment__c || 0;
+                })
+                //if(pricePromotionJSON[key].totalSuggestIncentive === 0){
+                if(pricePromotionJSON[key].paymentRequestLineOutletWS.ASI_CRM_Actual_Value_Base__c === 0){
+                    pricePromotionJSON[key].actualIncentivePercent = 0;
+                } else {
+                    //pricePromotionJSON[key].actualIncentivePercent = (pricePromotionJSON[key].historicalPaidAmount + pricePromotionJSON[key].totalPayment) / pricePromotionJSON[key].totalSuggestIncentive * 100;
+                    pricePromotionJSON[key].actualIncentivePercent = (pricePromotionJSON[key].historicalPaidAmount + pricePromotionJSON[key].totalPayment) / pricePromotionJSON[key].paymentRequestLineOutletWS.ASI_CRM_Actual_Value_Base__c * 100;
+                }
+                pricePromotionJSON[key].suggestedPayment = pricePromotionJSON[key].totalSuggestIncentive - pricePromotionJSON[key].historicalPaidAmount;
+                 /*
+                    Author:Bowen
+                    Date:2019-09-02
+                    Function：原逻辑是vs_suggested = Suggested_this_time_payment - Total_this_time_payment;
+                    应客户方BA的要求，将逻辑修改为vs_suggested = Total_this_time_payment - Suggested_this_time_payment;
+
+                 */
+                pricePromotionJSON[key].vsSuggested = pricePromotionJSON[key].totalPayment - pricePromotionJSON[key].suggestedPayment ;
+
+            }
+
+            let columns = [
+                {data: 'validationKey', type: 'text'},
+            ];
+            if (promotionType === 'Wholesaler Promotion') {
+                columns = columns.concat([
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.ASI_CRM_CN_CRM_Code__c', type: 'text'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.Name', type: 'text'},
+                ]);
+            } else if (promotionType === 'Outlet Promotion' && region === 'South Region') {
+                columns = columns.concat([
+                    //{data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.ASI_CRM_CN_CRM_Code__c', type: 'text'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.ASI_CRM_CN_CRM_Code__c', type: 'text', renderer: CheckForSouth},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.Name', type: 'text'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_WS_Intake_9L__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Purchase_Value__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_Customer__r.ASI_CRM_CN_CRM_Code__c', type: 'text'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_Customer__r.Name', type: 'text'},
+                ]);
+            } else {
+                columns = columns.concat([
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_Customer__r.ASI_CRM_CN_CRM_Code__c', type: 'text'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_Customer__r.Name', type: 'text'},
+                ]);
+            }
+
+            if (promotionType === 'Wholesaler Promotion') {
+                if (dataSource == 'Min(WS Intake, Outlet Intake)') {
+                    columns = columns.concat([
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_WS_Intake_9L__c'},
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Purchase_Value__c'},
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Outlet_Intake_9L__c'},
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Retail_Value__c'},
+                    ])
+                } else if(dataSource == 'Outlet Intake'){
+                    columns = columns.concat([
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Outlet_Intake_9L__c'},
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Retail_Value__c'},
+                    ])
+                }else {
+                    columns = columns.concat([
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_WS_Intake_9L__c'},
+                        {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Purchase_Value__c'},
+                    ]);
+                }
+
+            }
+            if (promotionType === 'Outlet Promotion') {
+                if(region === 'South Region'){
+                    columns = columns.concat([
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Outlet_Intake_9L__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Retail_Value__c'},
+                    ])
+                }else{
+                    columns = columns.concat([
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Outlet_Intake_9L__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Retail_Value__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_POS_Volume__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_POS_Value__c'},
+                    ])
+                }
+            }
+            if (promotionType === 'Consumer Promotion') {
+                columns = columns.concat([
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Outlet_Intake_9L__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CTD_Actual_Retail_Value__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_POS_Volume__c'},
+                    {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_POS_Value__c'},
+                ])
+            }
+            columns = columns.concat([
+                {data: 'paymentRequestLineOutletWS.ASI_CRM_Actual_Value_Base__c'},
+                {data: 'totalSuggestIncentive'},
+                {data: 'historicalPaidAmount'},
+                {data: 'suggestedPayment'},
+                {data: 'totalPayment'},
+                {data: 'actualIncentivePercent'},
+                {data: 'vsSuggested'},
+                {data: 'paymentRequestLineOutletWS.ASI_CRM_CN_Comment__c', readOnly: !isEdit, type: 'text'},
+            ]);
+
+
+            let outletColumnIndex = columns.length - 1;
+            let mergeCellsOption = [];
+
+            if (promotionType === 'Outlet Promotion' && region === 'South Region') {
+                let startCol, endCol;
+                startCol = colHeaders.indexOf('{!$ObjectType.ASI_CRM_AccountsAdditionalField__c.Fields.ASI_CRM_CN_CRM_Code__c.Label}');
+                endCol = colHeaders.indexOf('{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CTD_Actual_Purchase_Value__c.Label}');
+
+                Object.values(pricePromotionJSON).forEach(function (d, i) {
+                    d.validationKey = d.paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__r.ASI_CRM_CN_CRM_Code__c + d.paymentRequestLineOutletWS.ASI_CRM_Customer__r.ASI_CRM_CN_CRM_Code__c;
+                    d.moduleWrappers.forEach(function(moduleWrapper){
+                        moduleWrapper.validationKey = d.validationKey;
+                    })
+                })
+
+
+                let wholesalerIds = Object.values(pricePromotionJSON).map(obj => obj.paymentRequestLineOutletWS.ASI_CRM_CN_Wholesaler__c);
+                let unique = [...new Set(wholesalerIds)];
+
+                for (let i = 0; i < unique.length; i++) {
+                    for (let j = startCol; j <= endCol; j++) {
+                        let option = {row: wholesalerIds.indexOf(unique[i]), col: j, rowspan: wholesalerIds.filter(id => id === unique[i]).length, colspan: 1};
+                        if (option.rowspan > 1) {
+                            mergeCellsOption.push(option);
+                        }
+                    }
+                }
+
+
+            } else {
+                for (let key in pricePromotionJSON) {
+                    if (pricePromotionJSON.hasOwnProperty(key)) {
+                        pricePromotionJSON[key].validationKey = key;
+                        pricePromotionJSON[key].moduleWrappers.forEach(function(moduleWrapper){
+                            moduleWrapper.validationKey = key;
+                        })
+                    }
+                }
+            }
+
+
+            console.log(mergeCellsOption);
+            for (let i = 0; i < {!numberOfModules};i++)
+            {
+                let displayIndex = i + 1;
+                columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Application_Payment_Amount__c`});
+                // TODO only for data source = Min (WS intake, Outlet Intake)
+                if (promotionType === 'Wholesaler Promotion' && dataSource === 'Min(WS Intake, Outlet Intake)') {
+                    //columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Application_Payment_Amount__c`});
+                    //columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Application_Payment_Amount__c`});
+                }
+
+                columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Historical_Paid_Amount__c`});
+                columns.push({
+                    data: `moduleWrappers.${i}.validationKey`,
+                    type: 'text', readOnly: !isEdit,
+                    renderer: validationKeyRenderer
+                });
+                //columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Actual_Payment__c`, readOnly: !isEdit});
+                columns.push({data: `moduleWrappers.${i}.module.ASI_CRM_Actual_Payment__c`, readOnly: !isEdit, renderer: CheckActualPayment});
+                //columns.push({data: `moduleWrappers.${i}.ASI_CRM_Application_Payment_Amount`, readOnly: !isEdit, renderer: CheckActualPayment});
+            }
+
+            console.log(Object.values(pricePromotionJSON));
+
+            const container = document.getElementById('handstontable');
+            hot = new Handsontable(container, {
+                data: Object.values(pricePromotionJSON),
+                colHeaders: function (col) {
+                    let text = colHeaders[col];
+
+                    // Link header to report
+                    if (text.match(/项目指标 \d+ 合同至今应付金额/)) {
+                        console.log('text' ,text);
+                        let moduleNumber = parseInt(text.split(' ')[1]);
+                        console.log('moduleNumber' ,moduleNumber);
+                        if(!Object.values(pricePromotionJSON)[0].moduleWrappers[moduleNumber - 1])
+                        {
+                            return text;
+                        }
+                        console.log('通过了');
+                        // Get the module
+                        let module = Object.values(pricePromotionJSON)[0].moduleWrappers[moduleNumber - 1].module;
+
+                        // Generate report name
+                        let reportName = '';
+                        if (promotionType === 'Wholesaler Promotion') {
+                            reportName = 'By WS ';
+                        } else if (promotionType === 'Outlet Promotion' && region === 'South Region') {
+                            reportName = 'By WS Outlet ';
+                        } else {
+                            reportName = 'By Outlet ';
+                        }
+                        reportName += module.ASI_CRM_Volume_Base__c;
+                        reportName += ' Report';
+
+                        let reportByName = {!reportByNameJSON};
+
+                        if (!module.ASI_CRM_Parent_Module__r) {
+                            return text;
+                        }
+
+                        text = `<a href="/${reportByName[reportName]}?pv1=${'{!PH.Name}'}&pv2=${module.ASI_CRM_Parent_Module__r.Name}" target="_blank">${text}</a>`;
+                    }
+
+                    return text;
+                },
+                columns: columns,
+                // multiColumnSorting: {
+                //     indicator: true
+                // },
+                // fixedRowsTop： 10,
+                // fixedColumnsLeft: 10,
+                // scrollX: true; //水平滚动条
+                // scrollY: "200px",
+                // scrollCollapse: true,
+                // paging: false,
+                rowHeaders: true,
+                afterGetColHeader: function (col, TH) {
+                    // Set column color
+                    if (col <= outletColumnIndex) {
+                        TH.style.background = '#00b0f0';
+                    }
+                    if (col > outletColumnIndex) {
+                        TH.style.background = '#ffe699';
+                    }
+
+
+                },
+                mergeCells: mergeCellsOption,
+                readOnly: true,
+                formulas: true,
+                width: $('#parentContainer').width(),
+                preventOverflow: 'horizontal',
+                licenseKey: '44a15-c0fe0-e7835-54d11-f8818',
+                // columnSummary: function () {
+                //     let configArray = [];
+                //     for (let i = 0; i < columns.length; i++) {
+                //         if(columns[i].type !== 'text'){
+                //             configArray.push({
+                //                 destinationRow: Object.values(pricePromotionJSON).length,
+                //                 destinationColumn: i,
+                //                 forceNumeric: true,
+                //                 type: 'sum',
+                //             });
+                //         }
+                //     }
+                //     return configArray;
+                // },
+                type: 'numeric',
+                numericFormat: {
+                    pattern: '0,0.00',
+                },
+                afterChange: function (changes, source) {
+                    if (source === 'edit') {
+                        console.log(changes);
+                        console.log(source);
+                        for (let key in pricePromotionJSON) {
+                            pricePromotionJSON[key].totalPayment = 0;
+                            pricePromotionJSON[key].moduleWrappers.forEach(function (moduleWrapper) {
+                                pricePromotionJSON[key].totalPayment +=  moduleWrapper.module.ASI_CRM_Actual_Payment__c || 0;
+                            })
+                            if(pricePromotionJSON[key].totalSuggestIncentive === 0){
+                                pricePromotionJSON[key].actualIncentivePercent = 0;
+                            } else {
+                                pricePromotionJSON[key].actualIncentivePercent = (pricePromotionJSON[key].historicalPaidAmount + pricePromotionJSON[key].totalPayment) / pricePromotionJSON[key].totalSuggestIncentive * 100;
+                            }
+                            pricePromotionJSON[key].suggestedPayment = pricePromotionJSON[key].totalSuggestIncentive - pricePromotionJSON[key].historicalPaidAmount;
+                            pricePromotionJSON[key].vsSuggested = pricePromotionJSON[key].suggestedPayment - pricePromotionJSON[key].totalPayment;
+                        }
+
+                    }
+
+                }
+            });
+
+        }
+
+        function toggleColumn(columnIndex) {
+            const plugin = hot.getPlugin('hiddenColumns');
+            plugin.enablePlugin();
+            if (plugin.isHidden(columnIndex)) {
+                plugin.showColumn(columnIndex);
+                $(event.target).removeClass('toggleable-link-inactive');
+            } else {
+                plugin.hideColumn(columnIndex);
+                $(event.target).addClass('toggleable-link-inactive');
+            }
+            hot.render();
+        }
+
+        function getAllIndexes(arr, regex) {
+            let result = [];
+
+            arr.forEach((value, index) => value.match(regex) ? result.push([index]) : null);
+
+            return result;
+        }
+
+
+    </script>
+
+
+    <!-- Free goods function -->
+    <script>
+
+        function addRow(tableId, module) {
+            const table = $(tableId).DataTable();
+            const newData = {
+                ASI_TH_CRM_Payment_Request__c: '{!PageId}',
+                ASI_CRM_CN_Suggest_Unit_Price__c: 0,
+                RecordTypeId: '{!freeGoodsRecordTypeId}',
+            };
+
+
+            table.row.add(newData);
+            $(tableId).DataTable().draw();
+        }
+
+        function deleteRow(rowIndex, tableId) {
+            const row = $(tableId).DataTable().row(rowIndex);
+            if (row.data().Id) {
+                deletedLines.push(row.data());
+            }
+            row.remove();
+            // invalidate row so every row redraw itself => update onchange function in render()
+            $(tableId).DataTable().rows().invalidate();
+            $(tableId).DataTable().draw();
+        }
+
+        function onFreeGoodsChange(rowIndex, newValue, tableId) {
+            let lineItem = $(tableId).DataTable().row(rowIndex).data();
+            let freeGood = freeGoods.find(function (freeGood) {
+                return freeGood.label === newValue;
+            });
+
+            if (freeGood) {
+                lineItem.ASI_CRM_CN_Item_Group__c = freeGood.value;
+                lineItem.ASI_CRM_CN_Item_Group__r = freeGood.ASI_CRM_CN_Item_Group__r;
+                delete lineItem.ASI_CRM_CN_Item_Group__r.T1_Price__r;
+                if (promotionType != 'Consumer Promotion' && freeGood.unitPrice != null && freeGood.unitPrice != 'undefined' && freeGood.unitPrice != '') {
+                    var t1Price = freeGood.unitPrice[0];
+                    //lineItem.ASI_CRM_Unit_Price__c = Math.floor(t1Price.ASI_CRM_CN_T1_Price__c * 102/100);
+                    lineItem.ASI_CRM_CN_Suggest_Unit_Price__c = Math.floor(t1Price.ASI_CRM_CN_T1_Price__c * 102/100);
+                } else if (promotionType == 'Consumer Promotion' && freeGood.unitPrice != null && freeGood.unitPrice != 'undefined' && freeGood.unitPrice != '') {
+                    var t1Price = freeGood.unitPrice[0];
+                    //lineItem.ASI_CRM_Unit_Price__c = Math.floor(t1Price.ASI_CRM_CN_T1_Price__c * 102/100);
+                    lineItem.ASI_CRM_CN_Suggest_Unit_Price__c = t1Price.ASI_CRM_CN_T1_Price__c;
+                }
+            }
+
+            $(tableId).DataTable().row(rowIndex).data(lineItem).draw();
+        }
+
+        function onFreeGoodsLineChange(rowIndex, newValue, change, tableId) {
+            const lineItem = $(tableId).DataTable().row(rowIndex).data();
+
+            if (change === 'ASI_CRM_Unit_Price__c') {
+                lineItem.ASI_CRM_Unit_Price__c = newValue || 0;
+            }
+            if (change === 'ASI_TH_CRM_Quantity__c') {
+                lineItem.ASI_TH_CRM_Quantity__c = newValue || 0;
+            }
+
+            var totalAmount = lineItem.ASI_CRM_Unit_Price__c * lineItem.ASI_TH_CRM_Quantity__c;
+            totalAmount = totalAmount || 0 ;
+            lineItem.ASI_CRM_CN_Total_Payable__c = totalAmount.toFixed(2);
+
+            $(tableId).DataTable().row(rowIndex).data(lineItem).draw();
+
+        }
+
+        function getColumnIndexesWithClass(columns, className) {
+            let indexes = [];
+            $.each(columns, function (index, columnInfo) {
+                if (columnInfo.className && columnInfo.className.split(' ').some(columnClassName => columnClassName === className)) {
+                    indexes.push(index);
+                }
+            });
+
+            return indexes;
+        }
+
+        function batchActionFunCompleted() {
+            var deletejobId  =  $('[id$="deletejobId"]').val();
+            var jobId  =  $('[id$="jobId"]').val();
+            console.log('deletejobId,',deletejobId);
+            console.log('jobId,',jobId);
+
+            // 有Job启动开启轮询
+            if (deletejobId) {
+                document.querySelector('#IsShowProgressBar').style.display = 'block';
+                //开启actionPoller
+                startOrStopActionPoller('delete');
+            }
+            if (jobId) {
+                document.querySelector('#IsShowProgressBar').style.display = 'block';
+                //开启actionPoller
+                startOrStopActionPoller('update');
+            }
+
+        }
+
+        function handleOutletBatchComplete() {
+            var handleComplte  =  $('[id$="BatchhandleResult"]').val();
+            var deletehandleComplte  =  $('[id$="deleteBatchResult"]').val();
+            console.log('handleComplte,',handleComplte);
+            console.log('deletehandleComplte,',deletehandleComplte);
+            //当处理完毕时
+            if (handleComplte == 'success') {
+                document.querySelector('#IsShowProgressBar').style.display = 'none';
+                // startOrStopActionPoller();
+            }
+        }
+
+        function handleOutletBatchCompleteDelete() {
+            // var handleComplte  =  $('[id$="BatchhandleResult"]').val();
+            var deletehandleComplte  =  $('[id$="deleteBatchResult"]').val();
+            var deletejobId  =  $('[id$="deletejobId"]').val();
+            console.log('deletehandleComplte,',deletehandleComplte);
+            //删除JOB处理完毕后，重新运行逻辑
+            if (deletejobId == '' && deletehandleComplte == 'success') {
+                changePricePromotionEndDateApex();
+                // document.querySelector('#IsShowProgressBar').style.display = 'none';
+                // startOrStopActionPoller();
+            }
+        }
+        
+    </script>
+
+    <apex:form id="promotionPaymentPage">
+        <div class="bs ">
+
+            <div class="container-fluid">
+                <div class="row" style=" display: inline-block; width: 100%;">
+                    <div class="col-md-4" style="font-weight: bold; font-family: Arial,Helvetica,sans-serif; color: #000; font-size: 1.3em;">
+                        {!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Label}
+                    </div>
+                    <div class="col-md-8">
+                        <apex:outputPanel layout="block" rendered="{!isView && !isEditHeader}">
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Edit}" styleClass="BSCommandButton" action="{!GoEditHeader}" rendered="{!PH.ASI_TH_CRM_Status__c == 'Draft'}"/>
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Form_Preview}" styleClass="BSCommandButton" onClick="window.open('/apex/ASI_CRM_CN_PromoPaymentRequestFrmPage?id={!PH.id}&pdf=1');"/>
+
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Submit_Approval}" styleClass="BSCommandButton"
+                                                action="{!GoToCheckPoint}" reRender="pageMessage" status="ActionStatus"
+                                                oncomplete="return false;"
+                                                rendered="{!PH.ASI_TH_CRM_Status__c == 'Draft'}"/>
+
+                            <apex:commandButton styleClass="BSCommandButton" value="{!$Label.ASI_CRM_CN_View} {!$Label.ASI_CRM_CN_Check_Point}"
+                                                onclick="window.location.href='/apex/ASI_CRM_CN_PromotionCheckPointResultPage?id={!PH.Id}&Type=ViewCheckPoint'"
+                                                oncomplete="return false;"
+                                                rendered="{!PH.ASI_TH_CRM_Status__c != 'Draft'  }"/>
+
+
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_CTD_Sales_Report}" styleClass="BSCommandButton"
+                                                onclick="window.open('/apex/ASI_CRM_CN_PromotionVolumeReportPage?id={!PH.ASI_TH_CRM_Contract__c}')"/>
+
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payment_Instruction}" styleClass="BSCommandButton"
+                                                rendered="{!PH.ASI_TH_CRM_Status__c=='Paid'}"
+                                                onClick="window.open('/apex/ASI_CRM_CN_HeavyPaymentSlipPage?id={!PH.id}&PTSelected=Instruction');"/>
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payment_Receipt}" styleClass="BSCommandButton"
+                                                onClick="window.open('/apex/ASI_CRM_CN_HeavyPaymentSlipPage?id={!PH.id}&PTSelected=Receipt');"
+                                                rendered="{!PH.ASI_TH_CRM_Status__c=='Paid'}"/>
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_Auto_PO_Modification}" styleClass="BSCommandButton"
+                                                action="{!AutoPOModification}" status="ActionStatus" reRender="pageMessage"
+                                                rendered="{!PH.ASI_TH_CRM_Status__c=='Paid' && PH.ASI_CRM_CN_Last_Payment__c && !isAutoModi}"/>
+                            <apex:commandButton value="{!$Label.ASI_CRM_CN_Contract_Return}"
+                                                styleClass="BSCommandButton"
+                                                action="{!GoReturn}" rendered="{!showReturn}" reRender="pageMessage"/>
+
+                            <!--20200513:AM@Introv START-->
+                            <apex:commandButton value="Tax Calculation" action="{!reDirectToTaxSavingPage}" rendered="{!PH.ASI_TH_CRM_Status__c == 'Paid' || PH.ASI_TH_CRM_Status__c == 'Approved'}" reRender="promotionPaymentPage" styleClass="BSCommandButton"/>
+                            <!--20200513:AM@Introv END-->
+
+                        </apex:outputPanel>
+                        <apex:outputPanel layout="block" rendered="{!isEdit || isEditHeader}">
+                            <apex:actionFunction name="saveRecordApex" action="{!saveItems}" reRender="promotionPaymentPage" status="ActionStatus">
+                                <apex:param name="isQuickSave" value=""/>
+                                <apex:param name="pricePromotionJSON" value=""/>
+                                <apex:param name="freeGoodsJSON" value=""/>
+                            </apex:actionFunction>
+                            <input type="button" class="btn BSCommandButton" onclick="saveRecord(false)" value="{!$Label.ASI_CRM_CN_IOM_Save}"/>
+                            <input type="button" class="btn BSCommandButton" onclick="saveRecord(true)" value="{!$Label.ASI_CRM_CN_Quick_Save}"/>
+
+                            <apex:commandButton styleClass="BSCommandButton" value="{!$Label.ASI_CRM_CN_IOM_Cancel}"
+                                                action="{!CancelProcess}"/>
+                        </apex:outputPanel>
+                    </div>
+
+                </div>
+
+                <apex:outputPanel layout="block" id="pageMessage">
+                    <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}" id="SaveFailPart">
+                        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+                        <strong>Oops, we meet following error:</strong><br/>
+                        <apex:outputText escape="false" value="{!msg}"/>
+                    </div>
+                </apex:outputPanel>
+
+                <!--Header Info-->
+                <apex:outputPanel layout="block" styleClass="row" rendered="{!isView || isEditHeader}">
+                    <div class="panel panel-primary">
+                        <div class="panel-heading">
+                            {!$Label.ASI_CRM_CN_VF_LABEL_Header_Info}
+                        </div>
+                        <div class="panel-body" style="padding: 0.5em">
+
+                            <table class="table table-condensed module-table">
+                                <tr>
+                                    <td style="width: 20% ">
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.Name.Label}"/>
+                                    </td>
+                                    <td style="width: 25% ">
+                                        <apex:outputField value="{!PH.name}"/>
+                                    </td>
+                                    <td style="width: 15% ">
+                                        <apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payment_Raised_Date__c.Label}"/>
+                                    </td>
+                                    <td style="width: 40% ">
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Payment_Raised_Date__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_No__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLink value="ASI_CRM_CN_PromotionContractPage?id={!PH.ASI_TH_CRM_Contract__c}">{!PH.ASI_CRM_CN_PO_No__c}</apex:outputLink>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_Start_Date__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_PO_Start_Date__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_OutletWS__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_OutletWS__c}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_End_Date__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_PO_End_Date__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <apex:outputLabel value="PO类别"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Promotion_Type__c}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Currency__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Currency__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        {!$Label.ASI_CRM_CN_Payment_Description}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Description__c}" rendered="{!!isEditHeader}"/>
+                                        <apex:InputField value="{!PH.ASI_CRM_CN_Description__c}" rendered="{!isEditHeader}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_TH_CRM_Status__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_TH_CRM_Status__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        {!$ObjectType.ASI_TH_CRM_Contract__c.Fields.ASI_CRM_PO_Channel__c.Label}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!ContractSelected.ASI_CRM_PO_Channel__c}"/>
+                                    </td>
+                                    <td>{!$ObjectType.ASI_TH_CRM_Contract__c.Fields.ASI_CRM_CN_Data_Source__c.Label}</td>
+                                    <td>
+                                        <apex:outputField value="{!ContractSelected.ASI_CRM_CN_Data_Source__c}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        {!$ObjectType.ASI_TH_CRM_Contract__c.Fields.ASI_CRM_CN_Festival_Season__c.Label}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!ContractSelected.ASI_CRM_CN_Festival_Season__c}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Last_Payment__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Last_Payment__c}" rendered="{!!isEditHeader}"/>
+                                        <apex:InputField value="{!PH.ASI_CRM_CN_Last_Payment__c}" rendered="{!isEditHeader}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        {!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payment_Type__c.Label}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Payment_Type__c}" rendered="{!!isEditHeader}"/>
+                                        <apex:InputField value="{!PH.ASI_CRM_CN_Payment_Type__c}" rendered="{!isEditHeader}"/>
+                                    </td>
+                                    <td>
+                                        {!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Last_Year_Payment__c.Label}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Last_Year_Payment__c}" rendered="{!!isEditHeader}"/>
+                                        <apex:InputField value="{!PH.ASI_CRM_CN_Last_Year_Payment__c}" rendered="{!isEditHeader}"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                    </td>
+                                    <td colspan="3">
+                                    </td>
+                                </tr>
+
+                                <tr style=" {!IF(ContractSelected.ASI_CRM_CN_Outlet_WS__r.RecordType.DeveloperName == 'ASI_CRM_CN_WS','','display:none;')}  ">
+                                    <td>
+                                        {!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_Volume_Option__c.Label}
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_Volume_Option__c}" id="paymenttype"/>
+                                    </td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>
+
+                                <tr>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_TH_CRM_GL_Date__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_TH_CRM_GL_Date__c}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Invoice_Date__c.Label}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputField value="{!PH.ASI_CRM_CN_Invoice_Date__c}"/>
+                                    </td>
+                                </tr>
+                                
+                            </table>
+                        </div>
+                    </div>
+                </apex:outputPanel>
+
+
+
+                <!-- Buttons to edit page-->
+                <div class="row" style="{!IF(!isEditHeader, '', 'display:none')}">
+                    <div class="col-md-offset-4">
+                        <apex:commandButton styleClass="BSCommandButton"
+                                            rendered="{!PH.ASI_TH_CRM_Status__c == 'Draft' && isView}"
+                                            value="{!$Label.ASI_CRM_CN_VF_BTN_Payee_Detail}"
+                                            action="{!GoEditDetailPage}"/>
+                        <apex:commandButton styleClass="BSCommandButton"
+                                            rendered="{!PH.ASI_TH_CRM_Status__c == 'Draft' && isView}"
+                                            value="{!$Label.ASI_CRM_CN_VF_BTN_Payee_Info}" action="{!GoEditPayee}"/>
+                    </div>
+                </div>
+
+                <!-- Payment Summary-->
+                <div class="row" style="{!IF(isView && !isEditHeader, '', 'display:none')}">
+                    <div class="PanelHeader">{!$Label.ASI_CRM_CN_Payment_Summary}</div>
+                    <div class="PanelBody">
+                        <table class="bs table table-condensed" style=" margin-bottom: 0;" id="PaymentSummaryDataTable">
+                            <thead>
+                            <tr>
+                                <th>{!$Label.ASI_CRM_CN_Payment_Summary}</th>
+                                <th>{!$Label.ASI_CRM_CN_PO_Estimated_Amount}</th>
+                                <th>{!$Label.ASI_CRM_CN_PO_Remaining_Amount}</th>
+                                <th>{!$Label.ASI_CRM_CN_Payment_Request_Amount}</th>
+                            </tr>
+                            </thead>
+                            <apex:variable value="{!0}" var="POEstimatedAmountTotal"/>
+                            <apex:variable value="{!0}" var="PORemainingAmountTotal"/>
+                            <apex:variable value="{!0}" var="PaymentRequestAmountTotal"/>
+                            <tbody>
+                            <apex:repeat value="{!PaymentSummaryList}" var="PaymentSummary" id="PaymentSummaryListItem">
+                                <apex:variable var="POEstimatedAmountTotal" value="{!POEstimatedAmountTotal+PaymentSummary.POEstimatedAmount}"/>
+                                <apex:variable var="PORemainingAmountTotal" value="{!PORemainingAmountTotal+PaymentSummary.POEstimatedAmount - PaymentSummary.PaidAmount}"/>
+                                <apex:variable var="PaymentRequestAmountTotal" value="{!PaymentRequestAmountTotal+PaymentSummary.PaymentRequestAmount}"/>
+                                <tr>
+                                    <td>
+                                            {!PaymentSummary.Name}
+                                        </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                            <apex:param value="{!PaymentSummary.POEstimatedAmount}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                            <apex:param value="{!PaymentSummary.POEstimatedAmount - PaymentSummary.PaidAmount}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                            <apex:param value="{!PaymentSummary.PaymentRequestAmount}"/>
+                                        </apex:outputText>
+                                    </td>
+                                </tr>
+                            </apex:repeat>
+                            <tr class="FontWeightCSS" style="background-color: #e3e3d7;">
+                                <td> {!$Label.ASI_CRM_CN_Total_Amount}
+                                    </td>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                        <apex:param value="{!POEstimatedAmountTotal}"/>
+                                    </apex:outputText>
+                                </td>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                        <apex:param value="{!PORemainingAmountTotal}"/>
+                                    </apex:outputText>
+                                </td>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                        <apex:param value="{!PaymentRequestAmountTotal}"/>
+                                    </apex:outputText>
+                                </td>
+
+                            </tr>
+                            </tbody>
+
+                        </table>
+                    </div>
+
+                </div>
+
+
+                <!-----------------------------------------------Price Promotion-------------------------------------------------------------->
+
+                <apex:actionFunction action="{!initProgressBarStatus}" name="initProgressBarStatus" reRender="progressBar">
+                </apex:actionFunction>
+                <apex:actionFunction action="{!startOrStopActionPoller}" name="startOrStopActionPoller" reRender="poller,pollerDelete">
+                    <apex:param name="batchType" value="" assignTo="{!batchType}"/>
+                </apex:actionFunction>
+                <apex:actionFunction name="changePricePromotionEndDateApex" action="{!refreshPricePromotionVolume}" rerender="PSFPanel,dataFactory,pageMessage,progressBar" status="ActionStatus" oncomplete="batchActionFunCompleted();">
+                    <apex:param name="PARAMID" value=""/>
+                </apex:actionFunction>
+                 <apex:actionRegion >
+                        <apex:actionPoller id="poller" action="{!processBarPercent}" reRender="progressBar,PSFPanel,dataFactory,pageMessage" interval="5" oncomplete="handleOutletBatchComplete();" enabled="{!IsEnabled}"/>
+                        <apex:actionPoller id="pollerDelete" action="{!processBarPercentDelete}" reRender="progressBar,PSFPanel,dataFactory,pageMessage" interval="5" oncomplete="handleOutletBatchCompleteDelete();" enabled="{!IsEnabledDelete}"/>
+
+
+                        <div id="IsShowProgressBar" style="display:none;">
+                            <apex:outputPanel id="progressBar">
+                                <apex:inputHidden value="{!BatchhandleResult}" id="BatchhandleResult" />
+                                <apex:inputHidden value="{!deleteBatchResult}" id="deleteBatchResult" />
+                                <apex:inputHidden value="{!jobId}" id="jobId" />
+                                <apex:inputHidden value="{!deletejobId}" id="deletejobId" />
+                                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                                     height: 100%; width:100%; opacity:0.65;">
+                                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                                        &nbsp;&nbsp;&nbsp;
+                                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..."/>
+                                        <span class="waitingDescription">数据量较大，正在处理，请耐心等待....</span>
+                                        <strong>{!progressRate}%</strong>
+                                    </div>
+                                </div>
+
+<!--                                 <div class="slds-grid slds-grid_align-spread slds-p-bottom_x-small" id="progress-bar-label-id-2">
+                                    <span>数据量较大，正在处理，请耐心等待....&nbsp;&nbsp;&nbsp;
+                                    <apex:outputPanel rendered="true">
+                                        <apex:image url="/img/loading.gif" style="position: relative;top:-2%;"/></apex:outputPanel>
+                                    </span>
+                                    <span aria-hidden="true">
+                                    <strong>{!progressRate}%</strong>
+                                </span>
+                                </div>
+                                <div class="slds-progress-bar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="25" aria-labelledby="progress-bar-label-id-2" role="progressbar">
+                                    <span class="slds-progress-bar__value" style="width: {!progressRate}%;">
+                                    </span>
+                                </div> -->
+                            </apex:outputPanel>
+                        </div>
+                    </apex:actionRegion>
+
+                <div class="row" style="{!IF(!isEditHeader, '', 'display:none')}">
+                    <apex:pageBlock id="PSF">
+                        <apex:outputPanel id="PSFPanel">
+                            <div class="PanelHeader">促销奖励</div>
+                            <div class="PanelBody">
+                                <table class="bs table table-condensed module-table">
+                                    <tr>
+                                        <td>{!$Label.ASI_CRM_CN_Start_Date}</td>
+                                        <td>
+                                            <apex:outputField value="{!PH.ASI_CRM_CN_PO_Start_Date__c}"/>
+                                        </td>
+                                        <td>{!$Label.ASI_CRM_CN_End_Date}</td>
+                                        <td>
+                                            <apex:outputText value="{0, date, yyyy年M月d日 }" rendered="{!isView}">
+                                                <apex:param value="{!endDate}"/>
+                                            </apex:outputText>
+                                            <apex:input type="date" value="{!endDate}" styleClass="ApexInputDateField" onchange="changePricePromotionEndDate();" rendered="{!isEdit}"/>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <table class="bs table table-condensed module-table"
+                               style="margin-bottom: 0;">
+                                    <tr>
+                                        <td style="width: 25%;{!if(showWS,'','display:none')}">
+                                            批发商进货量（9L)
+                                        </td>
+                                        <td style="width: 25%;{!if(showWS,'','display:none')}">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!WS_Intake_9L}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25%;{!if(showWS,'','display:none')}">
+                                            批发商进货金额
+                                        </td>
+                                        <td style="width: 25%;{!if(showWS,'','display:none')}">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!CTD_Actual_Purchase_Value}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td style="width: 25%">
+                                            店家进货量（9L)
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Outlet_Intake_9L}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25% ">
+                                            店家进货金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!CTD_Actual_Retail_Value}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td style="width: 25%;{!if(NOT(showWS),'','display:none')}">
+                                            POS Volume (9L)
+                                        </td>
+                                        <td style="width: 25%;{!if(NOT(showWS),'','display:none')}">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!POS_Volume_9L}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25%;{!if(NOT(showWS),'','display:none')}">
+                                            POS Value
+                                        </td>
+                                        <td style="width: 25%;{!if(NOT(showWS),'','display:none')}">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!POS_Value}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td style="width: 25%">
+                                            实际销售金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Actual_Value_Base}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25% ">
+                                            合同至今应付金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Total_Suggest_Incentive}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>
+  
+                                    <tr>
+                                        <td style="width: 25%">
+                                            已支付金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Historical_Paid_Amount}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25% ">
+                                            支付金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Suggested_this_time_payment}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td style="width: 25%">
+                                            实际支付金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Total_this_time_payment}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style="width: 25%">
+                                            vs.支付金额
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!vs_suggested}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        
+                                    </tr>
+
+                                    <tr>
+                                        <td style="width: 25% ">
+                                            实际返点%
+                                        </td>
+                                        <td style="width: 25% ">
+                                            <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                <apex:param value="{!Actual_Incentive}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        
+                                        <td style="width: 25% ">
+                                            
+                                        </td>
+                                        <td style="width: 25% ">
+                                            
+                                        </td>
+                                    </tr>
+                                </table>
+
+
+                                <table class="bs table table-condensed module-table"
+                                    style="margin-bottom: 0;">
+                                    <apex:repeat value="{!moduleActualPaymentMap_ByPage}" var="PaymentSummary" id="PaymentSummaryListItem">
+                                        <tr>
+                                            <td>
+                                                <apex:outputText value="实际支付金额(项目指标 {!PaymentSummary} )"/>
+                                            </td>
+                                             <td>
+                                                <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                                    <apex:param value="{!moduleActualPaymentMap_ByPage[PaymentSummary]}"/>
+                                                </apex:outputText>
+                                            </td>
+                                             <td>
+                                                
+                                            </td>
+                                             <td>
+                                                
+                                            </td>
+                                        </tr>
+                                    </apex:repeat>
+                                </table>
+
+                                <br/>
+
+                                Click below to show/hide columns:
+                                <br/>
+                                <div class="btn-group">
+                                    <apex:variable value="{!0}" var="index"/>
+                                    <apex:repeat value="{!colHeaders}" var="colHeader">
+                                        <a class="" onclick="toggleColumn({!index})">
+                                            <apex:outputText value="{!colHeader}" escape="false"/>
+                                        </a> -
+                                        <apex:variable value="{!index+1}" var="index"/>
+                                    </apex:repeat>
+                                </div>
+
+
+                                <div id="parentContainer" style="width: 100%;">
+
+                                    <div id="handstontable">
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <script>
+                                pricePromotionJSON = {!interimDataMapJSON};
+                                console.log('data', pricePromotionJSON);
+                                console.log('data2', JSON.stringify(pricePromotionJSON));
+                                colHeaders = {!colHeadersJSON};
+                                if ({!!ISNULL(endDate)})
+                                {
+                                    drawHustonTable();
+                                }
+                            </script>
+
+                         <!--    <apex:commandButton value="上一页" styleClass="BSCommandButton" onclick="SkipPage('Last')" rendered="{!isFirst}"
+                                                status="actStatusId1">
+                                <apex:actionStatus id="actStatusId1" startText="保存中...">
+                                    <apex:facet name="start">
+                                        <img src="/img/loading.gif" />
+                                    </apex:facet>
+                                </apex:actionStatus>
+                                <!-- <apex:param name="PageSkipType" value="Last" assignTo="{!PageSkipType}" /> -->
+                            <!-- </apex:commandButton> -->
+
+                            <input type="button" value="上一页" class="BSCommandButtonSM" onclick="SkipPage('Last')" style="{!if(isFirst,'display:block;','display:none;')}"></input>
+
+                            <!-- <apex:commandButton value="下一页" styleClass="BSCommandButton"  onclick="SkipPage('Next')" rendered="{!isNext}"
+                                                status="actStatusId2">
+
+                                <apex:actionStatus id="actStatusId2" startText="保存中...">
+                                    <apex:facet name="start">
+                                        <img src="/img/loading.gif" />
+                                    </apex:facet>
+                                </apex:actionStatus> -->
+                                <!-- <apex:param name="PageSkipType" value="Next" assignTo="{!PageSkipType}" /> -->
+                            <!-- </apex:commandButton> -->
+
+                            <input type="button" value="下一页" class="BSCommandButtonSM" onclick="SkipPage('Next')" style="{!if(isNext,'display:block;','display:none;')}"></input>
+                            <span>当前页数：<apex:outputText value="{!totalNumPage}" escape="false"/></span>
+                            <span>总页数：<apex:outputText value="{!sumNumPage}" escape="false"/></span>
+
+
+
+                            <apex:actionFunction action="{!NextPage}" name="NextPage" reRender="PSF" status="ActionStatus">
+                                <apex:param name="PageSkipType" value="" assignTo="{!PageSkipType}"/>
+                                <apex:param name="pricePromotionJSON" value=""/>
+                                <apex:param name="freeGoodsJSON" value=""/>
+                            </apex:actionFunction>
+
+                            <script>
+                                function SkipPage(type) {
+                                    console.log('进入skipPage' ,type);
+                                    updateLinesBeforeApex();
+                                    console.log('进入skipPage2' , JSON.stringify(pricePromotionJSON));
+                                    // 替换一些标准的对象信息，减少字符串长度
+                                    var pricePromotionJSON2 = JSON.stringify(pricePromotionJSON).replace(new RegExp('"attributes":\\{"type":"[a-zA-Z_]+?","url":"/services/data/...../sobjects/.*?/.{18}"\\},',"g"),"");
+                                    console.log('进入skipPage3' , pricePromotionJSON2);
+                                    NextPage(type, pricePromotionJSON2, JSON.stringify(freeGoodsJSON));
+                                    console.log('完成skipPage');
+                                }
+
+                            </script>
+
+                        </apex:outputPanel>
+                    </apex:pageBlock>
+
+
+
+
+                </div>
+
+
+                <!-------------------------------- Free Goods/GWP -------------------------------------------------->
+                <!--remove ASI_TH_CRM_Promotion_Type__c condition 20200402 -->
+                <!-- <apex:outputPanel layout="block" styleClass="row" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Consumer Promotion' && !isEditHeader}"> -->
+                <apex:outputPanel layout="block" styleClass="row" rendered="{! !isEditHeader}">
+                    <apex:variable var="" value="" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Consumer Promotion'}">
+                        <div class="PanelHeader">礼品及赠酒费用</div>
+                    </apex:variable>
+                    <apex:variable var="" value=""  rendered="{!PH.ASI_CRM_CN_Promotion_Type__c != 'Consumer Promotion'}">
+                        <div class="PanelHeader">促销奖励所含赠酒明细</div>
+                    </apex:variable>
+                    <div class="PanelBody">
+                        <table id="free_goods_table" class="bs table table-condensed data-table">
+                            <tfoot>
+                            <tr></tr>
+                            </tfoot>
+                        </table>
+
+                        <script>
+                            drawTable('#free_goods_table');
+                        </script>
+
+                    </div>
+                </apex:outputPanel>
+
+                <!-- Visibility -->
+                <apex:outputPanel layout="block" styleClass="row" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Outlet Promotion' && !isEditHeader}">
+                    <div class="PanelHeader2">陈列费</div>
+                    <div class="PanelBody">
+                        <table class="bs table table-condensed data-table">
+                            <thead>
+                            <tr>
+                                <th>{!$Label.ASI_CRM_CN_PO_Estimated_Amount}</th>
+                                <th>{!$Label.ASI_CRM_CN_PO_Remaining_Amount}</th>
+                                <th>{!$Label.ASI_CRM_CN_Payment_Request_Amount}</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                        <apex:param value="{!ContractSelected.ASI_CRM_CN_Expected_Visibility_Est_Total__c}"/>
+                                    </apex:outputText>
+                                </td>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}">
+                                        <apex:param value="{!ContractSelected.ASI_CRM_CN_Expected_Visibility_Est_Total__c - paidVisibilityAmt}"/>
+                                    </apex:outputText>
+                                </td>
+                                <td>
+                                    <apex:outputText value="{0, number, ###,###,###,###,##0.00}" rendered="{!isView}">
+                                        <apex:param value="{!visibilityModule.ASI_CRM_Actual_Payment__c}"/>
+                                    </apex:outputText>
+                                    <apex:inputField value="{!visibilityModule.ASI_CRM_Actual_Payment__c}" rendered="{!isEdit}"/>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </apex:outputPanel>
+                <apex:outputPanel layout="block" styleClass="row" rendered="{!cashtype && isView && !isEditHeader}">
+                    <div class="PanelHeader">{!$Label.ASI_CRM_CN_VF_LABEL_Cash}</div>
+                    <div class="PanelBody" >
+                        <apex:outputPanel id="PayeeCashDetailPanel">
+                            <table class="bs table table-condensed" style="margin-bottom: 0;" id="PayeeCashDetailDataTable"  >
+                                <thead>
+                                    <tr>
+                                        
+                                        <th >{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Cash_Payee_Name_T1__c.Label}</th>
+                                        <th >{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Amount__c.Label}</th>
+                                        <th >{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}</th>
+                                        <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    
+                                    <apex:repeat value="{!Payee_Item_Map_CASH}" var="itm"   id="PayeeCashDetailLineTable" >
+                                        <tr>
+                                            <td>
+                                                <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Cash_Payee_Name_T1__c}" />
+                                            </td> 
+                                            <td>
+                                                <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Amount__c}" />
+                                            </td>
+                                            <td> <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Reason__c}" /></td>
+                                            <td><apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Comfirm_Receipt__c}" /> </td>
+                                        </tr>
+                                    </apex:repeat>
+                                </tbody>
+                                
+                            </table>
+                        </apex:outputPanel>                            
+                    </div>
+                </apex:outputPanel>
+                <apex:outputPanel layout="block" styleClass="row" rendered="{!discounttype && isView && !isEditHeader}">
+                    <div class="PanelHeader">{!$Label.ASI_CRM_CN_VF_LABEL_Discount}</div>
+                    <div class="PanelBody" >
+                            <apex:outputPanel id="PayeeDiscountDetailPanel">
+                                <table class="bs table table-condensed" style="margin-bottom: 0;" id="PayeeDiscountDetailDataTable"  >
+                                    <thead>
+                                        <tr>
+                                            
+                                            <th >{!$Label.ASI_CRM_CN_VF_LABEL_T2_WS}</th>
+                                            <th >{!$Label.ASI_CRM_CN_VF_LABEL_T1_WS}</th>
+                                            <th >{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Discount_Amount__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Instruction_Sent_Time__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        
+                                        <apex:repeat value="{!Payee_Item_Map_DISCOUNT}" var="itm"   id="PayeeDiscountDetailLineTable" >
+                                            <tr>
+                                                <td>
+                                                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Payee_T2__c}" />
+                                                </td> 
+                                                <td>
+                                                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Payee_T1__c}" />
+                                                </td>
+                                                <td>  <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Amount__c}" /></td>
+                                                <td><apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Reason__c}" /> </td>
+                                                <td> <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Instruction_Sent_Time__c}" /></td>
+                                                <td> <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Comfirm_Receipt__c}" /></td>
+                                                
+                                            </tr>
+                                        </apex:repeat>
+                                    </tbody>
+                                    
+                                </table>
+                            </apex:outputPanel>                            
+                        </div>
+                </apex:outputPanel>
+                <apex:outputPanel layout="block" styleClass="row" rendered="{!discounttype && isView &&!isEditHeader}">
+                    <div class="PanelHeader">{!$Label.ASI_CRM_CN_VF_LABEL_Others}</div>
+                        <div class="PanelBody" >
+                            
+                            <apex:outputPanel id="PayeeOtherWSDetailPanel">
+                                <table class="bs table table-condensed" style="margin-bottom: 0;" id="PayeeOtherWSDetailDataTable"  >
+                                    <thead>
+                                        <tr>
+                                            
+                                            <th >{!$Label.ASI_CRM_CN_VF_LABEL_T2_WS}</th>
+                                            <th >{!$Label.ASI_CRM_CN_VF_LABEL_T1_WS}</th>
+                                            <th >{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Discount_Amount__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Instruction_Sent_Time__c.Label}</th>
+                                            <th>{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        
+                                        <apex:repeat value="{!Payee_Item_Map_CD}" var="itm"   id="PayeeOtherWSDetailLineTable" >
+                                            <tr>
+                                                <td>
+                                                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Payee_T2__c}" />
+                                                </td> 
+                                                <td>
+                                                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Payee_T1__c}" />
+                                                </td>
+                                                <td>  <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Amount__c}" /></td>
+                                                <td><apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Reason__c}" /> </td>
+                                                <td><apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Instruction_Sent_Time__c}" /></td>
+                                                <td> <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Comfirm_Receipt__c}" /></td>
+                                            </tr>
+                                        </apex:repeat>
+                                    </tbody>
+                                    
+                                </table>
+                            </apex:outputPanel>                            
+                        </div>                    
+                </apex:outputPanel>
+
+            </div>
+        </div>
+
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;">
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..."/>
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+
+    </apex:form>
+
+    <apex:relatedList id="Attachments" subject="{!pageid}" list="CombinedAttachments" rendered="{!isView && !isEditHeader}"/>
+    <apex:relatedList id="Approval" subject="{!pageid}" list="ProcessSteps" rendered="{!isView && !isEditHeader}"/>
+    <apex:relatedList id="ApprovalComment" subject="{!pageid}" list="Payment_Request_Approval_Comments__r" rendered="{!isView && !isEditHeader}"/>
+
+</apex:page>

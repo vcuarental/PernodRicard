@@ -1,0 +1,817 @@
+<apex:page standardController="ASI_GnH_Request_Recipient__c" recordSetVar="ASI_GnH_Request_Recipients" sidebar="false" showHeader="true" extensions="ASI_GnH_KR_ManageRecipientAllCtrl" docType="html-5.0" >
+    <head>
+
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Ng_SimplePagination, 'ASI_JS_Ng_SimplePagination/simplePagination.js')}" />  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+
+    </head>
+
+    <style>
+
+        input.inputField {
+            width: auto !important;
+        }
+
+        .table td, 
+        .table th {
+            white-space: nowrap;
+            width: 1%;
+        }
+
+        .boldRedText {
+            color:red;
+            font-weight:bold
+        }
+
+        .waiting-box {
+            display: block;
+            position: absolute; /* fixed position so it doesn't scroll */
+            width: 250px;
+            top: 10px; 
+            background-color: #fbfbfb;
+            height: 100%; width:100%; 
+            opacity:0.65;
+        }
+
+        .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+        }
+
+        .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+        }
+
+        .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            overflow:auto;
+            padding-right: 20px;
+            left: 0;
+        }
+
+        *html .ui-autocomplete {
+            height: 200x;
+        }
+
+        .bs.panel-heading.div-size {
+            border-radius: 10px;
+        }
+
+        .required {
+            border-left: 3px solid darkred !important;  
+        }
+
+        .hide {
+            display: none; 
+        }
+
+        .ui-helper-hidden-accessible { display:none !important;} 
+
+        .ui-helper-hidden-accessible { position: absolute; left:-999em !important;}
+        input:-moz-read-only { /* For Firefox */
+            background-color: Gainsboro;
+        }
+
+        input:read-only {
+            background-color: Gainsboro;
+        }
+
+        textarea:disabled {
+            background-color: Gainsboro;
+        }
+
+        select:disabled {
+            background-color: Gainsboro;
+        }
+
+        #loadingpart {
+            display: block;
+            position: absolute;
+            top: -30;
+            left: 0;
+            z-index: 100;
+            //width: 100vw;
+            height: 100vh;
+            background-color: rgba(192, 192, 192, 0.5);
+            background-image: url("/img/loading.gif");
+            background-repeat: no-repeat;
+            background-position: 5%;
+        }
+
+        .warning-background{
+            color: #fff; 
+            background: #f2dede
+        }        
+        .btn-primary{
+            margin-right: 10px;
+        }
+        .container{
+            margin: 20px 0;
+        }
+    </style>
+
+
+    <script type="text/javascript">
+
+        var app = angular.module("myapp", ['simplePagination']);
+
+        app.directive('autocomplete', function(GetMasterData) {        
+            var  resultList = [];
+            var  multiplecache ={};
+            return {
+                restrict: 'E',
+                replace:true,
+                transclude: true, 
+                template:  '<input name="autocomplete" cass="inputField" type="text" ></input>',
+                link: function (scope, elem, attrs) {
+                    scope.$watch(attrs.object, function(value) { 
+                        elem.autocomplete({
+                            minLength:1,
+                            source: function(request, response){
+                                request.term =request.term.replace(/'/g, "\\'");
+                                var queryTerm = '%' + request.term +'%';
+                                var additonalQuery = '';
+                                var selectQuery = '';
+
+                                if(attrs.selection==="GnHRecipient"){
+                                    console.log('Finding GnH Recipient');
+                                    additonalQuery = ' Where Name like \'' + queryTerm + '\'' + ' OR ASI_GnH_Title__c like \'' + queryTerm + '\'' + ' OR ASI_GnH_Organization__c like \'' + queryTerm + '\'';
+                                    selectQuery = 'Name, ASI_GnH_Title__c, ASI_GnH_Organization__c, ASI_GnH_Mobile__c, ASI_GnH_Email__c, ASI_GnH_Company_Address__c ';
+                                }
+                                GetMasterData.getData(attrs.object, selectQuery, additonalQuery).then(function(result){
+                                    resultList = [];
+                                    if (!result) {
+                                        var noResult = { value:"",label:"No results found" };
+                                        response(noResult);
+                                    }else{
+                                        for (var i = 0; i < result.length; i++) {
+                                            var tempresult = new Object();
+                                            if (attrs.selection=="GnHRecipient"){
+                                                tempresult.label  = helper.htmlEncode(result[i]["Name"]);
+                                            }
+                                            tempresult.value =  result[i]["Id"];
+                                            if(selectQuery!=null){
+                                                if(attrs.selection=="GnHRecipient"){ 
+                                                    tempresult.desc =  (result[i]["ASI_GnH_Organization__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Organization__c"]):"")
+                                                        +' - '+(result[i]["ASI_GnH_Company_Address__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Company_Address__c"]):"");
+                                                }
+                                            }
+                                            //console.log('Label: '+ tempresult.label+' AND Value: '+tempresult.value);
+                                            tempresult.Obj=result[i];
+                                            resultList.push(tempresult);
+                                        }
+                                    }
+                                    response(resultList);
+                                }); 
+                            },
+                            response: function (event, ui) {
+
+                                if(ui.content.length===0){ 
+                                    console.log("No result found");
+                                }
+                                if (ui.content.length == 1){
+
+                                }                                   
+                            },
+                            open: function (event, ui) {
+                                var menu = $(this).data("uiAutocomplete").menu
+                                , i = 0
+                                , $items = $('li', menu.element)
+                                , item
+                                , text
+                                , startsWith = new RegExp("^" + $.ui.autocomplete.escapeRegex(this.value), "i");
+
+                                for (i = 0; i < $items.length && !item; i++) {
+                                    text = $items.eq(i).text();
+                                    if (startsWith.test(text)) {
+                                        item = $items.eq(i);
+                                    }
+                                }
+
+                                if (item) {
+                                    menu.focus(null, item);
+                                }
+                            },
+                            select: function(event, ui) {
+                                event.preventDefault();
+                                $(this).val(ui.item.label);
+                                if(attrs.selection == 'GnHRecipient'){
+                                    scope.addRecipient(ui.item.value);
+                                }
+                                /*if(typeof attrs.index!= 'undefined'){
+                                    scope.setResultData(attrs.index, ui.item , attrs.object, attrs.selection,false);
+                                }else{
+                                    scope.setMassAssignObj(ui.item , attrs.object, attrs.selection);
+                                }
+                                if(!ui.item && !foundInCache){
+                                    this.value = '';
+                                    scope.setResultData(attrs.index, null, attrs.object, attrs.selection,false);                                                     
+                                }*/ 
+                                scope.$apply();
+                                return false;                                    
+                            },
+                            focus: function( event, ui ) {
+                                event.preventDefault();
+                                $(this).val(ui.item.label);
+                                //  return false;  
+                            },
+                            change:function (event, ui) {
+                                if (ui.item && attrs.selection == "GnHForm") {
+                                    scope.changeGnHRecipient(ui.item,attrs.index);
+
+                                }
+                                else {
+                                    this.value = '';
+                                    scope.setResultData(attrs.index, null, attrs.object, attrs.selection,false);                                                                
+                                }               
+                                return false;   
+                            }
+                        }).focus(function() {
+                            $(this).autocomplete("search", "");
+                        }
+                                ).each(function() {
+                            $(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                                if(!item.desc){
+                                    return $("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><a>")  
+                                        .appendTo(ul);                                             
+                                }
+                                return $("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                                    .appendTo(ul); 
+                            };                        
+                        });
+                    });
+                }
+
+            };
+        });
+
+        app.factory('GetMasterData',function($q,$rootScope,$parse){  
+            var factory = {};  
+            factory.getData = function(ObjectName,SQLStatement,whereClause){  
+                var deferred = $q.defer();
+                RemoteGetMasterData(function(result){  
+                    $rootScope.$apply(function(){  
+                        deferred.resolve(result);  
+                    });  
+                }, ObjectName,SQLStatement,whereClause);  
+                return deferred.promise;  
+            }  
+            return factory;  
+        });    
+
+        function RemoteGetMasterData(callback, ObjectName,SQLStatement,whereClause){  
+            Visualforce.remoting.Manager.invokeAction(  
+                '{!$RemoteAction.ASI_GnH_KR_ManageRecipientAllCtrl.findList}', ObjectName,SQLStatement,whereClause,
+                callback,  
+                {escape: false}  
+            );      
+        }
+
+
+        app.controller("ListController", function($scope,GetMasterData,Pagination,$sce,$parse) {
+            $scope.ResultData;
+            $scope.prkusers; 
+            $scope.numberOfRecordPerPage = 10;
+            $scope.pagination = Pagination.getNew($scope.numberOfRecordPerPage);
+            $scope.pagination.numPages = 0;    
+            $scope.isLoading = false;
+            $scope.delClaimDetailIds = [];
+
+            $scope.APIFieldNameMap = {};
+            $scope.APIFieldNameMap["GnHRecipient"] = "ASI_GnH_Recipient_Master__c";
+
+            $scope.GnHRecipientListData;
+            $scope.delRecipientIds = [];
+            $scope.GnHRecipientMasterList;
+
+            var gnhRequestId = helper.getGnHRequestId();
+
+            getRecipientMasterList();
+            getGnHRecipientByApex(gnhRequestId);
+
+
+
+            /*********************************
+            Init Function
+            *********************************/
+            function getRecipientMasterList(){
+                ASI_GnH_KR_ManageRecipientAllCtrl.getRecipientMaster(function(results, event){
+                    if(event.status) {
+                        $scope.GnHRecipientMasterList = jQuery.parseJSON(results);
+                        $scope.$apply();
+                    }else{
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;
+            }
+
+            function getGnHRecipientByApex(gnhRequestId) {
+                ASI_GnH_KR_ManageRecipientAllCtrl.getGnHRecipient(gnhRequestId, function(results, event){
+                    if(event.status) {
+                        $scope.ResultData = jQuery.parseJSON(results);
+
+                        for( i=0 ;i< $scope.ResultData.length; i++){
+                            $scope.ResultData[i].newRecord = false;
+                            $scope.ResultData[i].fromMaster = true;
+                            console.log('ASI_GnH_Recipient__r: '+ $scope.ResultData[i].ASI_GnH_Recipient__c);
+                        }
+                        $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage);
+                        $scope.$apply();
+                    } else {
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;                   
+            }
+
+            /*function setDataReadOnly(event) {
+                console.log('Result Data: '+$scope.ResultData);
+                for ( i=0 ;i< $scope.ResultData.length; i++){
+                    if($scope.ResultData[i].newRecord == false){
+                        var name = angular.element(document.getElementById('name'+i));
+                        name.attr('readonly',true);
+                    }
+                }
+                return false;   
+            }*/
+
+            $scope.setMassAssignObj = function(item, objectName, fieldName){
+
+                var objectVar = 'selected';
+                objectVar = objectVar + fieldName;
+                model  = $parse(objectVar);
+                model.assign($scope, new Object());
+                var selectedVar = objectVar + '.IsSelected';
+                model  = $parse(selectedVar);
+                model.assign($scope, true);    
+                var itemVar =  objectVar + '.item';
+                if(!item){ 
+                    item = new Object();
+                }
+                item.label = item!=null? item.label:'';
+                item.value = item!=null? item.value:'';
+                model  = $parse(itemVar);
+                model.assign($scope, item); 
+
+                console.log("setMassAssignObj  -  item:" + item.GnHForm +"|objectName:" + objectName +"|fieldName: " + fieldName);
+
+            }
+
+
+            $scope.setResultData = function(rowNo, item, objectName, fieldName, resetIndex){
+
+                if(isNaN(rowNo)){
+                    $scope.setMassAssignObj(item, objectName, fieldName);
+                    return;
+                }
+
+                $scope.errorMessages = [];
+
+                if(parseInt(rowNo) > $scope.numberOfRecordPerPage  || resetIndex){
+                    rowNo = parseInt(rowNo) ;
+                }else  
+                    rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+
+                console.log("rowNo :" +rowNo + "|item :" + item + "|objectName :"+ objectName +" |fieldName :" +fieldName);
+                $scope.ResultData[rowNo].IsChanged = true;
+
+                var startWith = 'ResultData['+rowNo+ '].'; 
+
+                var returnAPIFieldName = $scope.APIFieldNameMap[fieldName]||'';
+                returnAPIFieldName = startWith + returnAPIFieldName;
+                model  = $parse(returnAPIFieldName);
+                var autocompleteValue = item!=null? item.value:'';
+                model.assign($scope,autocompleteValue);                    
+
+                fieldName = startWith + fieldName;
+                model  = $parse(fieldName);
+                var autocompleteLabel = item!=null? item.label:'';
+                model.assign($scope,autocompleteLabel); 
+            }
+
+            $scope.removeRecipient  = function(event, rowNo) {
+                event.preventDefault();
+                var rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                if ($scope.ResultData[rowNo].Id) {
+                    $scope.delRecipientIds.push($scope.ResultData[rowNo].Id);
+                    console.log('Deleted: '+ $scope.ResultData[rowNo].Id);
+                }
+                $scope.ResultData.splice(rowNo, 1);
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage); 
+            }
+
+            /*$scope.renderAddRecipientField = function(){
+                console.log('Enable Buttons');
+                var autoCompleteField = angular.element(document.getElementById('GnHRecipient'));
+                autoCompleteField.attr('class',"");
+                var addButton = angular.element(document.getElementById('button'));
+                addButton.attr('class',"btn btn-default btn-sm");
+            }*/
+
+            $scope.addRecipient= function(selectedRecipient){
+                event.preventDefault();
+                console.log('Enter Insertion: '+selectedRecipient);
+                //var gnhRecipientList = $scope.ResultData[parentRow].GnHRecipient; 
+                var selected = $scope.GnHRecipientMasterList[selectedRecipient];
+                var newEmptyGnHRecipient = helper.getGnHRecipientObject();
+                //newEmptyGnHRecipient.Id = selected.Id,
+                console.log('Inserting:'+ $scope.GnHRecipientMasterList[selectedRecipient]);
+                if($scope.GnHRecipientMasterList[selectedRecipient]){
+                    console.log('Information: '+ selected.Name+' '+selected.ASI_GnH_Title__c+' '+selected.ASI_GnH_Organization__c+' '+selected.ASI_GnH_Mobile__c+' '+selected.ASI_GnH_Email__c);
+                    newEmptyGnHRecipient.Name = selected.Name;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__c = selected.Id;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r = {};
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.Name = selected.Name;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Email__c = selected.ASI_GnH_Email__c;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Mobile__c = selected.ASI_GnH_Mobile__c;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Organization__c = selected.ASI_GnH_Organization__c;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c = selected.ASI_GnH_Company_Address__c;
+                    newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Title__c = selected.ASI_GnH_Title__c;
+                    newEmptyGnHRecipient.newRecord = true;
+                    newEmptyGnHRecipient.fromMaster = true;
+                    console.log('NewRecord Flag: '+newEmptyGnHRecipient.newRecord+' FromMaster Flag: '+newEmptyGnHRecipient.fromMaster);
+                }
+                $scope.ResultData.splice(0, 0, newEmptyGnHRecipient);
+            }
+
+            $scope.addNewRecipient = function(event, rowNo) {
+                event.preventDefault();
+                console.log('Row No:'+rowNo);
+                var rowNo = parseInt($scope.ResultData.length)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                var newRecipientRecord = helper.getRequestRecipientObject();
+                newRecipientRecord.newRecord = true;
+                newRecipientRecord.fromMaster = false;
+                console.log('New Record Flag: '+ newRecipientRecord.newRecord);
+                var newRow = rowNo+1;
+                $scope.ResultData.push(newRecipientRecord);
+
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage);                     
+            }
+
+            $scope.addNewRecipientTop = function(event) {
+                event.preventDefault();
+                var rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                var newRecipientRecord = helper.getRequestRecipientObject();
+                newRecipientRecord.newRecord = true;
+                console.log('New Record Flag: '+ newRecipientRecord.newRecord);
+                $scope.ResultData.push(newRecipientRecord);
+                //for (var i in $scope.ResultData){
+                //console.log($scope.ResultData[i]);
+                //}
+                //console.log($scope.ResultData.length-1);
+                //var name = document.getElementById('name4');
+                //name.setAttribute("ng-readonly",false);
+                //compile(name);
+
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage);                     
+            }
+
+            $scope.checkNewRecord = function(rowNo){
+                //console.log('Row:'+rowNo+'NewRecord Flag: '+$scope.ResultData[rowNo].newRecord+' FromMaster Flag: '+$scope.ResultData[rowNo].fromMaster)
+                var editable = ({!isEditable});                
+                if(editable != 2){ //Status = 'Draft' or 'Rejected'
+                    if($scope.ResultData[rowNo].fromMaster == true){
+                        var organisation = angular.element(document.getElementById('organisation'+rowNo));
+                        var address = angular.element(document.getElementById('address'+rowNo));
+                        var title = angular.element(document.getElementById('title'+rowNo));
+                        var mobile = angular.element(document.getElementById('mobile'+rowNo));
+                        var email = angular.element(document.getElementById('email'+rowNo));
+                        organisation.attr('readonly',true);
+                        address.attr('readonly',true);
+                        title.attr('readonly',true);
+                        mobile.attr('readonly',true);
+                        email.attr('readonly',true);
+                        return true;
+                    }
+                }else{ //Status != 'Draft' or 'Rejected'
+                    var organisation = angular.element(document.getElementById('organisation'+rowNo));
+                    var address = angular.element(document.getElementById('address'+rowNo));
+                    var title = angular.element(document.getElementById('title'+rowNo));
+                    var mobile = angular.element(document.getElementById('mobile'+rowNo));
+                    var email = angular.element(document.getElementById('email'+rowNo));
+                    organisation.attr('readonly',true);
+                    address.attr('readonly',true);
+                    title.attr('readonly',true);
+                    mobile.attr('readonly',true);
+                    email.attr('readonly',true);
+                    return true;
+                }
+            }
+
+            /*function compile(element){
+                var el = angular.element(element);    
+                $scope = el.scope();
+                $injector = el.injector();
+                $injector.invoke(function($compile){
+                    $compile(el)($scope)
+                })     
+            }*/
+
+            $scope.doSave = function(event) {
+                event.preventDefault();
+                console.log($scope.ResultData);
+                $scope.isLoading = true;
+                $scope.errorMessages = [];
+                var errorMessage =[];
+                errorMessage = validateChecking($scope.ResultData);
+                if(errorMessage.length>0){
+                    $scope.errorMessages = errorMessage;
+                    $scope.isLoading = false;
+                }else{
+                    var delRecipientIdsObj = JSON.stringify($scope.delRecipientIds);
+                    var apexRequestRecipient = getAllRequestRecipient($scope.ResultData);
+
+                    doSaveByApex(apexRequestRecipient,delRecipientIdsObj);
+                }                    
+            }
+
+            function validateChecking(resultInput){
+                errorMessages = [];
+                checkDuplicateRecord = [];
+                var requestPax = ({!paxNoJSON});
+                if (resultInput.length > requestPax){
+                    errorMessages.push("Number of recipients should not exceed the PAX number");
+                }
+                for (var i = 0; i < resultInput.length; i++) {
+                    var tempIndex = i+1;
+                    if(resultInput[i].ASI_GnH_Recipient__r){ 
+                        if(!resultInput[i].ASI_GnH_Recipient__r.Name){ 
+                            errorMessages.push("#"+ tempIndex +": Name should not be empty");
+                        }
+                        if(!resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Organization__c){ 
+                            errorMessages.push("#"+ tempIndex +": Organisation should not be empty");
+                        }
+                        if(!resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c){ 
+                            errorMessages.push("#"+ tempIndex +": Comapny Address should not be empty");
+                        }
+                        if(!resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Title__c){ 
+                            errorMessages.push("#"+ tempIndex +": Title should not be empty");
+                        }
+                        if(resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Email__c){
+                            var x = resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Email__c;
+                            var atpos = x.indexOf("@");
+                            var dotpos = x.lastIndexOf(".");
+                            if (atpos<1 || dotpos<atpos+2 || dotpos+2>=x.length) {
+                                errorMessages.push("#"+ tempIndex +": Invalid email address. Email address should follow the formatting as \"aaa@bbb.com\" ");
+                            }
+                        }
+                        var recordString = resultInput[i].ASI_GnH_Recipient__r.Name+resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Organization__c+resultInput[i].ASI_GnH_Recipient__r.ASI_GnH_Title__c;
+                        console.log("#"+ tempIndex +" combined key: "+recordString);
+                        if (checkDuplicateRecord.indexOf(recordString) >= 0){
+                            errorMessages.push("#"+ tempIndex +": Duplicated Recipient");
+                        }else{
+                            checkDuplicateRecord.push(recordString);
+                        }
+                    }
+                    else{
+                        errorMessages.push("#"+ tempIndex +": Please delete empty row");
+                    }
+                }
+                return errorMessages;
+            }
+
+            function doSaveByApex(apexRequestRecipient,delRecipientIdsObj) {
+                ASI_GnH_KR_ManageRecipientAllCtrl.doCashSave(apexRequestRecipient,delRecipientIdsObj, function(result, event){
+                    if(event.status){
+                        if(result.errorMessages.length>0){
+                            var i;
+                            for (i = 0; i < result.errorMessages.length; ++i) {
+                                $scope.errorMessages.push(helper.htmlEncode(result.errorMessages[i]));
+                            }
+                        }else{
+                            alert("Save success!");
+                            location.href = '/' + '{!$CurrentPage.parameters.id}';
+                        }
+                    } 
+                    else{
+                        alert(event.message);
+                    }
+                    $scope.isLoading = false;
+                    $scope.$apply();
+                    return false;                         
+                });
+            }
+
+            function getAllRequestRecipient (resultData){
+                var allRequestRecipient = {};
+                for(i=0;i<$scope.ResultData.length;i++){
+                    if ($scope.ResultData[i].newRecord){
+                        var requestRecipientObj = {
+                            ASI_GnH_Request__c:"",
+                            ASI_GnH_Recipient__c:"",
+                            ASI_GnH_Sys_Name__c:"",
+                            ASI_GnH_Sys_Title__c:"",
+                            ASI_GnH_Sys_Organization__c:"",
+                            ASI_GnH_Sys_Company_Address__c:"",
+                            ASI_GnH_Sys_Mobile__c:"",
+                            ASI_GnH_Sys_Email__c:""                        
+                        };
+
+                        if($scope.ResultData[i].ASI_GnH_Recipient__r.Name && $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Title__c 
+                           && $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Organization__c){
+                            requestRecipientObj.ASI_GnH_Request__c ='{!$CurrentPage.parameters.id}';
+                            requestRecipientObj.ASI_GnH_Sys_Name__c = $scope.ResultData[i].ASI_GnH_Recipient__r.Name;
+                            requestRecipientObj.ASI_GnH_Sys_Title__c = $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Title__c;
+                            requestRecipientObj.ASI_GnH_Sys_Organization__c = $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Organization__c;
+                            requestRecipientObj.ASI_GnH_Sys_Company_Address__c = $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c;
+                            requestRecipientObj.ASI_GnH_Sys_Mobile__c = $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Mobile__c;
+                            requestRecipientObj.ASI_GnH_Sys_Email__c = $scope.ResultData[i].ASI_GnH_Recipient__r.ASI_GnH_Email__c;
+                            allRequestRecipient[i] = requestRecipientObj;
+                        }
+
+                    }//else if($scope.ResultData[i].ASI_GnH_Recipient__c){
+                    //requestRecipientObj.ASI_GnH_Recipient__c =  $scope.ResultData[i].ASI_GnH_Recipient__c; 
+                    //}
+
+                }
+                console.log(allRequestRecipient);
+                return allRequestRecipient;
+            }
+
+        }).filter('unsafe', function($sce) {return $sce.trustAsHtml;});
+
+
+
+        //helper
+        helper = {
+            htmlEncode: function (input) {
+                var e = document.createElement('div');
+                e.innerHTML = input;
+                return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+            },
+            getGnHRequestId: function() {
+                var gnhrequestId = "{!$CurrentPage.parameters.id}";
+
+                return gnhrequestId;
+            },               
+            getRequestRecipientObject: function() {
+                return {
+                    Id:"",
+                    Name: "",
+                    ASI_GnH_Recipient__r : {
+                        Name:"",
+                        ASI_GnH_Email__c:"",
+                        ASI_GnH_Mobile__c:"",
+                        ASI_GnH_Organization__c:"",
+                        ASI_GnH_Title__c:""
+
+                    }
+                };
+            },
+            setCopyClaimDetail: function(newClaimDetail, baseClaimDetail) {
+                newClaimDetail = angular.copy(baseClaimDetail);
+                newClaimDetail.Id = null;
+                newClaimDetail.IsChanged = false;
+                return newClaimDetail;
+            },
+
+            getGnHRecipientObject: function(){
+                return{
+                    Id:"",
+                    Name: ""
+
+                }
+            }
+        };
+
+    </script>
+
+    <body class="bs">
+        <div class="fullScreenLoading"></div>
+        <div id="HeaderForm" class="bs container-fluid">
+            <apex:form id="form">
+                <div class="bs row">
+                    <div class="bs col-md-12" >    
+                        <div ng-app="myapp" ng-controller="ListController">     
+                            <div class="container-fluid">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="panel">
+                                            <div class="panel-body">
+                                                <apex:pageBlock >
+                                                    <apex:pageBlockButtons id="buttons">
+                                                        <button  type="button" ng-click="doSave($event)"  class="btn btn-success btn-sm searchbtn" >
+                                                            <span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Save
+                                                        </button>
+                                                        <apex:commandButton styleClass="btn btn-danger btn-sm searchbtn" style="font-weight: bold" value="Cancel" action="{!cancel}" 
+                                                                            />    
+                                                    </apex:pageBlockButtons>
+                                                    <div class="message errorM3 ng-hide alert-danger" role="alert" ng-show="errorMessages.length > 0" id="messageDiv">
+                                                        <strong><span>Error, Can not Save! Please check following error message:<br/></span></strong>
+                                                        <span>
+                                                            <ul ng-repeat="errorMsg in errorMessages track by $index" style="padding-left:10px;padding-top:0px;margin:0px">
+                                                                <li ng-bind="errorMsg"></li>
+                                                            </ul>
+                                                        </span>                                            
+                                                    </div>
+                                                    <apex:pageblocksection title="Manage Recipient">
+                                                        <apex:outputPanel styleClass="table-responsive">
+                                                            <b>Total Recipient:</b><span class="label label-primary">({{ResultData.length}} Results)</span> <br /><br />                                                           
+                                                            <apex:outputLink html-ng-click="addNewRecipientTop($event)">
+                                                                <apex:outputText value="Add New Recipient" />
+                                                                <br />
+                                                            </apex:outputLink>
+                                                            <br/>
+                                                            <table class="table table-bordered table-hover resultTable"   cellpadding="0" cellspacing="0">
+                                                                <thead class="thead-inverse">
+                                                                    <tr>
+                                                                        <th><apex:outputLink rendered="{!IF(isEditable!=2, true, false)}" html-ng-click="">
+                                                                            <apex:outputText value="Find Recipient"/>
+                                                                            </apex:outputLink><br/>
+                                                                            <autocomplete id="GnHRecipient" Class ="" style="height:25px" selection="GnHRecipient" object="ASI_GnH_Recipient_Master__c"  ng-model="typedRecipient"></autocomplete>
+                                                                            <!--Button id="button" Class =""  style="height:25px; text-align:center" value="Add"  ng-click="addRecipient(typedRecipient)" status="ActionStatus"  >Add</Button-->
+                                                                        </th>
+                                                                        <th><apex:outputText value="#" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Recipient_Master__c.Fields.Name.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Request_Recipient__c.Fields.ASI_GnH_Organization__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Request_Recipient__c.Fields.ASI_GnH_Company_Address__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Request_Recipient__c.Fields.ASI_GnH_Title__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Request_Recipient__c.Fields.ASI_GnH_Mobile__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_GnH_Request_Recipient__c.Fields.ASI_GnH_Email__c.Label}" /></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr ng-repeat="item in ResultData| startFrom: pagination.page * pagination.perPage | limitTo: pagination.perPage" class="my-repeat-animation" ng-class="{activeRow: item.Id == '' || item.IsChanged}">
+                                                                        <td>
+                                                                            <apex:outputLink rendered="{!IF(isEditable!=2, true, false)}" html-ng-click="addNewRecipient($event,$index)">
+                                                                                <apex:outputText value="Add" />
+                                                                            </apex:outputLink>
+                                                                            <apex:outputText value="       " />
+                                                                            <apex:outputLink rendered="{!IF(isEditable!=2, true, false)}" html-ng-click="removeRecipient($event,$index)">
+                                                                                <apex:outputText value="Delete" />
+                                                                            </apex:outputLink>
+                                                                        </td>
+                                                                        <td>{{$index+1}}</td>
+                                                                        <td>
+                                                                            <input class="required" id="name{{$index}}" ng-readonly="checkNewRecord($index)" type="text" ng-model="item.ASI_GnH_Recipient__r.Name" ng-change="" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="required" id="organisation{{$index}}" ng-readonly="" type="text" ng-model="item.ASI_GnH_Recipient__r.ASI_GnH_Organization__c" ng-change="" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="required" id="address{{$index}}" ng-readonly="" type="text" ng-model="item.ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c" ng-change="" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="required" id="title{{$index}}" ng-readonly="" type="text" ng-model="item.ASI_GnH_Recipient__r.ASI_GnH_Title__c" ng-change=""/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <input id="mobile{{$index}}" ng-readonly="" type="text" ng-model="item.ASI_GnH_Recipient__r.ASI_GnH_Mobile__c" ng-change=""/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <input id="email{{$index}}" ng-readonly="" type="text" ng-model="item.ASI_GnH_Recipient__r.ASI_GnH_Email__c" ng-change=""/>
+                                                                        </td>
+                                                                    </tr>                                                                    
+                                                                </tbody>
+                                                            </table>
+                                                            <div class="row">        
+                                                                <nav>
+                                                                    <ul class="pagination" >
+                                                                        <li>
+                                                                            <div class="pull-left paddright paddtop"><a ng-click="pagination.toPageId(0)">First&nbsp;&nbsp;</a></div>
+                                                                        </li>
+                                                                        <li>                        
+                                                                            <a href="#" aria-label="Previous" ng-click="pagination.prevPage()">
+                                                                                <span aria-hidden="true">&laquo;</span>
+                                                                            </a>
+                                                                        </li>
+                                                                        <li ng-repeat="n in [] | range: pagination.numPages" ng-class="{active: n == pagination.page}">
+                                                                            <a href="" ng-click="pagination.toPageId(n)">{{n + 1}}</a>
+                                                                        </li>
+                                                                        <li>
+                                                                            <a href="#" aria-label="Next" ng-click="pagination.nextPage()">
+                                                                                <span aria-hidden="true">&raquo;</span>
+                                                                            </a>
+                                                                        </li>
+                                                                        <li>
+                                                                            <div class="pull-left paddright paddtop"><a ng-click="pagination.toPageId(pagination.numPages - 1)">&nbsp;&nbsp;Last</a></div>
+                                                                        </li>
+                                                                    </ul>
+                                                                </nav>        
+                                                            </div>
+                                                        </apex:outputPanel> 
+                                                    </apex:pageblocksection>  
+                                                </apex:pageBlock>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div ng-show="isLoading" class="waiting-box"><span  ng-show="isLoading" >Please wait...<img  ng-show="isLoading" src="/img/loading.gif" /></span></div>
+                        </div>   
+                    </div>
+                </div>
+            </apex:form>
+        </div>
+    </body>
+</apex:page>

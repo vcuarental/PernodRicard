@@ -1,0 +1,568 @@
+<apex:page standardController="ASI_HK_CRM_Pre_Approval_Form__c"  sidebar="false"  docType="html-5.0" showHeader="true" extensions="ASI_CRM_HK_PAFCustomerEditController" action="{!init}">
+    
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>     
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_HK_Library, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_HK_Datatable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_HK_Library, 'dist/css/SimpleTable.css')}" />
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"/>
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.1/jquery-ui.min.js"/>  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_HK_Library, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_HK_Datatable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_HK_Library, 'dist/js/numericInput.min.js')}" />    
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_HK_Library, 'dist/js/CurrencyUtil.js')}" />    
+        <script type="text/javascript">
+        
+        $j = jQuery.noConflict();
+        
+        var headerId = null;
+        var resultTable;
+        var POLTable;
+        var returnURL;
+        var datatableILength = 15;   
+        var initCurrency; 
+        var allowReceiptAmountFloat = false;
+        var totalAmountDecimalPlace = 0;
+        var api;
+        
+        function initPOReceiptPage(config) {
+            if (config) {
+                headerId = config.headerId;
+                initCurrency = config.initCurrency;
+                if(initCurrency!=="JPY") { 
+                    allowReceiptAmountFloat = true;
+                    totalAmountDecimalPlace = 2;
+                }
+                setResultTable(true);
+                setPOLineTable(true);
+            }
+        }  
+        
+        $j(document).on('mousemove', function(e){
+            $j('#loadtext').css({
+                left:  e.pageX,
+                top:   e.pageY
+            });
+        });
+        
+        
+        
+        /*method for stop enter to submit form*/
+        function stopRKey(evt) {
+            var evt = (evt) ? evt : ((event) ? event : null);
+            var node = (evt.target) ? evt.target : ((evt.srcElement) ? evt.srcElement : null);
+            if ((evt.keyCode == 13) && (node.type=="text")) {return false;}
+        }
+        
+        document.onkeypress = stopRKey; 
+        
+        function setResultTable(newTable){    
+            resultTable =  $j('#dt_PAFCustomerLists').on( 'init.dt', function () {               
+            }).DataTable({   
+                
+                "bDestroy":true,
+                "bSearch":false,
+                "dom": '<"top">frt<"bottom"ip><"clear">',
+                "bAutoWidth":false,		    			
+                "iDisplayLength":datatableILength,
+                "sPaginationType": "full_numbers",
+                "bLengthChange": false,
+                "columnDefs": [{
+                    "targets": [ 0 ],
+                    "searchable": false,
+                    "orderable": false
+                }   
+                              ],
+                "footerCallback": function( tfoot, data, start, end, display ) {   
+                    api = this.api();
+                }
+            });
+            
+            $j("#checkbox-main-header0").click(function(e){
+                if($j(this).is(":checked")){
+                    $j('.checkbox-tr0').prop("checked",true);
+                }else{
+                    $j('.checkbox-tr0').prop("checked",false);
+                }
+            });
+            
+            $j("#checkbox-main-header2").click(function(e){
+                if($j(this).is(":checked")){
+                    $j('.checkbox-tr2').prop("checked",true);
+                }else{
+                    $j('.checkbox-tr2').prop("checked",false);
+                }
+            });//20160509,edited by Leo
+        }
+        
+        function setPOLineTable(newTable){   
+            POLTable =  $j('#dt_AccList').DataTable({
+                "bDestroy":true,
+                "bSort":true,
+                "dom": '<"top">frt<"bottom"ip><"clear">',
+                "iDisplayLength":datatableILength,
+                "order": [],
+                "columnDefs": [
+                    {
+                        "targets": [ 0 ], // action button
+                        "searchable": false,
+                        "orderable": false
+                    }
+                ]
+                
+                
+            });
+            $j("#checkbox-main-header1").click(function(e){
+                if($j(this).is(":checked")){
+                    $j('.checkbox-tr1').prop("checked",true);
+                }else{
+                    $j('.checkbox-tr1').prop("checked",false);
+                }
+            });
+        }
+        
+        function formatNumber(n) {
+            return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }    
+        
+        function FilterAction(){
+            /* 
+            var PADA = $j('#PADAFilter').val();
+            if (PADA != 'All'){
+                POLTable.column(3)
+                .search(PADA)
+                .draw();         
+            } else {
+                POLTable.column(3)
+                .search('')
+                .draw();
+            }  
+*/
+            var PADA = document.getElementById("PADAFilter").value;
+            searchServer(PADA);       
+        }
+        
+        $j(document).ready(function() {
+            initPOReceiptPage({
+                headerId: '{!header.Id}'
+            });    
+        } );
+        
+        function disableButton() {
+            $j('#divpaymentForm .btn').button('loading');
+        }  
+        function backToManageAll(hasError) {
+            if (hasError) {
+                $j('#divpaymentForm .btn').button('reset');
+                return;
+            }
+        }
+        
+        </script>
+        
+        <style type="text/css">
+            .dateFormat{
+            display:none;
+            }
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }
+            
+            
+            .amount{
+            border-left: 3px solid darkred !important;          
+            
+            }
+            
+            .receiptDate{
+            border-left: 3px solid darkred !important;   
+            }
+            
+            .dropdownDiv {
+            border-radius: 5px;
+            margin-bottom: 5px;
+            color: #666;
+            display: inline-block;
+            padding: 10px;
+            
+            }
+            .headsUpDiv {
+            padding: 5px; 
+            border-radius: 3px; 
+            background-color: rgb(217, 237, 247); 
+            color: #31708f; 
+            border: 1px solid #9acfea; 
+            display: inline-block;
+            }
+            .div-size {
+            height: 30px;
+            }
+            .btn-round {
+            align: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 100% !important;
+            font-size: 14px !important;
+            padding: 3px !important;
+            }
+            .btn-size {
+            height: 30px;
+            }
+            
+            
+            .btn-round.btn-lg {
+            width: 48px;
+            height: 48px;
+            }
+            
+            .btn-round.btn-sm {
+            width: 34px;
+            height: 34px;
+            }
+            
+            .btn-round.btn-xs {
+            width: 24px;
+            height: 24px;
+            }
+            
+            .lookupInput a{
+            display: block;
+            position: absolute !important;
+            top:0px !important;
+            }
+            
+            .lookupInput img{
+            float: right;
+            }
+            
+            span.lookupInput {
+            position: relative !important;
+            display:inherit !important;
+            }
+            
+            .lookupInput a, .lookupInput a{
+            border:none !important;
+            border-left: 3px solid darkred !important;          
+            background: none !important;
+            }
+            
+            .bs.panel-heading.div-size {
+            border-radius: 10px;
+            }
+            
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }  
+            
+            .required {
+            border-left: 3px solid darkred !important;  
+            }
+            .centerNum {
+            font-weight:bold;
+            text-align: center;
+            }
+            .rightNum {
+            font-weight:bold;
+            text-align: right;
+            padding-right:5px !important;
+            }
+            .headerCen {
+            text-align: center !important;
+            }
+        </style>
+        
+    </head>
+    
+    <apex:form id="frm_Form" styleclass="objectFormCls" >
+        <div id="divReceiptForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-12">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="POReceiptDetailPanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title" >Pre-Approval Form Details</h5>
+                        </div>
+                        <div class="bs panel-body">                                           
+                            <div class="bs table-responsive" > 
+                                <table class="bs table" style="margin-bottom:0">
+                                    <tr>
+										<td style="width:15%"><apex:outputLabel value="PAF Number" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td style="width:35%">
+                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!Header.ID}" target="_blank">
+                                                <apex:outputField value="{!Header.Name}"></apex:outputField>
+                                            </apex:outputLink>
+                                        </td> 
+                                        <td style="width:15%"><apex:outputLabel value="Status" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td style="width:35%"><apex:outputField value="{!Header.ASI_HK_CRM_PAF_Status__c}"></apex:outputField></td>
+                                    </tr>
+                                    <tr>
+                                        <td><apex:outputLabel value="Customer" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_HK_CRM_PAF_Customer__c}"></apex:outputField></td>
+                                        <td><apex:outputLabel value="Start Date" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_HK_CRM_PAF_Start_Date__c}"></apex:outputField></td>             
+                                    </tr>
+                                    <tr>
+                                        <td><apex:outputLabel value="Channel" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_HK_CRM_PAF_Customer__r.ASI_HK_CRM_Channel__c}"></apex:outputField></td> 
+                                        <td><apex:outputLabel value="End Date" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_HK_CRM_PAF_End_Date__c}"></apex:outputField></td>             
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </apex:outputPanel>
+                    <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title">Channel PAF Customer List</h5>
+                        </div>  
+                        <div class="bs panel-body">        
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                
+                                <strong>Error! Cannot Save!</strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Quick Save Success!</strong>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>    
+                            
+                            <div class='bs wrapper text-center' id='bs toolbar' >
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Add All"
+                                                      style="font-weight: bold"
+                                                      action="{!AddAllLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="True" 
+                                                      target="_parent" >
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Add Selected"
+                                                      style="font-weight: bold"
+                                                      action="{!AddSelectedLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="True" 
+                                                      target="_parent" >
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Remove All"
+                                                      style="font-weight: bold"
+                                                      action="{!RemoveAllLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="True" 
+                                                      target="_parent" >
+                                    </apex:commandLink>
+                                </div>&nbsp; 
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Remove Selected"
+                                                      style="font-weight: bold"
+                                                      action="{!RemoveSelectedLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="True" 
+                                                      target="_parent" >
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Save"
+                                                      style="font-weight: bold"
+                                                      action="{!saveLinetems}" 
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="True" 
+                                                      target="_parent" >
+                                        <apex:param name="IS_QUICK_SAVE" value="false"/>
+                                    </apex:commandLink>
+                                </div>&nbsp;                                            
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Quick Save"
+                                                        action="{!onCommitted}"
+                                                        status="ActionStatus"
+                                                        onclick="resultTable.page.len( -1 ).draw(false);"
+                                                        oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                        reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                        rendered="True" 
+                                                        html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                                    </apex:commandButton>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Cancel"
+                                                        action="{!cancel}" 
+                                                        html-data-loading-text="Loading..."
+                                                        html-formnovalidate="formnovalidate"/>
+                                </div>                             
+                            </div>
+                            <table id="dt_PAFCustomerLists" class="hover responsive no-wrap compact stripe" style="width: 100%;" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th style="width:20px"><input type="checkbox" id="checkbox-main-header0" /></th>
+                                        <th style="width:20px"></th>
+                                        <th>Customer Name</th>
+                                        <th>PA / DA</th>
+                                        <th>Parent Account</th>
+                                        <th><input type="checkbox" id="checkbox-main-header2" />Generate Price Set</th><!--20160509,edited by Leo-->
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <apex:variable value="{!0}" var="i"/>
+                                    <apex:repeat value="{!allPAFCustomerMap}" var="AccId">
+                                        <apex:variable var="i" value="{!i+1}"/>
+                                        <tr>
+                                            <td><apex:inputCheckbox value="{!allPAFCustomerMap[AccId].Checked}"  styleClass="checkbox-tr0"></apex:inputCheckbox></td>
+                                            <td><apex:commandLink style="border: none;background-color: transparent;"
+                                                                  reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                  action="{!removeLine}"
+                                                                  onclick="resultTable.page.len( -1 ).draw(false);"
+                                                                  oncomplete="console.log('Remove Done');setResultTable(true);setPOLineTable(true);"
+                                                                  status="ActionStatus"
+                                                                  immediate="false"
+                                                                  title="Remove line {!i}"
+                                                                  html-formnovalidate="formnovalidate"
+                                                                  rendered="TRUE"
+                                                                  html-data-loading-text="Loading..." >
+                                                <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 10px;"></span>
+                                                <apex:param name="PARAM_PORLine_ID" value="{!AccId}" />
+                                                </apex:commandLink>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPAFCustomerMap[AccId].CustomerID}" target="_blank">
+                                                    <apex:outputText value="{!allPAFCustomerMap[AccId].CustomerName}"></apex:outputText>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{!allPAFCustomerMap[AccId].PADA}"></apex:outputText>
+                                            </td>
+                                            <td><!--20160628,edited by Leo-->
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPAFCustomerMap[AccId].parentID}" target="_blank">
+                                                    <apex:outputText value="{!allPAFCustomerMap[AccId].parentName}"></apex:outputText>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><!--20160509,edited by Leo-->
+                                                <apex:inputCheckbox styleClass="checkbox-tr2" value="{!allPAFCustomerMap[AccId].GenPriceSet}"></apex:inputCheckbox>
+                                            </td>
+                                        </tr>
+                                    </apex:repeat> 
+                                </tbody>  
+                            </table>
+                        </div>
+                    </apex:outputPanel>
+                    <apex:outputPanel styleclass="bs panel-primary" id="poLinePanel" rendered="True" >
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">Account List</h5>
+                        </div>
+                        <div class="bs panel-body" style="padding-bottom:0"> 
+                            <table width="100%">                  
+                                <tr>
+                                    <td> <b>PA / DA: </b> &nbsp;
+                                        <select id="PADAFilter" styleClass="PADAFilter" onchange="FilterAction();">
+                                            <option value="All">All</option>
+                                            <option value="PA">PA</option>
+                                            <option value="DA">DA</option>
+                                        </select> 
+                                    </td>
+                                </tr>
+                                <apex:actionFunction name="searchServer" action="{!getAccount}" rerender="dt_div" oncomplete="setPOLineTable(true);" status="ActionStatus">
+                                    <apex:param name="PADA" value="" />
+                                </apex:actionFunction>
+                            </table>
+                        </div>
+                        <apex:outputPanel styleclass="bs panel-primary" id="dt_div" rendered="True" >
+                            <div class="bs panel-body" id="dt_div">     
+                                <table id="dt_AccList" class="hover responsive no-wrap compact stripe" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:20px"><input type="checkbox" id="checkbox-main-header1" /></th>
+                                            <th style="width:20px"> </th>
+                                            <th>Customer Name</th>
+                                            <th>PA / DA</th>
+                                            <th>Parent Account</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <apex:repeat value="{!allChannelAccMap}" var="Accs">
+                                            <tr>
+                                                <td><apex:inputCheckbox value="{!allChannelAccMap[Accs].Checked}" styleClass="checkbox-tr1"></apex:inputCheckbox></td>
+                                                <td> <apex:commandLink style="border: none;background-color: transparent;"
+                                                                       action="{!addLineItem}"
+                                                                       reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                       immediate="false"
+                                                                       status="ActionStatus"
+                                                                       onclick="resultTable.page.len( -1 ).draw(false);POLTable.page.len( -1 ).draw(false);"
+                                                                       oncomplete="console.log('Add');setResultTable(true);setPOLineTable(true);"
+                                                                       html-formnovalidate="formnovalidate">
+                                                    <span class="bs glyphicon glyphicon-plus"  style="color:green;font-size: 10px;"></span>
+                                                    <apex:param name="PARAM_POLINE_SOURCE_ITEM_ID" value="{!Accs}" />
+                                                    </apex:commandLink>
+                                                    
+                                                </td>
+                                                <td>
+                                                    <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allChannelAccMap[Accs].AccountId}" target="_blank">
+                                                        <apex:outputText value="{!allChannelAccMap[Accs].AccountName}"></apex:outputText>
+                                                    </apex:outputLink>
+                                                </td>
+                                                <td>
+                                                    <apex:outputText value="{!allChannelAccMap[Accs].PADA}"></apex:outputText>
+                                                </td>
+                                                <td><!--20160628,edited by Leo-->
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allChannelAccMap[Accs].parentID}" target="_blank">
+                                                    <apex:outputText value="{!allChannelAccMap[Accs].parentName}"></apex:outputText>
+                                                </apex:outputLink>
+                                            </td>
+                                            </tr>
+                                        </apex:repeat>
+                                    </tbody>
+                                </table>             
+                            </div>
+                        </apex:outputPanel>
+                    </apex:outputPanel>                            
+                </div>
+            </div>
+            <apex:actionstatus id="ActionStatus">
+                <apex:facet name="start">
+                    <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb; height: 100%; width:100%; opacity:0.65;"> 
+                        <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                            &nbsp;&nbsp;&nbsp;
+                            <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                            <span class="waitingDescription">Please Wait...</span>
+                        </div>
+                    </div>
+                </apex:facet>
+            </apex:actionstatus>
+        </div>
+    </apex:form>        
+</apex:page>

@@ -1,0 +1,201 @@
+<apex:page standardController="ASI_CRM_EVENTCapture__c" extensions="ASI_CRM_MY_EventReport" docType="html-5.0" recordSetVar="var"  sidebar="true" id="page">
+    <apex:sectionHeader title="Report" subtitle="Event / Activation Report"/>
+    
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jszip, '/jquery-1.12.4.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jszip, '/jszip.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jszip, '/FileSaver.min.js')}"/>
+    
+    <script type="text/javascript">
+    var j$ = jQuery.noConflict();
+    
+    j$(document).ready(function() {
+        
+        var inputDateStart = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecDateFrom.inputDateStart}');
+        //inputDateStart.datepicker( "option", "dateFormat", 'yy-mm-dd' );
+        
+        var accountId = 'test';
+        if(!accountId) {
+            j$('#message').text('Error: This page must be used in combination with a specific Account. Please navigate to an Account and click the Create Opportunities ZIP button to use this page.');
+            return;
+        }
+        
+        
+    });
+    
+    
+    function downloadZip() {
+        
+        var zipFile = new JSZip();			// Instantiate a new zip file
+        var zipFilename = '{!zipFilename}';	// Get filename from the controller
+        var count = 0;						// File count
+        
+        var inputName = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecName.inputName}');
+        inputName = (inputName!=undefined) ? inputName.value : '';
+        
+        var inputKey = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecKey.inputKey}');
+        inputKey = (inputKey!=undefined) ? inputKey.value : '';
+        
+        var inputAct = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecAct.inputActivity}');
+        inputAct = (inputAct!=undefined) ? inputAct.value : '';
+        
+        var inputBranch = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecBranch.inputBranch}');
+        inputBranch = (inputBranch!=undefined) ? inputBranch.value : '';
+        
+        var inputDateStart = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecDateFrom.inputDateStart}');
+        inputDateStart = (inputDateStart!=undefined) ? inputDateStart.value : '';
+        
+        var inputDateEnd = document.getElementById('{!$Component.page.form.pgBlk.eventtable.pgBlkSec.pgBlkSecDateTo.inputDateEnd}');
+        inputDateEnd = (inputDateEnd!=undefined) ? inputDateEnd.value : '';
+        
+        // Call controller function to get a list of XML files
+        // Response is an object with filename as key and XML body as value
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_CRM_MY_EventReport.getXMLFiles}',
+            inputName, inputAct, inputKey,
+            inputBranch, inputDateStart, inputDateEnd,
+            function(result, event) {
+                if(event.status) {
+                    // Loop through files and add each one to the zip
+                    // One result contains the Schedule Ids for all Schedule records that were used
+                    for(var xmlFilename in result) {
+                        count++;
+                        //compressFile(zipFile, xmlFilename, result[xmlFilename]);
+                        zipFile.file(xmlFilename, result[xmlFilename], {base64: true});
+                        console.log(xmlFilename);
+                    }
+                    
+                    if(count > 0) {
+                        
+                        zipFile.generateAsync({type:"blob"})
+                        .then(function(content) {
+                            // see FileSaver.js
+                            //file name
+                            var d = new Date();
+                            var fn  = '{!zipFileName}';
+                                //d.getFullYear() +''+ d.getMonth() +''+ d.getDate()+''+ d.getHours()+''+ d.getMinutes()+'.zip';
+                            
+                            saveAs(content, fn);
+                        });
+                        return;
+                        
+                    } else {
+                        j$('#message').html('No XML files were generated. Please make sure your Account is setup correctly with at least one Opportunity record. ');
+                    }
+                } else if(event.type === 'exception') {
+                    j$('#message').html('An error occurred and the XML files were not able to be generated. <br/>Error message: ' + event.message);
+                } else {
+                    j$('#message').html('An error occurred and the XML files were not able to be generated. <br/>Error message: ' + event.message);
+                }
+            }
+        );
+    }
+    
+    </script>
+    
+    <apex:form id="form">
+        <apex:pageBlock id="pgBlk">
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="Search" styleClass="btn" action="{!searchEvents}" reRender="eventtable" />
+                <apex:commandLink value="Download to PDF" target="blank" styleClass="btn" action="{!getEventsReport}" />
+                <apex:commandButton value="Download to Excel" styleClass="btn" action="{!getEventsExcel}" />
+                <input type="button" value="Download Image" onclick="downloadZip()" class="btn" />
+            </apex:pageBlockButtons>
+            
+            <apex:pageBlockSection id="eventtable" columns="1">
+                <apex:pageBlockSection columns="2" id="pgBlkSec">
+                    <apex:pageBlockSectionItem id="pgBlkSecName">
+                        <apex:outputLabel value="Event / Activation" />
+                        <apex:inputText id="inputName" value="{!name}"  />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="pgBlkSecKey">
+                        <apex:outputLabel value="Key search" />
+                        <apex:inputText id="inputKey" value="{!keysearch}"  />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="pgBlkSecAct">
+                        <apex:outputLabel value="Activity" />
+                        <apex:selectList id="inputActivity" value="{!activity}" size="1">
+                            <apex:selectOptions value="{!Activitys}"></apex:selectOptions>
+                        </apex:selectList>
+                    </apex:pageBlockSectionItem>
+                    
+                    <apex:pageBlockSectionItem id="pgBlkSecDateFrom">
+                        <apex:outputLabel value="Start Date" />
+                        <!--apex:inputField id="inputDateFrom" value="{!searchRec.ASI_CRM_MY_ActivationStartDate__c}"  /-->
+                        <apex:input type="date" id="inputDateStart" value="{!startDate}" />
+                    </apex:pageBlockSectionItem>
+                    
+                    <apex:pageBlockSectionItem id="pgBlkSecBranch">
+                        <apex:outputLabel value="Branch" />
+                        <apex:selectList id="inputBranch" value="{!branch}" size="1">
+                            <apex:selectOptions value="{!Branchlist}"></apex:selectOptions>
+                        </apex:selectList>
+                    </apex:pageBlockSectionItem>
+                    
+                    <apex:pageBlockSectionItem id="pgBlkSecDateTo">
+                        <apex:outputLabel value="End Date" />
+                        <!--apex:inputField id="inputDateTo" value="{!searchRec.ASI_CRM_MY_ActivationEndDate__c}" /-->
+                        <apex:input type="date" id="inputDateEnd" value="{!endDate}" />
+                    </apex:pageBlockSectionItem>
+                </apex:pageBlockSection>
+                
+                <apex:pageBlockTable value="{!eventList}" var="c">
+                    <apex:column >
+                        <apex:facet name="header">Event Name</apex:facet>
+                        {!c.Name}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Activity</apex:facet>
+                        {!c.Activity}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Sub-brand</apex:facet>
+                        {!c.Subbrand}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Outlet</apex:facet>
+                        <apex:outputText value="{!c.Outlet}" escape="false" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Branch</apex:facet>
+                        <apex:outputText value="{!c.Branch}" escape="false" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Start Date</apex:facet>
+                        <apex:outputText value="{0,date,yyyy-MM-dd}">
+                            <apex:param value="{!c.StartDate}" />
+                        </apex:outputText>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">End Date</apex:facet>
+                        <apex:outputText value="{0,date,yyyy-MM-dd}">
+                            <apex:param value="{!c.EndDate}" />
+                        </apex:outputText>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Type</apex:facet>
+                        {!c.TypeActivation}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Sales person</apex:facet>
+                        {!c.Salesman}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Last Modified</apex:facet>
+                        {!c.LastModified}
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Attachments</apex:facet>
+                        <apex:repeat value="{!c.EventAttachment}" var="t">
+                            <apex:image url="/servlet/servlet.FileDownload?file={!t.Id}" width="64px" style="margin:2px;" /> 
+                        </apex:repeat>
+                    </apex:column>
+                </apex:pageBlockTable>
+                
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+        
+        
+        <h2 id="message"></h2>
+    </apex:form>
+    
+</apex:page>

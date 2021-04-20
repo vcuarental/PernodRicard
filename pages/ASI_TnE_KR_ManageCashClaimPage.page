@@ -1,0 +1,1619 @@
+<apex:page standardController="ASI_TnE_ClaimHeader__c" sidebar="false" showHeader="true" extensions="ASI_TnE_KR_ClaimManageAllCtrl" action="{!init}" docType="html-5.0" >
+
+    <head>
+
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Ng_SimplePagination, 'ASI_JS_Ng_SimplePagination/simplePagination.js')}" />  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+
+    </head>
+
+    <style>
+
+        input.inputField {
+            width: auto !important;
+        }
+
+        .table td, 
+        .table th {
+            white-space: nowrap;
+            width: 1%;
+        }
+
+        .boldRedText {
+            color:red;
+            font-weight:bold
+        }
+
+        .waiting-box {
+            display: block;
+            position: absolute; /* fixed position so it doesn't scroll */
+            width: 250px;
+            top: 10px; 
+            background-color: #fbfbfb;
+            height: 100%; width:100%; 
+            opacity:0.65;
+        }
+
+        .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+        }
+
+        .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+        }
+
+        .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            overflow:auto;
+            padding-right: 20px;
+            left: 0;
+        }
+
+        *html .ui-autocomplete {
+            height: 200x;
+        }
+
+        .bs.panel-heading.div-size {
+            border-radius: 10px;
+        }
+
+        .required {
+            border-left: 3px solid darkred !important;  
+        }
+
+        .hide {
+            display: none; 
+        }
+
+        .ui-helper-hidden-accessible { display:none !important;} 
+
+        .ui-helper-hidden-accessible { position: absolute; left:-999em !important;}
+        input:-moz-read-only { /* For Firefox */
+            background-color: Gainsboro;
+        }
+
+        input:read-only {
+            background-color: Gainsboro;
+        }
+
+        textarea:disabled {
+            background-color: Gainsboro;
+        }
+
+        select:disabled {
+            background-color: Gainsboro;
+        }
+
+        #loadingpart {
+            display: block;
+            position: absolute;
+            top: -30;
+            left: 0;
+            z-index: 100;
+            //width: 100vw;
+            height: 100vh;
+            background-color: rgba(192, 192, 192, 0.5);
+            background-image: url("/img/loading.gif");
+            background-repeat: no-repeat;
+            background-position: 5%;
+        }
+
+        .warning-background{
+            color: #fff; 
+            background: #f2dede
+        }        
+        .btn-primary{
+            margin-right: 10px;
+        }
+        .container{
+            margin: 20px 0;
+        }
+    </style>
+
+    <script type="text/javascript">
+        /***************************
+        VF Page for Cash Claim 
+        ***************************/
+
+        var app = angular.module("myapp", ['simplePagination']);
+
+        app.directive('autocomplete', function(GetMasterData) {        
+            var  resultList = [];
+            var  multiplecache ={};
+            return {
+                restrict: 'E',
+                replace:true,
+                transclude: true, 
+                template:  '<input name="autocomplete" class="inputField" type="text" ></input>',
+                link: function (scope, elem, attrs) {
+                    scope.$watch(attrs.object, function(value) { 
+                        elem.autocomplete({
+                            minLength:1,
+                            source: function(request, response){
+                                request.term =request.term.replace(/'/g, "\\'");
+                                var queryTerm = '%' + request.term +'%';
+                                var additonalQuery = '';
+                                var selectQuery = '';
+
+                                if(attrs.selection==="CustomerName"){
+                                    additonalQuery = ' Where Name like \'' + queryTerm + '\'';
+                                    additonalQuery += ' AND (RecordType.DeveloperName = \'ASI_CRM_KR_Venue\' OR RecordType.DeveloperName = \'ASI_CRM_KR_Wholesaler\' '+ ') AND ASI_CRM_CN_Inactive_Flag__c = false';
+                                    selectQuery = 'Id, Name, ASI_CRM_CN_Address__c';
+                                }  
+                                if(attrs.selection=="WhereVenueName"){
+                                    additonalQuery = ' Where Name like \'' + queryTerm + '\'';
+                                    additonalQuery += ' AND RecordType.DeveloperName = \'ASI_CRM_KR_Venue\' AND ASI_CRM_CN_Inactive_Flag__c = false';
+                                    selectQuery = 'Id, Name';
+                                    // Added by 2107-10-13 Linus@introv
+                                    selectQuery = 'Id, Name, ASI_CRM_CN_Address__c';
+                                }
+                                if(attrs.selection==="BudgetOwner"){
+                                    additonalQuery = ' Where Name like \'' + queryTerm + '\'';
+                                    additonalQuery += ' AND CompanyName = \'Pernod Ricard Korea\' AND ASI_KOR_Commission_Code__c != null ';
+                                    selectQuery = 'Id, Name';
+                                }
+                                if(attrs.selection==="GnHForm"){
+                                    //console.log('Finding GnH Form');
+                                    additonalQuery = ' Where (((Name like \'' + queryTerm + '\'' + ' OR ASI_GnH_Applicant__r.Name like \'' + queryTerm + '\')'  + ' AND ASI_GnH_Applicant__c = \'' + "{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Payee__c}" + '\')'+ ' OR ((Name like \'' + queryTerm + '\'' + ' OR ASI_GnH_Applicant__r.Name like \'' + queryTerm + '\')'  + ' AND OwnerId = \'' + "{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Payee__c}" + '\'))';
+                                    additonalQuery += ' AND ASI_GnH_Status__c = \'Approved\' AND ASI_GnH_Company__c = \'Pernod Ricard Korea\' ';
+                                    additonalQuery += ' AND (RecordType.DeveloperName = \'ASI_GnH_KR_Offer_Request_Read_Only\' OR RecordType.DeveloperName = \'ASI_GnH_KR_Receive_Request_Read_Only\' )';
+                                    selectQuery = 'Id,Name, ASI_GnH_Applicant__c, ASI_GnH_Applicant__r.Name, ASI_GnH_Department__c, ASI_GnH_Amount_per_Recipient__c, ASI_GnH_Type__c';
+                                }
+                                if(attrs.selection==="GnHRecipient"){
+                                    console.log('Finding GnH Recipient');
+                                    additonalQuery = ' Where (Name like \'' + queryTerm + '\'' + ' OR ASI_GnH_Title__c like \'' + queryTerm + '\'' + ' OR ASI_GnH_Organization__c like \'' + queryTerm + '\')';
+                                    additonalQuery += ' AND (RecordType.DeveloperName = \'ASI_GnH_KR_Recipient_Master\' OR RecordType.DeveloperName = \'ASI_GnH_KR_PR_Staffs_Master\' )';
+                                    additonalQuery += ' AND ASI_GnH_Active__c = true ';
+                                    selectQuery = 'Name,ASI_GnH_Title__c, ASI_GnH_Organization__c, ASI_GnH_Company_Address__c, ASI_GnH_Mobile__c, ASI_GnH_Email__c';
+                                }
+                                GetMasterData.getData(attrs.object, selectQuery, additonalQuery).then(function(result){
+                                    resultList = [];
+                                    if (!result) {
+                                        var noResult = { value:"",label:"No results found" };
+                                        response(noResult);
+                                    }else{
+                                        for (var i = 0; i < result.length; i++) {
+                                            //console.log('Results Found '+result);
+                                            var tempresult = new Object();
+                                            if (attrs.selection=="CustomerName"||attrs.selection=="WhereVenueName"||attrs.selection=="BudgetOwner"){
+                                                tempresult.label  = helper.htmlEncode(result[i]["Name"]);
+                                            }
+                                            if (attrs.selection=="GnHForm"){
+                                                tempresult.label  = helper.htmlEncode(result[i]["Name"]);
+                                                //tempresult.label  = helper.htmlEncode(result[i]["ASI_GnH_Applicant__r"]["Name"]);
+                                            }
+                                            if (attrs.selection=="GnHRecipient"){
+                                                tempresult.label  = helper.htmlEncode(result[i]["Name"]);
+                                            }
+                                            tempresult.value =  result[i]["Id"];
+                                            //console.log('Label: '+ tempresult.label+' AND Value: '+tempresult.value);
+
+                                            if(selectQuery!=null){
+                                                if(attrs.selection=="CustomerName" || attrs.selection=="WhereVenueName"){ 
+                                                    tempresult.desc =  result[i]["ASI_CRM_CN_Address__c"]!=null?helper.htmlEncode(result[i]["ASI_CRM_CN_Address__c"]):"";
+                                                }
+                                                if(attrs.selection=="GnHForm"){ 
+                                                    tempresult.desc = ' - '+(result[i]["ASI_GnH_Applicant__r"]["Name"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Applicant__r"]["Name"]):"")
+                                                        +' - '+(result[i]["ASI_GnH_Type__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Type__c"]):"")
+                                                        +' - '+(result[i]["ASI_GnH_Amount_per_Recipient__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Amount_per_Recipient__c"]):"");
+                                                }
+                                                if(attrs.selection=="GnHRecipient"){ 
+                                                    tempresult.desc =  (result[i]["ASI_GnH_Organization__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Organization__c"]):"")
+                                                        +' - '+(result[i]["ASI_GnH_Company_Address__c"]!=null?helper.htmlEncode(result[i]["ASI_GnH_Company_Address__c"]):"");
+                                                }
+                                            }
+                                            tempresult.Obj=result[i];
+                                            resultList.push(tempresult);
+                                        }
+                                    }
+                                    response(resultList);
+                                }); 
+                            },
+                            response: function (event, ui) {
+
+                                if(ui.content.length===0){ 
+                                    console.log("No result found");
+                                }
+                                if (ui.content.length == 1){
+
+                                }                                   
+                            },
+                            open: function (event, ui) {
+                                var menu = $(this).data("uiAutocomplete").menu
+                                , i = 0
+                                , $items = $('li', menu.element)
+                                , item
+                                , text
+                                , startsWith = new RegExp("^" + $.ui.autocomplete.escapeRegex(this.value), "i");
+
+                                for (i = 0; i < $items.length && !item; i++) {
+                                    text = $items.eq(i).text();
+                                    if (startsWith.test(text)) {
+                                        item = $items.eq(i);
+                                    }
+                                }
+
+                                if (item) {
+                                    menu.focus(null, item);
+                                }
+                            },
+                            select: function(event, ui) {
+                                event.preventDefault();
+                                $(this).val(ui.item.label);
+                                console.log('Index: '+attrs.index);
+
+                                if(attrs.selection != "GnHRecipient" && typeof attrs.index!= 'undefined'){
+                                    console.log('Go1');
+                                    scope.setResultData(attrs.index, ui.item , attrs.object, attrs.selection,false);
+                                }else if (attrs.selection != "GnHRecipient"){
+                                    console.log('Go2');
+                                    scope.setMassAssignObj(ui.item , attrs.object, attrs.selection);
+                                }
+                                if(ui.item && attrs.selection == "GnHRecipient"){
+                                    console.log('Go10');
+                                    scope.addRecipient(attrs.index,ui.item.value);                                                     
+                                }  
+                                if(!ui.item && !foundInCache){
+                                    console.log('Go3');
+                                    this.value = '';
+                                    scope.setResultData(attrs.index, null, attrs.object, attrs.selection,false);                                                     
+                                }  
+                                scope.$apply();
+                                return false;                                    
+                            },
+                            focus: function( event, ui ) {
+                                event.preventDefault();
+                                $(this).val(ui.item.label);
+                                //  return false;  
+                            },
+                            change:function (event, ui) {
+                                if (ui.item && attrs.selection == "GnHForm") {
+                                    console.log('Go4');
+                                    scope.changeGnHRecipient(ui.item,attrs.index);
+                                }
+                                else if(!ui.item) {
+                                    this.value = '';
+                                    console.log('Go5');
+                                    scope.setResultData(attrs.index, null, attrs.object, attrs.selection,false);                                                                
+                                }               
+                                return false;   
+                            }
+                        }).focus(function() {
+                            $(this).autocomplete("search", "");
+                        }
+                                ).each(function() {
+                            $(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                                if(!item.desc){
+                                    return $("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><a>")  
+                                        .appendTo(ul);                                             
+                                }
+                                return $("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                                    .appendTo(ul); 
+                            };                        
+                        });
+                    });
+                }
+
+            };
+        });
+
+        app.factory('GetMasterData',function($q,$rootScope,$parse){  
+            var factory = {};  
+            factory.getData = function(ObjectName,SQLStatement,whereClause){  
+                var deferred = $q.defer();
+                RemoteGetMasterData(function(result){  
+                    $rootScope.$apply(function(){  
+                        deferred.resolve(result);  
+                    });  
+                }, ObjectName,SQLStatement,whereClause);  
+                return deferred.promise;  
+            }  
+            return factory;  
+        });    
+
+        function RemoteGetMasterData(callback, ObjectName,SQLStatement,whereClause){  
+            Visualforce.remoting.Manager.invokeAction(  
+                '{!$RemoteAction.ASI_TnE_KR_ClaimManageAllCtrl.findList}', ObjectName,SQLStatement,whereClause,
+                callback,  
+                {escape: false}  
+            );      
+        }
+
+
+        app.controller("ListController", function($scope,GetMasterData,Pagination,$sce,$parse) {
+            $scope.ResultData;
+            $scope.prkusers; 
+            $scope.numberOfRecordPerPage = 50;
+            $scope.pagination = Pagination.getNew($scope.numberOfRecordPerPage);
+            $scope.pagination.numPages = 0;    
+            $scope.isLoading = false;
+            $scope.delClaimDetailIds = [];
+
+            $scope.APIFieldNameMap = {};
+            //$scope.APIFieldNameMap["expenseCat"] = "ASI_TnE_Expense_Category__c";
+            //$scope.APIFieldNameMap[""] = "ASI_TnE_Expense_Classification__c";
+            $scope.APIFieldNameMap["BudgetOwner"] = "ASI_TnE_KR_Owner__c";
+            $scope.APIFieldNameMap["WhereVenueName"] = "ASI_TnE_KR_Where__c";
+            $scope.APIFieldNameMap["CustomerName"] = "ASI_TnE_KR_Customer__c";
+            $scope.APIFieldNameMap["GnHForm"] = "ASI_GnH_Request__c";
+            $scope.APIFieldNameMap["GnHRecipient"] = "ASI_GnH_Recipient_Master__c";
+
+            $scope.GnHRecipientListData;//Store All GnH Request Recipient Information, Key:GnH Request
+            $scope.delGnHRecipientIds = [];//Store All deleted GnH Recipient Id
+            $scope.GnHRecipientMasterList;//Store All Recipient Master Information, Key: Recipient Name
+            $scope.GnHReuqestList;//Store All GnH Request Information, Key: GnH Request Name
+
+            var claimHeaderId = helper.getheaderId();
+
+            getclaimDetailsByApex(claimHeaderId);
+            getSelectListItemByApex();
+            assignRecipientToDetails();
+            getRecipientMasterList();
+            getGnHRequestList();
+
+            this.expandAll = function (expanded) {
+                //console.log('Expand All');
+                $scope.$broadcast('onExpandAll', {expanded: expanded});
+            };
+
+            $scope.setMassAssignObj = function(item, objectName, fieldName){
+
+                var objectVar = 'selected';
+                objectVar = objectVar + fieldName;
+                model  = $parse(objectVar);
+                model.assign($scope, new Object());
+                var selectedVar = objectVar + '.IsSelected';
+                model  = $parse(selectedVar);
+                model.assign($scope, true);    
+                var itemVar =  objectVar + '.item';
+                if(!item){ 
+                    item = new Object();
+                }
+                item.label = item!=null? item.label:'';
+                item.value = item!=null? item.value:'';
+                model  = $parse(itemVar);
+                model.assign($scope, item); 
+
+                console.log("setMassAssignObj  -  item:" + item.GnHForm +"|objectName:" + objectName +"|fieldName: " + fieldName);
+
+            }
+
+            $scope.changePicklistValue = function(rowNo, fieldName, fieldValue) {
+                $scope.errorMessages = [];
+                fieldValue = typeof fieldValue !="undefined"? fieldValue :'';
+                console.log("changePicklistValue  -  rowNo:" + rowNo +"|fieldName:" + fieldName +"|fieldValue: " + fieldValue);
+                /*if(parseInt(rowNo) > $scope.numberOfRecordPerPage ){
+                        rowNo = parseInt(rowNo) ;
+                    }else   rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);*/
+                $scope.ResultData[rowNo].IsChanged = true;
+                $scope.ResultData[rowNo][fieldName] = fieldValue;
+
+            }
+
+            $scope.setResultData = function(rowNo, item, objectName, fieldName, resetIndex){
+
+                if(isNaN(rowNo)){
+                    $scope.setMassAssignObj(item, objectName, fieldName);
+                    return;
+                }
+
+                $scope.errorMessages = [];
+
+                if(parseInt(rowNo) > $scope.numberOfRecordPerPage  || resetIndex){
+                    rowNo = parseInt(rowNo) ;
+                }else  
+                    rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+
+                console.log("rowNo :" +rowNo + "|item :" + item + "|objectName :"+ objectName +" |fieldName :" +fieldName);
+                $scope.ResultData[rowNo].IsChanged = true;
+
+                var startWith = 'ResultData['+rowNo+ '].'; 
+
+                var returnAPIFieldName = $scope.APIFieldNameMap[fieldName]||'';
+                returnAPIFieldName = startWith + returnAPIFieldName;
+                model  = $parse(returnAPIFieldName);
+                var autocompleteValue = item!=null? item.value:'';
+                model.assign($scope,autocompleteValue);                    
+
+                fieldName = startWith + fieldName;
+                model  = $parse(fieldName);
+                var autocompleteLabel = item!=null? item.label:'';
+                model.assign($scope,autocompleteLabel); 
+            }
+
+            function setSelectListItemBlank() {
+                for (var i = 0; i < $scope.ResultData.length; i++) {
+
+                    if (!$scope.ResultData[i].ASI_TnE_Expense_Category__c){
+                        $scope.ResultData[i].ASI_TnE_Expense_Category__c= '';
+                    }
+                    if (!$scope.ResultData[i].ASI_TnE_Expense_Classification__c){
+                        $scope.ResultData[i].ASI_TnE_Expense_Classification__c= '';
+                    }
+                    if (!$scope.ResultData[i].ASI_TnE_Currency__c){
+                        $scope.ResultData[i].ASI_TnE_Currency__c= '';
+                    }
+                }
+            }
+
+            function getSelectListItemByApex() {
+                // RemoteAction
+                ASI_TnE_KR_ClaimManageAllCtrl.lookupFieldToSelectedOptions('ASI_JP_TnE_Expense_Classification__c','ASI_TnE_Expense_Category__c', function(results, event){
+                    if(event.status) {
+                        $scope.expenseCat = getDependentSelectListItem(results);
+                        //console.log('expenseCat Detail: '+$scope.expenseCat);
+                        $scope.$apply(); 
+                    } else { 
+                        alert(event.message);
+                    }
+                }, {escape: false});
+                ASI_TnE_KR_ClaimManageAllCtrl.getSelectedOptions('ASI_TnE_Currency__c', function(results, event){
+                    if(event.status) {
+                        $scope.currency =  getSelectListItem(results);
+                        $scope.$apply(); 
+                    } else {
+                        alert(event.message);
+                    }
+                }, {escape: false});
+                ASI_TnE_KR_ClaimManageAllCtrl.getSelectedOptions('ASI_GnH_Type__c', function(results, event){
+                    if(event.status) {
+                        $scope.gnhType =  getSelectListItem(results);
+                        //console.log('Got GnH Type : '+$scope.gnhType);
+                        $scope.$apply(); 
+                    } else {
+                        alert(event.message);
+                    }
+                }, {escape: false});
+                ASI_TnE_KR_ClaimManageAllCtrl.getRecipientOptions('ASI_TnE_Recipient_Type__c', function(results, event){
+                    if(event.status) {
+                        $scope.recipientType =  getSelectListItem(results);
+                        //console.log('Got Recipient Type: '+$scope.recipientType);
+                        $scope.$apply(); 
+                    } else {
+                        alert(event.message);
+                    }
+                }, {escape: false});
+                return false;
+            }
+
+            function getSelectListItem(resultMap) {
+                var resultObj = new Object();
+                var i = 0;
+                for (var key in resultMap) {
+                    resultObj[i] = {value: key, label: helper.htmlEncode(resultMap[key])};
+                    i++;
+                }
+                return resultObj;
+            }
+
+            function getDependentSelectListItem(resultList) {
+                var resultObj = [];
+                for (var i = 0; i < resultList.length; i++) {
+                    var tempresult = new Object();
+                    tempresult.label  = helper.htmlEncode(resultList[i]["label"]);
+                    tempresult.value  = helper.htmlEncode(resultList[i]["recordId"]);
+                    tempresult.gnhRelated  = helper.htmlEncode(resultList[i]["gnhRelated"]);
+                    tempresult.childObject  = getSelectListItem(resultList[i]["childPicklist"]);
+                    //console.log(tempresult.label+'-'+tempresult.value+'-'+tempresult.gnhRelated);
+                    resultObj[i] = tempresult;
+                }
+                return resultObj;
+            }
+
+            function validateChecking(resultInput){
+                errorMessages = [];
+                var gnhRequestMap = ({!gnhRequestMapJson});
+                var totalAmountandPaxPerGnHForm = {};
+                var thresholdList = ({!TnEThresholdJson});
+                console.log('Start Validation: '+$scope.ResultData);
+                for (var i = 0; i < $scope.ResultData.length; i++) {
+                    //console.log('GnH selected: '+gnhId);
+                    //console.log('GnH Existed in another value: '+ gnhRequestMap[gnhId]);
+                    var checkDuplicateRecord = [];
+                    var tempIndex = i+1;
+                    if(!resultInput[i].ASI_TnE_Receipt_Date__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Receipt Date");
+                    }
+                    if(!resultInput[i].ASI_TnE_Expense_Category__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Expense Category");
+                    }  
+                    if(!resultInput[i].ASI_TnE_Expense_Classification__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Expense Classification");
+                    }
+                    if(!resultInput[i].ASI_TnE_Currency__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Currency");
+                    }
+                    if(!resultInput[i].ASI_TnE_Receipt_Amount__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Receipt Amount");
+                    }
+                    if(!resultInput[i].ASI_TnE_Total_Number_Pax__c){
+                        errorMessages.push("#"+ tempIndex +": Please input Pax");
+                    }
+                    if(!resultInput[i].ASI_TnE_Details_of_Expense__c){
+                        errorMessages.push("#"+ tempIndex +":Details of Expense is Empty");
+                    }
+                    if(resultInput[i].aboveThreshold == true && !resultInput[i].GnHForm){
+                        console.log('Flag: '+resultInput[i].aboveThreshold+' && '+resultInput[i].GnHForm);
+                        errorMessages.push("#"+ tempIndex +": The amount is over the G&H threshold, please fill in the approved G&H Form");
+                    }
+                    if(resultInput[i].GnHMandatory && (!resultInput[i].ASI_GnH_Type__c || !resultInput[i].ASI_TnE_Recipient_Type__c)){
+                        errorMessages.push("#"+ tempIndex +": Please Select G&H Type and Recipent Type");
+                    }
+                    if(resultInput[i].aboveThreshold == true && !resultInput[i].GnHForm){
+                        console.log('Flag: '+resultInput[i].aboveThreshold+' && '+resultInput[i].GnHForm);
+                        errorMessages.push("#"+ tempIndex +": The amount is over the G&H threshold, please fill in the approved G&H Form");
+                    }
+                    if(resultInput[i].GnHForm){
+                        var gnhId = resultInput[i].ASI_GnH_Request__c;
+                        var gnhForm = resultInput[i].GnHForm;
+                        var tolerance = thresholdList[0];
+                        var totalAmt = resultInput[i].ASI_TnE_Receipt_Amount__c;
+                        var amountPerPax = resultInput[i].ASI_TnE_Receipt_Amount__c/resultInput[i].ASI_TnE_Total_Number_Pax__c;
+                        console.log($scope.GnHReuqestList);
+                        var gnhApprovedAmt = $scope.GnHReuqestList[gnhForm].ASI_GnH_Total_Request_Amount__c;//Amount Approved total in GnH Request
+                        var gnhApprovedAvg = $scope.GnHReuqestList[gnhForm].ASI_GnH_Amount_per_Recipient__c;//Amount Approved per recipient in GnH Request
+
+                        var gnhApprovedAmtTolerance = gnhApprovedAmt * tolerance;
+                        var gnhApprovedAvgTolerance = gnhApprovedAvg * tolerance;
+
+                        var recipientType = $scope.GnHReuqestList[gnhForm].ASI_GnH_Recipient_Type__c;
+                        var gnhType = $scope.GnHReuqestList[gnhForm].ASI_GnH_Type__c;
+
+                        if (gnhRequestMap[gnhId]){
+                            errorMessages.push("#"+ tempIndex +": This GnH form is used in another TnE Claim, Please choose another GnH form to proceed");
+                        }
+                        if(totalAmt > gnhApprovedAmtTolerance){
+                            errorMessages.push("#"+ tempIndex +": Total Amount exceeded in selected GnH Request");
+                        }
+                        if(amountPerPax > gnhApprovedAvgTolerance){
+                            errorMessages.push("#"+ tempIndex +": Amount Per Recipient/PAX exceeded in selected GnH Request");
+                        }
+                        if(recipientType != resultInput[i].ASI_TnE_Recipient_Type__c){
+                            errorMessages.push("#"+ tempIndex +": Recipient Type does not match with GnH Request");
+                        }
+                        if(gnhType != resultInput[i].ASI_GnH_Type__c){
+                            errorMessages.push("#"+ tempIndex +": GnH Type does not match with GnH Request");
+                        }
+                        var recipientLength = $scope.ResultData[i].GnHRecipient.length;
+                        if(resultInput[i].ASI_TnE_Total_Number_Pax__c != recipientLength){
+                            errorMessages.push("#"+ tempIndex +": Number of recipients should be same as PAX number");
+                        }
+                    }
+                    if ($scope.ResultData[i].GnHRecipient.length > 0){
+                        for (var j=0; j<$scope.ResultData[i].GnHRecipient.length; j++){
+                            var recordString = resultInput[i].GnHRecipient[j].ASI_GnH_Recipient__r.Name
+                            +resultInput[i].GnHRecipient[j].ASI_GnH_Recipient__r.ASI_GnH_Organization__c
+                            +resultInput[i].GnHRecipient[j].ASI_GnH_Recipient__r.ASI_GnH_Title__c
+                            +resultInput[i].GnHRecipient[j].ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c;
+                            console.log("#"+ tempIndex +" combined key: "+recordString);
+                            if (checkDuplicateRecord.indexOf(recordString) >= 0){
+                                errorMessages.push("#"+ tempIndex +": Duplicated recipient in claim detail");
+                            }else{
+                                checkDuplicateRecord.push(recordString);
+                            }
+                        }
+                    }
+                    //Put recipient amount and pax into a map,
+                    //Key: GnH Form  Value:Receipt Amount, Pax, Number of record
+                    if (totalAmountandPaxPerGnHForm.hasOwnProperty(resultInput[i].GnHForm)){
+                        totalAmountandPaxPerGnHForm[resultInput[i].GnHForm].totalAmount += resultInput[i].ASI_TnE_Receipt_Amount__c;
+                        totalAmountandPaxPerGnHForm[resultInput[i].GnHForm].totalPax += resultInput[i].ASI_TnE_Total_Number_Pax__c;
+                        totalAmountandPaxPerGnHForm[resultInput[i].GnHForm].count += 1;
+                    }else{
+                        totalAmountandPaxPerGnHForm[resultInput[i].GnHForm]={totalAmount: resultInput[i].ASI_TnE_Receipt_Amount__c, 
+                                                                             totalPax: resultInput[i].ASI_TnE_Total_Number_Pax__c,
+                                                                             count: 1};
+                    }
+                }
+                for (var i in totalAmountandPaxPerGnHForm){
+                    console.log(i);
+                    if(i.length > 0){
+                        var tolerance = thresholdList[0];
+                        var totalAmount = totalAmountandPaxPerGnHForm[i].totalAmount;
+                        var totalPax = totalAmountandPaxPerGnHForm[i].totalPax;
+                        var count = totalAmountandPaxPerGnHForm[i].count;
+
+                        //var averageAmt = (totalAmount / count);
+                        var avgPax = totalPax / count;
+                        var averageAmt = (totalAmount / count) / avgPax;
+
+                        var gnhApprovedAmt = $scope.GnHReuqestList[i].ASI_GnH_Total_Request_Amount__c;//Amount Approved total in GnH Request
+                        var gnhApprovedAvg = $scope.GnHReuqestList[i].ASI_GnH_Amount_per_Recipient__c ;//Amount Approved per recipient in GnH Request
+
+                        var gnhApprovedAmtTolerance = gnhApprovedAmt * tolerance;
+                        var gnhApprovedAvgTolerance = gnhApprovedAvg * tolerance;
+                        console.log('Total Amt:'+totalAmount+' Average Amt: '+averageAmt+' Total Tolerance: '+gnhApprovedAmtTolerance+' AVerage Tolerance: '+gnhApprovedAvgTolerance);
+                        if ( totalAmount > gnhApprovedAmtTolerance){
+                            errorMessages.push("Total Receipt Amount of the Claim details are exceeded the approved value in GnH Request:"+ i);
+                        }else if (averageAmt > gnhApprovedAvgTolerance){
+                            errorMessages.push("Average Receipt Amount of the Claim details are exceeded the approved value in GnH Request:"+ i);
+                        }
+                    }
+                }
+                return errorMessages;
+            }
+
+            $scope.selectAll = function() {
+                angular.forEach($scope.ResultData, function(item) {
+                    item.IsSelected = $scope.selectedAll;
+                });
+            };
+
+            $scope.checkIfAllSelected = function() {
+                $scope.selectedAll = $scope.ResultData.every(function(item) {
+                    return item.IsSelected == true;
+                })
+            };
+
+            $scope.doAssign = function(event) {
+                var i= 0;
+                angular.forEach($scope.ResultData, function(item) {
+                    if(item.IsSelected){
+                        console.log(item);
+                        if( $scope.selectedCustomerName && $scope.selectedCustomerName.IsSelected){
+                            $scope.setResultData(i, $scope.selectedCustomerName.item, "ASI_CRM_AccountsAdditionalField__c", "CustomerName",true);
+                        }
+
+                        if( $scope.selectedWhereVenueName && $scope.selectedWhereVenueName.IsSelected){
+                            $scope.setResultData(i, $scope.selectedWhereVenueName.item, "ASI_CRM_AccountsAdditionalField__c", "WhereVenueName",true);
+                        }
+
+                        if( $scope.selectedBudgetOwner && $scope.selectedBudgetOwner.IsSelected){
+                            $scope.setResultData(i, $scope.selectedBudgetOwner.item, "User", "BudgetOwner",true);
+                        }
+
+                        if( $scope.selectedExpenseCategory && $scope.selectedExpenseCategory.IsSelected){
+                            $scope.changePicklistValue(i, "ASI_TnE_Expense_Category__c", $scope.selectedExpenseCategory.ASI_TnE_Expense_Category__c);
+                            console.log($scope.selectedExpenseCategory.ASI_TnE_Expense_Category__c);
+                            $scope.changeGnHColumn($scope.selectedExpenseCategory.ASI_TnE_Expense_Category__c,item.ASI_TnE_Expense_Classification__c,i);
+                        }
+
+                        if($scope.selectedExpenseClassification && $scope.selectedExpenseClassification.IsSelected){
+                            $scope.changePicklistValue(i, "ASI_TnE_Expense_Classification__c", $scope.selectedExpenseClassification.ASI_TnE_Expense_Classification__c);
+                            console.log($scope.selectedExpenseClassification.ASI_TnE_Expense_Classification__c);
+                            $scope.changeGnHColumn(item.ASI_TnE_Expense_Category__c,$scope.selectedExpenseClassification.ASI_TnE_Expense_Classification__c,i);
+                        }
+
+                    }   
+                    i++;
+                });
+            }
+
+            $scope.doSave = function(event) {
+                event.preventDefault();
+                console.log("save"+ $scope.ResultData);
+                $scope.isLoading = true;
+                $scope.errorMessages = [];
+                var errorMessage =[];
+                //errorMessage = validateChecking($scope.ResultData);
+                if(errorMessage.length>0){
+                    $scope.errorMessages = errorMessage;
+                    $scope.isLoading = false;
+                }else{
+                    //console.log("Do Saving");
+                    var delClaimIdsObj = JSON.stringify($scope.delClaimDetailIds);
+                    var apexClaimDetails = getClaimDetails($scope.ResultData);
+                    var getGnHRecipient = getGnHRecipientByDetails($scope.ResultData);
+                    console.log(delClaimIdsObj);
+                    doSaveByApex(apexClaimDetails,delClaimIdsObj,getGnHRecipient);
+                }                    
+            }
+
+            function doSaveByApex(apexClaimDetails,delClaimIdsObj,gnhActualRecipient) {
+                ASI_TnE_KR_ClaimManageAllCtrl.doCashSave(apexClaimDetails, delClaimIdsObj, gnhActualRecipient, function(result, event){
+
+                    if(event.status){
+
+                        if(result.errorMessages.length>0){
+                            var i;
+                            for (i = 0; i < result.errorMessages.length; ++i) {
+                                $scope.errorMessages.push(helper.htmlEncode(result.errorMessages[i]));
+                            }
+                        }else{
+                            alert("Save success!");
+                            location.href = '/' + '{!ASI_TnE_ClaimHeader__c.Id}';
+                        }
+                    } 
+                    else{
+                        alert(event.message);
+                    }
+                    $scope.isLoading = false;
+                    $scope.$apply();
+                    return false;                         
+                });
+            }
+
+            /*********************************
+            onSave Function [START]: 
+            get all claimdetail and recipient
+            *********************************/
+            function getClaimDetails(scopeResultData) {
+                var apexClaimDetails = {};
+                //console.log('Scope Result Data Length: '+scopeResultData.length);
+                for( i=0 ;i< scopeResultData.length; i++){
+                    var apexClaimDetail ={
+                        IsChanged:false,
+                        claimDetail : {},
+                        rdYear:"",
+                        rdMonth:"",
+                        rdDay:"",
+                        rowNo:""
+                    };
+                    //console.log('ASI_TnE_Expense_Category__c: '+scopeResultData[i].ASI_TnE_Expense_Category__c);
+                    //console.log('ASI_TnE_Expense_Classification__c: '+scopeResultData[i].ASI_TnE_Expense_Classification__c);
+                    apexClaimDetail.claimDetail.Id = scopeResultData[i].Id;
+                    apexClaimDetail.claimDetail.ASI_TnE_Details_of_Expense__c = scopeResultData[i].ASI_TnE_Details_of_Expense__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_KR_Where__c = scopeResultData[i].ASI_TnE_KR_Where__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_KR_Customer__c = scopeResultData[i].ASI_TnE_KR_Customer__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Total_Number_Pax__c = scopeResultData[i].ASI_TnE_Total_Number_Pax__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_KR_Owner__c = scopeResultData[i].ASI_TnE_KR_Owner__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Expense_Category__c = scopeResultData[i].ASI_TnE_Expense_Category__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Expense_Classification__c = scopeResultData[i].ASI_TnE_Expense_Classification__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Receipt_Amount__c = scopeResultData[i].ASI_TnE_Receipt_Amount__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_FX_Rate__c = scopeResultData[i].ASI_TnE_FX_Rate__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Currency__c = scopeResultData[i].ASI_TnE_Currency__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_GnH_Request__c = scopeResultData[i].ASI_GnH_Request__c;
+                    apexClaimDetail.claimDetail.ASI_GnH_Type__c = scopeResultData[i].ASI_GnH_Type__c;
+                    apexClaimDetail.claimDetail.ASI_TnE_Recipient_Type__c = scopeResultData[i].ASI_TnE_Recipient_Type__c;
+                    //console.log('Recipent Type: '+apexClaimDetail.claimDetail.ASI_TnE_Recipient_Type__c+' Type: '+apexClaimDetail.claimDetail.ASI_GnH_Type__c + ' GNH FOrm: '+apexClaimDetail.claimDetail.ASI_TnE_GnH_Request__c);
+                    //apexClaimDetail.claimDetail.ASI_TnE_Receipt_Date__c = scopeResultData[i].ASI_TnE_Receipt_Date__c;
+                    apexClaimDetail.claimDetail.recordTypeId = '{!detailRecordType}'; //cash claim
+                    apexClaimDetail.claimDetail.ASI_TnE_ClaimHeader__c = helper.getheaderId(); //cash claim
+                    console.log('GnH Form Id row '+ i +': '+scopeResultData[i].ASI_GnH_Request__c);
+                    //console.log('GnH Form Id: '+scopeResultData[i].GnHForm);
+                    //cash claim   
+                    apexClaimDetail.rdYear = scopeResultData[i].ASI_TnE_Receipt_Date__c.getFullYear();
+                    apexClaimDetail.rdMonth = scopeResultData[i].ASI_TnE_Receipt_Date__c.getMonth()+1;
+                    apexClaimDetail.rdDay = scopeResultData[i].ASI_TnE_Receipt_Date__c.getDate();
+                    apexClaimDetail.rowNo = i;
+                    //cash claim
+                    if(scopeResultData[i].IsChanged){
+                        apexClaimDetail.IsChanged = scopeResultData[i].IsChanged;
+                    }
+                    apexClaimDetails[i] = apexClaimDetail;
+                }
+                //console.log(apexClaimDetails);
+                return apexClaimDetails;
+            }
+
+            function getGnHRecipientByDetails(scopeResultData){
+                var getGnHRecipients = {};
+                var count = 0;
+                for(i=0 ;i<$scope.ResultData.length; i++){
+                    //var GnHRecipientList = $scope.ResultData[i].GnHRecipient;
+                    if ($scope.ResultData[i].GnHRecipient){
+                        // console.log('Mother: '+i);
+                        //console.log('Element: '+$scope.ResultData[0].GnHRecipient.length);
+                        for (j=0;j<$scope.ResultData[i].GnHRecipient.length;j++){
+                            //console.log('Child: '+j);
+                            var actualRecipient={
+                                rowNo:"",
+                                actualRecipient:{}
+                            }
+                            actualRecipient.actualRecipient.ASI_TnE_Details__c = $scope.ResultData[i].Id;
+                            actualRecipient.actualRecipient.ASI_GnH_Recipient__c = $scope.ResultData[i].GnHRecipient[j].ASI_GnH_Recipient__c;
+                            actualRecipient.rowNo = i;
+                            getGnHRecipients[count] = actualRecipient;
+                            count++; 
+                            //console.log('GnH Recipient Element: '+actualRecipient.ASI_TnE_Details__c+' '+actualRecipient.ASI_GnH_Recipient__c);
+                        }
+                    }
+                }
+                console.log(getGnHRecipients);
+                return getGnHRecipients;
+            }
+            /*********************************
+            Column Function[OnChange]
+            *********************************/
+
+            $scope.changePicklist = function(fieldName) {
+                var model = $parse(fieldName);
+                model.assign($scope,true);
+            }
+
+            $scope.changeClaimDetail = function(rowNo) {
+                $scope.errorMessages = [];
+                var rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                $scope.ResultData[rowNo].IsChanged = true;
+            }
+
+            ////Disable GnH Column based on selection of Expense Classification
+            $scope.changeGnHColumn = function(category,classification,rowNo) {
+                //CHG0030009 
+                //Disable Budget Owner field when expense category = Transfer to A&P 
+                $scope.ResultData[rowNo].BudgetOwnerDisabled = false;
+                for (var i in $scope.expenseCat){
+                	if ($scope.expenseCat[i].value==category && $scope.expenseCat[i].label=='Transfer to A&P')
+                		$scope.ResultData[rowNo].BudgetOwnerDisabled = true;
+						$scope.ResultData[rowNo].BudgetOwner = '';
+                        $scope.ResultData[rowNo].ASI_TnE_KR_Owner__c ='';
+                }
+				
+				//console.log($scope.expenseCat);
+                console.log('Classification Entered: '+classification);
+                console.log('Category Entered:'+ category);
+                if (category && classification){
+                    for (i=0 ;i< $scope.expenseCat.length; i++){
+                        if ($scope.expenseCat[i].value==category){
+                            var classificationFound = $scope.expenseCat[i].childObject;
+                            //console.log($scope.expenseCat[i].childObject);
+                            var gnhCheckbox = $scope.expenseCat[i].gnhRelated;                            
+                            ////Loop Child Object of Expense Classification
+                            // for (var j in classificationFound){
+                            var GnHForm = angular.element(document.getElementById('GnHForm'+rowNo));//Get the HTML tag
+                            var GnHType = angular.element(document.getElementById('GnHType'+rowNo));//Get the HTML tag
+                            var Recipient = angular.element(document.getElementById('Recipient'+rowNo));//Get the HTML tag
+                            //console.log('for:'+j);
+                            //console.log('classificationFound: '+classificationFound[j].value);
+                            // console.log('Boolean: '+ angular.equals(classificationFound[j].value, classification));
+                            //console.log('GnH checkbox:'+gnhCheckbox);
+                            //var isEqual = angular.equals(classificationFound[j].value, classification);
+                            if ($scope.expenseCat[i].gnhRelated == 'true'){
+                                console.log('Enable Column');
+                                GnHType.attr('class',"required");
+                                Recipient.attr('class',"required");
+
+                                $scope.ResultData[rowNo].gnhFormDisabled = false;
+                                $scope.ResultData[rowNo].GnHTypeDisabled = false;
+                                $scope.ResultData[rowNo].RecipientDisabled = false;
+
+                                $scope.ResultData[rowNo].GnHMandatory = true;
+                                $scope.ResultData[rowNo].aboveThreshold = false;
+                                break;
+                            }else{
+                                console.log('Lock Column');
+                                GnHType.attr('class',"");
+                                Recipient.attr('class',"");
+
+                                $scope.ResultData[rowNo].gnhFormDisabled = true;
+                                $scope.ResultData[rowNo].GnHTypeDisabled = true;
+                                $scope.ResultData[rowNo].RecipientDisabled = true;
+
+                                $scope.ResultData[rowNo].ASI_GnH_Type__c = '';
+                                $scope.ResultData[rowNo].ASI_TnE_Recipient_Type__c = '';
+                                $scope.ResultData[rowNo].GnHForm = '';
+                                $scope.ResultData[rowNo].ASI_GnH_Request__c = '';
+                                $scope.ResultData[rowNo].GnHRecipient = [];
+
+                                $scope.ResultData[rowNo].GnHMandatory = false;
+                                $scope.ResultData[rowNo].aboveThreshold = false;
+                                console.log('Picklist Value: '+ $scope.gnhType[0].value);
+
+                            }
+                            //}
+                        }
+                    }
+                }
+            }
+            //Check if Receipt Amount exceed the GnH minimum threshold, if so make "GnHForm" a required field 
+            $scope.verifyWithThreshold = function(receiptAmt,paxNo,gnhType,receiptType,rowNo){
+                if(receiptAmt  && paxNo  && gnhType.length>0 && receiptType.length>0){
+                    console.log('Start Finding Threshold');
+                    var amountPerPAX = receiptAmt / paxNo;
+                    var thresholdObj = 'ASI_GnH_Threshold__c';
+                    var query = 'ASI_GnH_GnH_Type__c,ASI_GnH_Recipient_Type__c,ASI_GnH_Threshold_Amount__c';
+                    var whereClause = ' WHERE ASI_GnH_GnH_Type__c like \''+ gnhType +'\'' + ' AND ASI_GnH_Recipient_Type__c like \''+receiptType+ '\''+ ' AND ASI_GnH_Threshold_Amount__c != null AND recordType.DeveloperName = \'ASI_GnH_KR_GnH_Offer_Threshold\'';
+                    GetMasterData.getData(thresholdObj,query,whereClause).then(function(result){
+                        console.log(result);
+                        if (!result || result==''){
+                            var errorMessages = [];
+                            $scope.errorMessages = [];
+                            errorMessages.push('Cannot Find any Threshold Value, Please Find your Administrator for support');
+                            $scope.errorMessages = errorMessages;
+                        }else{
+                            //get the minimum value, ros 0 in list in ASC order
+                            var thresholdAmt = result[0]["ASI_GnH_Threshold_Amount__c"]
+                            var GnHForm = angular.element(document.getElementById('GnHForm'+rowNo));//Get the HTML tag
+                            if(amountPerPAX > thresholdAmt){
+                                console.log('Above Threshold');
+                                GnHForm.attr('class',"required"); 
+                                $scope.ResultData[rowNo].gnhFormDisabled = false;//Disable readOnly
+                                $scope.ResultData[rowNo].aboveThreshold = true;
+                                console.log('Boolean Changed: '+ $scope.ResultData[rowNo].aboveThreshold);
+                            }else{
+                                console.log('Below Threshold');
+                                GnHForm.attr('class',"");
+                                $scope.ResultData[rowNo].gnhFormDisabled = true;//keep it readOnly
+                                $scope.ResultData[rowNo].aboveThreshold = false;
+
+                                $scope.ResultData[rowNo].GnHForm = '';
+                                $scope.ResultData[rowNo].ASI_GnH_Request__c = '';
+                                $scope.ResultData[rowNo].GnHRecipient = [];
+                                console.log('Boolean Changed: '+ $scope.ResultData[rowNo].aboveThreshold);
+                            }
+                        }
+                    }); 
+                }
+                $scope.ResultData[rowNo].aboveThreshold = false;
+            }
+
+            //Update list of $scope.ResultData[rowNo].GnHRecipient
+            //To generate Expandable sub-table
+            $scope.changeGnHRecipient= function(GnHOption,rowNo){
+                event.preventDefault();
+                var recipientByRequest = ({!recipientbyRequestMapJson});
+                var GnHOptionValue = GnHOption!=null? GnHOption.value:'';
+                console.log('GnH new Id: '+ GnHOptionValue);
+                console.log('Changing GnH Recipient: '+ recipientByRequest[GnHOptionValue]);
+                //if (!$scope.ResultData[rowNo].GnHRecipient){
+                if (recipientByRequest[GnHOptionValue]){
+                    var newGnhRecipient = recipientByRequest[GnHOptionValue];
+                    $scope.ResultData[rowNo].GnHRecipient = newGnhRecipient;
+                    console.log('Row '+rowNo+' Changed to: '+$scope.ResultData[rowNo].GnHRecipient);
+                }else{
+                    var newGnhRecipient = [];
+                    $scope.ResultData[rowNo].GnHRecipient = newGnhRecipient;
+                    console.log('Row '+rowNo+' set to Empty');
+                }
+                //}
+            }
+
+            $scope.renderAddRecipientField = function(rowNo){
+                console.log('Enable Buttons');
+                var autoCompleteField = angular.element(document.getElementById('GnHRecipient'+rowNo));
+                autoCompleteField.attr('class',"");
+                var addButton = angular.element(document.getElementById('button'+rowNo));
+                addButton.attr('class',"btn btn-default btn-sm");
+            }
+
+            /***********************************
+            Init Function for claim detail field
+            ************************************/
+
+            $scope.checkDisabled = function(category, classification, gnhForm, rowNo){
+                console.log('Init '+ rowNo + ': category = '+category+ 'and classification = '+classification);
+                var disableValue = ({!isEditable});
+                var classificationMap = ({!checkedClassificationMapJson});
+				
+				//CHG0030009 
+                //Disable Budget Owner field when expense category = Transfer to A&P
+                $scope.ResultData[rowNo].BudgetOwnerDisabled = false;
+                if (category && category == ("{!idTransferAnP}")) {
+                	$scope.ResultData[rowNo].BudgetOwnerDisabled = true;
+					$scope.ResultData[rowNo].BudgetOwner = '';
+                    $scope.ResultData[rowNo].ASI_TnE_KR_Owner__c ='';
+				}
+				
+                if (disableValue == 1 || disableValue == 2){                    
+                    if (classificationMap[classification] != null){
+                        $scope.ResultData[rowNo].GnHTypeDisabled = false;
+                        $scope.ResultData[rowNo].RecipientDisabled = false;
+                        if (gnhForm.length >0){
+                            $scope.ResultData[rowNo].gnhFormDisabled = false;
+                        }else{
+                            $scope.ResultData[rowNo].gnhFormDisabled = true;
+                        }
+
+                        //$scope.ResultData[rowNo].GnHMandatory = true;
+                    }else{
+                        //return false
+                        $scope.ResultData[rowNo].gnhFormDisabled = true;
+                        $scope.ResultData[rowNo].GnHTypeDisabled = true;
+                        $scope.ResultData[rowNo].RecipientDisabled = true;
+
+                        $scope.ResultData[rowNo].ASI_GnH_Type__c = '';
+                        $scope.ResultData[rowNo].ASI_TnE_Recipient_Type__c = '';
+                        $scope.ResultData[rowNo].GnHForm = '';
+
+                        $scope.ResultData[rowNo].GnHMandatory = false; 
+                    }
+                }else{
+                    //return false
+                    $scope.ResultData[rowNo].gnhFormDisabled = true;
+                    $scope.ResultData[rowNo].GnHTypeDisabled = true;
+                    $scope.ResultData[rowNo].RecipientDisabled = true;
+
+                    $scope.ResultData[rowNo].ASI_GnH_Type__c = '';
+                    $scope.ResultData[rowNo].ASI_TnE_Recipient_Type__c = '';
+                    $scope.ResultData[rowNo].GnHForm = '';
+
+                    $scope.ResultData[rowNo].GnHMandatory = false;
+                }
+            }
+
+            $scope.checkCurrencyAndPAX = function(currency, pax, rowNo){
+                console.log('Init '+ rowNo + ': Currency = '+currency+ ' and PAX = '+pax);
+                if (currency == 'indefined'){
+                    $scope.ResultData[rowNo].ASI_TnE_Currency__c = 'KRW';
+                }
+
+                if (pax == 'indefined'){
+                    $scope.ResultData[rowNo].ASI_TnE_Total_Number_Pax__c = 1;
+                }
+            }
+
+            /*********************************
+            Row Function[Expandable Table]
+            *********************************/
+            //Delete and GnH Recipient 
+            $scope.deleteRecipient = function(parentRow, subRow){
+                if (confirm("Are You Sure?")){
+                    //console.log('Start Finding');
+                    //console.log($scope.ResultData[parentRow]);
+                    //var gnhRecipientList = $scope.ResultData[parentRow].GnHRecipient;
+                    //console.log(gnhRecipientList);
+                    $scope.delGnHRecipientIds.push($scope.ResultData[parentRow].GnHRecipient[subRow].Id);
+                    //console.log("Delete ID Added: " + $scope.delGnHRecipientIds);
+                    var currentRecipient = $scope.ResultData[parentRow].GnHRecipient;
+                    currentRecipient.splice(subRow,1);
+                    //console.log($scope.GnHRecipientListData);
+                }
+            }
+
+            $scope.addRecipient= function(parentRow,selectedRecipient){
+                event.preventDefault();
+                //console.log($scope.GnHRecipientListData);
+                console.log('Enter Insertion');
+                //console.log($scope.GnHRecipientMasterList);
+                console.log(parentRow);
+                //var gnhRecipientList = $scope.ResultData[parentRow].GnHRecipient; 
+                var selected = $scope.GnHRecipientMasterList[selectedRecipient];
+                console.log(selected);
+                var newEmptyGnHRecipient = helper.getGnHRecipientObject();
+                newEmptyGnHRecipient.ASI_GnH_Recipient__c = selected.Id;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r = {};
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.Name = selected.Name;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Email__c = selected.ASI_GnH_Email__c;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Mobile__c = selected.ASI_GnH_Mobile__c;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Organization__c = selected.ASI_GnH_Organization__c;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c = selected.ASI_GnH_Company_Address__c;
+                newEmptyGnHRecipient.ASI_GnH_Recipient__r.ASI_GnH_Title__c = selected.ASI_GnH_Title__c;
+                console.log('Selected Parent: '+$scope.ResultData[parentRow].Id + ' - '+'Insert GnH: '+newEmptyGnHRecipient.ASI_GnH_Recipient__r.Name);
+                var currentRecipent = $scope.ResultData[parentRow].GnHRecipient;
+                currentRecipent.push(newEmptyGnHRecipient);
+                //$scope.ResultData[parentRow].GnHRecipient = currentRecipent;
+                //console.log(currentRecipent);
+                console.log($scope.GnHRecipientListData);
+                //$scope.$apply();
+            }
+
+            $scope.removeClaimDetailRow  = function(event, rowNo) {
+                event.preventDefault();
+                var rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                if ($scope.ResultData[rowNo].Id) {
+                    $scope.delClaimDetailIds.push($scope.ResultData[rowNo].Id);
+                }
+                $scope.ResultData.splice(rowNo, 1);
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage); 
+            }
+
+            $scope.addNewClaimDetailRow = function(event) {
+                event.preventDefault();
+                var targetClaimDetail = helper.getClaimDetailObject();
+                targetClaimDetail.IsChanged = true;
+                $scope.ResultData.push(targetClaimDetail);
+                console.log($scope.ResultData);
+
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage);                     
+            }
+
+            $scope.doCopyClaimDetailRow = function(event, rowNo) {
+                event.preventDefault();
+                var rowNo = parseInt(rowNo)+( $scope.numberOfRecordPerPage * $scope.pagination.page);
+                var targetClaimDetail = helper.setCopyClaimDetail(helper.getClaimDetailObject(), $scope.ResultData[rowNo]);
+                targetClaimDetail.IsChanged = true;
+                $scope.ResultData.splice(rowNo + 1, 0, targetClaimDetail);
+                $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage); 
+            }
+
+            /*********************************
+            Init Function
+            *********************************/
+
+            function getclaimDetailsByApex(claimHeaderId) {
+                ASI_TnE_KR_ClaimManageAllCtrl.getClaimDetails(claimHeaderId, function(results, event){
+                    if(event.status) {
+                        $scope.ResultData = jQuery.parseJSON(results);
+                        console.log($scope.ResultData);
+                        for( i=0 ;i< $scope.ResultData.length; i++){
+
+                            // console.log('Initial Value: '+ $scope.ResultData[i].Id+'-'+$scope.ResultData[i].ASI_GnH_Type__c +'-'+$scope.ResultData[i].ASI_TnE_Recipient_Type__c);
+
+                            $scope.ResultData[i].aboveThreshold = false;
+                            $scope.ResultData[i].GnHMandatory = false;
+
+                            if(typeof $scope.ResultData[i].ASI_TnE_KR_Customer__r != 'undefined'){
+                                $scope.ResultData[i].CustomerName =  helper.htmlEncode($scope.ResultData[i].ASI_TnE_KR_Customer__r.Name);
+                            }else{
+                                $scope.ResultData[i].CustomerName ='';
+                                $scope.ResultData[i].ASI_TnE_KR_Customer__c ='';
+                            }
+                            if(typeof $scope.ResultData[i].ASI_TnE_KR_Where__r != 'undefined'){
+                                $scope.ResultData[i].WhereVenueName =  helper.htmlEncode($scope.ResultData[i].ASI_TnE_KR_Where__r.Name);
+                            }else{
+                                $scope.ResultData[i].WhereVenueName  ='';
+                                $scope.ResultData[i].ASI_TnE_KR_Where__c ='';
+                            }
+                            if(typeof $scope.ResultData[i].ASI_TnE_KR_Owner__r != 'undefined'){
+                                $scope.ResultData[i].BudgetOwner =  helper.htmlEncode($scope.ResultData[i].ASI_TnE_KR_Owner__r.Name);
+                            }else{
+                                $scope.ResultData[i].BudgetOwner ='';
+                                $scope.ResultData[i].ASI_TnE_KR_Owner__c ='';
+                            }
+                            if(typeof $scope.ResultData[i].ASI_TnE_Receipt_Date__c != 'undefined'){
+                                $scope.ResultData[i].ASI_TnE_Receipt_Date__c = new Date($scope.ResultData[i].ASI_TnE_Receipt_Date__c);
+                            }else{
+                                $scope.ResultData[i].ASI_TnE_Receipt_Date__c = new Date();
+                            }
+                            if(typeof $scope.ResultData[i].ASI_TnE_GnH_Request__r != 'undefined'){
+                                $scope.ResultData[i].GnHForm =  helper.htmlEncode($scope.ResultData[i].ASI_TnE_GnH_Request__r.Name);
+                            }else{
+                                $scope.ResultData[i].GnHForm ='';
+                                $scope.ResultData[i].ASI_TnE_GnH_Request__c ='';
+                            }
+                            //$scope.changeGnHColumn($scope.ResultData[i].PromotionCode,i);
+                            //$scope.ResultData[i].ASI_TnE_Receipt_Date__c = new Date($scope.ResultData[i].ASI_TnE_Receipt_Date__c);
+                        }
+                        $scope.pagination.numPages = Math.ceil($scope.ResultData.length/$scope.pagination.perPage); 
+                        setSelectListItemBlank();
+                        $scope.$apply();
+                    } else {
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;                   
+            }
+
+            function assignRecipientToDetails(){
+                ASI_TnE_KR_ClaimManageAllCtrl.getGnhRecipient(function(results, event){
+                    if(event.status) {
+                        $scope.GnHRecipientListData = jQuery.parseJSON(results);
+                        var recipientByRequest = ({!recipientbyRequestMapJson});
+                        var currentGnHRecipient = ({!currentRecipientMapJson});
+                        console.log(currentGnHRecipient);
+                        for( i=0 ;i< $scope.ResultData.length ; i++){
+                            var claimId = $scope.ResultData[i].Id;
+                            if (currentGnHRecipient[claimId]){
+                                console.log('Found GnH From Actual for Row '+i);
+                                var gnhRecipient = currentGnHRecipient[claimId]!=null? currentGnHRecipient[claimId]:[];
+                                console.log(gnhRecipient);
+                                $scope.ResultData[i].GnHRecipient = gnhRecipient;
+                            }else {
+                                if($scope.ResultData[i].ASI_TnE_GnH_Request__c){
+                                    var gnhRequest = $scope.ResultData[i].ASI_TnE_GnH_Request__c;
+                                    console.log('Get the request: '+gnhRequest);
+                                    var gnhRecipient = recipientByRequest[gnhRequest]!=null? recipientByRequest[gnhRequest]:[];
+                                    $scope.ResultData[i].GnHRecipient = gnhRecipient;
+                                    console.log('Row '+i+': '+$scope.ResultData[i].GnHRecipient);
+                                }else{
+                                    $scope.ResultData[i].GnHRecipient = [];
+                                }
+                            }
+                        }
+                    }else{
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;
+            }
+
+            function getRecipientMasterList(){
+                ASI_TnE_KR_ClaimManageAllCtrl.getRecipientMaster(function(results, event){
+                    if(event.status) {
+                        $scope.GnHRecipientMasterList = jQuery.parseJSON(results);
+                        //console.log('Initialised GnHRecipientMasterList: '+$scope.GnHRecipientMasterList["Test User"].ASI_GnH_Title__c );
+                    }else{
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;
+            }
+
+            function getGnHRequestList(){
+                ASI_TnE_KR_ClaimManageAllCtrl.getGnHRequest(function(results, event){
+                    if(event.status) {
+                        $scope.GnHReuqestList = jQuery.parseJSON(results);
+                        //console.log('Initialised GnHRecipientMasterList: '+$scope.GnHRecipientMasterList["Test User"].ASI_GnH_Title__c );
+                    }else{
+                        alert('error: ' +  event.message);
+                    }
+                }, {escape: false});
+                return false;
+            }
+
+            $scope.checkPAX = function( pax, rowNo){
+                console.log('Init '+ rowNo + ' PAX = '+pax);
+                if (pax == null){
+                    $scope.ResultData[rowNo].ASI_TnE_Total_Number_Pax__c = 1;
+                }
+            }
+
+
+
+        }).filter('unsafe', function($sce) {return $sce.trustAsHtml;});
+
+
+        app.directive('expand', function () {
+            return {
+                restrict: 'E',
+                replace:true,
+                transclude: true, 
+                template:  '<button name="expandTable"></button>',
+                controller: ['$scope', function ($scope) {
+                    $scope.$on('onExpandAll', function (event, args) {
+                        $scope.expanded = args.expanded;
+                    });
+                }]
+            };
+        });
+
+
+        //helper
+        helper = {
+            htmlEncode: function ( input ) {
+                var e = document.createElement('div');
+                e.innerHTML = input;
+                return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+            },
+            getheaderId: function() {
+                var claimHeaderId = '{!ASI_TnE_ClaimHeader__c.Id}';
+                return claimHeaderId;
+            },               
+            getClaimDetailObject: function() {
+                return {
+                    Id: null,
+                    ASI_TnE_Receipt_Date__c: new Date(),
+                    ExpenseCategory:"",
+                    ASI_TnE_Expense_Category__c:"",
+                    ExpenseClassification:"",
+                    ASI_TnE_Expense_Classification__c:"",
+                    ASI_TnE_Total_Number_Pax__c:1,
+                    BudgetOwner:"",
+                    ASI_TnE_KR_Owner__c:"",
+                    CustomerName:"", 
+                    ASI_TnE_KR_Customer__c:"",
+                    ASI_TnE_Details_of_Expense__c :"",
+                    WhereVenueName:"",
+                    ASI_TnE_KR_Where__c:"",
+                    ASI_TnE_Receipt_Amount__c:0,
+                    ASI_TnE_Currency__c:"KRW",
+                    ASI_GnH_Request__c : "",
+                    GnHForm:"",
+                    IsChanged: false,
+                    aboveThreshold:false,
+                    isExpanded: false,
+                    GnHRecipient:[]
+                };
+            },
+            setCopyClaimDetail: function(newClaimDetail, baseClaimDetail) {
+                newClaimDetail = angular.copy(baseClaimDetail);
+                newClaimDetail.Id = null;
+                newClaimDetail.IsChanged = false;
+                return newClaimDetail;
+            },
+
+            getGnHRecipientObject: function(){
+                return{
+                    Id:"",
+                    Name: ""
+                }
+            }
+        };
+
+    </script>
+
+    <body class="bs">
+        <div class="fullScreenLoading"></div>
+        <div id="HeaderForm" class="bs container-fluid">
+            <apex:form id="form">
+                <div class="bs row">
+                    <div class="bs col-md-12" >    
+                        <div ng-app="myapp" ng-controller="ListController as ctrl">     
+                            <div class="container-fluid">
+
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="panel">
+                                            <div class="panel-body">
+
+                                                <apex:pageBlock title="{!ASI_TnE_ClaimHeader__c.Name}">
+                                                    <apex:pageBlockSection title="A&P Claim">
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.Owner.Name}"/>
+                                                        <apex:outputField label="Claim Type" value="{!ASI_TnE_ClaimHeader__c.RecordType.Name}"/>
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Payee__c}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_Date__c}"/>
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Company__c}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_Status__c}"/>
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Department__c}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_Credit_Card_No__c}"/>
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_Currency__c}"/> 
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_TotalAmount__c}"/>
+
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.ASI_TnE_KR_GL_Date__c}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.Name}"/>
+
+                                                    </apex:pageBlockSection>
+                                                    <apex:pageblocksection title="System Information">
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.CreatedByID}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.CreatedDate}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.LastModifiedByID}"/>
+                                                        <apex:outputField value="{!ASI_TnE_ClaimHeader__c.LastModifiedDate}"/>
+                                                    </apex:pageblocksection>
+
+                                                </apex:pageBlock>
+                                                <apex:pageBlock >
+
+                                                    <!--- testing on 17 ---> 
+                                                    <apex:pageblocksection title="Mass Assign Function" columns="1">
+                                                        <apex:panelGrid columns="3" id="MassAssignGrid">
+                                                            <apex:panelGroup id="CustomerGroup">
+                                                                <table class="table table-bordered">
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="Select" /></td>
+                                                                        <td><input ng-readOnly="{!IF(isEditable!=1, true, false)}" type="checkbox" ng-model="selectedCustomerName.IsSelected"/></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Customer__c.Label}" /></td>
+                                                                        <td><autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" selection="CustomerName" object="ASI_CRM_AccountsAdditionalField__c" ng-model="selectedCustomerName.item.label"></autocomplete></td>
+                                                                    </tr>
+                                                                </table>
+                                                            </apex:panelGroup>
+                                                            <apex:panelGroup id="WhereGroup">
+                                                                <table class="table table-bordered">
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="Select" /></td>
+                                                                        <td><input ng-readOnly="{!IF(isEditable!=1, true, false)}"  type="checkbox" ng-model="selectedWhereVenueName.IsSelected"/></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Where__c.Label}" /></td>
+                                                                        <td><autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" selection="WhereVenueName" object="ASI_CRM_AccountsAdditionalField__c" ng-model="selectedWhereVenueName.item.label"></autocomplete></td>
+                                                                    </tr>
+                                                                </table>
+                                                            </apex:panelGroup>
+                                                            <apex:panelGroup id="BudgetOwnerGroup">
+                                                                <table class="table table-bordered">
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="Select" /></td>
+                                                                        <td><input ng-readOnly="{!IF(isEditable!=1, true, false)}"  type="checkbox" ng-model="selectedBudgetOwner.IsSelected"/></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Owner__c.Label}" /></td>
+                                                                        <td><autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" selection="BudgetOwner" object="User" ng-model="selectedBudgetOwner.item.label"></autocomplete></td>
+                                                                    </tr>
+                                                                </table>
+                                                            </apex:panelGroup>
+                                                            <apex:panelGroup id="ExpenseCategoryGroup">
+                                                                <table class="table table-bordered">
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="Select" /></td>
+                                                                        <td><input ng-readOnly="{!IF(AND(isEditable!=1, isEditable!=2), true, false)}"  type="checkbox" ng-model="selectedExpenseCategory.IsSelected"/></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Expense_Category__c.Label}" /></td>
+                                                                        <td><select ng-disabled="{!IF(AND(isEditable!=1, isEditable!=2), true, false)}" ng-model="selectedExpenseCategory.ASI_TnE_Expense_Category__c" ng-options="x.value as x.label for x in expenseCat" ng-change="changePicklist('selectedExpenseCategory.IsSelected')"></select></td>
+                                                                    </tr>
+                                                                </table>
+                                                            </apex:panelGroup>                                                    
+                                                            <apex:panelGroup id="ExpenseClassificationGroup">
+                                                                <table class="table table-bordered">
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="Select" /></td>
+                                                                        <td><input ng-readOnly="{!IF(AND(isEditable!=1, isEditable!=2), true, false)}"  type="checkbox" ng-model="selectedExpenseClassification.IsSelected"/></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td><apex:outputLabel value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Expense_Classification__c.Label}" /></td>
+                                                                        <td><select  ng-disabled="{!IF(AND(isEditable!=1, isEditable!=2), true, false)}" ng-model="selectedExpenseClassification.ASI_TnE_Expense_Classification__c" ng-options="y.value as y.label for y in ((expenseCat | filter:{'value':selectedExpenseCategory.ASI_TnE_Expense_Category__c})[0].childObject)" ng-change="changePicklist('selectedExpenseClassification.IsSelected')"></select></td>
+                                                                    </tr>
+                                                                </table>
+                                                            </apex:panelGroup>                                                     
+                                                        </apex:panelGrid>
+
+                                                        <apex:commandButton styleClass="btn btn-default btn-xs" value=" Mass Assign " html-ng-click="doAssign($event)" status="ActionStatus" reRender="HeaderForm,messageDiv" rendered="{!IF(AND(isEditable!=1, isEditable!=2), false, true)}" />
+                                                    </apex:pageblocksection>
+
+                                                    <apex:pageBlockButtons id="buttons">
+                                                        <apex:commandButton styleClass="btn btn-default btn-sm" value=" Save " html-ng-click="doSave($event)" status="ActionStatus" reRender="HeaderForm,messageDiv" rendered="{!IF(AND(isEditable!=1, isEditable!=2), false, true)}" />
+                                                        <apex:commandButton styleClass="btn btn-default btn-sm"  value=" Cancel " action="{!Cancel}" reRender="form,messageDiv" />  
+                                                    </apex:pageBlockButtons>
+
+                                                    <div class="message errorM3 ng-hide alert-danger" role="alert" ng-show="errorMessages.length > 0" id="messageDiv">
+                                                        <strong><span>Error, Can not Save! Please check following error message:<br/></span></strong>
+                                                        <span>
+                                                            <ul ng-repeat="errorMsg in errorMessages track by $index" style="padding-left:10px;padding-top:0px;margin:0px">
+                                                                <li ng-bind="errorMsg"></li>
+                                                            </ul>
+                                                        </span>                                            
+                                                    </div>
+                                                    <apex:pageblocksection title="TnE KR Claim Detail">
+                                                        <apex:outputPanel styleClass="table-responsive">
+
+                                                            <b>Total# of Records:</b><span class="label label-primary">({{ResultData.length}} Results)</span> <br /><br />     
+                                                            <div class="boldRedText">Mandatory Fields: Expense Category, Expense Classification, Pax, Details of Expense</div><br /><br /> 
+                                                            <table class="table table-bordered table-hover resultTable"   cellpadding="0" cellspacing="0">
+                                                                <thead class="thead-inverse">
+                                                                    <tr>
+                                                                        <th><input type="checkbox" ng-model="selectedAll" ng-click="selectAll()" /></th>
+                                                                        <th><apex:outputLink html-ng-click="addNewClaimDetailRow($event)">
+                                                                            <apex:outputText value="Add New" />
+                                                                            </apex:outputLink>
+                                                                        </th>
+                                                                        <th>#</th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Receipt_Date__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Expense_Category__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Expense_Classification__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Currency__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Receipt_Amount__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_FX_Rate__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Customer__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Total_Number_Pax__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Details_of_Expense__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Where__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_KR_Owner__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_GnH_Type__c.Label}" /></th>
+                                                                        <th><apex:outputText value="{!$ObjectType.ASI_TnE_ClaimDetail__c.Fields.ASI_TnE_Recipient_Type__c.Label}" /></th>
+                                                                        <th><apex:outputText value="G&H Form" /></th>
+                                                                        <th>
+                                                                            <apex:outputText value="G&H Recipient" />
+                                                                            <button type="button" ng-click="ctrl.expandAll(allExpanded = !allExpanded)">
+                                                                                <span ng-bind="allExpanded ? '-' : '+'"></span>
+                                                                            </button>
+                                                                        </th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr ng-repeat-start="item in ResultData| startFrom: pagination.page * pagination.perPage | limitTo: pagination.perPage" class="my-repeat-animation" ng-class="{activeRow: item.Id == '' || item.IsChanged}">
+                                                                        <td>
+                                                                            <input ng-readOnly="{!IF(AND(isEditable!=1, isEditable!=2), true, false)}" type="checkbox" ng-model="item.IsSelected"  ng-change="changeClaimDetail($index)"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <apex:outputLink html-ng-click="doCopyClaimDetailRow($event, $index)">
+                                                                                <apex:outputText value="Clone" />
+                                                                            </apex:outputLink>
+                                                                            <apex:outputText value=" | " />
+                                                                            <apex:outputLink html-ng-click="removeClaimDetailRow($event, $index)">
+                                                                                <apex:outputText value="Delete" />
+                                                                            </apex:outputLink>
+                                                                        </td>
+                                                                        <td>{{$index+1+ numberOfRecordPerPage * pagination.page}}</td>
+                                                                        <!--<td>{{item.ASI_TnE_Receipt_Date__c| date:'MM/dd/yyyy'}}</td>-->
+                                                                        <td>
+                                                                            <input class="required" type="date" ng-readOnly="{!IF(isEditable!=1, true, false)}" ng-model="item.ASI_TnE_Receipt_Date__c" ng-change="changeClaimDetail($index)" placeholder="yyyy-MM-dd"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <select class="required" ng-disabled="{!IF(AND(isEditable!=1,isEditable!=2), true, false)}" ng-model="item.ASI_TnE_Expense_Category__c" ng-options="x.value as x.label for x in expenseCat" ng-change="changeClaimDetail($index);changeGnHColumn(item.ASI_TnE_Expense_Category__c,item.ASI_TnE_Expense_Classification__c,$index)"></select>
+                                                                        </td> 
+                                                                        <td>
+                                                                            <select class="required" ng-disabled="{!IF(AND(isEditable!=1,isEditable!=2), true, false)}" ng-model="item.ASI_TnE_Expense_Classification__c" ng-options="y.value as y.label for y in ((expenseCat | filter:{'value':item.ASI_TnE_Expense_Category__c})[0].childObject)" ng-change="changeClaimDetail($index);changeGnHColumn(item.ASI_TnE_Expense_Category__c,item.ASI_TnE_Expense_Classification__c,$index)"></select>
+                                                                        </td>
+                                                                        <td>
+                                                                            <select class="required"  ng-disabled="{!IF(isEditable!=1, true, false)}" ng-model="item.ASI_TnE_Currency__c" ng-init="checkCurrencyAndPAX(item.ASI_TnE_Currency__c,item.ASI_TnE_Total_Number_Pax__c,$index)" ng-options="x.value as x.label for x in currency" ng-change="changeClaimDetail($index)"></select>
+                                                                        </td>  
+                                                                        <td>
+                                                                            <input class="required" type="number" ng-readOnly="{!IF(isEditable!=1, true, false)}" ng-model="item.ASI_TnE_Receipt_Amount__c" ng-change="changeClaimDetail($index);verifyWithThreshold(item.ASI_TnE_Receipt_Amount__c,item.ASI_TnE_Total_Number_Pax__c,item.ASI_GnH_Type__c,item.ASI_TnE_Recipient_Type__c,$index)"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <input type="text" ng-readOnly="{!IF(isEditable!=1, true, false)}" ng-model="item.ASI_TnE_FX_Rate__c" ng-change="changeClaimDetail($index)"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" selection="CustomerName" object="ASI_CRM_AccountsAdditionalField__c" index="{{$index}}" ng-model="item.CustomerName" ng-change="changeClaimDetail($index)"></autocomplete> 
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="required"  type="number" ng-readOnly="{!IF(isEditable!=1, true, false)}" ng-init="checkPAX(item.ASI_TnE_Total_Number_Pax__c, $index)" ng-model="item.ASI_TnE_Total_Number_Pax__c" ng-change="changeClaimDetail($index);verifyWithThreshold(item.ASI_TnE_Receipt_Amount__c,item.ASI_TnE_Total_Number_Pax__c,item.ASI_GnH_Type__c,item.ASI_TnE_Recipient_Type__c,$index)"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <textarea class="required" ng-disabled="{!IF(isEditable!=1, true, false)}" row="3" maxlength="500" ng-model="item.ASI_TnE_Details_of_Expense__c" ng-change="changeClaimDetail($index)"/>
+                                                                        </td>
+                                                                        <td>
+                                                                            <autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" selection="WhereVenueName" object="ASI_CRM_AccountsAdditionalField__c" index="{{$index}}" ng-model="item.WhereVenueName" ng-change="changeClaimDetail($index)"></autocomplete>                    
+                                                                        </td>
+                                                                        <td>
+                                                                            <autocomplete ng-readOnly="{!IF(isEditable!=1, true, false)}" ng-disabled="item.BudgetOwnerDisabled" selection="BudgetOwner" object="User" index="{{$index}}" ng-model="item.BudgetOwner"  ng-change="changeClaimDetail($index)"></autocomplete> 
+                                                                        </td>
+                                                                        <td>
+                                                                            <select id="GnHType{{$index}}"  ng-init="checkDisabled(item.ASI_TnE_Expense_Category__c,item.ASI_TnE_Expense_Classification__c,item.GnHForm,$index)" ng-disabled="item.GnHTypeDisabled" ng-model="item.ASI_GnH_Type__c" ng-options="x.value as x.label for x in gnhType" ng-change="changeClaimDetail($index);verifyWithThreshold(item.ASI_TnE_Receipt_Amount__c,item.ASI_TnE_Total_Number_Pax__c,item.ASI_GnH_Type__c,item.ASI_TnE_Recipient_Type__c,$index)"></select>
+                                                                        </td> 
+                                                                        <td>
+                                                                            <select id="Recipient{{$index}}" ng-init="" ng-disabled="item.RecipientDisabled" ng-model="item.ASI_TnE_Recipient_Type__c" ng-options="x.value as x.label for x in recipientType" ng-change="changeClaimDetail($index);verifyWithThreshold(item.ASI_TnE_Receipt_Amount__c,item.ASI_TnE_Total_Number_Pax__c,item.ASI_GnH_Type__c,item.ASI_TnE_Recipient_Type__c,$index)"></select>
+                                                                        </td>
+                                                                        <td>
+                                                                            <autocomplete id="GnHForm{{$index}}" ng-readOnly="item.gnhFormDisabled" selection="GnHForm" object="ASI_GnH_Request__c" index="{{$index}}" ng-model="item.GnHForm" ng-change="changeClaimDetail($index);"></autocomplete>
+                                                                        </td>
+                                                                        <td>                           
+                                                                            <expand type="button" ng-click="expanded = !expanded" ng-bind="expanded ? '-' : '+'"></expand>
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr ng-repeat-end="ng-repeat-end" ng-show="expanded">
+                                                                        <td colspan="12"></td>
+                                                                        <td colspan="6">
+                                                                            <table class="table table-bordered table-hover resultTable" cellpadding="0" cellspacing="0">
+                                                                                <thead class="thead-inverse">
+                                                                                    <tr>
+                                                                                        <th>
+                                                                                            <apex:outputLink html-ng-click="renderAddRecipientField($index)" rendered="{!IF(isEditable =1, true, false)}">
+                                                                                                <apex:outputText value="Add New Recipient" />
+                                                                                            </apex:outputLink>
+                                                                                            <br/>
+                                                                                            <autocomplete id="GnHRecipient{{$index}}" Class ="hide" style="height:25px" ng-readOnly=""  selection="GnHRecipient" object="ASI_GnH_Recipient_Master__c" index="{{$index}}" ng-model="typedRecipient"></autocomplete>
+                                                                                            <!--Button id="button{{$index}}" Class ="hide"  style="height:25px; text-align:center"  ng-click="addRecipient($index,typedRecipient)">Add</Button-->
+                                                                                        </th>
+                                                                                        <th ><apex:outputText value="#" /></th>
+                                                                                        <th ><apex:outputText value="Recipient Name" /></th>
+                                                                                        <th><apex:outputText value="Organisation" /></th>
+                                                                                        <th><apex:outputText value="Company Address" /></th>
+                                                                                        <th><apex:outputText value="Title" /></th>
+                                                                                        <th><apex:outputText value="Mobile" /></th>
+                                                                                        <th><apex:outputText value="Email" /></th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody ng-repeat="recipient in item.GnHRecipient" class="my-repeat-animation">
+                                                                                    <tr>
+                                                                                        <td>
+                                                                                            <apex:outputLink html-ng-click="deleteRecipient($parent.$index,$index)">
+                                                                                                <apex:outputText value="Delete" />
+                                                                                            </apex:outputLink>
+                                                                                        </td>
+                                                                                        <td>{{$index+1}}</td>
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.Name}}</td>    
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.ASI_GnH_Organization__c}}</td>
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.ASI_GnH_Company_Address__c}}</td>
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.ASI_GnH_Title__c}}</td>   
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.ASI_GnH_Mobile__c}}</td>
+                                                                                        <td>{{recipient.ASI_GnH_Recipient__r.ASI_GnH_Email__c}}</td>   
+                                                                                    </tr>
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </td>
+                                                                    </tr>                                                                    
+                                                                </tbody>
+                                                                <!--button  type="button" ng-click="doSave($event)"  class="btn btn-success btn-sm searchbtn"  >
+<span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Save
+</button-->
+                                                            </table>
+                                                            <div class="row">        
+                                                                <nav>
+                                                                    <ul class="pagination" >
+                                                                        <li>
+                                                                            <div class="pull-left paddright paddtop"><a ng-click="pagination.toPageId(0)">First&nbsp;&nbsp;</a></div>
+                                                                        </li>
+                                                                        <li>                        
+                                                                            <a href="#" aria-label="Previous" ng-click="pagination.prevPage()">
+                                                                                <span aria-hidden="true">&laquo;</span>
+                                                                            </a>
+                                                                        </li>
+                                                                        <li ng-repeat="n in [] | range: pagination.numPages" ng-class="{active: n == pagination.page}">
+                                                                            <a href="" ng-click="pagination.toPageId(n)">{{n + 1}}</a>
+                                                                        </li>
+                                                                        <li>
+                                                                            <a href="#" aria-label="Next" ng-click="pagination.nextPage()">
+                                                                                <span aria-hidden="true">&raquo;</span>
+                                                                            </a>
+                                                                        </li>
+                                                                        <li>
+                                                                            <div class="pull-left paddright paddtop"><a ng-click="pagination.toPageId(pagination.numPages - 1)">&nbsp;&nbsp;Last</a></div>
+                                                                        </li>
+                                                                    </ul>
+                                                                </nav>        
+                                                            </div>
+                                                        </apex:outputPanel> 
+                                                    </apex:pageblocksection>  
+                                                </apex:pageBlock>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div ng-show="isLoading" class="waiting-box"><span  ng-show="isLoading" >Please wait...<img  ng-show="isLoading" src="/img/loading.gif" /></span></div>
+                        </div>   
+                    </div>
+                </div>
+            </apex:form>
+        </div>
+
+    </body>
+</apex:page>

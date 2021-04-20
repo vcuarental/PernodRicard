@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_AlerteDeclarationRecolte</fullName>
+        <ccEmails>partners-mmpj@pernod-ricard.com</ccEmails>
+        <ccEmails>Guillaume.Crouigneau-ext@pernod-ricard.com</ccEmails>
+        <description>MMPJ_Ext_Vign_AlerteDeclarationRecoltefabrication</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>pascal.flouret@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <senderAddress>partners-mmpj@pernod-ricard.com</senderAddress>
+        <senderType>OrgWideEmailAddress</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_AlerteDocumentsFournis</template>
+    </alerts>
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Alertecalendriertraitement</fullName>
+        <ccEmails>partners-mmpj@pernod-ricard.com</ccEmails>
+        <ccEmails>Guillaume.Crouigneau-ext@pernod-ricard.com</ccEmails>
+        <description>MMPJ_Ext_Vign_Alertecalendriertraitement</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>alexandre.michez@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <recipients>
+            <recipient>philippe.brandy@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <senderAddress>partners-mmpj@pernod-ricard.com</senderAddress>
+        <senderType>OrgWideEmailAddress</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_AlerteDocumentsFournis</template>
+    </alerts>
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Document</fullName>
+        <description>MMPJ_Ext_Vign_Document</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>MMPJ_Ext_Vign_Admins_Fonctionnels_Cognac</recipient>
+            <type>group</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_Nouveau_Document</template>
+    </alerts>
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Document_upload_Champagne</fullName>
+        <description>MMPJ_Ext_Vign_Document_upload_Champagne</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>MMPJ_Ext_Vign_Admins_Fonctionnels_Champ</recipient>
+            <type>group</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_Nouveau_Document</template>
+    </alerts>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Calendrier traitement</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Alertecalendriertraitement</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Documents_Fournis__c.MMPJ_Ext_Vign_Type__c</field>
+            <operation>equals</operation>
+            <value>Calendrier de Traitement</value>
+        </criteriaItems>
+        <description>Envoyer un email dès qu&apos;un document de type calendrier traitement est créé au niveau de l&apos;objet document fourni</description>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_DeclarationRecolte</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_AlerteDeclarationRecolte</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Documents_Fournis__c.MMPJ_Ext_Vign_Type__c</field>
+            <operation>equals</operation>
+            <value>Déclaration de récolte,Déclaration de fabrication</value>
+        </criteriaItems>
+        <description>Envoyer un email dès qu&apos;un document de type déclaration récolte ou déclaration de fabrication est créé au niveau de l&apos;objet document fourni</description>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Document_upload_Champagne</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Document_upload_Champagne</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <formula>AND( 	OR( 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;RIB&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;KBIS&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;Récépissé ODG&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;Memento fiscal&quot;) 	), 	ISPICKVAL(MMPJ_Ext_Vign_Livreur__r.MMPJ_Ext_Vign_Societe_Segmentation__c,&quot;Champagne&quot; )   )</formula>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Document_upload_Cognac</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Document</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <formula>AND( 	OR( 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;RIB&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;KBIS&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;Récépissé ODG&quot;), 		ISPICKVAL(MMPJ_Ext_Vign_Type__c,&quot;Memento fiscal&quot;) 	), 	ISPICKVAL(MMPJ_Ext_Vign_Livreur__r.MMPJ_Ext_Vign_Societe_Segmentation__c,&quot;Cognac&quot; )   )</formula>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+</Workflow>

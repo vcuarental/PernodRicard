@@ -1,0 +1,156 @@
+<apex:page >
+    <apex:stylesheet value="{!URLFOR($Resource.dragdrop__javascript_libraries, '/css/dropzone.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.dragdrop__dzJquery)}" />
+    <apex:includeScript value="{!URLFOR($Resource.dragdrop__DropZone)}" />  
+    <apex:includeScript value="/canvas/sdk/js/publisher.js"/>  
+    <style>
+    	/* Fixes gray background that happens in communities */
+        .hasMotif {
+            margin:0px 4px 0px 0px;
+        }
+        .dz-drag-hover {
+        	border-color: rgba(0,128,0,0.85) !important;
+        	background: rgba(0,255,0,0.3) !important;
+        } 
+        .dz-highlight{
+        	border-color: rgba(0,0,255,0.85) !important;
+        }
+        /*Override lightning formatting. */
+        html body.sfdcBody{
+            font-family:'Helvetica';
+            color:#3c3d3e;
+            background:none transparent;margin:0;
+            padding:0px 10px 0px 10px;
+            height:100%;
+            overflow:auto;
+            -webkit-overflow-scrolling:touch
+        }
+        html{
+            overflow:auto;
+            -webkit-overflow-scrolling:touch
+        }
+    </style>
+        <div style="display:none">
+            <chatter:feed entityId="{!$User.Id}"/>
+        </div>
+    
+        <div id="dropzone-chatter" class="dz-drop-target" style="text-align:center;width:100%;overflow:auto;background-color:rgb(255, 255, 255);padding:0px;border:2px dashed rgb(234, 234, 234);font-size:16px;line-height:32px"><span class="uploadChatterClickable" style="cursor:pointer;color:rgb(1, 91, 167);"><span style="">Upload files</span></span> or drag and drop to add files...</div>
+        
+        <div id="dropzone-chatter-previews" class="dropzone-previews" style="clear:both;"></div>
+        
+    <script> 
+    
+    var myChatterDropzone;
+    dz_jQuery(function(){
+        var recordId;
+
+        // Try to find the Id of the record we are looking at, if any.
+        var documentText = dz_jQuery('html').html();
+        var tokenStart = documentText.indexOf("ResponseRequestedURL=") ;
+        var documentEnd = documentText.substr(tokenStart,documentText.length);
+        var tokenEndIndex = documentEnd.indexOf("');");
+        recordId = documentEnd.substr(tokenEndIndex-15,15);
+
+        function resizePublisher(){
+            var newHeight = (myChatterDropzone.files.length * 85) + 36;
+            Sfdc.canvas.publisher.resize({height : newHeight + "px"});
+        }
+
+       var dropTarget='#dropzone-chatter';
+       var url = '/chatter/handlers';
+        // If in a communities page, the url needs 'communities' appended...
+        if(typeof __sfdcSiteUrlPrefix !== 'undefined'){
+            url = __sfdcSiteUrlPrefix + url;
+        }
+     
+        myChatterDropzone = new Dropzone(dropTarget, {
+            url: url ,
+            parallelUploads:1,
+            uploadMultiple:false,
+            autoProcessQueue: true,
+            previewsContainer: '#dropzone-chatter-previews',
+            maxFilesize: 2000,
+            headers:{"Accept":"*/*"},
+            forceFallback: false,
+            paramName: 'chatterFile',
+            clickable: ".uploadChatterClickable",
+            accept: function(file, callback){
+               
+                // Remove all the files that were previously attempted to be uploaded.
+                // Set a variable on all the files that were uploaded so we know we can remove them
+                var removeFiles = [];
+                for(var i=0;i<myChatterDropzone.files.length;i++){
+                    var oldFile = myChatterDropzone.files[i];
+                    if(oldFile.removable){
+                        removeFiles.push(oldFile);
+                    }
+                }
+
+                for(var i=0;i<removeFiles.length;i++){
+                    myChatterDropzone.removeFile(removeFiles[i]);
+                }
+                var errors = '';
+                resizePublisher();
+                // Truncate the filename so it is only 80 characters long in total.
+                // We want to leave the extention intact though...
+                if(file.name.length > 80) {
+                    errors += ' The filename exceeds the maximum length allowed, which is 80 characters.';
+                }
+                if(errors.length > 0) {
+                    callback(errors);
+                } else{
+                     callback();
+                }
+            },
+            complete: function(file){
+                // When there are no more files left to try and upload, then refresh the page...
+
+                 
+                 if (this.getUploadingFiles().length === 0 && this.getQueuedFiles().length === 0) {
+                    
+                    // Set a variable on all the files that were uploaded so we know we can remove them
+                    for(var i=0;i<myChatterDropzone.files.length;i++){
+                        var oldFile = myChatterDropzone.files[i];
+                        oldFile.removable = true;
+                    }
+                 }
+            },
+            addRemoveLinks: false,
+            previewTemplate: "<div class=\"dz-preview dz-file-preview\">\n  <div class=\"dz-details\" style=\"height:auto;width:auto;background:inherit;padding:inherit;margin-bottom:0px\">\n<table style=\"white-space:nowrap\"><tr><td><div class=\"dz-filename\"><span data-dz-name></span></div></td>\n    <td><div class=\"dz-size\" data-dz-size style=\"position:relative;line-height:inherit;bottom:0px;height:auto\"></div>\n  </div>\n</td></tr><tr><td colspan=\"2\">  <div class=\"dz-progress\" style=\"top:28px\"><span class=\"dz-upload\" data-dz-uploadprogress></span></div>\n</td></tr></table>  <div class=\"dz-success-mark\" style=\"top:-25px;left-25px\"><span>✔</span></div>\n  <div class=\"dz-error-mark\" style=\"top:-25px;left-25px\"><span>✘</span></div>\n  <div class=\"dz-error-message\"><span data-dz-errormessage></span></div>\n</div>",
+            init: function() {
+                this.on("processing", function(file) {
+                  
+                });
+                 this.on("sending", function(file,xhrObj, formData) {
+                    debugger;
+                    formData.append("hiddenFileName", 'C:\\fakepath\\' + file.name);
+                    var lastPeriod = file.name.lastIndexOf('.');
+                    var extention = file.name.substring(lastPeriod);
+                    var filename = file.name.substring(0,lastPeriod);
+                    formData.append("fileName",filename);
+                    formData.append("shareOption","pvt");
+                    formData.append("feedItemType", "ContentPost");
+                    formData.append("entityId",recordId);
+                    formData.append("feedType","ENTITY");
+                    formData.append("refreshRecentFiles","false");
+                    formData.append("q",';postFile');
+                    
+                    var documentText = dz_jQuery('html').html();
+                    var tokenStart = documentText.indexOf("chatter.getToolbox().setToken('") ;
+                    var documentText = documentText.substr(tokenStart + 31);
+                    var tokenEnd = documentText.indexOf("')");
+                    var sid = documentText.substring(0,tokenEnd);
+                    formData.append("token",sid);
+                    
+                });
+                this.on("success",function(file,response){
+                     Sfdc.canvas.publisher.publish({name : 'publisher.refresh', payload :{feed:true}});
+                     myChatterDropzone.removeFile(file);
+                     resizePublisher();
+                });
+            }
+        });
+    });
+
+    </script>
+</apex:page>

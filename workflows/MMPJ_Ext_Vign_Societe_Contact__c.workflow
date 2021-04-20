@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fieldUpdates>
+        <fullName>MMPJ_Ext_Vign_Contact_Principal_false</fullName>
+        <field>MMPJ_Ext_Vign_Unicite__c</field>
+        <name>MMPJ_Ext_Vign_Contact_Principal_false</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Null</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>MMPJ_Ext_Vign_Contact_Principal_true</fullName>
+        <field>MMPJ_Ext_Vign_Unicite__c</field>
+        <formula>MMPJ_Ext_Vign_Societe__c</formula>
+        <name>MMPJ_Ext_Vign_Contact_Principal_true</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>MMPJ_Ext_Vign_Maj_EspacePersoMMPJetMoi</fullName>
+        <description>Set &quot;true&quot; to the checkbox EspacePersonnelMMPJetMoi</description>
+        <field>MMPJ_XRM_Espace_Personnel_MMPJetMoi__c</field>
+        <literalValue>1</literalValue>
+        <name>MMPJ_Ext_Vign_Maj_EspacePersoMMPJetMoi</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Contact_Principal_false</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Contact_Principal_false</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Societe_Contact__c.MMPJ_Ext_Vign_Contact_Principal__c</field>
+            <operation>equals</operation>
+            <value>False</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Societe_Contact__c.MMPJ_Ext_Vign_Unicite__c</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <description>Unicité du contact principal d&apos;une société</description>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Contact_Principal_true</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Contact_Principal_true</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Societe_Contact__c.MMPJ_Ext_Vign_Contact_Principal__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <description>Unicité du contact principal d&apos;une société</description>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_EspacePersoMMPJetMoi</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Maj_EspacePersoMMPJetMoi</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Societe_Contact__c.MMPJ_Ext_Vign_SocietContact_Segmentation__c</field>
+            <operation>equals</operation>
+            <value>Cognac</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>MMPJ_Ext_Vign_Societe_Contact__c.CreatedById</field>
+            <operation>equals</operation>
+            <value>MMPJ Ext Vign Service</value>
+        </criteriaItems>
+        <description>Set &quot;true&quot; to the checkbox EspacePersonnelMMPJetMoi when a Cognac Contact is created from the API User (MMPJ Ext Vign Service )</description>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+</Workflow>

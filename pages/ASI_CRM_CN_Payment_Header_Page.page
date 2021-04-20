@@ -1,0 +1,775 @@
+<!-- ---------------------------------------------------------------------------
+ * Filename: ASI_CRM_CN_Payment_Header_Page
+ * Author:   Stella Sing
+ * Purpose:  
+ *
+ * Copyright 2014 Introv Limited. All rights reserved.
+ * Customer confidential. Do not distribute.
+ *
+ * History
+ * -----------------------------------------------------------------------------
+ * 2014-03-10 Stella Sing           Create
+-->
+<apex:page standardController="ASI_TH_CRM_PaymentRequest__c" extensions="ASI_CRM_CN_Payment_Header_Controller">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.js')}"/>
+    <style>
+        .negative{
+        color : red;
+        font-weight : bold;
+        }
+        
+    </style>
+    <apex:outputPanel ><chatter:feedWithFollowers entityid="{!ASI_TH_CRM_PaymentRequest__c.id}" /></apex:outputPanel>
+<script>
+    let freeGoodsJSON = {!freeGoodsInterimDataJSON};
+    let promotionType = '{!PH.ASI_CRM_CN_Promotion_Type__c}';
+    let freeGoods = [];
+
+    $(document).ready(function () {
+        retrieveFreeGoods();
+    });
+
+    function retrieveFreeGoods() {
+        let whereClause = ' WHERE RecordType.DeveloperName = \'ASI_CRM_CN_CRM_Item_Group\' ';
+        if (promotionType != 'Consumer Promotion') {
+            whereClause = whereClause + ' AND ASI_CRM_CN_Consumer_Website__c = true AND ASI_CRM_Competitor__c = \'No\' AND (NOT ASI_MFM_Item_Group_Code__c like \'9L1%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9SC%\')  AND (NOT ASI_MFM_Item_Group_Code__c like \'9L2%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9H%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'Z%\') ' ;
+        }
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_CRM_CN_Payment_Header_Controller.retrieveFreeGoods}', 'ASI_MFM_Item_Group__c', whereClause
+            , function (result, event) {
+                if (event.status && result) {
+                    freeGoods = result.map(function (res) {
+                        return {
+                            label: res["Name"],
+                            value: res["Id"],
+                            Name: res.Name,
+                            ASI_CRM_CN_Item_Group__r: res,
+                            unitPrice: res.T1_Price__r
+                        }
+                    });
+                }
+                initAutoCompleteComponent();
+            }
+            , {escape: true}
+        );
+    }
+    function submit_not_allow(){
+        alert("  Remaining Amount more than 10000 ,Total Amount more than 2000000, Please check Business License Qualify and Overpayment Approval!");
+    }
+
+    function getColumnIndexesWithClass(columns, className) {
+        let indexes = [];
+        $.each(columns, function (index, columnInfo) {
+            if (columnInfo.className && columnInfo.className.split(' ').some(columnClassName => columnClassName === className)) {
+                indexes.push(index);
+            }
+        });
+
+        return indexes;
+    }
+
+    function initAutoCompleteComponent() {
+
+        $(".free-goods-input").autocomplete({
+            source: freeGoods,
+            minLength: 0,
+            scroll: true,
+            select: function (event, ui) {
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            },
+            focus: function (event, ui) {
+                // event.preventDefault();
+            }
+        })
+
+
+    }
+
+    function formatNumber(number) {
+        if (number && number.toLocaleString) {
+            return number.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+        return number;
+    }
+
+    function drawTable(tableId) {
+        let freeGoodsColumns;
+        freeGoodsColumns = [
+            {
+                title: '',
+                render: function (data, type, row, meta) {
+                    // if ($.isEmptyObject(row) || !isEdit) {
+                        return '';
+                    // }
+                    // return `<button type="button" class="BSCommandButtonSM" onclick="deleteRow(${meta.row},'${tableId}')"><span class="bs glyphicon glyphicon-trash" style="color:red;font-size: 20px;"></span></button>`;
+                },
+            },
+            {
+                title: '{!$ObjectType.ASI_MFM_Item_Group__c.fields.ASI_MFM_Item_Group_Code__c.Label}',
+                data: 'ASI_CRM_CN_Item_Group__r.ASI_MFM_Item_Group_Code__c',
+            },
+            {
+                //title: "{!$ObjectType.ASI_MFM_Item_Group__c.fields.Name.Label}",
+                title: "赠品品类",
+                data: 'ASI_CRM_CN_Item_Group__r.Name',
+                render: function (data, type, row, meta) {
+                    data = data || '';
+                    return '<a href="/' + row.ASI_CRM_CN_Item_Group__c + '">' + data + '</a>';
+                },
+            },
+            {
+                title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_CN_Suggest_Unit_Price__c.Label}',
+                className: 'number',
+                data: 'ASI_CRM_CN_Suggest_Unit_Price__c',
+                render: function (data, type, row, meta) {
+                    let classes = [];
+
+                    return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                },
+            },
+            {
+                title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_Unit_Price__c.Label}',
+                className: 'number',
+                data: 'ASI_CRM_Unit_Price__c',
+                render: function (data, type, row, meta) {
+                    let classes = [];
+
+
+                        return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                },
+            },
+            {
+                title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_TH_CRM_Quantity__c.Label}',
+                className: 'number summable',
+                data: 'ASI_TH_CRM_Quantity__c',
+                render: function (data, type, row, meta) {
+                    let classes = [];
+
+
+                    
+                        return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                },
+            },
+            {
+                title: '{!$Label.ASI_CRM_CN_CTD_Payable_Amount}',
+                className: 'number summable',
+                data: 'ASI_CRM_CN_Total_Payable__c',
+            },
+        ];
+            // }
+
+        let table = $(tableId).DataTable({
+            paging: false,
+            ordering: false,
+            searching: false,
+            info: false,
+            drawCallback: function () {
+                initAutoCompleteComponent();
+            },
+            footerCallback: function (tfoot, data, start, end, display) {
+                const api = this.api();
+                let htmlString = '';
+
+                const summableColumns = api.columns('.summable').indexes();
+
+                api.columns().every(function () {
+                    const column = this;
+
+                    if (column.visible()) {
+                        htmlString += '<th>';
+
+                        let sum = '';
+                        if (summableColumns.indexOf(column.index()) !== -1) {
+                            sum = this
+                                .data()
+                                .reduce(function (a, b) {
+                                    const x = parseFloat(a) || 0;
+                                    const y = parseFloat(b) || 0;
+                                    return x + y;
+                                }, 0);
+                            htmlString += formatNumber(sum);
+                        }
+                        htmlString += '</th>';
+
+                    }
+
+                });
+                $(tfoot).select('tr').html(htmlString);
+
+            },
+            columnDefs: [
+                {
+                    targets: getColumnIndexesWithClass(freeGoodsColumns, 'number'),
+                    defaultContent: 0.00,
+                    render: function (data, type, row) {
+                        return formatNumber(data || 0);
+                    }
+                },
+                {
+                    targets: '_all',
+                    defaultContent: '',
+                },
+            ],
+            data: freeGoodsJSON.paymentRequestLines,
+            columns: freeGoodsColumns
+        })
+        table.draw();
+    }
+</script>
+    <apex:form >
+        <apex:pageBlock title="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Label}">
+            <apex:pageMessages id="showmsg"></apex:pageMessages>
+            <apex:pageMessages />
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Edit}" action="{!GoEditHeader}" rendered="{!PH.ASI_TH_CRM_Status__c=='Draft'}"/>
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Form_Preview}" onClick="window.open('/apex/ASI_CRM_CN_PaymentRequestForm_Page?id={!PH.id}&pdf=1');" />
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_CTD_Vol_Report}" onClick="window.open('/apex/ASI_CRM_CN_PSFCTDPDF_Page?id={!PH.ASI_TH_CRM_Contract__c}');" />
+                
+                <!--<apex:commandButton value="5.1 Report" />-->
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Submit_Approval}" action="{!submitApproval}"  rendered="{!PH.ASI_TH_CRM_Status__c=='Draft'}"/>
+                <!--<apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Submit_Approval}" onclick="{submit_not_allow();}" rendered="{!!Allow_Submit_For_Approval && PH.ASI_TH_CRM_Status__c=='Draft'}" />-->
+          <!--      <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Upl_PO_Ver}" action="{!updatePOVersion}" rendered="{!PH.ASI_TH_CRM_Status__c=='Draft'}"/> -->
+                <!--<apex:commandButton value="Payment Instruction" />
+                                
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payment_Receipt}"  onClick="window.open('/apex/ASI_CRM_CN_PaymentReceiptPDFPage?id={!PH.id}');"/>-->
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payment_Instruction}"  onClick="window.open('/apex/ASI_CRM_CN_PaymentSlipPage?id={!PH.id}&PTSelected=Instruction');" rendered="{!PH.ASI_TH_CRM_Status__c=='Paid'}"/>  <!-- || PH.ASI_TH_CRM_Status__c=='Approved' -->
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payment_Receipt}"  onClick="window.open('/apex/ASI_CRM_CN_PaymentSlipPage?id={!PH.id}&PTSelected=Receipt');" rendered="{!PH.ASI_TH_CRM_Status__c=='Paid' }"/> <!-- || PH.ASI_TH_CRM_Status__c=='Approved' -->
+                
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_COMMON_BTN_Return}" action="{!GoReturn}" rendered="{!showReturn}"  rerender="showmsg"/>
+                
+                <!--20171110 Introv-->
+                <apex:commandButton value="Tax Calculation" action="{!reDirectToTaxSavingPage}" rendered="{!PH.ASI_TH_CRM_Status__c == 'Paid' || PH.ASI_TH_CRM_Status__c == 'Approved'}"/>
+                <!--20171110 End-->
+                
+            </apex:pageBlockButtons>
+            <apex:pageBlockButtons location="bottom">
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payee_Detail}" action="{!GoEditDetail}" rendered="{!PH.ASI_TH_CRM_Status__c=='Draft'}"/>
+                <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Payee_Info}" action="{!GoEditPayee}" rendered="{!PH.ASI_TH_CRM_Status__c=='Draft'}"/>
+            </apex:pageBlockButtons>
+            <apex:pageBlockSection title="{!$Label.ASI_CRM_CN_VF_LABEL_Header_Info}">
+                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.Name.Label}" for="paymentrequested_no" />
+                    <apex:outputText value="{!PH.name}" id="paymentrequested_no"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payment_Raised_Date__c.Label}" for="paymentraised_date "/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Payment_Raised_Date__c}" id="paymentraised_date" />
+                </apex:pageBlockSectionItem>
+                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_No__c.Label}" for="pono" />
+                    <!--------Laputa change 20171121-------------->
+                    <apex:outputLink value="ASI_CRM_RedirectContractViewPage?id={!PH.ASI_TH_CRM_Contract__c}" id="pono">{!PH.ASI_CRM_CN_PO_No__c}</apex:outputLink>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_Start_Date__c.Label}" for="postartdate" />
+                    <apex:outputField value="{!PH.ASI_CRM_CN_PO_Start_Date__c}" id="postartdate"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_OutletWS__c.Label}" for="outlet_ws" />
+                    <apex:outputField value="{!PH.ASI_CRM_CN_OutletWS__c}" id="outlet_ws"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_End_Date__c.Label}" for="poenddate"/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_PO_End_Date__c}" id="poenddate"/>
+                </apex:pageBlockSectionItem>
+                <!--21060622 Ben @ Elufa-->
+                <apex:pageBlockSectionItem rendered="{!boolCNLanguage}" >
+                    <apex:outputText value="{!if(PH.ASI_CRM_New_FY_Payment__c, 'PO类别', '促销类别')}"></apex:outputText>
+                    <!--<apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Promotion_Type__c.Label}" for="promotiontype"/>-->
+                    <apex:outputText value="{!poTypeMap[PH.ASI_CRM_CN_Promotion_Type__c]}" id="promotiontype"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem rendered="{!!boolCNLanguage}" >
+                    <apex:outputText value="{!if(PH.ASI_CRM_New_FY_Payment__c, 'PO Type', 'Promotion Type')}"></apex:outputText>
+                    <!--<apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Promotion_Type__c.Label}" for="promotiontype"/>-->
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Promotion_Type__c}" id="promotiontype"/>
+                </apex:pageBlockSectionItem>
+                <!--20160622 End-->
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Bottle_Collection_Rate__c.Label}" for="bottle_collection_date"/>
+                    <apex:outputText value="{0,number,0}%"><apex:param value="{!PH.ASI_CRM_CN_Bottle_Collection_Rate__c}"/></apex:outputText>
+                </apex:pageBlockSectionItem>
+                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Last_Payment__c.Label}"/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Last_Payment__c}"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Currency__c.Label}" for="currency"/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Currency__c}" id="currency"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Last_Year_Payment__c.Label}"/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Last_Year_Payment__c}"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_TH_CRM_Status__c.Label}" for="status"/>
+                    <apex:outputField value="{!PH.ASI_TH_CRM_Status__c}" id="status"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$Label.ASI_CRM_CN_Payment_Description}" for="description" />
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Description__c}" id="description" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payment_Type__c.Label}" for="paymenttype" />
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Payment_Type__c}" id="paymenttype" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_Contract__c.Fields.ASI_CRM_Investment_Type__c.Label}" for="investmenttype" />
+                    <apex:outputField value="{!PH.ASI_TH_CRM_Contract__r.ASI_CRM_Investment_Type__c}" id="investmenttype" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem rendered="{!IF(PH.ASI_TH_CRM_Contract__r.ASI_CRM_CN_Outlet_WS__r.RecordType.DeveloperName == 'ASI_CRM_CN_WS',true,false)}" >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_Volume_Option__c.Label}" for="paymenttype" />
+                    <apex:outputField value="{!PH.ASI_CRM_Volume_Option__c}" id="paymenttype" />
+                </apex:pageBlockSectionItem>
+
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_TH_CRM_GL_Date__c.Label}"/>
+                    <apex:outputField value="{!PH.ASI_TH_CRM_GL_Date__c}" id="gldate"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Invoice_Date__c.Label}"/>
+                    <apex:outputField value="{!PH.ASI_CRM_CN_Invoice_Date__c}" id="invoicedate"/>
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>            
+        </apex:PageBlock>
+        <apex:pageblock title="{!$Label.ASI_CRM_CN_Payment_Summary}" >
+        <apex:pageblocktable value="{!LPaymentSummary}" var="row">
+            
+            <apex:column style="{!if(PH.ASI_CRM_New_FY_Payment__c, 'width:19%', 'width:20%')}">
+                <apex:facet name="header"><apex:outputLabel value="{!$Label.ASI_CRM_CN_Payment_Summary}" /></apex:facet> 
+                <apex:outputText value="{!row.feeChiName}"/>
+                <apex:facet name="footer"><apex:outputLabel value="{!strTotal}"/></apex:facet>
+            </apex:column>
+            
+            <!--20160726 Ben @ Elufa-->
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'CNY(Est)', '春节(预估)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.cnyEst}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalEstAmtCNY}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'CNY Remaining', '春节(剩余金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.cnyRemaining}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRemainAmtCNY}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'CNY Request Amt.', '春节(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.cnyRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtCNY}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'MAF(Est)', '中秋(预估)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.mafEst}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalEstAmtMAF}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'MAF Remaining', '中秋(剩余金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.mafRemaining}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRemainAmtMAF}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'MAF Request Amt.', '中秋(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.mafRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtMAF}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'Others(Est)', '其他(预估)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.othersEst}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalEstAmtOthers}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'Others Remaining', '其他(剩余金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.othersRemaining}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRemainAmtOthers}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            
+            <!--<apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'Others Request Amt.', '其他(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.othersRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtOthers}"/></apex:outputText></apex:facet> 
+            </apex:column>--><!--20160816, added by Leo-->
+            <!--20160726 End-->
+            
+            <apex:column style="{!if(PH.ASI_CRM_New_FY_Payment__c, 'width:9%', 'width:20%')}">
+                <apex:facet name="header"><apex:outputLabel value="{!$Label.ASI_CRM_CN_PO_Estimated_Amount}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.POEstimateAmt}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalPOEstAmt}"/></apex:outputText></apex:facet> 
+            </apex:column>
+            
+            <apex:column style="{!if(PH.ASI_CRM_New_FY_Payment__c, 'width:9%', 'width:20%')}">
+                <apex:facet name="header"><apex:outputLabel value="{!$Label.ASI_CRM_CN_PO_Remaining_Amount}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.PORemainAmt}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalPORemainAmt}"/></apex:outputText></apex:facet>
+            </apex:column>
+            
+            <apex:column style="{!if(PH.ASI_CRM_New_FY_Payment__c, 'width:9%', 'width:20%')}">
+                <apex:facet name="header"><apex:outputLabel value="{!$Label.ASI_CRM_CN_Payment_Request_Amount}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.PaymentRequestAmount}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmt}"/></apex:outputText></apex:facet>
+            </apex:column>
+            <!--20160816, added by Leo-->
+            <apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'CNY Request Amt.', '春节(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.cnyRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtCNY}"/></apex:outputText></apex:facet> 
+            </apex:column>
+            <apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'MAF Request Amt.', '中秋(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.mafRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtMAF}"/></apex:outputText></apex:facet> 
+            </apex:column>
+            <apex:column style="width:6%" rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header"><apex:outputLabel value="{!if(!boolCNLanguage, 'Others Request Amt.', '其他(申请金额)')}" /></apex:facet> 
+                <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.othersRequest}"/></apex:outputText>
+                <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!TotalRequestAmtOthers}"/></apex:outputText></apex:facet> 
+            </apex:column>
+            <!--20160816, added by Leo-->
+        </apex:pageblocktable>
+    </apex:pageblock>
+        <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_BRSF}">
+        <apex:pageblockButtons location="top">
+            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_BRSF_Report}" onClick="window.open('/apex/ASI_CRM_CN_BRSFFormPDFPage?id={!PH.id}');" rendered="{!PH.ASI_TH_CRM_Status__c!='Draft'}" />
+        </apex:pageblockButtons>
+            <apex:pageblocktable value="{!BRSFList}" var="row">
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_CRM_Sub_Brand_Grade__c.Fields.Name.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__r.ASI_CRM_CN_Sub_brand_Grade__r.Name}" rendered="{!!boolCNLanguage}"/>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__r.ASI_CRM_CN_Sub_brand_Grade__r.ASI_CRM_Chinese_Name__c}" rendered="{!boolCNLanguage}"/>
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_MFM_Sub_brand__c.Fields.Name.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Incentive_BT__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Incentive_BT__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Target_BT__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Target_BT__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Actual_Vol__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Actual_Vol__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Completion_Rate__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Completion_Rate__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Total_Payable__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Total_Payable__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Payable_Vol__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Payable_Vol__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Bottle_Collected__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Bottle_Collected__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Collection_Rate__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,0}%"><apex:param value="{!row.ASI_CRM_CN_Collection_Rate__c}" /></apex:outputText>
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Offtake_Vol__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Offtake_Vol__c}" />
+                </apex:column>
+            </apex:pageblocktable>
+
+            <br/>
+            <apex:outputpanel id="PSFtotal" >
+                <apex:outputpanel >
+                    <apex:pageblocksection >
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$Label.ASI_CRM_CN_VF_LABEL_Completion_Rate}" />
+                            <apex:outputText value="{0,number,0}%"><apex:param value="{!completionRate}"/></apex:outputText>
+                            <!--<apex:outputField value="{!PH.ASI_CRM_CN_Completion_Rate__c}" />-->
+                        </apex:pageblocksectionitem>
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payable_Amount__c.Label}" />
+                            <apex:outputField value="{!PH.ASI_CRM_CN_Payable_Amount__c}" />
+                        </apex:pageblocksectionitem>
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Overpayment_Reason__c.Label}" />
+                            <!--<apex:inputText value="{!OverPaymentReason}"/>-->
+                            <apex:outputPanel >
+                            <apex:outputField id="overpayment_field" value="{!PH.ASI_CRM_CN_Overpayment_Reason__c}" >
+                            </apex:outputField>
+                            <apex:message for="overpayment_field"  rendered="{!require_overpayment_reason}"/>
+                            </apex:outputPanel>
+                        </apex:pageblocksectionitem>
+                        
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Other_Reason__c.Label}" />
+                            <apex:outputPanel >
+                            <apex:outputField id="other_field" value="{!PH.ASI_CRM_CN_Other_Reason__c}">
+                            </apex:outputField>
+                            <apex:message for="other_field"  rendered="{!require_other_reason}"/>
+                            </apex:outputPanel>
+                        </apex:pageblocksectionitem>
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Adjustment__c.Label}" />
+                        <!--<apex:inputText value="{!adjustment}">-->
+                            <apex:outputField value="{!PH.ASI_CRM_CN_Adjustment__c}" >
+                            
+                            <!--</apex:inputText>-->
+                            </apex:outputField>
+                        </apex:pageblocksectionitem>
+                        <apex:pageblocksectionitem >
+                            <apex:outputLabel value="{!$Label.ASI_CRM_CN_VF_LABEL_Actual_Payment}" />
+                            <apex:outputText value="{0,number,###,###,##0.00}" id="actual"><apex:param value="{!actualPayment}"/></apex:outputText>
+                            <!--<apex:outputField value="{!PH.ASI_CRM_CN_Actual_Payment__c}" id="actual" />-->
+                        </apex:pageblocksectionitem>
+                        <!--<apex:pageblocksectionitem >
+                            <apex:outputLabel value="Over-Payment Comment" />
+                            <apex:outputField value="{!PH.ASI_CRM_CN_Overpayment_Comment__c}"></apex:inputField>
+                        </apex:pageblocksectionitem>--> 
+                       
+                    </apex:pageblocksection>
+                </apex:outputpanel>
+            </apex:outputpanel>
+
+        </apex:pageblock>
+        <apex:pageblock title="{!if(PH.ASI_CRM_New_FY_Payment__c, $Label.ASI_CRM_CN_VF_LABEL_PSF_NewFY, $Label.ASI_CRM_CN_VF_LABEL_PSF)}">
+        <apex:pageblockButtons location="top">
+            <apex:commandButton value="{!if(PH.ASI_CRM_New_FY_Payment__c, $Label.ASI_CRM_CN_VF_LABEL_PSF_Report_NewFY, $Label.ASI_CRM_CN_VF_BTN_PSF_Report)}" onClick="window.open('/apex/ASI_CRM_CN_PSFFormPDFPage?id={!PH.id}');" rendered="{!PH.ASI_TH_CRM_Status__c!='Draft'}" />
+        </apex:pageblockButtons>
+            <apex:pageblocktable value="{!PSFList}" var="row">
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Payment_Description__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Payment_Description__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Period_Start__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Period_Start__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Period_End__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Period_End__c}" />
+                </apex:column>
+                <!-- 20170712 Introv commented-->
+                <!--<apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Supporting_Document__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Supporting_Document__c}" />
+                </apex:column>-->
+               <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_TH_CRM_Amount__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_TH_CRM_Amount__c}" /></apex:outputText>
+                </apex:column>
+                <!--20160816, added by Leo-->
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}">
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CNY_Est__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_CNY_Est__c}" /></apex:outputText>
+                </apex:column>
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}">
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_MAF_Est__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_MAF_Est__c}" /></apex:outputText>
+                </apex:column>
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}">
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_Other_Est__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_Other_Est__c}" /></apex:outputText>
+                </apex:column>
+                <!--20160816, added by Leo-->
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Comment__c.Label}</apex:facet> 
+                    <apex:outputField value="{!row.ASI_CRM_CN_Comment__c}"/>
+                </apex:column>             
+            </apex:pageblocktable>
+        </apex:pageblock>
+        <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_Other_Payment_Detail}">
+            <apex:pageblocktable value="{!OTPList}" var="row">
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Expense_Type__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Expense_Type__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_TH_CRM_Amount__c.Label}"/></apex:facet>
+                    <apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_TH_CRM_Amount__c}" /></apex:outputText>
+                </apex:column>
+                <!--20160613 Ben @ Elufa-->
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                    <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_MAF_Est__c.Label}</apex:facet>
+                    <apex:outputText rendered="{!festivalMap[row.id]}" value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_MAF_Est__c}" /></apex:outputText>
+                </apex:column>
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                    <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CNY_Est__c.Label}</apex:facet>
+                    <apex:outputText rendered="{!festivalMap[row.id]}" value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_CNY_Est__c}" /></apex:outputText>
+                </apex:column>
+                <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                    <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_Other_Est__c.Label}</apex:facet>
+                    <span class="OthersEstCost"><apex:outputText rendered="{!festivalMap[row.id]}" value="{0,number,###,###,##0.00}"><apex:param value="{!row.ASI_CRM_Other_Est__c}" /></apex:outputText></span>
+                </apex:column>
+                <!--20160613 End-->
+                <!--<apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Remaining_Amount__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Remaining_Amount__c}" />
+                </apex:column>-->
+                <apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Comment__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Comment__c}" />
+                </apex:column>
+            </apex:pageblocktable>
+        </apex:pageblock>       
+        <apex:pageBlock title="促销奖励所含赠酒明细" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Promotion'}">
+            <!-- <apex:variable var="" value="" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Consumer Promotion'}">
+                <div class="PanelHeader">礼品及赠酒费用</div>
+            </apex:variable> -->
+            <!-- <apex:variable var="" value=""  rendered="{!PH.ASI_CRM_CN_Promotion_Type__c != 'Consumer Promotion'}"> -->
+            <!-- <div class="PanelHeader">促销奖励所含赠酒明细</div> -->
+            <!-- </apex:variable> -->
+            <div class="PanelBody">
+                <table id="free_goods_table" class="bs table table-condensed data-table">
+                    <tfoot>
+                    <tr></tr>
+                    </tfoot>
+                </table>
+
+                <script>
+                    drawTable('#free_goods_table');
+                </script>
+
+            </div>
+        </apex:pageBlock>
+        <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_Cash}" rendered="{!cashtype}">
+        <apex:pageblocksection columns="1">
+            <apex:pageblocktable value="{!Payee_Item_Map_CASH}" var="itm" id="item">
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Cash_Payee_Name_T1__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Cash_Payee_Name_T1__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Amount__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Amount__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Reason__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CASH[itm].ASI_CRM_CN_Comfirm_Receipt__c}" />
+                </apex:column>
+            </apex:pageblocktable>
+        </apex:pageblocksection>
+     </apex:pageblock>
+     <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_Discount}" rendered="{!discounttype}">
+        <apex:pageblocksection title="{!$Label.ASI_CRM_CN_VF_LABEL_Discount}" columns="1">
+            <apex:pageblocktable value="{!Payee_Item_Map_DISCOUNT}" var="itm" id="item">
+                <apex:column >
+                    <apex:facet name="header">{!$Label.ASI_CRM_CN_VF_LABEL_T2_WS}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Payee_T2__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$Label.ASI_CRM_CN_VF_LABEL_T1_WS}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Payee_T1__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Discount_Amount__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Amount__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Reason__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Instruction_Sent_Time__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Instruction_Sent_Time__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_DISCOUNT[itm].ASI_CRM_CN_Comfirm_Receipt__c}" />
+                </apex:column>
+            </apex:pageblocktable>
+        </apex:pageblocksection>
+        <apex:pageblocksection title="{!$Label.ASI_CRM_CN_VF_LABEL_Others}" columns="1">
+            <apex:pageblocktable value="{!Payee_Item_Map_CD}" var="itm" id="item">
+                <apex:column >
+                    <apex:facet name="header">{!$Label.ASI_CRM_CN_VF_LABEL_T2_WS}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Payee_T2__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$Label.ASI_CRM_CN_VF_LABEL_T1_WS}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Payee_T1__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Discount_Amount__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Amount__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Reason__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Reason__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Instruction_Sent_Time__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Instruction_Sent_Time__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_CN_PH_Payee_Line_Item__c.Fields.ASI_CRM_CN_Comfirm_Receipt__c.Label}:</apex:facet>
+                    <apex:outputField value="{!Payee_Item_Map_CD[itm].ASI_CRM_CN_Comfirm_Receipt__c}" />
+                </apex:column>
+            </apex:pageblocktable>
+        </apex:pageblocksection>
+     </apex:pageblock>
+        
+     
+    </apex:form>
+    
+    <apex:relatedList id="Attachments" subject="{!pageid}" list="CombinedAttachments"/>
+    <apex:relatedList id="Approval" subject="{!pageid}" list="ProcessSteps"/>
+    <apex:relatedList id="ApprovalComment" subject="{!pageid}" list="Payment_Request_Approval_Comments__r" />
+    <!-- Hiding Standard Submit for Approval button -->
+    <script type="text/javascript"> 
+        function addLoadEvent(func) {   
+            var oldonload = window.onload;
+            if (typeof window.onload != 'function') {   
+                window.onload = func;   }   
+            else {  window.onload = function() {    
+                if (oldonload) {    oldonload();    }   
+                func(); }   
+            }   
+        }   
+        addLoadEvent(   
+            function() {    checkPage();    }   ); 
+    </script>
+    &nbsp;
+    <script type="text/javascript">     
+        function checkPage() {  
+            if (document.getElementsByName("piSubmit")[0] != null)  
+                document.getElementsByName("piSubmit")[0].style.display = 'none';   
+        }
+    //20160621 Ben @ Elufa
+    var $inputEle = $('td span.OthersEstCost').each(function(){
+        
+        if($(this).text().indexOf('-') > -1){
+            $(this).addClass('negative');
+        }else{
+            $(this).removeClass('negative');
+        }
+    });
+    //20160621 End
+    </script>
+</apex:page>

@@ -1,0 +1,138 @@
+<!--
+ - Created by User on 5/31/2018.
+ -->
+
+<aura:component description="EUR_CRM_OP_Action" controller="EUR_CRM_OP_ActionController"
+                implements="force:LightningQuickActionWithoutHeader,flexipage:availableForRecordHome,lightning:actionOverride,force:hasRecordId,force:hasSObjectName">
+
+    <!--<aura:attribute name="recordId" type="String" access="public"/>-->
+    <aura:attribute name="isOpenOPActionTab" type="Boolean" access="public" default="false"/>
+    <aura:attribute name="recordTemplateId" type="String" access="public"/>
+    <aura:attribute name="actionChangedFields" type="EUR_CRM_OP_Action__c" access="public"/>
+    <aura:attribute name="hasQuota" type="Boolean" access="public"/>
+    <aura:attribute name="hasTarget" type="Boolean" access="public"/>
+
+    <aura:attribute name="new_actionChangedFields" type="EUR_CRM_OP_Action__c" access="private"/>
+    <aura:attribute name="hideOPTarget" type="Boolean" access="private"/>
+    <aura:attribute name="recordTypeList" type="String[]" access="private"/>
+    <aura:attribute name="selectedRecordType" type="String[]" access="private"/>
+    <aura:attribute name="selectedArrayGeneralPromo" type="List" access="private"/>
+    <aura:attribute name="selectedArrayPromoTarget" type="List" access="private"/>
+    <aura:attribute name="selectedArrayPromoTargetSumm" type="List" access="private"/>
+    <aura:attribute name="multiPicklistForRecType" type="String" access="private"/>
+    <aura:attribute name="fieldNameForGeneralOrProduct" type="String" access="private"
+                    default="EUR_CRM_MultiPLGeneralOrProductRT__c"/>
+    <aura:attribute name="fieldNameForTargetSumm" type="String" access="private"
+                    default="EUR_CRM_MultiPLPromoTargetSumm__c"/>
+    <aura:attribute name="fieldNameForTarget" type="String" access="private" default="EUR_CRM_MultiPLOpTarget__c"/>
+    <aura:attribute name="isReady" type="Boolean" access="private" default="false"/>
+    <aura:attribute name="valueSet_PICKLIST" type="List" default="[]" access="public"/>
+    <aura:attribute name="valueSetSuccessfulStatus_PICKLIST" type="List" default="[]" access="public"/>
+    <aura:attribute name="valueUnsuccess_PICKLIST" type="String" access="public"/>
+    <aura:attribute name="valueSuccessfulStatus_PICKLIST" type="String" access="public"/>
+    <aura:attribute name="valueSuccess_PICKLIST" type="String" access="public"/>
+    <aura:attribute name="old_valueUnsuccess_PICKLIST" type="String" access="public"/>
+    <aura:attribute name="old_valueSuccess_PICKLIST" type="String" access="public"/>
+    <aura:attribute name="spinner" type="Boolean" access="private"/>
+    <aura:attribute name="isGeneralRecordType" type="Boolean" access="private"/>
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+
+    <aura:handler event="aura:waiting" action="{!c.showSpinner}"/>
+    <aura:handler event="aura:doneWaiting" action="{!c.hideSpinner}"/>
+    <aura:handler name="actionFieldChange" event="c:EUR_CRM_OP_ActionFieldChange" action="{!c.onActionFieldChange}"/>
+    <aura:registerEvent name="closeOPActionTab" type="c:EUR_CRM_OP_CloseOPAction"/>
+
+    <!--loading spinner start... style=Brand Medium (blue dots)-->
+    <aura:if isTrue="{!v.spinner}">
+        <div aura:id="spinnerId" class="slds-spinner_container">
+            <div class="slds-spinner--brand  slds-spinner slds-spinner--large slds-is-relative" role="alert">
+                <span class="slds-assistive-text">Loading</span>
+                <div class="slds-spinner__dot-a"></div>
+                <div class="slds-spinner__dot-b"></div>
+            </div>
+        </div>
+    </aura:if>
+    <!-- Loading spinner end-->
+
+    <aura:if isTrue="{!v.isReady}">
+        <div class="slds-modal slds-fade-in-open modal-glass slds-backdrop fadein slds-backdrop--open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <p class="slds-text-heading--medium">{!$Label.c.EUR_CRM_OP_Action_title}</p>
+                </header>
+
+                <div class="slds-modal__content slds-p-around_medium">
+
+                    <div class="slds-grid slds-grid_align-spread">
+                        <!-- BODY -->
+                        <div class="slds-col slds-size_1-of-3">
+
+                            <lightning:select aura:id="selectRecordType" label="Record Type"
+                                              onchange="{! c.onChangeRecordType }"
+                                              value="{!v.selectedRecordType[0]}" required="true">
+                                <aura:iteration items="{!v.recordTypeList}" var="option">
+                                    <option text="{!option.label}" value="{!option.value}"
+                                            selected="{!v.selectedRecordType[0] == option.value}"/>
+                                </aura:iteration>
+                            </lightning:select>
+                                {!v.body}
+
+                            <lightning:select aura:id="idFieldSuccess" label="Selected Field for Success"
+                                              value="{!v.valueSuccess_PICKLIST}"
+                                              onchange="{!c.doChangeFieldSuccess}">
+                                <option value="">--none--</option>
+                                <aura:iteration items="{!v.valueSet_PICKLIST}" var="option">
+                                    <option text="{!option.label}" value="{!option.value}"
+                                            selected="{!v.valueSuccess_PICKLIST == option.value}"/>
+                                </aura:iteration>
+                            </lightning:select>
+                            <aura:if isTrue="{!v.valueSetSuccessfulStatus_PICKLIST.length > 1}">
+                                <lightning:select aura:id="idFieldSuccessfulStatus" label="Successful Status"
+                                                   value="{!v.valueSuccessfulStatus_PICKLIST}"
+                                                  onchange="{!c.doChangeFieldSuccessfulStatus}">
+                                    <aura:iteration items="{!v.valueSetSuccessfulStatus_PICKLIST}" var="option">
+                                        <option text="{!option.label}" value="{!option.value}"
+                                                selected="{!v.valueSuccessfulStatus_PICKLIST == option.value}"/>
+                                    </aura:iteration>
+                                </lightning:select>
+                            </aura:if>
+
+                            <lightning:select aura:id="idFieldUnsuccess" label="Selected Field for Unsuccess Reason"
+                                              value="{!v.valueUnsuccess_PICKLIST}"
+                                              onchange="{!c.doChangeFieldUnsucess}">
+                                <option value="">--none--</option>
+                                <aura:iteration items="{!v.valueSet_PICKLIST}" var="option">
+                                    <option text="{!option.label}" value="{!option.value}"
+                                            selected="{!v.valueUnsuccess_PICKLIST == option.value}"/>
+                                </aura:iteration>
+                            </lightning:select>
+                        </div>
+                        <div class="slds-col slds-size_3-of-5">
+                            <c:EUR_CRM_OP_MultyPiclist devName="VisitAction"
+                                                       fieldName="{!v.fieldNameForGeneralOrProduct}"
+                                                       label="{!$Label.c.EUR_CRM_Visit_Action}"
+                                                       recordId="{!v.actionChangedFields.Id}"
+                                                       selectedArray="{!v.selectedArrayGeneralPromo}"
+                                                       listOptions="{!v.valueSet_PICKLIST}"/>
+
+                            <aura:if isTrue="{!and(!v.isGeneralRecordType, !v.hideOPTarget)}">
+                                <c:EUR_CRM_OP_MultyPiclist devName="PromoTarget" fieldName="{!v.fieldNameForTarget}"
+                                                           label="{!$Label.c.EUR_CRM_OP_Target_in_Promo}"
+                                                           recordId="{!v.actionChangedFields.Id}"
+                                                           selectedArray="{!v.selectedArrayPromoTarget}"/>
+                            </aura:if>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <footer class="slds-modal__footer">
+                    <lightning:button label="Cancel" onclick="{!c.cancelOPAction}"/>
+                    <lightning:button label="Save" onclick="{!c.saveOPAction}"/>
+                </footer>
+            </div>
+        </div>
+    </aura:if>
+</aura:component>

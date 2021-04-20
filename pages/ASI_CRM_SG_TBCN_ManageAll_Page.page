@@ -1,0 +1,572 @@
+<!--
+/*********************************************************************************
+ * Name: ASI_CRM_SG_TBCN_ManageAll_Page
+ * Description: VF page to edit Sales Order line item for SG CRM TBCN
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2016-05-31       Laputa: Hugo Cheung     Created
+ * 2018-02-26       Wilken Lee              [WL 1.0] Change SKU to use Name instead of JDE Search Text
+ */
+-->
+
+<apex:page standardController="ASI_KOR_Sales_Order_Request__c" extensions="ASI_CRM_SG_TBCN_ManageAll_Controller" sidebar="false" showheader="false">
+    
+    <head>
+
+        <apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/styles/common.css')}" />
+        <link href="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+
+        <script>
+            $ = jQuery.noConflict();
+
+            var colLabel_Action = "Action";     
+    
+            var basicDataTableProperties = {
+                "bDestroy":true,
+                "bStateSave":true,
+                "aaSorting": [[1, "asc"]],
+                "bSearch":false,
+                "bFilter" : true,
+                "aLengthMenu":[10,25,50],
+                "iDisplayLength":25,
+                "bSort" : false,
+                "oLanguage" : {"sSearch": "Filter"}
+            };
+            
+            var basicDataTableProperties2 = {
+                "bDestroy":true,
+                "bStateSave":true,
+                "aaSorting": [[1, "asc"]],
+                "bSearch":false,
+                "bFilter" : true,
+                "aLengthMenu":[10,25,50],
+                "iDisplayLength":25,
+                "bSort" : true,
+                "oLanguage" : {"sSearch": "Filter"}
+            };
+
+            $(document).ready(
+                function(){
+                    setTables();
+                }
+            );
+
+            function setTables(){
+                var tbcnLineItem_dataTableProperties = basicDataTableProperties;
+                
+                tbcnLineItem_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "Sales Order History Detail"},
+                    {"sTitle": "SKU Name"},
+                    {"sTitle": "Sales Order History<br/>Quantity (Bottle)"},
+                    {"sTitle": "Return Quantity (Bottle)"}
+                ];
+
+                $("#tbcn_line_item_table").dataTable(tbcnLineItem_dataTableProperties);
+
+                var salesOrderHistory_dataTableProperties = basicDataTableProperties2;
+
+                salesOrderHistory_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "Sales Order History Detail"},
+                    {"sTitle": "Sales Order No"},
+                    {"sTitle": "LOT No"},
+                    {"sTitle": "JDE Invoice No"},
+                    {"sTitle": "Customer PO #"},
+                    {"sTitle": "SKU Name"},
+                    {"sTitle": "Order Quantity (Bottle)"},
+                    {"sTitle": "Sku Code"},
+                    {"sTitle": "Sku Description"},
+                    {"sTitle": "Pack Factor"},
+                    {"sTitle": "UOM 1"},
+                    {"sTitle": "UOM 2"},
+                    {"sTitle": "Bottle Size (cL)"},
+                    {"sTitle": "Bottles per Case"}
+                ];
+
+                $("#available_sales_order_history_detail").dataTable(salesOrderHistory_dataTableProperties);
+
+                var sku_dataTableProperties = basicDataTableProperties2;
+
+                sku_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "SKU Name"},
+                    {"sTitle": "Sku Code"},
+                    {"sTitle": "Sku Description"},
+                    {"sTitle": "Pack Factor"},
+                    {"sTitle": "UOM 1"},
+                    {"sTitle": "UOM 2"},
+                    {"sTitle": "Bottle Size (cL)"},
+                    {"sTitle": "Bottles per Case"}
+                ];
+
+                $("#available_SKU").dataTable(sku_dataTableProperties);
+            }
+
+            function isInteger(n) { return /^\+?(0|[\d,]*)$/.test(n); }
+
+            function startLoading(){
+                $('.loadingBox').show();
+            }
+            
+            function endLoading(){
+                $('.loadingBox').hide();
+            }
+
+        </script>
+
+        <style>
+
+            body {
+                margin-top: 40px;
+                font-size: 12px;
+                font-family: Helvetica,Arial,Verdana,sans-serif;
+                width:100%;
+            }
+
+            #tabLink {
+                font-size: 10px;
+            }
+
+            .overlay {
+                display: none;
+                height: 100%;
+                left: 0;
+                position: fixed;
+                top: 0;
+                opacity: 0.3;
+                -moz-opacity: 0.3;
+                width: 100%;
+                -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+                filter: alpha(opacity=30);
+                background: #000;
+                -khtml-opacity: 0.3;
+                z-index: 1000;
+            }
+
+            input.error-input {
+                border-color: red;
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+        <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+
+        <apex:form >
+            <apex:pageMessages id="pageMsg"></apex:pageMessages>
+
+            <div class="loadingBox overlay"> </div>
+
+            <apex:pageBlock id="main_pageBlock">
+
+                <apex:pageBlockButtons >
+
+                    <apex:commandLink value="Save" status="loading" action="{!saveSalesOrderLineItem}" 
+                                      target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;">
+                        <apex:param name="IS_QUICK_SAVE" value="false" />
+                    </apex:commandLink>
+                    
+                    <apex:commandButton value="Quick Save" rerender="pageMsg" status="loading" 
+                                        action="{!saveSalesOrderLineItem}">
+                        <apex:param name="IS_QUICK_SAVE" value="true" />
+                    </apex:commandButton>
+
+                    <apex:commandLink value="Cancel" action="{!cancel}" immediate="true" 
+                                      target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;" />
+
+                </apex:pageBlockButtons>
+
+                <apex:pageBlockSection columns="1">
+                    <apex:outputField value="{!tbcnHeader.Name}"/>
+                </apex:pageBlockSection>
+
+                <div id="mechanicTypeTabs" class="tabLink">
+                    <ul>
+                        <li>
+                            <apex:outputPanel rendered="true"><a href="#tab_TBCN">TBCN</a></apex:outputPanel>
+                        </li>
+                    </ul>
+
+                    <div id="tab_TBCN">
+
+                        <apex:pageBlock id="pageBlock_TBCN">
+
+                            <apex:pageBlockSection id="tbcn_line_item_page_block_section" title="TBCN Line Items" columns="1">
+
+                                <apex:outputPanel layout="block">
+
+                                    <table id="tbcn_line_item_table">
+
+                                        <apex:repeat var="tbcnLineItemId" value="{!tbcnLineItemWrapperMap}">
+
+                                            <apex:repeat var="tbcnLineItemWrapper" value="{!tbcnLineItemWrapperMap[tbcnLineItemId]}">
+
+                                                <tr id="row_tbcn_line_item_{!tbcnLineItemId}" class="cpiContent">
+
+                                                    <td>
+
+                                                        <apex:commandLink value="Delete" immediate="true" action="{!removeSalesOrderLineItem}" 
+                                                                          rerender="pageBlock_TBCN, pageMsg" onComplete="setTables();" status="loading">
+                                                            <apex:param name="PARAM_SALES_ORDER_LINE_ITEM_ID" value="{!tbcnLineItemId}" />
+                                                        </apex:commandLink>
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!tbcnLineItemWrapper.tbcnLineItem.ASI_CRM_Sales_Order_History_Detail__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputLink value="/{!tbcnLineItemWrapper.tbcnLineItem.ASI_CRM_SG_SKU__c}">
+                                                            <apex:outputText value="{!tbcnLineItemWrapper.skuName}"/>
+                                                        </apex:outputLink>
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputText value="{!tbcnLineItemWrapper.salesOrderHistoryQuantity}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:inputField value="{!tbcnLineItemWrapper.tbcnLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}" required="true" styleclass="requestQuantityBottle"
+                                                                         onChange="" />
+
+                                                    </td>
+
+                                                </tr>
+
+                                            </apex:repeat>
+
+                                        </apex:repeat>
+
+                                    </table>
+
+                                </apex:outputPanel>
+
+                            </apex:pageBlockSection>
+
+                            <apex:pageBlockSection id="section_available_sales_order_history_detail" title="Sales Order History" columns="1"
+                            rendered="{!OR($Profile.Name='ASI SG External User',$Profile.Name='System Administrator')}">
+
+                                <apex:outputPanel layout="block">
+                                    <table align="left">
+                                        <tr>
+                                            <td>
+                                                <apex:outputLabel value="SKU Code" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistorySKUCodeFilter}" />
+                                            </td>
+                                            <td>
+                                                <apex:outputLabel value="SKU Name" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistorySKUNameFilter}" />
+                                            </td>
+                                            <td>
+                                                <apex:outputLabel value="Sales Order No" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistoryOrderNoFilter}" />
+                                            </td>
+                                            <td>
+                                                <apex:outputLabel value="Lot No" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistoryLotNoFilter}" />
+                                            </td>                                           
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <apex:outputLabel value="JDE Invoice No" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistoryJDEInvoiceNoFilter}" />
+                                            </td>
+                                            <td>
+                                                <apex:outputLabel value="Customer PO #" />
+                                            </td>
+                                            <td>
+                                                <apex:inputText value="{!salesOrderHistoryCustomerPO}" />
+                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="8" align="left">
+                                                <apex:commandButton value="Search" action="{!retrieveSalesOrderHistoryDetail}" rerender="pageBlock_TBCN, pageMsg" 
+                                                                    onComplete="setTables();" status="loading" />
+                                            </td>
+                                        </tr>
+
+                                    </table>
+                                </apex:outputPanel>
+
+                                <apex:outputPanel layout="block">
+
+                                    <table id="available_sales_order_history_detail">
+
+                                        <apex:repeat var="salesOrderHistoryDetailId" value="{!salesOrderHistoryDetailMap}">
+
+                                            <apex:repeat var="salesOrderHistoryDetail" value="{!salesOrderHistoryDetailMap[salesOrderHistoryDetailId]}">
+
+                                                <tr>
+
+                                                    <td valign="middle">
+
+                                                        <apex:commandLink value="Add" action="{!addSalesOrderLineItem}" rendered="true" 
+                                                                          immediate="true" rerender="pageBlock_TBCN, pageMsg" onComplete="setTables();"
+                                                                          status="loading">
+                                                                          <apex:param name="PARAM_SALES_ORDER_HISTORY_DETAIL_ID" value="{!salesOrderHistoryDetailId}" />
+                                                        </apex:commandLink>
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.Name}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Sales_Order_History__r.ASI_HK_CRM_Order_No__c}" />
+
+                                                    </td>
+                                                    
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_CRM_Lot_Number__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Sales_Order_History__r.ASI_HK_CRM_JDE_Invoice_No__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Sales_Order_History__r.ASI_HK_CRM_Customer_PO__c}" />
+
+                                                    </td>
+                                                    
+                                                    <td>
+                                                        <!--[WL 1.0] BEGIN-->
+                                                        <!--<apex:outputLink value="/{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__c}">
+                                                            <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_CRM_Short_Description__c}"/>
+                                                        </apex:outputLink>-->
+                                                        <apex:outputLink value="/{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__c}">
+                                                            <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.Name}"/>
+                                                        </apex:outputLink>
+                                                        <!--[WL 1.0] END-->
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Quantity_in_Bottles__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_MFM_SKU_Code__c}" />
+
+                                                    </td>
+                                                    
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_MFM_SKU_Description__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_HK_CRM_Pack_Factor__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_HK_CRM_UOM1__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_HK_CRM_UOM2__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_HK_CRM_Std_Bottle_Size__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!salesOrderHistoryDetail.ASI_HK_CRM_Product_SKU__r.ASI_HK_CRM_Packaging_Size__c}" />
+
+                                                    </td>
+
+                                                </tr>
+
+                                            </apex:repeat>
+
+                                        </apex:repeat>
+
+                                    </table>
+
+                                </apex:outputPanel>
+
+                            </apex:pageBlockSection>
+
+                            <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1"
+                            rendered="{!OR(NOT($Profile.Name='ASI SG External User'),$Profile.Name='System Administrator')}">
+
+                                <apex:pageBlockSectionItem >
+
+                                    <apex:outputLabel value="SKU Code" />
+                                    <apex:outputPanel >
+                                        <apex:inputText value="{!skuCodeFilter}" />
+                                    </apex:outputPanel>
+
+                                </apex:pageBlockSectionItem>
+
+                                <apex:pageBlockSectionItem >
+
+                                    <apex:outputLabel value="SKU Name" />
+                                    <apex:outputPanel >
+
+                                        <apex:inputText value="{!skuNameFilter}" />
+
+                                        <apex:commandButton value="Search" action="{!retrieveSKU}" rerender="pageBlock_TBCN, pageMsg" 
+                                                            onComplete="setTables();" status="loading" />
+
+                                    </apex:outputPanel>
+
+                                </apex:pageBlockSectionItem>
+
+                                <apex:outputPanel layout="block">
+
+                                    <table id="available_SKU">
+
+                                        <apex:repeat var="skuId" value="{!skuMap}">
+
+                                            <apex:repeat var="sku" value="{!skuMap[skuId]}">
+
+                                                <tr>
+
+                                                    <td>
+
+                                                        <apex:commandLink value="Add" action="{!addSalesOrderLineItem}" rendered="true" 
+                                                                          immediate="true" rerender="pageBlock_TBCN, pageMsg" onComplete="setTables();"
+                                                                          status="loading">
+                                                                          <apex:param name="PARAM_SKU_ID" value="{!skuId}" />
+                                                        </apex:commandLink>
+
+                                                    </td>
+
+                                                    <td>
+                                                        <!--[WL 1.0] BEGIN-->
+                                                        <!--<apex:outputLink value="/{!sku.Id}">
+                                                            <apex:outputField value="{!sku.ASI_CRM_Short_Description__c}"/>
+                                                        </apex:outputLink>-->
+                                                        <apex:outputLink value="/{!sku.Id}">
+                                                            <apex:outputField value="{!sku.Name}"/>
+                                                        </apex:outputLink>
+                                                        <!--[WL 1.0] BEGIN-->
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_MFM_SKU_Code__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_MFM_SKU_Description__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_HK_CRM_Pack_Factor__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_HK_CRM_UOM1__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_HK_CRM_UOM2__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_HK_CRM_Std_Bottle_Size__c}" />
+
+                                                    </td>
+
+                                                    <td>
+
+                                                        <apex:outputField value="{!sku.ASI_HK_CRM_Packaging_Size__c}" />
+
+                                                    </td>
+
+                                                </tr>
+
+                                            </apex:repeat>
+
+                                        </apex:repeat>
+
+                                    </table>
+
+                                </apex:outputPanel>
+
+                            </apex:pageBlockSection>
+
+                        </apex:pageBlock>
+
+                    </div>
+
+                </div>
+
+                <script>
+                    $("#mechanicTypeTabs").tabs();
+                </script>
+
+            </apex:pageBlock>
+
+        </apex:form>
+
+    </body>
+
+</apex:page>

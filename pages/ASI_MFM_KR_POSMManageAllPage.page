@@ -1,0 +1,870 @@
+<apex:page standardController="ASI_KOR_POSM_Order_Detail__c" sidebar="false" extensions="ASI_MFM_KR_POSMManageAllController"  docType="html-5.0" action="{!init}" recordSetVar="posmReqDetails"> 
+    
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/SimpleTable.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" /> 
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/currency.js')}" /> 
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/numericInput.min.js')}" /> 
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" /> 
+        
+    </head>
+    
+    
+    <style type="text/css">
+        
+        div.hid {display: none;}
+        .filterLabel {
+        font-weight:bold;
+        }
+        .filterCol {
+        vertical-align:middle;
+        }
+        
+        /* highlight results */ 
+        .ui-autocomplete span.hl_results {
+        background-color: #ffff66;
+        }
+        
+        /* loading - the AJAX indicator */
+        .ui-autocomplete-loading {
+        background: white url('/img/loading.gif') right center no-repeat;
+        }
+        
+        
+        .ui-autocomplete-input{ 
+        border-left: 3px solid darkred !important;    
+        }
+        
+        .ui-autocomplete {
+        height: 200px;
+        overflow-y: auto;
+        /* prevent horizontal scrollbar */
+        overflow-x: hidden;
+        overflow:auto;
+        /* add padding to account for vertical scrollbar */
+        padding-right: 20px;
+        left: 0;
+        }
+        /* IE 6 doesn't support max-height
+        * we use height instead, but this forces the menu to always be this tall
+        */
+        *html .ui-autocomplete {
+        height: 200x;
+        }
+        
+        .required {
+        border-left: 3px solid darkred !important;  
+        }
+        
+        #dialogBG {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        width: 100%;
+        height: 100%;
+        z-index: 10000;
+        background: rgb(255, 255, 255) transparent;
+        background-color: rgba(255, 255, 255, 0.85);
+        background-image: url({!URLFOR($Resource.ASI_KOR_Common, '/ASI_KOR_Common/img/bg_loading.png')});
+        background-repeat: repeat;
+        filter:progid:DXImageTransform.Microsoft.gradient(startColorstr=#D8FFFFFF, endColorstr=#D8FFFFFF);
+        -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr=#D8FFFFFF, endColorstr=#D8FFFFFF)";
+        display: none;
+        }
+        #loadingDiv {
+        position: relative;
+        top: 48%;
+        left: 45%;
+        vertical-align: middle;
+        display: block;
+        }
+        #loadingImg {
+        display: inline;
+        float: left;
+        height: 14px;
+        width: 14px;
+        }
+        #loadingText {
+        display: inline;
+        color: #666;
+        font-weight: bold;
+        margin-left: 6px;
+        font-size: 1em;
+        }
+    </style>
+    <script type="text/javascript">
+    $j = jQuery.noConflict();
+    var headerId = null;
+    var resultTable;
+    var PORLTable;
+    var returnURL;
+    var datatableILength = 15;   
+    var initCurrency; 
+    var allowReceiptAmountFloat = false;
+    var allowInputVATAdjust = true;
+    var totalAmountDecimalPlace = 0;
+    var finishRetrievePaymentLineItems = false;
+    var origLineItems = [];
+    
+    var api;
+    var Brands = [];
+    var BrandGroup = [];
+    var SubBrand = [];
+    var Supplies = [];
+    var POSMProductItems = [];
+    var POnumber = [];
+    var unitCost = [];
+    
+    function dialogShow() {
+        var dialogBG = document.getElementById('dialogBG');
+        if (dialogBG) {
+            dialogBG.style.display = 'block';
+        }
+    }
+    function dialogHide() {
+        var dialogBG = document.getElementById('dialogBG');
+        if (dialogBG) {
+            dialogBG.style.display = 'none';
+        }
+    }
+    function htmlEncode( input ) {
+        var e = document.createElement('div');
+        e.innerHTML = input;
+        return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        //return String(input).replace(/\&amp;/g,'&').replace(/\&lt;/g,'<').replace(/\&rt;/g,'>');
+    };
+    
+    
+    function initManageAllPage(config) {
+        // console.log('initManageAllPage');
+        if (config) {
+            headerId = config.headerId;
+            
+        }
+        
+        retrieveSupplier(); 
+        // retrieveBrand();
+        // retrieveBrandGroup();
+        // retrieveSubBrand();
+        retrievePOSMProductItems();
+        // calulatealldata();
+        //initalizeAutoCompleteComponent();
+        setResultTable(true);
+        
+        
+    }
+    
+    //Calc Amount
+    function calulatealldata(){// calulate all data in data table
+        $j('.UnitCostClass').each(function() {
+            var currentid = $j(this).attr('data-id');
+            CalAmount(currentid);
+            //  console.log('calculate all data:'+currentid );
+        });
+    }
+    
+    function CalAmount(Id){
+        var UnitCost=0;
+        var Quantity=0; 
+        var bothvar=false;
+        
+        
+        if(parseFloat($j('#unitCost_manageAll_' + Id + '_input input').val().replace(/[$,]+/g,""))>0){
+            UnitCost=parseFloat($j('#unitCost_manageAll_' + Id + '_input input').val().replace(/[$,]+/g,""));
+            bothvar=true;
+        }else{
+            bothvar=false;
+        }
+        
+        if(parseFloat($j('#Quantity_manageAll_' + Id + '_input input').val().replace(/[$,]+/g,""))>0){
+            Quantity=parseFloat($j('#Quantity_manageAll_' + Id + '_input input').val().replace(/[$,]+/g,""));
+            bothvar=true;
+        }else{
+            bothvar=false;
+        }
+        
+        if(bothvar){
+            //  console.log('Amount:' + Quantity*UnitCost);
+            $j('#totalAmount_manageAll_' + Id + '_totalAmount').html(Quantity*UnitCost);
+        }
+        
+    }
+    
+    
+    
+    
+    function retrievePOSMProductItems() {
+        var SBList = $j('SBList').val();
+        // console.log('retrievePOSMProductItems:' + SBList);
+        var whereClause ='  ASI_MFM_Item_Category__c = \'Trade MKT\'  ' 
+        console.log('Enter retrievePOSMProductItems ');
+        
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_MFM_KR_POSMManageAllController.findPOSMproduct}','ASI_KOR_POSM_Product__c' ,  whereClause
+            , callbackPOSMProductItems
+            , {escape: true, timeout: 10000}
+        );       
+    }
+    
+    
+    
+    function retrieveSupplier() {
+        // console.log('retrieveSupplier');
+        var whereClause =   ' WHERE RecordType.DeveloperName = \'ASI_KR_Supplier\' AND ASI_MFM_Applicable__c = true'
+        
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_MFM_KR_POSMManageAllController.findSObjects}','Account', whereClause 
+            , callbackSupplier
+            , {escape: true, timeout: 10000}
+        );       
+    }
+    
+    
+    function callbackPOSMProductItems(result, event){
+        if (event.status) {
+            //   console.log('Call BACK34');
+            if (result) {
+                console.log('result');
+                console.log(result);
+                var unitCost = [];
+                var TempList = [];
+                POSMProductItems = [];
+                var size = result.length;
+                var currentid = $j(this).attr('data-id');
+                var sValue = $j('#SubBrand_manageAll_' + currentid + '_input input').val();
+                
+                for (var i = 0; i < size; i++) {
+                    
+                    
+                    var posmProductName = new Object();
+                    posmProductName.label =  htmlEncode(result[i]["Name"]);
+                    posmProductName.value =  htmlEncode(result[i]["Id"]);
+                    posmProductName.description = htmlEncode(result[i]["ASI_MFM_Sub_Brand__r"]["Name"]); 
+                    posmProductName.price = htmlEncode(result[i]["ASI_MFM_UnitCost__c"]);
+                    posmProductName.UOM = htmlEncode(result[i]["ASI_KOR_UOM__c"]);
+                    POSMProductItems.push(posmProductName);
+                    
+                    //SB-List
+                    
+                    var SubBrandValue = new Object();
+                    SubBrandValue.label =  htmlEncode(result[i]["ASI_MFM_Sub_Brand__r"]["Name"]);
+                    SubBrandValue.value =  htmlEncode(result[i]["ASI_MFM_Sub_Brand__c"]);
+                    //  SubBrand.push(SubBrandValue); 
+                    
+                    //Filter out duplicate record in SB-List
+                    if(TempList.indexOf(SubBrandValue.label) == -1 ){  
+                        TempList.push(SubBrandValue.label);
+                        SubBrand.push(SubBrandValue);
+                    }
+                    
+                    
+                    
+                }
+            }
+        } else {
+            // TODO: Handle error
+            //displayErrorMsg(event.message);
+        }   
+        initalizeAutoCompleteComponent();
+    } 
+    
+    
+    
+    function callbackSupplier(result, event){
+        if (event.status) {
+            if (result) {
+                
+                Supplies = [];
+                var size = result.length;
+                for (var i = 0; i < size; i++) {
+                    var br = new Object();
+                    br.label =  htmlEncode(result[i]["Name"]);
+                    br.value =  htmlEncode(result[i]["Id"]);
+                    br.email = htmlEncode(result[i]["ASI_LUX_Email_Business__c"]);
+                    Supplies.push(br);
+                }
+            }
+        } else {
+            // TODO: Handle error
+            //displayErrorMsg(event.message);
+        }   
+        initalizeAutoCompleteComponent();
+    } 
+    
+    function callbackBrand(result, event){
+        if (event.status) {
+            if (result) {
+                
+                Brands = [];
+                var size = result.length;
+                for (var i = 0; i < size; i++) {
+                    var br = new Object();
+                    br.label =  htmlEncode(result[i]["Name"]);
+                    br.value =  htmlEncode(result[i]["Id"]);
+                    Brands.push(br);
+                }
+            }
+        } else {
+            // TODO: Handle error
+            //displayErrorMsg(event.message);
+        }   
+        // initalizeAutoCompleteComponent();
+    } 
+    
+    function callbackBrandGroup(result, event){
+        if (event.status) {
+            if (result) {
+                
+                BrandGroup = [];
+                var size = result.length;
+                for (var i = 0; i < size; i++) {
+                    var br = new Object();
+                    br.label =  htmlEncode(result[i]["Name"]);
+                    br.value =  htmlEncode(result[i]["Id"]);
+                    BrandGroup.push(br);
+                }
+            }
+        } else {
+            // TODO: Handle error
+            //displayErrorMsg(event.message);
+        }   
+        //  initalizeAutoCompleteComponent();
+    } 
+    
+    
+    function initalizeAutoCompleteComponent() {
+        // console.log('Start-Test:inital autocomplete');
+        //	console.log('Suppliers:'+Supplies);
+        //	console.log('SB-List:'+SubBrand);
+        //	console.log('POSM Product:'+POSMProductItems);
+        //Suppliers
+        $j(".SuppliersClass").autocomplete
+        (
+            {
+                source:
+                Supplies,
+                response: function(event, ui)
+                {
+                    if(ui.content.length===0)
+                    { 
+                        // console.log("Suppliers:No result found");
+                    }
+                },
+                minLength: 0,
+                scroll: true,
+                change: function (event, ui) {
+                    // console.log('Suppliers Change');
+                    if (!ui.item) {
+                        this.value = '';
+                        $j(this).parent().next().children().val('');
+                    }
+                },
+                select: function(event, ui)
+                { 
+                    
+                    $j(this).val(ui.item.label);
+                    $j(this).next().next().children().val(ui.item.value);
+                    if(ui.item.email != 'undefined'){
+                        $j(this).parent().next().children().val(ui.item.email);
+                    }
+                    
+                    event.preventDefault();
+                },
+                focus: function(event, ui)
+                {
+                    $j(this).val(ui.item.label);
+                    
+                    event.preventDefault();
+                }
+            }
+        ).focus(function()
+                {
+                    $j(this).autocomplete("search", "");
+                }
+               );
+        
+        //Sub Brand
+        $j(".SubBrandClass").autocomplete
+        (
+            {
+                source:
+                SubBrand,
+                response: function(event, ui)
+                {
+                    if(ui.content.length===0)
+                    { 
+                        // console.log("SB:No result found");
+                    }
+                },
+                minLength: 0,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.value = '';
+                    }  
+                    //Clear value
+                    $j(this).parent().next().children().val('');
+                    $j(this).parent().next().next().children().next().children().val('');
+                    $j(this).parent().next().next().next().children().val('');
+                    calulatealldata();
+                    
+                    
+                },
+                select: function(event, ui)
+                {
+                    $j(this).val(ui.item.label);
+                    $j(this).next().next().children().val(ui.item.value);
+                    event.preventDefault(); 
+                },
+                focus: function(event, ui)
+                {
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }
+            }
+        ).focus(function()
+                {
+                    $j(this).autocomplete("search", "");
+                }
+               );
+        
+        //POSMProductItems
+        $j(".POSMProductItemsClass").autocomplete
+        (
+            {
+                source:
+                POSMProductItems,
+                search: function(event, ui) {
+                    var currentid = $j(this).attr('data-id');
+                    
+                    var sValue = $j('#SubBrand_manageAll_' + currentid + '_input input').val();
+                    //  var sValue = $j('#ProductItem_manageAll_' + currentid + '_input input').val();
+                    var aSearch = [];
+                    $j(POSMProductItems).each(function(iIndex, sElement) {
+                        // console.log(sElement.description+' Test:  '+sElement.label);
+                        if(sElement.description==sValue){
+                            aSearch.push(sElement);
+                        }
+                    });    
+                    $j(this).autocomplete('option', 'source', aSearch);
+                },
+                response: function(event, ui)
+                {
+                    
+                    if(ui.content.length===0)
+                    { 
+                        //  console.log("POSM Product:No result found");
+                    }
+                },
+                minLength: 0,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.value = '';
+                        $j(this).parent().next().next().children().val('');
+                    }
+                    //Clear value
+                    calulatealldata();
+                    
+                    
+                },
+                
+                select: function(event, ui)
+                {
+                    //  console.log('UI:  '+ui.item.label);
+                    $j(this).val(ui.item.label);
+                    // console.log('Test unit price:' + ui.item.price); 
+                    $j(this).next().next().children().val(ui.item.value);
+                    $j(this).parent().next().next().children().val(ui.item.price);
+                    $j(this).parent().next().next().next().next().children().val(ui.item.UOM);
+                    event.preventDefault();
+                },
+                focus: function(event, ui)
+                {
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }
+            }
+        ).focus(function()
+                {
+                    $j(this).autocomplete("search", "");
+                }
+               );
+        
+        
+    }
+    
+    $j(document).ready(function() {
+        
+        
+        //$j('.simpleTable tr:nth-child(odd)').addClass("odd-row");
+        
+        
+        initManageAllPage({
+            headerId: '{!posmReqHeader.Id}',
+            
+        });
+        
+        
+        
+        //iterate through each textboxes and add keyup                    handler to trigger sum event  createEventBindings();
+        $j('.amount').bind("keyup change", function(e) {
+            calculateSum();
+        })
+    } );
+    
+    function setResultTable(newTable){
+        
+        
+        resultTable = $j('#dt_LineItems').on( 'init.dt', function () {
+            //Auto-Complete
+            //retrieveandGroup();
+            //retrieveSubBrand();
+            //retrieveSupplier();
+            //retrievePOSMProductItems();
+            //initalizeAutoCompleteComponent();
+            //calulatealldata();
+            
+        }).DataTable({
+            "bDestroy":true,
+            "bSearch":false,
+            "dom": '<"top">irt<"bottom"p><"clear">',
+            "bSort": false, 
+            "bFilter": false, 
+            "iDisplayLength":datatableILength,
+            "bPaginate": true,
+            "sPaginationType": "full_numbers",
+            "columnDefs": [{
+                "targets": [ 0 ],
+                "searchable": false,
+                "orderable": false
+            }],
+            "fnDrawCallback": function() { 
+                
+                $j('.totalcost').numericInput({ allowNegative: false  ,allowFloat: true });
+                
+                
+                $j('.lookupCen input').change();
+                
+                initalizeAutoCompleteComponent();
+                calulatealldata();
+            }
+        });
+        
+        $j('#dt_LineItems').on( 'page.dt', function () {
+            
+            info = resultTable.page.info();
+        } );
+        info = resultTable.page.info();
+        if(newTable==false){
+            addRow(); 
+        } 
+    }
+    
+    
+    
+    function setTables(newTable){
+        setResultTable(newTable);
+        
+    }
+    
+    function addRow(){
+        resultTable.page('last').draw(false);        
+    }
+    </script>
+    
+    
+    
+    <apex:form id="KR_Header" styleclass="objectFormCls">
+        <div id="HeaderForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-12">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="paymentDetailPanel"> 
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">Trade POSM Details</h5>
+                        </div>
+                        <div class="bs panel-body">                                           
+                            <div class="bs table-responsive" >     
+                                <!-----------------------------------------------------  PSOM Header         ------------------------------------------------------------------->
+                                <table class="bs table">
+                                    <tbody>  
+                                        <tr>
+                                            <td><apex:outputLabel value="POSM Order Number" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                            <td><apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!posmReqHeader.ID}" target="_blank">
+                                                <apex:outputField value="{!posmReqHeader.Name}"></apex:outputField>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><apex:outputLabel value="Request Date" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                            <td><apex:outputField value="{!posmReqHeader.ASI_KOR_Requested_Date__c}"></apex:outputField>
+                                            </td>
+                                        </tr>  
+                                        <tr>
+                                            <td><apex:outputLabel value="Venue" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                            <td><apex:outputLabel value="{!posmReqHeader.ASI_KOR_POSM_TO_Venue__r.name}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                            <td><apex:outputLabel value="Status" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                            <td><apex:outputField value="{!posmReqHeader.ASI_KOR_Status__c}" ></apex:outputField></td>                              
+                                        </tr>
+                                        
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </apex:outputPanel>
+                    
+                    
+                    <!------------------------------------------------------- LINES------------------------------------------------------------->
+                    <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                        <div class="bs panel-heading div-size" >
+                            <h3 class="bs panel-title">POSM Line Items </h3>
+                        </div>  
+                        <div class="bs panel-body">
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                
+                                <strong>Error,Can not Save!</strong><br/>
+                                <apex:outputText escape="false" value="{!msg}"/> 
+                            </div>  
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(EmailUpsertPermission,'display:none;','')}"  id="EmailFailPart">
+                                <strong>Error,Can not send email!</strong><br/>
+                                <apex:outputText escape="false" value="{!msg}"/> 
+                            </div>  
+                            
+                            
+                            <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Quick Save Success!</strong>
+                                <apex:outputText escape="false" value="{!msg}"/>
+                            </div>  
+                            
+                            
+                            <div class="alert alert-success fade in" style="{!IF(SentSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Email Sent!</strong>
+                                <apex:outputText escape="false" value="{!msg}"/>
+                            </div>   
+                            
+                            
+                            
+                            <div class='bs wrapper text-center' id='bs toolbar' >
+                                <div class="bs btn-group " role="group" >
+                                    
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Save"
+                                                      style="font-weight: bold"
+                                                      action="{!saveLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false); "
+                                                      oncomplete="console.log('Save Done');setTables(true);calulatealldata();redirectBack();"
+                                                      reRender="LinePanel,SaveFailPart,SaveSuccessPart"
+                                                      
+                                                      >
+                                        <apex:param name="IS_QUICK_SAVE" value="false"/>
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" > 
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size"
+                                                      style="font-weight: bold"
+                                                      value="Quick Save"
+                                                      action="{!saveLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false); "
+                                                      oncomplete="console.log('Quick Save Done');setTables(true);calulatealldata(); "
+                                                      reRender="LinePanel,SaveFailPart,SaveSuccessPart"
+                                                      
+                                                      html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                
+                                <!--- Send Email --->
+                                <div class="bs btn-group " role="group" > 
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size"
+                                                      style="font-weight: bold"
+                                                      value="Send Email"
+                                                      action="{!sendEmail2}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false); "
+                                                      oncomplete="console.log('Quick Save Done');setTables(true);calulatealldata(); "
+                                                      reRender="LinePanel,SaveFailPart,SentSuccess;EmailFailPart"
+                                                      rendered="{!IF(AND(posmReqHeader.ASI_KOR_Status__c =='Approved',$Profile.Name =='System Administrator' || $Permission.ASI_MFM_KR_POSM_Manage_All), true, false)}"
+                                                      html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_Send_Email" value="true"/>
+                                    </apex:commandLink>
+                                </div>&nbsp;
+                                <!--- Send Email --->
+                                
+                                <div class="bs btn-group " role="group" >
+                                    
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Cancel"
+                                                        action="{!cancel}" 
+                                                        oncomplete="redirectBack()"
+                                                        html-data-loading-text="Loading..."
+                                                        html-formnovalidate="formnovalidate"/>
+                                </div>
+                            </div>
+                            <div class="bs table-responsive"> 
+                                
+                                <apex:commandButton styleClass="btn btn-success" value="Add New POSM Line" action="{!addLineItem}"  rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}" onComplete="console.log('Add Row');  setTables(false);calulatealldata();" 
+                                                    onclick="resultTable.page.len( -1 ).draw(false); "
+                                                    html-formnovalidate="formnovalidate" reRender="LinePanel"  status="ActionStatus" ></apex:commandButton>
+                                &nbsp;
+                                
+                                
+                                
+                                <table id="dt_LineItems" class="hover responsive no-wrap compact" style="width: 100%;"  cellspacing="0" cellpadding="0">
+                                    <thead>
+                                        <tr> 
+                                            <th> </th>
+                                            <th> </th>
+                                            <th> Sub Brand<span class="thtitle" >*</span></th>
+                                            <th>Item<span class="thtitle" >*</span></th>
+                                            <th>Sales Branch Name</th>
+                                            
+                                            <th>Unit Cost*</th>
+                                            <th>Quanity*</th>
+                                            <th>UOM*</th>  
+                                            <th>Total Amount</th>
+                                            <th>Remark</th>
+                                           <!--- <th >Vendor*</th>--->
+                                            <!-- <th>Vendor Email Address*</th>--->
+                                            
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        
+                                        <apex:variable value="{!0}" var="i"/>
+                                        <apex:repeat value="{!allPOSMLineMap}" var="porlId">
+                                            <apex:variable var="i" value="{!i+1}"/>
+                                            <tr>
+                                                <td><apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-xs"
+                                                                      style="border: none;background-color: transparent;"
+                                                                      reRender="LinePanel,SaveFailPart,SaveSuccessPart"
+                                                                      action="{!cloneLine}"
+                                                                      onclick="resultTable.page.len( -1 ).draw(false); "
+                                                                      status="ActionStatus"
+                                                                      onComplete="console.log('Clone Row'); setTables(false); calulatealldata(); "     
+                                                                      rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}"
+                                                                      html-formnovalidate="formnovalidate" 
+                                                                      title="Clone line {!i}"
+                                                                      html-data-loading-text="Loading..." >
+                                                    <span class="bs glyphicon glyphicon-duplicate"  style="color:black;font-size: 20px;"></span>
+                                                    <apex:param name="PARAM_clone_ID" value="{!porlId}" />
+                                                    </apex:commandLink>
+                                                </td>
+                                                <td>
+                                                    <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-xs "
+                                                                      style="border: none;background-color: transparent;"
+                                                                      reRender="LinePanel,SaveFailPart,SaveSuccessPart"
+                                                                      html-formnovalidate="formnovalidate" 
+                                                                      action="{!removePOSMLine}"
+                                                                      onclick="resultTable.page.len( -1 ).draw(false); "
+                                                                      status="ActionStatus"
+                                                                      title="Remove line {!i}"
+                                                                      onComplete="console.log('Remove Row'); setTables(true); "  
+                                                                      rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}"
+                                                                      html-data-loading-text="Loading..." >
+                                                        <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;"></span>
+                                                        <apex:param name="PARAM_Line_ID" value="{!porlId}" />
+                                                    </apex:commandLink>
+                                                </td>
+                                                
+                                                
+                                                
+                                                
+                                                <td class="lookupCen"  id="SubBrand_manageAll_{!porlId}_input"   >
+                                                    <apex:inputText styleClass="SubBrandClass "  value="{!allPOSMLineMap[porlId].SubBrand}" rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}"   html-data-id="{!porlId}"  />
+                                                    <apex:outputText value="{!allPOSMLineMap[porlId].SubBrand}" rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', false, true)}" html-readonly="fasle"  html-data-id="{!porlId}"  />
+                                                    
+                                                    <div class="hid" >
+                                                        <apex:inputText value="{!allPOSMLineMap[porlId].SubBrandID}" styleclass="value" />
+                                                    </div>
+                                                </td>
+                                                
+                                                <td class="lookupCen"  id="ProductItem_manageAll_{!porlId}_input" >
+                                                    <apex:inputText styleClass="POSMProductItemsClass "  value="{!allPOSMLineMap[porlId].ProductItem}"  rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}" html-data-id="{!porlId}"  />
+                                                    <apex:outputText value="{!allPOSMLineMap[porlId].ProductItem}" rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', false, true)}" html-readonly="fasle"  html-data-id="{!porlId}"  />
+                                                    
+                                                    <div class="hid">
+                                                        <apex:inputText value="{!allPOSMLineMap[porlId].ProductItemID}" styleclass="value" />
+                                                    </div>
+                                                    
+                                                </td>     
+                                                <td> 
+                                                    <apex:outputText value="{!posmReqHeader.ASI_MFM_Sales_Branch__c}"  html-readonly="fasle"  html-data-id="{!porlId}"  />
+                                                </td> 
+                                                
+                                                <td  class="lookUpUnitCost" id="unitCost_manageAll_{!porlId}_input" >
+                                                    <apex:inputText styleClass="UnitCostClass" value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_UnitCost__c}"  html-readonly="fasle" html-data-id="{!porlId}"  onchange="CalAmount('{!porlId}');"  style="white-space: pre-wrap; width: 8em; " />
+                                                </td>
+                                                <td  id="Quantity_manageAll_{!porlId}_input">  
+                                                    <apex:inputField value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_Quantity__c}"  styleClass="required"  onchange="CalAmount('{!porlId}');" style="white-space: pre-wrap; width: 8em;" rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}" html-data-id="{!porlId}"></apex:inputField>
+                                                    <apex:inputtext value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_Quantity__c}"   rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', false, true)}" html-readonly="fasle"  html-data-id="{!porlId}"  ></apex:inputtext>
+                                                    
+                                                </td>
+                                                
+                                                <!---  UOM  ----> 
+                                                <td class="lookUpUOM" id="uom_manageAll_{!porlId}_input" >  
+                                                    <apex:inputtext value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_UOM__c}"  html-readonly="false"  html-data-id="{!porlId}"   ></apex:inputtext>
+                                                </td>
+                                                
+                                                <td class="rightNum totalAmount_manageAll" id="totalAmount_manageAll_{!porlId}_totalAmount" style="text-align: center;" > 
+                                                    <apex:outputText value="{0, number, ###,###,###,###,##0}" ><apex:param value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_TotalAmount__c}"/></apex:outputText>
+                                                </td>
+                                                <td >
+                                                    <apex:inputField value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_Remarks__c}"  rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', true, false)}" html-data-id="{!porlId}" styleclass="value" ></apex:inputField> 
+                                                    <apex:inputtext value="{!allPOSMLineMap[porlId].linesItems.ASI_KOR_Remarks__c}" rendered="{!IF(posmReqHeader.ASI_KOR_Status__c =='Draft', false, true)}" html-readonly="fasle"  html-data-id="{!porlId}"  ></apex:inputtext>
+                                                </td>
+                                                <!--
+                                                <td>    
+                                                    <apex:inputText styleClass="SuppliersClass"  value="{!allPOSMLineMap[porlId].Supplier}"  />
+                                                    
+                                                    <div class="hid">
+                                                        <apex:inputText value="{!allPOSMLineMap[porlId].SupplierID}" styleclass="value" />
+                                                    </div>  
+                                                </td> 
+                                                --->
+                                            </tr>
+                                        </apex:repeat>
+                                        
+                                    </tbody>
+                                </table>
+                            </div>
+                            <script type="text/javascript">
+                            </script>
+                        </div>
+                    </apex:outputPanel>
+                    
+                    
+                </div>
+            </div>
+        </div>	
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+    </apex:form>
+</apex:page>

@@ -1,0 +1,225 @@
+<apex:page controller="ASI_MFM_PO_Attchment_ZipController" showHeader="true" sidebar="false">
+
+<head>
+    <script type="text/javascript" src="/soap/ajax/36.0/connection.js"> </script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_jsZIP, 'jszip.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_jsZIP, 'FileSaver.js')}"/>
+
+    <script type="text/javascript">
+        var j$ = jQuery.noConflict();
+
+        j$(document).ready(function() {
+            //Hide upload button
+            var uploadZipButton = j$('input[id$=uploadZipButton]');
+            uploadZipButton.css('display', 'none');
+            
+            //Instantiate JSZip
+            var zipFile = new JSZip();
+
+            //Intercept click event
+            j$('a[id=generatePOZipLink]').click(function() {
+                zipFile = new JSZip();
+                var checkedSize = j$("input[name='att_poids_group[]']:checked").size();
+                var count = 0;
+
+                //Iterate over each selected file               
+                j$("input[name='att_poids_group[]']:checked").each(function() {
+                    //Refresh zip process status
+                    j$('span[id$=zipStatus]').text('Getting file...');
+                    
+                    //Get file using javascript remoting
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{!$RemoteAction.ASI_MFM_PO_Attchment_ZipController.getAttachment}',
+                        j$(this).val(),
+                        function(result, event){
+                            if (event.status) {
+                                //Refresh zip process status
+                                j$('span[id$=zipStatus]').text('Compressing file "' + result.attName + '"...');
+
+                                count++;
+                                
+                                //Add the file
+                                compressFile(zipFile, result.attName, result.attEncodedBody);
+                                
+                                //Once all the selected files have been compressed
+                                if (count == checkedSize) {
+                                    //Refresh zip process status
+                                    j$('span[id$=zipStatus]').text('Generating zip file...');
+                                    
+                                    //Send form
+                                    sendZip(zipFile);
+                                }
+                            } else if (event.type === 'exception') {
+                                alert('Exception: ' + event.message);
+                            } else {
+                                alert('Message: ' + event.message);
+                            }
+                        }, 
+                        {escape: true}
+                    );//End getAttachment
+
+                });//end each selected attId
+            });//end click
+            
+            j$('a[id=generateSOZipLink]').click(function() {
+                zipFile = new JSZip();
+                var checkedSize = j$("input[name='att_soids_group[]']:checked").size();
+                var count = 0;
+
+                //Iterate over each selected file               
+                j$("input[name='att_soids_group[]']:checked").each(function() {
+                    //Refresh zip process status
+                    j$('span[id$=zipStatus]').text('Getting file...');
+                    
+                    //Get file using javascript remoting
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{!$RemoteAction.ASI_MFM_PO_Attchment_ZipController.getAttachment}',
+                        j$(this).val(),
+                        function(result, event){
+                            if (event.status) {
+                                //Refresh zip process status
+                                j$('span[id$=zipStatus]').text('Compressing file "' + result.attName + '"...');
+
+                                count++;
+                                
+                                //Add the file
+                                compressFile(zipFile, result.attName, result.attEncodedBody);
+                                
+                                //Once all the selected files have been compressed
+                                if (count == checkedSize) {
+                                    //Refresh zip process status
+                                    j$('span[id$=zipStatus]').text('Generating zip file...');
+                                    
+                                    //Send form
+                                    sendZip(zipFile);
+                                }
+                            } else if (event.type === 'exception') {
+                                alert('Exception: ' + event.message);
+                            } else {
+                                alert('Message: ' + event.message);
+                            }
+                        }, 
+                        {escape: true}
+                    );//End getAttachment
+
+                });//end each selected attId
+            });//end click
+            
+            //Compress one single file
+            function compressFile(zipFile, name, data) {
+                zipFile.file(name, data, {base64:true});
+            }
+
+            //Generate and upload zip file
+            function sendZip(zipFile) {
+                j$('span[id$=zipStatus]').text('Completed');
+
+                zipFile.generateAsync({type:"blob"})
+                .then(function(content) {
+                    saveAs(content, "file.zip");
+                });
+                
+                //var data = zipFile.generate();
+                //location.href="data:application/zip;base64,"+data;          
+            }
+        });
+        
+        function selectAllCheckboxes(obj,receivedInputID){
+            var inputCheckBox = document.getElementsByTagName("input");                  
+            for(var i=0; i<inputCheckBox.length; i++){          
+                if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){                                     
+                    inputCheckBox[i].checked = obj.checked;
+                }
+            }
+        }
+        
+    </script>
+</head>
+
+<apex:form id="uploadZipForm" enctype="multipart/form-data">
+    
+    <apex:inputHidden id="zipContent" value="{!zipContent}" />
+
+    <apex:pageBlock id="searchBlock" title="HK Document Search">
+        <apex:outputLabel value="PO number: " />
+        <apex:inputText id="poName" value="{!poName}" />
+        
+        <apex:outputLabel value="SO number: " />
+        <apex:inputText id="soName" value="{!soName}" />
+        <apex:commandButton styleClass="btn btn-primary bsbutton" value="Search" action="{!searchRecord}" style="font-weight: bold"></apex:commandButton>
+    </apex:pageBlock>
+      
+    <apex:pageBlock id="poFileBlock" title="PO Notes & Attachments">
+        <apex:pageBlockTable value="{!poFileList}" var="att">            
+            <apex:column >
+                <apex:facet name="header"><apex:inputCheckbox onclick="selectAllCheckboxes(this,'poInput')" id="poCheckAll" selected="{!checkAll}"/></apex:facet>
+                <input type="checkbox" name="att_poids_group[]" value="{!att.Id}" id="poInput"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">File Name</apex:facet>
+                <apex:outputText value="{!att.Name}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Content Type</apex:facet>
+                <apex:outputText value="{!att.ContentType}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Size</apex:facet>
+                <apex:outputText value="{!att.BodyLength} kb"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Last Modified Date</apex:facet>
+                <apex:outputText value="{!att.LastModifiedDate}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Created By</apex:facet>
+                <apex:outputText value="{!att.CreatedBy.Name}"/>
+            </apex:column>
+        </apex:pageBlockTable>
+        <p>
+            <a id="generatePOZipLink" href="#">Generate zip</a>
+        </p>
+    </apex:pageBlock>
+    
+    <apex:pageBlock id="soFileBlock" title="SO Notes & Attachments">
+        <apex:pageBlockTable value="{!soFileList}" var="att">
+            <apex:column >
+                <apex:facet name="header"><apex:inputCheckbox onclick="selectAllCheckboxes(this,'soInput')" id="soCheckAll" selected="{!checkAll}"/></apex:facet>
+                <input type="checkbox" name="att_soids_group[]" value="{!att.Id}" id="soInput"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">File Name</apex:facet>
+                <apex:outputText value="{!att.Name}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Content Type</apex:facet>
+                <apex:outputText value="{!att.ContentType}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Size</apex:facet>
+                <apex:outputText value="{!att.BodyLength} kb"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Last Modified Date</apex:facet>
+                <apex:outputText value="{!att.LastModifiedDate}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">Created By</apex:facet>
+                <apex:outputText value="{!att.CreatedBy.Name}"/>
+            </apex:column>
+        </apex:pageBlockTable>
+        
+        <p>
+            <a id="generateSOZipLink" href="#">Generate zip</a>
+        </p>
+    </apex:pageBlock>  
+    
+    <p>
+        <span>Status: </span>
+        <span id="zipStatus"></span>
+    </p>
+    
+</apex:form>
+
+</apex:page>

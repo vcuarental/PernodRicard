@@ -1,0 +1,90 @@
+<aura:component controller="EUR_ISP_SpendActivityController">
+	<aura:attribute name="UserPermissions" type="Map" access="public"/>
+	<aura:attribute name="SystemSettings" type="EUR_ISP_SystemSettings__c" access="public"/>
+
+	<aura:attribute name="isLocked" type="Boolean" access="public"/>
+
+	<aura:attribute name="activitiesTree" type="List" access="public"/>
+	<aura:attribute name="activityId" type="String" access="public"/>
+	<aura:attribute name="activityToDeleteId" type="String" access="public"/>
+	<aura:attribute name="activities" type="List" default="[]" access="public"/>
+
+	<aura:attribute name="Spend" type="EUR_ISP_Spend__c" access="public"/>
+	<aura:attribute name="SpendActivity" type="EUR_ISP_Spend_Activity__c" access="public"/>
+	<aura:attribute name="SpendActivityType" type="EUR_ISP_Spend_Activity_Type__c" access="public"/>
+
+	<aura:attribute name="isTabSelected" type="Boolean" default="false" access="public"/>
+	<aura:attribute name="isLoading" type="Boolean" default="false" access="public"/>
+
+	<aura:handler event="c:EUR_ISP_SpendActivitySaveEvent" action="{!c.updateActivity}"/>
+	<aura:handler name="confirmationOkEvent" event="c:EUR_ISP_ConfirmationWindowOkEvent" action="{!c.deleteActivity}"/>
+	<aura:handler name="showLoading" event="c:EUR_ISP_ShowSpinerEvent" action="{!c.showLoading}"/>
+	<aura:handler name="hideLoading" event="c:EUR_ISP_HideSpinerEvent" action="{!c.hideLoading}"/>
+
+	<aura:method name="showLoading" action="{!c.showLoading}" access="public"/>
+	<aura:method name="hideLoading" action="{!c.hideLoading}" access="public"/>
+	<aura:method name="doActivitiesInit" action="{!c.doActivitiesInit}" access="public">
+		<aura:attribute name="activityTypeId" type="String"/>
+	</aura:method>
+	<aura:method name="doActivitiesRefresh" action="{!c.doActivitiesRefresh}" access="public">
+		<aura:attribute name="activities" type="List"/>
+	</aura:method>
+	<aura:method name="clearCmpData" action="{!c.doClearData}" access="public">
+		<aura:attribute name="config" type="Map"/>
+	</aura:method>
+
+	<aura:registerEvent name="RenderBrandCmpTablesEvent" type="c:EUR_ISP_BrandCmpTableShowEvent"/>
+	<aura:registerEvent name="SpendActivityShowEvent" type="c:EUR_ISP_SpendActivityShowEvent"/>
+	<aura:registerEvent name="ShowItemsToAdjustEvent" type="c:EUR_ISP_SpendShowEvent"/>
+
+	<div class="slds-tabs--scoped slds-p-left--x-small slds-p-right--x-small">
+		<c:EUR_ISP_ConfirmationWindow aura:id="confirmation"/>
+
+		<aura:if isTrue="{!v.isTabSelected}">
+
+			<div class="{!v.isLoading ? 'slds-hide': 'slds-clearfix'}">
+				<ul class="slds-tabs--scoped__nav" role="tablist" id="activityTabs">
+					<aura:iteration items="{!v.activities}" var="activity">
+						<li class="{!'slds-tabs--scoped__item slds-text-heading--label slds-float--left' + (v.activityId == activity.Id ? ' slds-active' : '')}" role="presentation">
+							<a href="javascript:void(0);" class="{!'slds-tabs--scoped__link ' + activity.colorClass}" role="tab" onclick="{!c.switchTab}" data-activity-id="{!activity.Id}">
+								<span data-activity-id="{!activity.Id}" onmouseover="{!c.showTooltip}" onmouseout="{!c.hideTooltip}">
+									{!activity.Name}&nbsp;
+									{!activity.formattedTotalActivityAmount}&nbsp;
+									<c:EUR_ISP_PicklistView value="{!v.activity.EUR_ISP_Status__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity_Type__c.fields.EUR_ISP_Status__c.picklistValuesMap}"/>
+								</span>
+
+								<aura:if isTrue="{!and(and(not(v.isLocked), not(activity.EUR_ISP_Status__c == 'Invoiced')), and(not(activity.EUR_ISP_Matched__c > 0), v.UserPermissions.EUR_ISP_Spend_Activity__c.theObject.isDeletable))}">
+									<span class="slds-button__icon action-icon__close" data-activity-id="{!activity.Id}" data-activity-name="{!activity.Name}" data-activity-amount="{!((activity.EUR_ISP_Total_Activity_Amount__c || 0) - (activity.EUR_ISP_Matched__c || 0)) + ' ' + activity.CurrencyIsoCode}" onclick="{!c.confirmOnDelete}">&nbsp;</span>
+								</aura:if>
+							</a>
+
+							<aura:if isTrue="{!activity.EUR_ISP_Description__c}">
+								<div class="slds-popover slds-popover--tooltip slds-nubbin--bottom slds-hide" role="tooltip">
+									<div class="slds-popover__body">{!activity.EUR_ISP_Description__c}</div>
+								</div>
+							</aura:if>
+						</li>
+					</aura:iteration>
+
+					<aura:if isTrue="{!and(not(v.isLocked), v.UserPermissions.EUR_ISP_Spend_Activity__c.theObject.isCreateable)}">
+						<li class="{!'slds-tabs--scoped__item slds-text-heading--label slds-float--left' + (v.activityId == null? ' slds-active' : '')}" role="presentation">
+							<button class="slds-tabs--scoped__link slds-button action-icon__new" onclick="{!c.doRenderActivityCreateForm}">
+								<c:EUR_ISP_SVG class="slds-button__icon" xlinkHref="/resource/EUR_ISP_SLDS/assets/icons/action-sprite/svg/symbols.svg#new"/>
+							</button>
+						</li>
+					</aura:if>
+				</ul>
+
+				<div class="slds-tabs--scoped__content">
+					<aura:if isTrue="{!or(not(v.isLocked), v.SpendActivity.Id)}"> 
+						<c:EUR_ISP_SpendActivityDetails SystemSettings="{!v.SystemSettings}" UserPermissions="{!v.UserPermissions}" Spend="{!v.Spend}" SpendActivity="{!v.SpendActivity}" SpendActivityType="{!v.SpendActivityType}" isLocked="{!v.isLocked}"/>
+					</aura:if>
+				</div>
+			</div>
+
+			<div class="{!v.isLoading ? 'slds-show': 'slds-hide'}">
+				<c:EUR_ISP_Spiner />
+			</div>
+		</aura:if>
+	</div>
+</aura:component>

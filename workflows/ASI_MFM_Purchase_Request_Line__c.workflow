@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_Reject_A</fullName>
+        <description>ASI CTY CN Vendor Reject A</description>
+        <protected>false</protected>
+        <recipients>
+            <type>owner</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_PrLine_Approval</template>
+    </alerts>
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_Reject_B</fullName>
+        <description>ASI CTY CN Vendor Reject B</description>
+        <protected>false</protected>
+        <recipients>
+            <field>ASI_CTY_CN_Vendor_Approval_Buyer__c</field>
+            <type>userLookup</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_PrLine_Approval</template>
+    </alerts>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendoe_IsNeedComparePrice</fullName>
+        <field>ASI_CTY_CN_Vendoe_IsNeedComparePrice__c</field>
+        <literalValue>1</literalValue>
+        <name>ASI CTY CN Vendoe IsNeedComparePrice</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendoe_IsNeedComparePriceNO</fullName>
+        <field>ASI_CTY_CN_Vendoe_IsNeedComparePrice__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI CTY CN Vendoe IsNeedComparePriceNO</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendoe_LineStatusSubmit</fullName>
+        <field>ASI_CTY_CN_Vendor_Status__c</field>
+        <literalValue>Submitted</literalValue>
+        <name>Purchase Request Line Status_Submit</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Is_Buyer_Approve</fullName>
+        <field>ASI_CTY_CN_Vendor_IsBuyerApprove__c</field>
+        <literalValue>1</literalValue>
+        <name>Purchase Request Line Is Buyer Approve</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Is_Buyer_Approve_No</fullName>
+        <field>ASI_CTY_CN_Vendor_IsBuyerApprove__c</field>
+        <literalValue>0</literalValue>
+        <name>Is Buyer Approve No</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Is_MKT_Submit_Yes</fullName>
+        <field>ASI_CTY_CN_Vendor_Is_MKT_Submit__c</field>
+        <literalValue>1</literalValue>
+        <name>Is MKT Submit Yes</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Is_Select_Quotation_No</fullName>
+        <field>ASI_CTY_CN_Vendor_IsSelectQuotation__c</field>
+        <literalValue>0</literalValue>
+        <name>Is Select Quotation	No</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Need_MKT_Approval</fullName>
+        <field>ASI_CTY_CN_Vendor_Is_Need_MKT_Approval__c</field>
+        <literalValue>1</literalValue>
+        <name>Need MKT Approval</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_No_MKT_Sumbit</fullName>
+        <field>ASI_CTY_CN_Vendor_Is_MKT_Submit__c</field>
+        <literalValue>0</literalValue>
+        <name>No MKT Sumbit</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_No_Need_MKT_Approval</fullName>
+        <field>ASI_CTY_CN_Vendor_Is_Need_MKT_Approval__c</field>
+        <literalValue>0</literalValue>
+        <name>No Need MKT Approval</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Status_Approved</fullName>
+        <field>ASI_CTY_CN_Vendor_Status__c</field>
+        <literalValue>Approved</literalValue>
+        <name>Purchase Request Line Status_Approved</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Status_Recall</fullName>
+        <field>ASI_CTY_CN_Vendor_Status__c</field>
+        <literalValue>Recall</literalValue>
+        <name>Purchase Request Line Status Recall</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Status_Reject</fullName>
+        <field>ASI_CTY_CN_Vendor_Status__c</field>
+        <literalValue>Reject</literalValue>
+        <name>Purchase Request Line Status_Reject</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_Status_ToBeAlloc</fullName>
+        <field>ASI_CTY_CN_Vendor_Status__c</field>
+        <literalValue>In Distribution</literalValue>
+        <name>Purchase Request Line Status_ToBeAlloc</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_KR_Set_PR_Line_External_ID</fullName>
+        <field>ASI_MFM_PurchaseRequests_Line_ExternalID__c</field>
+        <formula>Name</formula>
+        <name>ASI MFM KR Set PR Line External ID</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_CTY_CN_Vendor_PurLine_Reject_A</fullName>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Reject_A</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_Purchase_Request_Line__c.ASI_CTY_CN_Vendor_Is_MKT_Submit__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_Purchase_Request_Line__c.ASI_CTY_CN_Vendor_Status__c</field>
+            <operation>equals</operation>
+            <value>Reject,Approved</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_CTY_CN_Vendor_PurLine_Reject_B</fullName>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_Reject_B</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_Purchase_Request_Line__c.ASI_CTY_CN_Vendor_Is_MKT_Submit__c</field>
+            <operation>equals</operation>
+            <value>False</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_Purchase_Request_Line__c.ASI_CTY_CN_Vendor_Status__c</field>
+            <operation>equals</operation>
+            <value>Reject,Approved</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_KR_PRLine_External_ID</fullName>
+        <actions>
+            <name>ASI_MFM_KR_Set_PR_Line_External_ID</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_Purchase_Request_Line__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>KR Purchase Request Line</value>
+        </criteriaItems>
+        <description>ASI_MFM_KR_PRLine_External_ID</description>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+</Workflow>

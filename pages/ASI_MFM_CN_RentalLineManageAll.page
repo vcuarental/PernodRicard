@@ -1,0 +1,687 @@
+<apex:page standardController="ASI_MFM_Rental_Request__c" extensions="ASI_MFM_CN_RentalRequestCtrl" docType="html-5.0" >
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    
+    <meta charset="UTF-8" />
+    
+    <head>
+        <script>
+        
+        var contractLine = [];
+        var countingline = 0;
+        var picklist = '';
+        var EnterModel='';
+        var PickListValue = '';
+        var taxCodeSkipped = '差额征收';//MT@20200319
+        
+        $(document).ready(function(){//  $('#el_loading').show();
+            $('#SaveBtn').hide();
+            $('#CancelBtn').hide();
+            $('#SaveContractBtn').hide();
+            
+            if('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft'){
+                $('#EditContractBtn').hide();
+            }
+            
+            if('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Submitted'){
+                $('#EditBtn').hide();
+            }
+            
+            EnterModel='View';
+            createHeaderCol();
+            ASI_MFM_CN_RentalRequestCtrl.getContractLines('{!ASI_MFM_Rental_Request__c.id}', '{!rentalRequest.ASI_MFM_Department__c}', '{!rentalRequest.ASI_MFM_BU__c}', {!isRenova}, '{!rentalRequest.ownerId}', getContractCallback);
+            
+
+        });
+        //@201904 CR - Tax column editable
+        //MT@Introv_20190514 start
+        function taxChange(s) {
+            var amountInput = $(s.closest('tr')).find('td.totalAmount input');
+            var tax = s[s.selectedIndex].id;
+            var totalAmount = Number(amountInput.val());
+            //var taxAmount = totalAmount*tax/100;
+            var amountwoTax = (totalAmount/(1+(tax/100))).toFixed(2);
+            $(s.closest('tr')).find('td.totalAmountwoTax input').val(amountwoTax);
+
+            console.log(totalAmount);
+            console.log(amountwoTax);
+        }
+        //MT@Introv_20190514 end
+        
+        
+        function getContractCallback(line, event){
+            if (event.status) {
+                
+                $('tbody.contractsBody').html('');
+                
+                if (line) {
+                    contractLine = [];
+                    picklist = line[0].Picklist;
+                    
+                    PickListValue=$.parseHTML( picklist )[0].nodeValue;// console.log(PickListValue);
+                    console.log(PickListValue);
+                    var size = line.length;
+                    var appendline = '';//console.log(size);//console.log(picklist);
+                    var seqNo=1;
+                    for (var i = 1; i < size; i++) {//console.log(i);
+                        
+                        var lineItem = line[i];
+                        contractLine[lineItem.lineId] = lineItem;
+                        
+                        
+                        if(!lineItem.PPLine.ASI_MFM_Detail__c){
+                            appendline += '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                            + '<td class="dataCell" style="text-align:center;">'+seqNo+'</td>';//'<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">'+seqNo+'</td>';
+                            appendline +='<td class="dataCell" style=" text-align: center;" >'; 
+                            
+                            if(EnterModel=='EditContract' && '{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft'){
+                                appendline +='<button   HaveDetailLine="'+(lineItem.HaveDetailLine? 'Yes':'No')+'"  data-id='+lineItem.PPLine.Id+' totalAmount="' + lineItem.totalAmount + '" onclick="AddDetail(this);"  class="btn" type="button" >New Line</button>'; 
+                            }
+                            
+                            if(lineItem.HaveDetailLine){
+                                appendline +='<button  data-id='+lineItem.PPLine.Id+' onclick="OpenDetail(this);"  class="btn" type="button" >+</button>'; 
+                            }
+                            appendline +='</td>'; 
+                            appendline += '<td class="dataCell contract"><a href="/' + lineItem.lineId + '" target="_top" >' + lineItem.contract + '</a></td>'
+                            + '<td class="dataCell totalAmount">' + lineItem.totalAmount + '</td>'
+                            + '<td class="dataCell taxCode"><a href="/' + lineItem.taxCodeId + '" target="_top" >' + lineItem.taxCodeName + '</a></td>'
+                            + '<td class="dataCell totalAmountwoTax">' + lineItem.totalAmountWithoutTax + '</td>' //MT@Introv_20190514 Add amountwithouttax
+                            + '<td class="dataCell expenseType">' + (lineItem.PPLine.ASI_MFM_ExpenseType__c ? lineItem.PPLine.ASI_MFM_ExpenseType__r.Name : '' ) + ' </td>'
+                            + '<td class="dataCell PeriodFrom">' + lineItem.PeriodFrom + '</td>'
+                            + '<td class="dataCell PeriodTo">' + lineItem.PeriodTo + '</td>'
+                            + '<td class="dataCell ">' + lineItem.paidAmount + '</td>'
+                            + '<td class="dataCell ">' + lineItem.cipAmount + ' </td>'
+                            + '<td class="dataCell "><input disabled type="checkbox" value="' + lineItem.ETL + '" ' + (lineItem.ETL ? 'checked' : '') + ' /></td>'
+                            + '<td class="dataCell completion"><input disabled type="checkbox" value="' + lineItem.completion + '" ' + (lineItem.completion ? 'checked' : '') + ' /></td>'
+                            + '<td style="display:none" class="lineId">' + lineItem.lineId + '</td>';
+                            if(EnterModel=='View' && '{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Final'){
+                                appendline +='<td ><button  data-id='+lineItem.lineId+' class="btn" type="button" onclick="CreateNewPayment(this);" >New Payment</button></td>'
+                            }
+                            
+                            appendline +='</tr>';   
+                            
+                            //onclick="window.open('http://www.website.com/page')" onclick="window.open("/apex/ASI_MFM_CN_StructureCostPrefix_Page","_blank")"
+                            appendline +=' <tr id="R_'+lineItem.PPLine.Id+'" style="display:none;" > <td colspan="1" ></td> <td colspan="12" ><div id="D_'+lineItem.PPLine.Id+'" ></div> </td> </tr>';
+                            seqNo++;
+                        }
+                        
+                        
+                    }
+                    //$('tbody.contractsBody').html('');
+                    $('tbody.contractsBody').append(appendline);
+                }
+                $('#el_loading').hide();
+            } else {
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert(event.message);
+            }
+        }
+        
+        
+         function CreateNewPayment(that){//
+             //console.log(that.getAttribute('data-id')); // https://pernod-ricard--asisb5conf--c.cs7.visual.force.com/apex/ASI_MFM_CN_RentalRequestNewPaymentPage?&id=aGaM00000000030
+             var recordId=that.getAttribute('data-id');
+             var win = window.open('/apex/ASI_MFM_CN_RentalRequestNewPaymentPage?&id='+recordId,'_blank');
+             win.focus();
+             //window.location.href='/'+urlid;
+        }
+        
+        function createHeaderCol(){
+            
+            var headercol = '';
+            if(EnterModel=='Edit'){
+                headercol='<th onclick="addOrRemoveLine.addline(this)" class="headerRow" style="text-align:center; font-size:120%;" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">+</th>';
+            }else{
+                headercol='<th></th><th style=" text-align: center;" >Detail</th>';
+            }
+            
+            headercol += '<th class="headerRow">Contract</th>'
+            + '<th class="headerRow">Total Amount</th>'
+            + '<th class="headerRow">Tax Code</th>'
+            + '<th class="headerRow">Total Amount w/o Tax</th>' //MT@Introv_20190514 add amountwithouttax
+            + '<th class="headerRow">Expense Type</th>'
+            + '<th class="headerRow">Period From</th>'
+            + '<th class="headerRow">Period To</th>'
+            + '<th class="headerRow">Paid Amount</th>'
+            + '<th class="headerRow">CIP Amount</th>'
+            + '<th class="headerRow">ETL</th>'
+            + '<th class="headerRow">Completion</th>'
+            + '<th style="display:none">ID</th>';
+            
+            if(EnterModel=='View' && '{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Final'){
+                headercol +='<th  >New Payment</th>';
+            }
+            
+            $('table.contracts tr.headerRow').html("");
+            $('table.contracts tr.headerRow').append(headercol);
+        }
+        
+        
+        function SaveContractResult(){
+            var submitlist = [];
+            var deleteList = [];
+            var ErrorMesg='';
+            var isprocess =true;
+            var tbody = $('.DetailTable tr');//console.log(tbody);
+            tbody.each(function(){
+                
+                if(typeof $(this).attr('class') !='undefined'){//console.log($(this).attr('RecordId'));//console.log($(this).find('td.PeriodFrom input').val());//console.log($(this).find('td.TotalAmountDetail input').val());
+                    var ParentStr='';
+                    var totalamount;
+                    if($(this).attr('ParentId')){
+                        ParentStr=$(this).attr('ParentId');
+                        ParentStr=ParentStr.replace("T_", "");
+                    }
+                    
+                    if($(this).attr('parenttotalamount')){
+                        totalamount = $(this).attr('parenttotalamount');
+                        //console.log(totalamount);
+                    }
+                    
+                    if(!$(this).find('td.PeriodFrom input').val() || !$(this).find('td.PeriodTo input').val() || !$(this).find('td.TotalAmountDetail input').val() ){
+                        ErrorMesg='Please input all required fields.';
+                        isprocess=false;
+                    }
+                    
+                    var tmp = {ParentId : ParentStr,
+                               PeriodFrom:$(this).find('td.PeriodFrom input').val() ? $(this).find('td.PeriodFrom input').val():'',
+                               PeriodTo:$(this).find('td.PeriodTo input').val() ? $(this).find('td.PeriodTo input').val():'',
+                               TotalAmountDetail : $(this).find('td.TotalAmountDetail input').val()? $(this).find('td.TotalAmountDetail input').val(): 0 ,
+                               AmountPerMonth:$(this).find('td.AmountPerMonth input').val()? $(this).find('td.AmountPerMonth input').val(): 0,
+                               lineId:$(this).attr('RecordId')?$(this).attr('RecordId'):''};
+                    
+                    if(Object.keys(tmp).length > 0){
+                        submitlist.push(tmp);
+                    }
+                }
+                
+            });
+            
+            for(var key in contractLine){
+                if(contractLine[key].isDelete)
+                    deleteList.push({lineId : key});
+            }//console.log(submitlist);
+            
+            if(isprocess){
+                ASI_MFM_CN_RentalRequestCtrl.SaveDetailLine(submitlist, deleteList, '{!ASI_MFM_Rental_Request__c.id}', saveCallBack);
+            }else{
+                $('#el_loading').hide();
+                alert('Cannot Save: '+ErrorMesg);
+            }
+            
+        }
+        
+        
+        function saveResult(){
+            
+            var submitlist = [];
+            var deleteList = [];
+            
+            var tbody = $('.contractsBody tr');
+                        
+            tbody.each(function(){//console.log($(this).find('td.expenseType select option:selected').val());
+                
+                var tmp = {contract : $(this).find('td.contract input').val() ? $(this).find('td.contract input').val() : ''
+                           , totalAmount : $(this).find('td.totalAmount input').val() ? $(this).find('td.totalAmount input').val() : 0
+                           , expenseTypeId : $(this).find('td.expenseType').find('select').find('option:selected').val() ? $(this).find('td.expenseType').find('select').find('option:selected').val() : ''
+                           , isDelete : false
+                           , PeriodFrom:$(this).find('td.PeriodFrom input').val() ? $(this).find('td.PeriodFrom input').val() : ''
+                           , PeriodTo:$(this).find('td.PeriodTo input').val() ? $(this).find('td.PeriodTo input').val() : ''
+                           , completion : $(this).find('td.completion input').attr('checked') != undefined ? true : false
+                           , taxCodeId : $(this).find('td.taxCode').find('select').find('option:selected').val() ? $(this).find('td.taxCode').find('select').find('option:selected').val() : ''
+                           , lineId : $(this).find('td.lineId').html()
+                           , totalAmountWithoutTax : $(this).find('td.totalAmountwoTax input').val() ? $(this).find('td.totalAmountwoTax input').val() : 0};//MT@20200319
+                
+                if(!contractLine[tmp.lineId]){
+                    //if(allocationline[$(this).find('td.lineId').attr('allocationlineId')])
+                    //delete allocationline[$(this).find('td.lineId').attr('allocationlineId')];
+                    contractLine[$(this).find('td.lineId').attr('contractlineId')] = tmp;
+                }else{
+                    //delete allocationline[tmp.lineId];
+                    contractLine[tmp.lineId] = tmp;
+                }
+                
+                if(Object.keys(tmp).length > 0){
+                    submitlist.push(tmp);
+                }
+            });
+            
+            for(var key in contractLine){
+                if(contractLine[key].isDelete)
+                    deleteList.push({lineId : key});
+            }//console.log(submitlist); console.log(deleteList);
+            
+            ASI_MFM_CN_RentalRequestCtrl.saveContractLines(submitlist, deleteList, '{!ASI_MFM_Rental_Request__c.id}', saveCallBack);
+          }
+        
+        function saveCallBack(returnMsg, event){
+            
+            if (event.status) {
+                if (returnMsg === 'Success') {//var redirectURL = '/apex/ASI_MFM_CN_RentalLineManageAll?id={!ASI_MFM_Rental_Request__c.id}';//location.href = redirectURL;//redirect = true;
+                    
+                    
+                    if('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Final'){
+                        
+                        window.top.location = '/{!ASI_MFM_Rental_Request__c.id}';
+                    }else{
+                        $('#SaveBtn').hide();
+                        $('#SaveContractBtn').hide();
+                        $('#CancelBtn').hide();
+                        $('#EditBtn').show();
+                        if('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft'){
+                            $('#EditContractBtn').show();
+                        }
+                          
+                        EnterModel='View';
+                        createHeaderCol();
+                        ASI_MFM_CN_RentalRequestCtrl.getContractLines('{!ASI_MFM_Rental_Request__c.id}', '{!rentalRequest.ASI_MFM_Department__c}', '{!rentalRequest.ASI_MFM_BU__c}', {!isRenova}, '{!rentalRequest.ownerId}', getContractCallback);
+                    }                    
+                }else{
+                    $('#el_loading').hide();
+                    alert('event.status : '+returnMsg);
+                }
+            }else{
+                // TODO: Handle error
+                $('#el_loading').hide();
+                alert('el_loading : '+event.message);
+            }
+        }
+        
+        var addOrRemoveLine = {
+            removeline : function(e){
+                var lineId = $(e).closest('tr').find('.lineId').html();
+                //console.log(lineId);
+                if(contractLine[lineId]){
+                    contractLine[lineId].isDelete = true;
+                }
+                $(e).closest('tr').remove();
+            },
+            addline : function(e){
+                var line = '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                + '<td class="dataCell" onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-</td>'
+                + '<td class="dataCell contract"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input type="" value="" /></div></td>'
+                //+ '<td class="dataCell totalAmount"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input type="" value="" /></div></td>'
+                + '<td class="dataCell totalAmount"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountwoTax(this)" onkeydown="calculateAmountwoTax(this)" onchange="calculateAmountwoTax(this)" onkeypress="calculateAmountwoTax(this)" type="" value="" /></div></td>'//MT_@Introv_20190514 modify to change with amountwithouttax
+                + '<td class="dataCell taxCode"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><select onchange="taxChange(this)">' + '{!TaxCodePiskList}' + '</select></td>'
+                + '<td class="dataCell totalAmountwoTax"><input onkeyup="calculateAmount(this)" onkeydown="calculateAmount(this)" onchange="calculateAmount(this)" onkeypress="calculateAmount(this)" type="" value="" /></td>'//MT@Introv_20190514 add amountwithouttax
+                + '<td class="dataCell expenseType"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><select>' + PickListValue + '</select></div></div></td>'
+                + '<td class="dataCell PeriodFrom" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value=""  /></td>'
+                + '<td class="dataCell PeriodTo" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value=""  /></td>'
+                + '<td class="dataCell "><input disabled type="" value="" /></td>'
+                + '<td class="dataCell "><input disabled type="" value="" /></td>'
+                + '<td class="dataCell "><input disabled type="checkbox" value="" /></td>'
+                + '<td class="dataCell completion"><input type="checkbox" value="" onclick="$(this).attr(\'checked\', \'checked\');" /></td>'
+                + '<td style="display:none" class="lineId" contractlineId="contractline_' + countingline + '" ></td></tr>';
+                $(e).closest('table').find('tbody').last('tr').append(line);
+                countingline++;
+                $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'}); 
+            },
+            addDetailline : function(InputId, amount){ // onfocus="$(this).datepicker({ dateFormat: \'dd-mm-yy\' });"  class="DatePickerClass" 
+                var line = '<tr ParentId="'+InputId+'" parenttotalamount="' + amount + '"  class="InputLine" ><td><button id="BU_'+countingline+'"  onclick="addOrRemoveLine.removeDetailLine(this);"  class="btn" type="button" >Delete</button></td>'+
+                    '<td class="dataCell PeriodFrom" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value=""  /></td>'+
+                    '<td class="dataCell PeriodTo" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });" value=""  /></td>'+
+                    '<td class="dataCell TotalAmountDetail"><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" type="" value="" /></div></td>'+
+                    '<td class="dataCell AmountPerMonth"><input disabled type="" value="" /></div></td>'+
+                    '</tr>';
+                $('#'+InputId).closest('table').find('tbody').last('tr').append(line); //$('.DatePickerClass').datepicker();
+                countingline++;
+            },
+            removeDetailLine : function(e){
+                var lineId ='';
+                var buttonId=e.id;
+                if(document.getElementById(buttonId).hasAttribute('lineId')){
+                    lineId=document.getElementById(buttonId).getAttribute('lineId');//$(e).getAttribute('lineItem') .getAttribute('lineItem') 
+                }
+                if(contractLine[lineId]){
+                    contractLine[lineId].isDelete = true;
+                }
+                $(e).closest('tr').remove();
+            }
+        }
+        
+        
+        
+        function drawEditTable(){
+            var appendline='';
+            for(var key in contractLine){ // $.parseHTML(lineItem.expenseType)[0].nodeValue +
+                if(key !='remove'){
+                    //console.log('{!TaxCodePiskList}');
+                    var lineItem=contractLine[key];
+                    if(!lineItem.PPLine.ASI_MFM_Detail__c){
+                    	//MT_@Introv_20190514 start
+                    	//Add amountwithouttax
+                        //modify to change with amountwithouttax
+                        //add control to check if the user is fin user
+                        appendline += '<tr class="dataRow even  first  last" onmouseover="if (window.hiOn){hiOn(this);} " onmouseout="if (window.hiOff){hiOff(this);} " onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}">'
+                        + '<td class="dataCell" ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '')  ? '>' : ' onclick="addOrRemoveLine.removeline(this)" style="text-align:center; font-size:120%" onmouseover="enlargeOrResume.enlarge(this)" onmouseout="enlargeOrResume.resume(this)" onblur="enlargeOrResume.resume(this)" onfocus="enlargeOrResume.enlarge(this)">-  ') + '</td>'
+                        + '<td class="dataCell contract"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin}) ? 'disabled' : '') + ' type="" value="' + lineItem.contract + '" /></td>'
+                        //+ '<td class="dataCell totalAmount"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input ' + ('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' type="" value="' + lineItem.totalAmount + '" /></td>' 
+                        + '<td class="dataCell totalAmount"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' type="" value="' + lineItem.totalAmount + '" onkeyup="calculateAmountwoTax(this)" onkeydown="calculateAmountwoTax(this)" onchange="calculateAmountwoTax(this)" onkeypress="calculateAmountwoTax(this)"/></td>' 
+                        + '<td class="dataCell taxCode"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><select ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' onchange="taxChange(this)">' + '{!TaxCodePiskList}'.replace( 'value="' + lineItem.taxCodeId + '"', 'value="' + lineItem.taxCodeId + '" selected') + '</select></td>' 
+                        + '<td class="dataCell totalAmountwoTax"><input ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' type="" value="' + lineItem.totalAmountWithoutTax + '" onkeyup="calculateAmount(this)" onkeydown="calculateAmount(this)" onchange="calculateAmount(this)" onkeypress="calculateAmount(this)"/></td>' 
+                        + '<td class="dataCell expenseType"><div class="requiredInput" style="color:red; display:none;">This field is required</div><div style="" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><select ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' >' +GenPickListHTML(lineItem.PPLine.ASI_MFM_ExpenseType__c)+ '</select></td>'
+                        + '<td class="dataCell PeriodFrom" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value="' + lineItem.PeriodFrom + '"  /></td>'
+                        + '<td class="dataCell PeriodTo" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input ' + (('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' != 'Draft' && !{!isFin} ) || (lineItem.paidAmount != null && lineItem.paidAmount > 0) ? 'disabled' : '') + ' class="DatePickerClass" placeholder="yyyy-mm-dd" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value="' + lineItem.PeriodTo + '"  /></td>'
+                        + '<td class="dataCell "><input disabled type="" value="' + lineItem.paidAmount + '" /></td>'
+                        + '<td class="dataCell "><input disabled type="" value="' + lineItem.cipAmount + '" /></td>'
+                        + '<td class="dataCell "><input disabled type="checkbox" value="' + lineItem.ETL + '" ' + (lineItem.ETL ? 'checked' : '') + ' /></td>'
+                        + '<td class="dataCell completion"><input onclick="$(this).attr(\'checked\', \'checked\');"  ' + (lineItem.completion ? 'disabled' : '') + ' type="checkbox" value="' + lineItem.completion + '" ' + (lineItem.completion ? 'checked' : '') + ' /></td>'
+                        + '<td style="display:none" class="lineId">' + lineItem.lineId + '</td></tr>';
+                    	//MT_@Introv_20190514 end
+                    }
+                }       
+            }//end of for loop
+            $('tbody.contractsBody').html('');
+            $('tbody.contractsBody').append(appendline);
+            $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'});
+        }
+        
+        function CancelModel(){
+            countingline = 0;
+            $('#SaveBtn').hide();
+            $('#SaveContractBtn').hide();
+            $('#CancelBtn').hide();
+            $('#EditBtn').show();
+            if('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft'){
+                $('#EditContractBtn').show();
+            }
+            
+            EnterModel='View';
+            createHeaderCol();
+            ASI_MFM_CN_RentalRequestCtrl.getContractLines('{!ASI_MFM_Rental_Request__c.id}', '{!rentalRequest.ASI_MFM_Department__c}', '{!rentalRequest.ASI_MFM_BU__c}', {!isRenova}, '{!rentalRequest.ownerId}', getContractCallback);
+            
+        }
+        
+        
+        
+        function EditFunction(){
+            $('#SaveBtn').show();
+            $('#CancelBtn').show();
+            $('#EditBtn').hide();
+            $('#EditContractBtn').hide();
+            
+            EnterModel='Edit';
+            createHeaderCol();
+            drawEditTable();
+            
+        }
+        
+        
+        function AddDetail(that){ //console.log(that.getAttribute('HaveDetailLine'));
+            
+            var returnHTML='';
+            var RowId= 'R_'+that.getAttribute('data-id');
+            var TableId='T_'+that.getAttribute('data-id');
+            var detailId= 'D_'+that.getAttribute('data-id');
+            var amount = that.getAttribute('totalAmount');
+            
+            if(that.getAttribute('HaveDetailLine')=='No'){
+                if(document.getElementById(RowId).style.display){
+                    document.getElementById(RowId).style.display='';
+                    returnHTML='<table id="'+TableId+'" class="DetailTable" ><tr><th>Action</th><th>Period From</th><th>Period To</th><th>Management Fee + Leasing</th><th>Amount Per Day</th></tr></table>';
+                    $('#'+detailId).html(returnHTML);
+                }
+            }else{
+                if(document.getElementById(RowId).style.display){
+                    document.getElementById(RowId).style.display='';
+                    
+                    $('#'+detailId).html(DraweEditDetailTable(that.getAttribute('data-id'),TableId));
+                }
+            }
+            
+            addOrRemoveLine.addDetailline(TableId, amount);
+            $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'}); 
+        }
+        
+        
+        
+        function DraweEditDetailTable(InputValueId,TableId){
+            var returnHTML='<table id="'+TableId+'"  class="DetailTable"  ><tr><th>Action</th><th>Period From</th><th>Period To</th><th>Management Fee + Leasing</th><th>Amount Per Day</th></tr>';//MT@Introv 20190527 //Amount per month -> day
+            for(var key in contractLine){
+                if(key !='remove'){
+                    var lineItem=contractLine[key];
+                    if(lineItem.PPLine.ASI_MFM_Detail__c &&  InputValueId ===lineItem.PPLine.ASI_MFM_Rental_Request_Line__c ){
+                        var PeriodFrom= formatDate(new Date(lineItem.PPLine.ASI_MFM_Period_From__c));
+                        var PeriodTo = formatDate(new Date(lineItem.PPLine.ASI_MFM_Period_To__c));
+                        returnHTML+='<tr  ParentId="'+TableId+'"  RecordId="'+ lineItem.PPLine.Id+'" parenttotalamount="' + lineItem.totalAmount + '"   class="InputLine" ><td>' + ('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft' ? '<button id="BU_'+lineItem.lineId+'"  lineId="'+lineItem.lineId+'"   onclick="addOrRemoveLine.removeDetailLine(this);"  class="btn" type="button" >Delete</button>' : '' ) + '</td><td class="dataCell PeriodFrom"  ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" ' + ('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft' ? '' : 'disabled') + ' class="DatePickerClass"  placeholder="dd-mm-yyyy" type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });" value="'
+                        +PeriodFrom+'" /></td><td class="dataCell PeriodTo" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" ' + ('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft' ? '' : 'disabled') + ' class="DatePickerClass" placeholder="dd-mm-yyyy"  type="text" onfocus="$(this).datepicker({ dateFormat: \'yy-mm-dd\' });"  value="'+
+                            PeriodTo+'" /></td><td class="dataCell TotalAmountDetail" ><div style="background-color:red;width:3px;display: inline-block;">&nbsp;</div><input onkeyup="calculateAmountPerMonth(this)" onkeydown="calculateAmountPerMonth(this)" onchange="calculateAmountPerMonth(this)" onkeypress="calculateAmountPerMonth(this)" ' + ('{!ASI_MFM_Rental_Request__c.ASI_MFM_Status__c}' == 'Draft' ? '' : 'disabled') + ' type="" value="' +lineItem.PPLine.ASI_MFM_Total_Amount__c+ '" /></td><td  class="dataCell AmountPerMonth" ><input disabled type="" value="'+(lineItem.PPLine.ASI_MFM_Amount_Per_Month__c?lineItem.PPLine.ASI_MFM_Amount_Per_Month__c:'')+'" /></td></tr>';
+                    }
+                }
+            }
+            
+            return returnHTML;
+        }
+        
+        function getDateCount(inDate){
+            return new Date(inDate.getFullYear(), inDate.getMonth()+1, 0).getDate();
+        }
+        
+        function calculateAmountPerMonth(that){
+            
+            var row = $(that).closest('tr');
+            var from = $(row).find('td.PeriodFrom input').val();
+            var to = $(row).find('td.PeriodTo input').val();
+            var amount = $(row).find('td.TotalAmountDetail input').val();
+            
+            if(from==null || to == null || Number(amount)==0) {$(row).find('td.AmountPerMonth input').val('');return;}
+            var fromStrs = from.split("-");
+            var toStrs   = to.split("-");
+            var fromDate = new Date(fromStrs[0],Number(fromStrs[1])-1,fromStrs[2]);
+            var toDate   = new Date(toStrs[0],Number(toStrs[1])-1,toStrs[2]);
+            
+             //MT@Introv 20190527 start
+             //Modify the calculation of counting days
+            var oneDay = 24*60*60*1000; // hours*minutes*seconds*milliseconds
+            var daycount = Math.round(Math.abs((fromDate.getTime() - toDate.getTime())/(oneDay))) + 1;
+
+            /*
+            var daycount = 0;
+            var runningDate = new Date(fromStrs[0],Number(fromStrs[1])-1,1);//the first date of the from date
+            while(runningDate<toDate) {
+                var index = runningDate.getMonth()+1;
+                var receiptDateCount = getDateCount(runningDate);//last month end date
+                if(runningDate.getMonth()==fromDate.getMonth() && runningDate.getMonth()==toDate.getMonth() ) {
+                    receiptDateCount = toDate.getDate()-(fromDate.getDate()-1);
+                }else if(runningDate.getMonth()==fromDate.getMonth()) {
+                    receiptDateCount -= (fromDate.getDate()-1);
+                } else if (runningDate.getMonth()==toDate.getMonth()) {
+                    receiptDateCount = (toDate.getDate());
+                }
+                //console.log(receiptDateCount);
+                daycount+=receiptDateCount;
+                runningDate.setMonth(index);
+            }
+            */
+
+            //MT@Introv 20190527 end
+            
+            $(row).find('td.AmountPerMonth input').val((amount/daycount).toFixed(2));
+            return;
+            
+            //find('td.AmountPerMonth input')
+            
+            var fyear = parseInt(from.split('-')[0]);
+            var fmonth = parseInt(from.split('-')[1]);
+            
+            var tyear = parseInt(to.split('-')[0]);
+            var tmonth = parseInt(to.split('-')[1]);
+            
+            var totalmonth = ((tyear - fyear) * 12) + (tmonth - fmonth + 1);
+            
+            $(row).find('td.AmountPerMonth input').val((amount/totalmonth).toFixed(2));
+            
+            //console.log(row + '   ' + from + '   ' + to + '    ' + amount);
+        }
+        
+        //MT@Introv_20190514 start
+        //add two function to calculate with tax
+        //Added a skip tax code MT@20200319
+        function calculateAmountwoTax(that){
+            var row = $(that).closest('tr');
+            var amt = $(row).find('td.totalAmount input').val();
+            //var tax = $(row).find('td.');
+            var tax = Number($(row).find('td.taxCode select').children('option:selected').attr('id'))/100;
+			var taxCodeSelected = $(row).find('td.taxCode select').children('option:selected').text();
+            console.log(amt);
+            console.log(tax);
+            console.log('taxCodeSelected ' + $(row).find('td.taxCode select').children('option:selected').text());
+            if(taxCodeSelected == taxCodeSkipped)
+                return;
+
+
+            if(amt==null || Number(amt)==0) {$(row).find('td.totalAmountwoTax input').val('');return;}
+           
+            $(row).find('td.totalAmountwoTax input').val((Number(amt)/(1+tax)).toFixed(2));
+            return;
+            
+        }
+
+
+        function calculateAmount(that){
+            var row = $(that).closest('tr');
+            var amt = $(row).find('td.totalAmountwoTax input').val();
+            var tax = Number($(row).find('td.taxCode select').children('option:selected').attr('id'))/100;
+			var taxCodeSelected = $(row).find('td.taxCode select').children('option:selected').text();
+
+            console.log(amt);
+            console.log(tax);
+            console.log('taxCodeSelected ' + $(row).find('td.taxCode select').children('option:selected').text());
+            if(taxCodeSelected == taxCodeSkipped)
+                return;
+
+            if(amt==null || Number(amt)==0) {$(row).find('td.totalAmount input').val('');return;}
+
+            $(row).find('td.totalAmount input').val((Number(amt)*(1+tax)).toFixed(2));
+            return;
+            
+        }
+        //MT@Introv_20190514 end
+        
+        function OpenDetail(that){
+            if(that.textContent==='-'){
+                that.textContent='+';
+            }else{
+                that.textContent='-';
+            }
+            var detailId= 'D_'+that.getAttribute('data-id');
+            var RowId= 'R_'+that.getAttribute('data-id');
+            var HTMLDiv='';
+            
+            if(document.getElementById(RowId).style.display){
+                document.getElementById(RowId).style.display='';
+            }else{
+                document.getElementById(RowId).style.display='none';
+            }
+            
+            if(EnterModel=='EditContract'){
+                HTMLDiv =DraweEditDetailTable(that.getAttribute('data-id'),'T_'+that.getAttribute('data-id'));
+            }else{
+                HTMLDiv=detailTable(that.getAttribute('data-id'));
+            }
+            
+            $('#'+detailId).html(HTMLDiv);
+            $('.DatePickerClass').datepicker({ dateFormat: 'yy-mm-dd'});
+        }
+        
+        
+        
+        function detailTable(InputValueId){
+            var returnHTML='<table ><tr><th>Period From</th><th>Period To</th><th>Management Fee + Leasing</th><th>Amount Per Day</th></tr>';
+            for(var key in contractLine){
+                if(key !='remove'){
+                    var lineItem=contractLine[key];//
+                    if(lineItem.PPLine.ASI_MFM_Detail__c && InputValueId ===lineItem.PPLine.ASI_MFM_Rental_Request_Line__c){//console.log(lineItem.PPLine.ASI_MFM_Period_To__c);
+                        //console.log(lineItem.PPLine.ASI_MFM_Rental_Request_Line__c + InputValueId);
+                        var PeriodFrom= formatDate(new Date(lineItem.PPLine.ASI_MFM_Period_From__c));
+                        var PeriodTo = formatDate(new Date(lineItem.PPLine.ASI_MFM_Period_To__c));
+                        returnHTML+='<tr><td>'+PeriodFrom+'</td><td>'+PeriodTo+'</td><td>'+lineItem.PPLine.ASI_MFM_Total_Amount__c+
+                            '</td><td>'+(lineItem.PPLine.ASI_MFM_Amount_Per_Month__c?lineItem.PPLine.ASI_MFM_Amount_Per_Month__c:'')+'</td></tr>';
+                    }
+                }
+            }
+            
+            returnHTML+='</table>';
+            return returnHTML;
+        }
+        
+        
+        function EditContractFunction(){
+            $('#SaveContractBtn').show();
+            $('#CancelBtn').show();
+            $('#EditBtn').hide();
+            $('#EditContractBtn').hide();
+            EnterModel='EditContract';
+            createHeaderCol();
+            ASI_MFM_CN_RentalRequestCtrl.getContractLines('{!ASI_MFM_Rental_Request__c.id}', '{!rentalRequest.ASI_MFM_Department__c}', '{!rentalRequest.ASI_MFM_BU__c}', {!isRenova}, '{!rentalRequest.ownerId}', getContractCallback);
+            
+        }
+        
+        
+        var enlargeOrResume = {
+            enlarge : function(e){
+                $(e).css('color','red');
+            }, resume : function(e){
+                $(e).css('color','black');
+            }
+        };
+        
+        
+        //
+        function formatDate(date) { //Format JavaScript Date to yyyy-mm-dd
+            var d = new Date(date),month = '' + (d.getMonth() + 1),day = '' + d.getDate(),year = d.getFullYear();
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+            return [year, month, day].join('-');
+        }
+        
+        function GenPickListHTML(InputValueId){
+            var StrHTML='';//console.log(InputValueId);
+            var wrapper= document.createElement('div');
+            wrapper.innerHTML=PickListValue;
+            for (var i = 0; i < wrapper.childNodes.length; i++) {
+                StrHTML+='<option value="'+wrapper.childNodes[i].value+'" ';
+                if(wrapper.childNodes[i].value == InputValueId){
+                    StrHTML+=' selected ';
+                }
+                StrHTML+=' >'+wrapper.childNodes[i].label+'</option>';//console.log(wrapper.childNodes[i].value+'='+wrapper.childNodes[i].label);
+            }//console.log('Checking111 ' + StrHTML);
+            return StrHTML;
+            //PickListValue
+        }
+        
+        
+        </script>
+    </head>
+    <apex:form rendered="true">
+        <apex:pageMessages id="headerPageMsg" />
+        <div class="waitingSearchDiv" id="el_loading" style="display : none; z-index:999;background-color: #fbfbfb; height: 100%;opacity:0.65;width:100%;"> 
+            <div class="waitingHolder" style="top: 74.2px; width: 91px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Please Wait...</span>
+            </div>
+        </div>
+        
+        <apex:outputPanel >
+            <apex:pageblock title="Contract" >
+                <apex:pageBlockButtons location="top" >
+                    <input id='EditBtn' type="button" value="Edit Contract" class="btn" onclick="EditFunction();" /> 
+                    <input id='SaveBtn'  type="button" value="Save" class="btn" onclick="$('#el_loading').show(); saveResult();" />
+                    
+                    <input id='EditContractBtn' type="button" value="Edit Contract detail" class="btn" onclick="EditContractFunction();" /> 
+                    <input id='SaveContractBtn' type="button" value="Save" class="btn" onclick="$('#el_loading').show(); SaveContractResult();" />
+                    
+                    <input id='CancelBtn'  type="button" value="Cancel" class="btn" onclick="CancelModel()" />
+                </apex:pageBlockButtons>
+                
+                <table class="list contracts" cellspacing="0" cellpadding="0" border="0">
+                    <tr class="headerRow"></tr>
+                    <tbody class="contractsBody"></tbody>
+                </table>
+            </apex:pageblock>
+        </apex:outputPanel>
+    </apex:form>
+</apex:page>

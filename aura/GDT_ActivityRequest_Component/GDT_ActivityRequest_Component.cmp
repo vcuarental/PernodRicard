@@ -1,0 +1,249 @@
+<aura:component controller="GDT_ManageActivity_Activity_Request" implements="flexipage:availableForAllPageTypes">
+
+
+	<aura:attribute name="serviceOptions" type="json[]" access="public" />
+	<aura:attribute name="selectedService" type="String" access="public"/>
+
+	<aura:attribute name="serviceIds" type="Map" default="{}"/>
+	<aura:attribute name="fields" type="json[]" access="public"/>
+	<aura:attribute name="relatedId" type="String" default="" />
+	<aura:attribute name="relatedType" type="String" default="" />
+	<aura:attribute name="spinnerShow" type="Boolean" default="false" />
+
+	<aura:attribute name="isAdmin" type="Boolean" default="false" />
+	<aura:attribute name="status" type="String" default="" />
+	<aura:attribute name="editable" type="Boolean" default="false" />
+	<aura:attribute name="isNew" type="Boolean" default="false" />
+	<aura:attribute name="submittable" type="Boolean" default="false" />
+	<aura:attribute name="releaseRequest" type="Boolean" default="false" />
+	
+    <aura:handler name="init"	value="{!this}"	action="{!c.doInit}" />
+    <aura:handler name="change"	value="{!v.selectedService}"	action="{!c.changeService}" />
+
+    <aura:attribute name="iterationLoaded" type="Boolean"  default="false"/>
+
+  	<aura:attribute name="activityRequestJSON" type="String" access="public"/>
+  	<aura:attribute name="activityRequest" type="Object" access="public"/>
+  	<aura:attribute name="attachments" type="Attachment[]" access="public" />
+  	<aura:attribute name="attachmentsLoaded" type="json[]" access="public" />
+
+  	<aura:attribute name="reloadForm" type="boolean" default="true" />
+
+  	<aura:if isTrue="False" >
+	  	<div>
+	  		Debug console
+	  		<ul>
+	  			<li>Service - {!v.selectedService}</li>
+			  	<li>Is New - {!v.isNew}</li>
+			  	<li>Is Admin - {!v.isAdmin}</li>
+			  	<li>Editable - {!v.submittable}</li>
+	  		</ul>
+	  	</div>
+  	</aura:if>
+
+    <aura:if isTrue="{!v.spinnerShow}" >
+   		<lightning:spinner aura:id="mySpinner" />
+   	</aura:if>
+   	<lightning:button class="slds-button_success slds-m-top_small allActivities" name="All_Activities" onclick="{!c.goBack}" type="button" label="All Activity Requests" />
+   	<aura:if isTrue="{!v.isNew}">
+	    <h3 style="font-size: 1rem;color: white;text-align: center;background: #023466;margin-top: 10px;margin-bottom: 10px;height: 59px;" class="slds-section-title--divider">
+	    	<div style="margin-left: 34%;float: left;margin-top: 12px;position: relative; margin-right: 14px;">New Request: </div>
+	    	<lightning:select name="services" class="allServices" value="{!v.selectedService}">
+	          <aura:iteration items="{!v.serviceOptions}" var="object">
+	            <option value="{!object.Code__c}">
+	              {!object.Label__c}
+	            </option>
+	          </aura:iteration>
+	    	</lightning:select>
+	    </h3>
+	</aura:if>
+	<aura:if isTrue="{!!v.isNew}">
+    	<h3 class="slds-section-title--divider" style="font-size: 1rem;color: white;text-align: center;background: #023466;margin-top: 10px;margin-bottom: 10px;">{!v.activityRequest.Services__c} : {!v.activityRequest.Activity_Name__c}</h3>
+	</aura:if>
+   <aura:if isTrue="{!not(empty(v.fields))}">
+	    <lightning:recordEditForm aura:id="myForm" recordId="{!v.relatedId}"
+	                              objectApiName="GDT_Activity__c" onload="{!c.loaded}" onsubmit="{!c.onRecordSubmit}" onsuccess="{!c.onRecordSuccess}" onerror="{!c.onRecordError}">
+	        <aura:if isTrue="{!v.reloadForm}">
+		        <div style="margin: auto; width: 50%; padding: 10px;text-align: center;">
+			        <aura:if isTrue="{!v.editable}">
+			        	<lightning:button class="slds-m-top_small headerBtn saveBtn" type="submit" label="Save" />
+			    	</aura:if>
+					<aura:if isTrue="{!v.submittable}">	
+					   	<lightning:button class="slds-m-top_small headerBtn submitBtn" onclick="{!c.submitApproval}" type="button" label="Submit for Approval" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'Pending Approval',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn saveBtn" onclick="{!c.approve}" type="button" label="Approve" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'Pending Approval',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn deleteBtn" onclick="{!c.reject}" type="button" label="Reject" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'On queue',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn submitBtn" onclick="{!c.inProgress}" type="button" label="In Progress" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'In Progress',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn deleteBtn" onclick="{!c.waitingForUser}" type="button" label="Waiting for User" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'In Progress',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn saveBtn" onclick="{!c.resolved}" type="button" label="Resolve" />
+			    	</aura:if>
+			    	<aura:if isTrue="{!and(v.status == 'Resolved',v.isAdmin)}">
+			        	<lightning:button class="slds-m-top_small headerBtn closeBtn" onclick="{!c.closed}" type="button" label="Close" />
+			    	</aura:if>
+			    	<aura:if isTrue="{! and(!v.isNew,or(v.isAdmin,v.status == 'Created'))}">
+			        	<lightning:button class="slds-m-top_small slds-button_text-destructive headerBtn deleteBtn" onclick="{!c.delete}" type="button" label="Delete" />
+			    	</aura:if>
+			    </div>
+			    
+
+		        <lightning:messages />
+		        <div class="slds-grid">
+			        <div class="slds-col" style="width:50%;margin-right: 10%;">
+			        	<aura:iteration items="{!v.fields}" var="field" loaded="{!v.iterationLoaded}">
+			        		<aura:if isTrue="{!and (_index % 2 == 0 ,field.index == '1')}" >
+				            	<lightning:inputField disabled="{!or(!(v.editable) , field.disabled)}" class="{!field.name}" fieldName="{!field.name}"  aura:Id="{!field.name}"/>
+				            </aura:if>
+				            <div class="slds-hide" aura:Id="loadingDiv"/>
+		        		</aura:iteration>
+			        </div> 
+			        <div class="slds-col"  data-aura-rendered-by="29:30;a"></div>
+                    <div class="slds-col" style="width:50%;">
+			        	<aura:iteration items="{!v.fields}" var="field">
+			        		<aura:if isTrue="{!and(_index % 2 != 0,field.index == '1')}" >
+				            	<lightning:inputField disabled="{!or(!(v.editable) , field.disabled)}" fieldName="{!field.name}"  aura:Id="{!field.name}"/>
+				            </aura:if>
+		        		</aura:iteration>
+			        </div>		        
+		    	</div>	  
+		    	 <h3 class="slds-section-title--divider" style="margin-top: 13px;margin-bottom: 13px;color: white;background: #023466;">Specific Info</h3>    
+		    	 <div class="slds-grid" style="width:50%;">
+			        <div class="slds-col" style="padding-right: 20px;">
+			        	<aura:iteration items="{!v.fields}" var="field" loaded="{!v.iterationLoaded}" >
+				            <aura:if isTrue="{!field.index == '2'}" >
+				            	<lightning:inputField disabled="{!or(!(v.editable) , field.disabled)}" fieldName="{!field.name}"  aura:Id="{!field.name}"/>
+				            </aura:if>
+				            <div class="slds-hide" aura:Id="loadingDiv"/>
+		        		</aura:iteration>
+			        </div>
+			    </div>
+			</aura:if> 	
+	    </lightning:recordEditForm>    
+	</aura:if>
+	<aura:if isTrue="{!and(!v.releaseRequest, !v.isNew)}">
+		<h3 class="slds-section-title--divider" style="margin-top: 13px;margin-bottom: 13px;color: white;background: #023466;">Attachments</h3>
+		<div style="border: 1px solid rgb(217, 219, 221);border-radius: .25rem;background-clip: padding-box;position: relative;overflow: scroll;height: 300px;float: left;width: 530px;background-color: aliceblue !important;}">
+			<ul class="slds-list--vertical slds-has-cards slds-has-inline-block-links--space" style="padding: 5px;">
+				<aura:iteration items="{!v.attachments}" var="att" >
+					<li class="slds-list__item"><a href="{!'/' + att.Id}">{!att.Name}</a>
+						<aura:if isTrue="{!or(v.editable, v.isAdmin)}">
+							<div data-attId="{!att.Id}" onclick="{!c.deleteAttachment}" style="float: right;margin: 5px;cursor: pointer;">
+								<lightning:icon size="small" iconName="utility:delete" alternativeText="delete!" variant="close"/>
+							</div>
+						</aura:if>
+					</li>
+				</aura:iteration>
+			</ul>
+		</div>
+	</aura:if>
+	<aura:if isTrue="{!and(!v.releaseRequest ,and (or(v.editable,v.isAdmin), !v.isNew))}">
+		<div id="dropZone" ondragover="{!c.onDragOver}" ondrop="{!c.onDrop}" style="border: 1px solid rgb(217, 219, 221);border-radius: .25rem;background-clip: padding-box;position: relative;overflow: scroll;margin-left: 10px;height: 300px;float: left;width: 530px;opacity: 0.6;padding: 5px;background-color: aliceblue !important;}">
+			<ul class="slds-list--vertical slds-has-cards">
+				<aura:iteration items="{!v.attachmentsLoaded}" var="att" >
+					<li class="{!att.error == true ? 'slds-list__item error' : 'slds-list__item'}"  style="padding: 8px;">{!att.Name}
+					<aura:if isTrue="{!!att.error}">
+						<div class="loader"></div>
+					</aura:if> 
+					<aura:if isTrue="{!att.error}">
+						<div style="float: right;">
+							<lightning:icon size="small" class="errorIcon" iconName="utility:error" alternativeText="Error!" variant="close"/>
+						</div>
+					</aura:if>
+				</li>
+				</aura:iteration>
+			</ul>
+			<aura:if isTrue="{!empty(v.attachmentsLoaded)}">
+				Drag and Drop files here...
+			</aura:if>
+		</div>
+	</aura:if>
+	<aura:if isTrue="{!and(v.releaseRequest, !v.isNew)}">
+		<h3 class="slds-section-title--divider" style="margin-top: 13px;margin-bottom: 13px;color: white;background: #023466;">Deployments</h3>
+		<aura:if isTrue="{!or(v.editable , v.status == 'Resolved')}">
+			<div style="margin-bottom:10px;">
+		    	<lightning:button class="slds-m-top_small saveBtn" onclick="{!c.newRequest}" type="button" label="New Deployment" />
+			</div>
+		</aura:if>
+		<table aura:id="theTable" id="mainTable" class="slds-table slds-table--bordered slds-table--cell-buffer">
+			  	<thead>
+				    <tr class="slds-text-title--caps">
+				    	<th style="cursor:pointer;" scope="col"  data-colNumber="1" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Name" data-colNumber="1" title="Name">Action</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="9" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Status__c" data-colNumber="9" title="status">Release Type</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="2" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Services__c" data-colNumber="2" title="Services">Deployment Type</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="3" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Project_Name__c" data-colNumber="3" title="Project_Name__c">Description</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="4" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Environment_Destination__c"  data-colNumber="4" title="Environment_Destination__c">Status</div>
+				      	</th>
+				      	<th style="cursor:pointer;width: 12%;" scope="col"  data-colNumber="5" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Affiliate__c" data-colNumber="5" title="Affiliate__c">Date Requested</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="6" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Project_Description__c" data-colNumber="6" title="Description">Date Expected</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="7" class="columnHeaders">
+				        	<div class="slds-truncate headerDiv" data-recordName="Date_Request__c" data-colNumber="7" title="Created Date">Date delivered</div>
+				      	</th>
+				      	<th style="cursor:pointer;" scope="col"  data-colNumber="8" class="columnHeaders">
+			        	<div class="slds-truncate headerDiv" data-recordName="Date_Expected__c" data-colNumber="8" title="Expected Date">Performed By</div>
+				      	</th>
+				    </tr>
+			  	</thead>
+			  	<tbody>
+					<aura:iteration items="{!v.activityRequest.GDT_Activity_LineItems__r.records}" var="row" indexVar="rowNumber">
+					    <tr> 
+					      	<td> 
+					      		<aura:if isTrue="{!and(row.Status__c == 'New', v.editable)}">
+						      		<div  onclick="{!c.deleteLine}" data-lineId="{!row.Id}" style="position: relative;right: 50%;float: right;margin: 5px;cursor: pointer;">
+										<lightning:icon size="small" iconName="utility:delete" alternativeText="delete" variant="close"/>
+									</div> 
+								</aura:if>
+									<div  onclick="{!c.editLine}" data-lineId="{!row.Id}" style="position: relative;right: 50%;float: right;margin: 5px;cursor: pointer;">
+										<lightning:icon size="small" iconName="utility:edit" alternativeText="edit" variant="close"/>
+									</div>
+					      	</td> 
+					      	<td>
+								{!row.Release_Type_Line__c}
+					      	</td>
+					      	<td>
+					      		{!row.Deployment_Type__c}
+					      	</td>
+					      	<td>
+					      		{!row.Commentary__c}
+					      	</td>
+					      	<td>
+					      		{!row.Status__c}
+					      	</td>
+					      	<td>
+					      		<lightning:formattedDateTime year="numeric" month="numeric" day="numeric"  aura:Id="outputTime" value="{!row.Date_of_request__c}" timeZone="UTC"/>
+					      	</td> 
+					      	<td>
+					      		<lightning:formattedDateTime year="numeric" month="numeric" day="numeric"  aura:Id="outputTime" value="{!row.Date_expected__c}" timeZone="UTC"/>
+					      	</td>
+					      	<td>
+						    	 <lightning:formattedDateTime year="numeric" month="numeric" day="numeric"  aura:Id="outputTime" value="{!row.Date_delivery__c}" timeZone="UTC"/>
+					      	</td>
+					      	<td>
+						    	 {!row.Performed_By__r.Name}
+					      	</td>
+						</tr>
+					 </aura:iteration>
+			  	</tbody>
+			</table>
+	</aura:if>
+</aura:component>

@@ -1,0 +1,456 @@
+<apex:page standardController="ASI_MFM_Payment__c" extensions="ASI_MFM_CAP_SG_MgAll_PaymentController" sidebar="false" showheader="true" >
+    <apex:outputField value="{!ASI_MFM_Payment__c.name}" rendered="false"/>
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/styles/common.css')}" />
+
+
+<link href="{!URLFOR($Resource.ASI_CRM_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+
+<!-- this guy first -->
+<script type="text/javascript">__sfdcSessionId = '{!$Api.Session_Id}';</script>
+
+<!-- this guy second -->
+<script src="/soap/ajax/29.0/connection.js" type="text/javascript"></script>
+
+<script>
+    $ = jQuery.noConflict();
+   
+    var isFirstLoad = true;
+    var colLabel_Action = "Action";     
+    var colLabel_Brand = "Brand";       
+    var colLabel_BrandQuality = "Brand Quality"; 
+    var colLabel_Volume = "Volume";     
+    
+    var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : false,
+        "aLengthMenu":[10,25,50],
+        "iDisplayLength":25,
+        "bSort" : false
+    };
+    
+    //PAYMENT Mechanic Column Definition
+    var PAYMENTLineItemColumns = [
+        {"sTitle": colLabel_Action},
+        {"sTitle": colLabel_Brand}
+    ]
+    
+    var PAYMENTMechanicColumns = [
+        {"sTitle": colLabel_Action},
+        {"sTitle": colLabel_Brand}
+    ]
+    
+    //DataTable Variable
+    var cliPayment;
+    
+    $(document).ready(
+        function(){
+            setTables();
+        }
+    );
+    
+    function setMainTabTable(){
+    
+        var cliPayment_dataTableProperties = basicDataTableProperties;
+        cliPayment_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "Sub-Brand"},
+            {"sTitle": "AP Code"},
+            {"sTitle": "Payment Amount"},
+            {"sTitle": "Payment List Item Description"},
+            {"sTitle": "AP Remark"}
+        ];
+        cliPayment =  $("#{!PAYMENT_LINE_TABLE_PREFIX}PaymentLine").dataTable(cliPayment_dataTableProperties);
+
+    } 
+    
+    function setCellReadOnly(cpiRowCell) {
+    
+        cpiRowCell.prop("disabled",true);
+        cpiRowCell.css("background", "LightGray");
+    
+    }
+    
+    function setTables(){
+        
+        //Set all line item and PAYMENT mechanic tables (for all mechanic type)
+        setMainTabTable();
+
+    }
+    
+    function numberWithCommas(x) {
+        return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        //return x;
+    }
+    
+    function validateNumber(input){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{0})?$"); 
+        return numRe.test(input);
+    }
+    
+    function validateFloat(input, precision){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{1,"+precision+"})?$"); 
+        return numRe.test(input);
+    }
+
+    
+    function normalizeFloat(number, chars) {
+        var lastIndex = -1;
+        if(typeof number === 'undefined'){
+            return number;
+        }
+        for(i=0; i < chars.length; i++) {
+            t = number.lastIndexOf(chars[i]);
+
+            if (t > lastIndex) {
+                lastIndex = t;
+            }
+        }
+
+        if (lastIndex == -1) {
+            lastIndex = number.length;
+        }
+
+        var whole = number.substring(0, lastIndex);   
+        var precision = number.substring(lastIndex);
+        for (i=0; i < chars.length; i++) {
+            whole = whole.replace(chars[i], '');
+            precision = precision.replace(chars[i],'.');           
+        }
+        number = whole + precision;
+        f = parseFloat(number.replace(/,/g, '')) ;
+        //f = parseFloat(number);
+
+        return f;
+    }
+    
+    function precise_round(num,decimals){
+        return Math.round(num*Math.pow(10,decimals))/Math.pow(10,decimals);
+    }
+    
+    function loading(val) {
+        if (val) {
+          document.getElementById('contentLoading').style.display = 'block';
+          document.getElementById('contentLoaded').style.display = 'none';
+        }
+        else {
+          document.getElementById('contentLoading').style.display = 'none';
+          document.getElementById('contentLoaded').style.display = 'block';
+        }
+    }
+    
+    function validateBU(cpiRow, cpiKey) {
+        var buValue = cpiRow.find("select.buPick").val();
+        updateBUPick(buValue, cpiKey);
+    }
+    
+    function validateAP(cpiRow, cpiKey) {
+        var apValue = cpiRow.find("select.apPick").val();
+        updateAPPick(apValue, cpiKey);
+    }
+    
+    function startLoading(){
+        $('#load_scrl').css('top', $(document).scrollTop() + 200);
+        $('.loadingBox').show();
+    }
+    function endLoading(){
+             $('.loadingBox').hide();
+    }
+    
+</script>
+
+<style>
+    body {
+        margin-top: 40px;
+        font-size: 12px;
+        font-family: Helvetica,Arial,Verdana,sans-serif;
+        width:100%;
+    }
+           
+    .loadingOverlay{
+        opacity: 0.4;
+        postion: absolute;
+        top:0px;
+        left:0px;
+        background-color:#001100;
+        width:100%;
+        z-index: 5000
+    }
+
+    #container1{
+        width:100%;
+    }
+
+    #tabLink{
+        font-size: 10px;
+    }
+   
+/*
+    .ui-widget-header {
+      border: 1px solid #4297d7;
+      background: #cB5 url(images/ui-bg_gloss-wave_55_5c9ccc_500x100.png) 50% 50% repeat-x;
+    }
+    
+    .DataTables_sort_wrapper{
+      Color: #e17009;
+    }
+*/    
+    
+    .overlay {
+                display: none;
+                height: 100%;
+                left: 0;
+                position: fixed;
+                top: 0;
+                opacity: 0.3;
+                -moz-opacity: 0.3;
+                width: 100%;
+                -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+                filter: alpha(opacity=30);
+                background: #000;
+                -khtml-opacity: 0.3;
+                z-index: 1000;
+            }
+    .loader {
+        width: 32px;
+        height: 32px;
+        position: absolute;
+        left: 50%;
+    }
+
+    input.error-input {
+        border-color: red;
+    }
+
+    .itemGroupReadOnly {
+        width: 150px;
+    }
+
+    .P1, .P2, .P3, .P4, .P5, .P6, .P7, .P8, .P9, .P10, .P11, .P12 { width: 50px ; }
+
+    .directRebate, .indirectRebate {
+        width: 70px;
+    }
+
+</style>
+
+</head>
+
+<body>
+    <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+<!-- ////////////////////////////////////// STANDARD UI ITEMS /////////////////////////////////////////////////// -->
+    <apex:form >
+    <apex:pageMessages id="pageMsg"></apex:pageMessages>
+    
+    <div id="contentLoading" style="display:none;">
+        <div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    
+    <div id="load_scrl" class="loadingBox loader" style="display:none"><div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    <div class="loadingBox overlay"> </div>
+
+    <apex:outputPanel id="jsFunctions">
+        <Script type="text/javascript">
+    
+        function onCompleteSave() {
+            console.log({!isAllNull});
+            
+            console.log({!isPaymentAmountNull});
+        
+            console.log({!isQtyxVapAmountNotPayment});
+            
+            if({!isAllNull}) {
+                //alert('Quantity, VAP Amount and Payment Amount is empty. Please click save again to confirm');
+            }
+            
+            if({!isPaymentAmountNull}) {
+                //alert('Payment Amount is empty or zero. Please click save again to confirm');
+            }
+            
+            if({!isQtyxVapAmountNotPayment}) {
+                //alert('VAP * Quantity is not equals to the Payment Amount. Please click save again to confirm');
+            }
+        }
+       
+        </Script>
+    </apex:outputPanel>
+
+<!-- ////////////////////////////////////// END OF STANDARD UI ITEMS /////////////////////////////////////////////////// -->
+    
+<!-- ////////////////////////////////////// HEADER BLOCK /////////////////////////////////////////////////// -->
+    <apex:pageBlock id="header_pageBlock">
+
+        <apex:pageBlockSection columns="2">     
+            <apex:outputField value="{!header.Name}"/>
+            <apex:outputField value="{!header.ASI_MFM_Status__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Supplier_Name__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Currency__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Payment_Type__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Exchange_Rate__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Invoice_Number__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Payment_Amount__c}"/>
+            <apex:outputField value="{!header.ASI_MFM_Invoice_Date__c}"/>
+        </apex:pageBlockSection>    
+        
+    </apex:pageBlock>
+<!-- ////////////////////////////////////// END OF HEADER BLOCK /////////////////////////////////////////////////// -->
+<!-- ////////////////////////////////////// MAIN BLOCK /////////////////////////////////////////////////// -->
+        <apex:pageBlock id="main_pageBlock">
+<!-- ////////////////////////////////////// MAIN BUTTONS BLOCK /////////////////////////////////////////////////// -->
+         <apex:pageblockButtons >
+        <apex:commandButton value="Save" 
+            rendered="{!!isReadOnlyView || isFinanceOnlyView}"
+            status="loading"
+            action="{!savePayment}"
+            rerender="pageBlock_Main, pageMsg, jsFunctions"
+            onComplete="setTables();onCompleteSave();">
+            <apex:param name="IS_QUICK_SAVE" value="false"/>
+        </apex:commandButton>
+        <apex:commandButton value="Quick Save" 
+            rendered="{!!isReadOnlyView || isFinanceOnlyView}"
+            rerender="pageBlock_Main, pageMsg, jsFunctions"
+            oncomplete="setTables();onCompleteSave();"
+            status="loading"
+            action="{!savePayment}">
+            <apex:param name="IS_QUICK_SAVE" value="true"/>
+        </apex:commandButton>
+        <apex:commandButton value="Cancel" action="{!cancel}" 
+            immediate="true"/>
+        </apex:pageblockButtons>
+<!-- ////////////////////////////////////// END OF MAIN BUTTONS BLOCK /////////////////////////////////////////////////// -->
+<!-- ////////////////////////////////////// TAB DEFINITIONS BLOCK /////////////////////////////////////////////////// -->
+        <div id="mechanicTypeTabs" class="tabLink" >
+        <!--    <ul>
+                <li><apex:outputPanel rendered="true"><a href="#tab_PaymentLine">Payment Lines</a></apex:outputPanel></li>
+            </ul> -->
+<!-- ////////////////////////////////////// END OF TAB DEFINITIONS BLOCK /////////////////////////////////////////////////// -->
+<!-- ////////////////////////////////////// FIRST TAB DEFINITIONS BLOCK /////////////////////////////////////////////////// -->
+            <div id="tab_PaymentLine">
+                    <apex:pageBlock id="pageBlock_Main"> 
+                        <apex:pageBlockSection id="section_lineItem" title="Payment Lines" columns="1">
+                            <apex:outputPanel layout="block">
+                                <apex:commandButton value="Add New"
+                                    rendered="{!!isReadOnlyView}"
+                                    immediate="true"
+                                    action="{!addPaymentLine}"
+                                    rerender="pageBlock_Main, pageMsg"
+                                    onComplete="console.log('Add CPI'); setTables();"
+                                    status="loading"> 
+                                </apex:commandButton>
+                                <br/>
+                                <br/>
+                                <table id="{!PAYMENT_LINE_TABLE_PREFIX}PaymentLine">
+                                    <apex:repeat var="cpiKey" value="{!allPaymentLineMap}">
+                                        <apex:repeat var="cpiObj" value="{!allPaymentLineMap[cpiKey]}">
+                                            <tr id="row_PaymentLine_{!cpiKey}" class="cpiContent">
+                                                <td>
+                                                    &nbsp;
+                                                    <apex:commandLink value="Clone"
+                                                    action="{!clonePaymentLine}"
+                                                    rerender="pageBlock_Main, pageMsg"
+                                                    rendered="{!!isReadOnlyView}"
+                                                    onComplete="console.log('Clone CPI'); setTables();"
+                                                    status="loading"> 
+                                                        <apex:param name="PARAM_PAYMENT_SOURCE_ITEM_ID" value="{!cpiKey}"/>
+                                                    </apex:commandLink>
+                                                    &nbsp;
+                                                    <apex:commandLink value="Delete"
+                                                    immediate="true"
+                                                    action="{!removePaymentLine}"
+                                                    rerender="pageBlock_Main, pageMsg"
+                                                    rendered="{!!isReadOnlyView}"
+                                                    onComplete="console.log('Remove CPI'); setTables();"
+                                                    status="loading">
+                                                        <apex:param name="PARAM_PAYMENT_LINE_ID" value="{!cpiKey}"/>
+                                                    </apex:commandLink>
+                                                </td>
+                                               <!-- <td>
+                                                    <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_Item_Type__c}" required="true" styleclass="paymentItemType" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_Item_Type__c}" styleclass="paymentItemType" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>  -->
+                                                <td>
+                                                    <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_Sub_brand__c}" required="false" styleclass="subBrand" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_Sub_brand__c}" styleclass="subBrand" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>  
+                                                <td>
+                                                  <!--  <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_AP_Code__c}" required="true" styleclass="apCode" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/> -->
+                                                    <apex:outputPanel styleClass="requiredInput" layout="block">
+                                                    <apex:outputPanel styleClass="requiredBlock" layout="block"/>
+                                                    <apex:selectList value="{!cpiObj.APSelected}" label="AP Code" size="1" id="apBlock" styleClass="apPick" onChange="validateAP($('#row_PaymentLine_{!cpiKey}'), '{!cpiKey}'); " rendered="{!!isReadOnlyView || isFinanceOnlyView}" required="true">
+                                                        <apex:selectOptions value="{!cpiObj.APSelectOption}"></apex:selectOptions>
+                                                    </apex:selectList>
+                                                    </apex:outputPanel>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_AP_Code__c}" styleclass="apCode" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>            
+                                          <!--      <td>
+                                                   <!-- <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_BU__c}" required="false" styleclass="buCode" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/> -->
+                                               <!--    <apex:outputPanel styleClass="requiredInput" layout="block">
+                                                    <apex:outputPanel styleClass="requiredBlock" layout="block"/>
+                                                    <apex:selectList value="{!cpiObj.BUSelected}" label="BU Code" size="1" id="buBlock" styleClass="buPick" onChange="validateBU($('#row_PaymentLine_{!cpiKey}'), '{!cpiKey}'); " rendered="{!!isReadOnlyView || isFinanceOnlyView}" required="true">
+                                                        <apex:selectOptions value="{!cpiObj.BUSelectOption}"></apex:selectOptions>
+                                                    </apex:selectList>
+                                                    </apex:outputPanel>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_BU__c}" styleclass="buCode" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>  -->                    
+                                                <td>
+                                                    <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_Amount__c}" required="false" styleclass="paymentAmount" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_Amount__c}" styleclass="paymentAmount" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>
+                                                <td>
+                                                    <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_List_Item_Description__c}" required="false" styleclass="description" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_Payment_List_Item_Description__c}" styleclass="description" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>
+                                                <td>
+                                                    <apex:inputField value="{!cpiObj.paymentLineItem.ASI_MFM_AP_Remark__c}" required="false" styleclass="apRemark" rendered="{!!isReadOnlyView || isFinanceOnlyView}"/>
+                                                    <apex:outputfield value="{!cpiObj.paymentLineItem.ASI_MFM_AP_Remark__c}" styleclass="apRemark" rendered="{!isReadOnlyView && !isFinanceOnlyView}"/>
+                                                </td>
+                                            </tr>
+                                        </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                            </apex:pageBlockSection>
+                            <apex:actionFunction name="updateBUPick" action="{!updateBUPick}" rerender="pageMsg" status="loading" immediate="true">
+                                    <apex:param name="BUChoice" value="" />
+                                    <apex:param name="cpiKey" value="" />
+                            </apex:actionFunction>
+                            <apex:actionFunction name="updateAPPick" action="{!updateAPPick}" rerender="pageMsg" status="loading" immediate="true">
+                                    <apex:param name="APChoice" value="" />
+                                    <apex:param name="cpiKey" value="" />
+                            </apex:actionFunction>
+                    </apex:pageBlock>
+                
+            </div>
+            </div>
+        <script>
+
+                $ = jQuery.noConflict();
+                //$("#mechanicTypeTabs").tabs();
+
+        </script>
+    </apex:pageBlock>
+    
+    
+    </apex:form>
+</body>
+
+</apex:page>

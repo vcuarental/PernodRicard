@@ -1,0 +1,385 @@
+<!-- ---------------------------------------------------------------------------------- 
+  - Company:Valuenet         Developer:Juan Pablo Cubo          Date:08/04/2013    - 
+  ---------------------------------------------------------------------------------- -->
+<apex:page standardController="Opportunity" extensions="VFC11_opportunityProductEntryExt_AR" action="{!initAction}" >
+
+    <apex:styleSheet value="http://yui.yahooapis.com/2.6.0/build/assets/skins/sam/skin.css" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/yahoo-dom-event/yahoo-dom-event.js" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/container/container-min.js" />
+    <apex:includeScript value="http://yui.yahooapis.com/2.6.0/build/animation/animation-min.js" />
+
+
+    <apex:includeScript value="/soap/ajax/20.0/connection.js"/> 
+    <apex:includeScript value="/soap/ajax/20.0/apex.js"/>
+
+
+ 
+    <apex:sectionHeader Title="{!$Label.VFP11_00002_AR}" subtitle="{!opportunity.Name}"/>
+<!--     <apex:messages style="color:red"/> -->
+
+    <style>
+   <!--Estilo do campo de pesquisa-->
+        .search{
+            font-size:14pt;
+            margin-right: 20px;    
+        }
+        .fyi{
+            color:red;
+            font-style:italic;
+        }
+        .label{
+            margin-right:10px;
+            font-weight:bold;
+        }
+        .bigButton {margin-left: 15px;}        
+   
+    <!-- Estilo para centralizar o select na lista de produtos -->
+        .centraliza {
+            text-align: center;
+        }
+    </style>
+    
+    
+    <!--Configuração do POPUP (showPopup)-->
+     <style type="text/css">
+       .customPopup{
+            background-color: white;
+            border-style: solid;
+            border-width: 2px;
+            left: 50%;
+            padding:10px;
+            <!-- position: absolute; -->
+            position: fixed;
+            z-index: 9999;
+            width: 550px;
+            margin-left: -250px;
+            top:100px;
+        }
+            font1{font-family: arial, helvetica, serif; font-weight: normal}
+            font2{font-family: arial, helvetica, serif; font-weight: bold}
+            font3{font-family: arial, helvetica, serif; font-weight: lighter}
+
+    </style>
+    
+   
+    <script type='text/javascript'>
+        
+    
+    function setSelectTodas(aObj, aText){
+      var lSelect = document.getElementById(aText);
+      lSelect.selectedIndex = 0;
+    }
+    
+    
+    function getPriceCalculation( aText ){   
+      var msg = document.getElementById( aText );
+      if ( msg.value == '' )
+      {
+        var aId = '{!Opportunity.Id}';
+        sforce.connection.sessionId = '{!$Api.Session_ID}';
+        sforce.apex.execute("WS04_PriceCalculationInterface_AR","PriceCalculation",{IdPedido:aId});
+        window.location.href=window.location.href;
+      }
+    }
+    
+
+    // This script assists the search bar functionality
+    // It will execute a search only after the user has stopped typing for more than 1 second
+    // To raise the time between when the user stops typing and the search, edit the following variable:
+    
+    var waitTime = 1;
+    
+
+    var countDown = waitTime+1;
+    var started = false;
+    
+    function resetTimer(){
+    
+        countDown=waitTime+1;
+        
+        if(started==false){
+            started=true;
+            runCountDown();
+        }
+    }
+    
+    function runCountDown(){
+    
+        countDown--;
+        
+        if(countDown<=0){
+            fetchResults();
+            started=false;
+        }
+        else{
+            window.setTimeout(runCountDown,1000);
+        }
+    }
+    
+    function guardaValor( aQtde )
+    {
+      var qtde = document.getElementById( aQtde );
+      qtde.oldValue = getNumber( qtde.value );
+    }
+    
+    function limpaBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var novoValor = getNumber( qtde.value );
+      if ( novoValor != qtde.oldValue )
+      {
+        var qtBonus = document.getElementById( aQtBonus );
+        var percBonus = document.getElementById( aPercBonus );
+        qtBonus.value="";
+        percBonus.value="";
+      }
+    }
+    
+    function getNumber( aValue )
+    {
+      if ( !aValue ) return 0;
+      else return Number( aValue.replace( ".", "" ).replace(",", "." ) );
+    }
+    
+    function calculaPercBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var qtBonus = document.getElementById( aQtBonus );
+      var nQtBonus = getNumber( qtBonus.value );
+      if ( nQtBonus > 0 )
+      {
+        var percBonus = document.getElementById( aPercBonus );     
+        var nQtde = getNumber( qtde.value );
+        var total = Math.floor( ( nQtBonus * 100 ) / nQtde ); 
+        percBonus.value = total;
+      }
+    }
+    
+    function calculaQtBonus( aQtde, aQtBonus, aPercBonus )
+    {
+      var qtde = document.getElementById( aQtde );
+      var qtBonus = document.getElementById( aQtBonus );
+      var percBonus = document.getElementById( aPercBonus );     
+      var nQtBonus = getNumber( qtBonus.value );
+      var nPercBonus = getNumber( percBonus.value );
+      if ( nQtBonus==0 && nPercBonus>0 )
+      {
+        var nQtde = getNumber( qtde.value );
+        var total = Math.floor( ( nPercBonus * nQtde ) / 100 );
+        qtBonus.value = total;
+      }
+    }
+
+        var arriba;
+        function subir() {
+            if (document.body.scrollTop != 0 || document.documentElement.scrollTop != 0) {
+                window.scrollBy(0, -50);
+                arriba = setTimeout('subir()', 10);
+            }else{
+                clearTimeout(arriba);
+            }
+        }
+    </script>
+   
+    <!--Inicio do formulário-->
+    <apex:form id="form">
+        
+     <apex:outputPanel id="msgPnl" >
+            <apex:pageMessages id="mensagens"/>
+            <apex:inputHidden value="{!erroSave}" id="errSave"/>      
+        </apex:outputPanel>
+        <script type="text/javascript">
+            function onCompleteError(){
+                var msgFld = document.getElementById("{!$Component.errSave}").value;
+                if(msgFld != 'SEM ERRO'){
+                    alert( msgFld );
+                } 
+            }
+        </script>
+
+        <apex:outputPanel id="mainBody">
+            
+            <apex:outputLabel styleClass="label">{!$Label.VFP11_00001_AR}: </apex:outputLabel>
+            <apex:outputText value="{!theBook.Name}"/>&nbsp;
+            <br/>
+            <apex:outputLabel styleClass="label">{!$Label.VFP11_00003_AR}: </apex:outputLabel>
+<!--             <apex:outputText value="{!theOpp.CreditLimitBalance_AR__c}"/> -->
+            <c:C01_CurrencyFormat myValue="{!theOpp.CreditLimitBalance_AR__c}"/>
+            &nbsp;
+            <br/>
+            <apex:outputLabel styleClass="label">{!$Label.VFP11_00004_AR}: </apex:outputLabel>
+<!--             <apex:outputText value="{0,number, #.##}"><apex:param value="{!theOpp.Valor_total__c}" /></apex:outputText> -->
+            <c:C01_CurrencyFormat myValue="{!theOpp.Valor_total__c}"/>
+            &nbsp;
+            <br/>
+            <apex:outputLabel styleClass="label">{!$Label.VFC11_00008_AR}: </apex:outputLabel>
+<!--             <apex:outputText value="{!theOpp.CreditLimitBalance_AR__c - theOpp.Valor_total__c}"/> -->
+            <c:C01_CurrencyFormat myValue="{!theOpp.CreditLimitBalance_AR__c - theOpp.Valor_total__c}"/>
+            &nbsp;
+            <br/>
+            
+<!-- this is the upper table... a.k.a. the "Shopping Cart"-->
+
+            <apex:pageBlock title="{!$Label.VFP11_00005_AR}" id="selected">
+                       
+                <apex:pageblockTable value="{!shoppingCart}" var="s">
+                 
+                    
+                     <!--Campos dos itens da oportunidade que foram selecionados-->
+                    
+                    <apex:column headerValue="{!$ObjectType.Product2.Label}" value="{!s.PriceBookEntry.Product2Id}"/><!-- 1 -->
+                    <apex:column headerValue="{!$Label.VFP11_00006_AR}" value="{!s.LAT_SkuText__c}"/><!-- 2 -->
+                    <apex:column headerValue="{!$Label.VFP11_00007_AR}" value="{!s.LAT_PaymentConditionDescription__c}"/><!-- 3 -->
+                    <apex:column headerValue="{!$Label.VFP11_00008_AR}"> <!-- 4 -->
+                        <apex:inputField value="{!s.UOM_AR__c}" style="width:120px" required="true" id="edUnidMedida"/>
+                    </apex:column>
+                    <apex:column headerValue="{!$Label.VFP11_00009_AR}" value="{!s.MaxDiscount_AR__c}"/><!-- 5 -->
+                    <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Quantity.Label}"> <!-- 6 -->
+                        <apex:inputField value="{!s.Quantity}" style="width:50px" required="true" id="edQty" />
+                    </apex:column>
+                    <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Discount.Label}"> <!-- 7 -->
+                        <apex:inputField value="{!s.Discount_AR__c}" style="width:50px" required="false" id="edDisc" />
+                    </apex:column>
+                    <apex:column headerValue="{!$Label.VFP11_00010_AR}"> <!-- 8 -->
+                        <apex:inputField value="{!s.SenttoApproveDiscount_AR__c}" id="edAppDisc" />
+                        <apex:outputText value="{!errorMessagesDiscount[s.PriceBookEntry.Product2.Id]}" style="color:red" />
+                    </apex:column>
+                    <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.UnitPrice.Label}" value="{!s.UnitPrice}"/><!-- 9 -->
+                    <apex:column headerValue="{!$Label.VFP11_00011_AR}" value="{!s.TotalPrice}"/><!-- 10 shoppingCartProxies[s.PriceBookEntry.Product2Id].TotalPrice -->
+                    <apex:column headerValue="{!$Label.VFP11_00012_AR}" style="text-align:center;" value="{!s.BottlesPerBox__c}"/><!-- 11 -->
+                    <apex:column headerValue="{!$Label.VFP11_00013_AR}" style="text-align:center;" value="{!s.cd_line_status__c}"/><!-- 12 -->
+                    <apex:column headerValue="{!$Label.VFP11_00014_AR}" value="{!s.Descricao_do_status__c}"/><!-- 13 -->
+                    <apex:column headerValue="{!$Label.VFP11_00015_AR}" value="{!s.Description}"/><!-- 14 -->
+                    <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Backorder__c.Label}" value="{!s.Backorder__c}"/><!-- 15 -->
+                    
+                    
+                    <!--Botão do POPUP-->
+                    <apex:column >
+                        <apex:commandButton value="{!$Label.VFP11_00016_AR}" action="{!showPopup}" rerender="popup">
+                            <apex:param value="{!s.PriceBookEntry.Product2Id}" assignTo="{!idOppOli}" name="idOppOli"/>
+                        </apex:commandButton>
+                    </apex:column>
+                    <apex:column >
+                        <!--again we use apex:param to be able to tell the controller which row we are working with -->
+                         <apex:commandButton rendered="{!(ISNULL(s.NR_order_line__c) || s.NR_order_line__c == '') && allowEdit}" action="{!removeFromShoppingCart}" value="{!$Label.VFP11_00017_AR}" id="btRemove" reRender="msgPnl,selected, searchResults" immediate="true" >
+                             <apex:param value="{!s.PricebookEntryId}" assignTo="{!toUnselect}" name="toUnselect"/>
+                         </apex:commandButton>
+                    </apex:column>
+                    <apex:column headerValue="{!$Label.VF_VTS_00007_AR}" styleClass="centraliza">
+                        <apex:inputField rendered="{!!ISNULL(s.NR_order_line__c) && s.NR_order_line__c != ''}" value="{!s.Remover__c}" id="check"/>
+                        
+                    </apex:column>
+                </apex:pageblockTable>
+                
+                <apex:pageBlockButtons >
+                    <apex:commandButton action="{!onSave}"  value="{!$Label.VF_VTS_00006_AR}" rendered="{!allowEdit}"/>
+                    <apex:commandButton action="{!onCancel}" value="{!$Label.VF_VTS_00005_AR}" immediate="true"/>
+  
+<!--                     <apex:actionStatus id="mySaveStatus1">                     -->
+<!--                       <apex:facet name="start"> -->
+<!--                           <apex:image value="/img/loading.gif" title="Consultando..."/> -->
+<!--                       </apex:facet> -->
+<!--                       <apex:facet name="stop">  -->
+<!--                           <apex:commandButton action="{!onSaveRefresh}" value="{!$Label.VFP11_00018_AR}" styleClass="bigButton" status="mySaveStatus1" disabled="false" rerender="msgPnl" oncomplete="getPriceCalculation('{!$Component.errSave}');" rendered="{!allowEdit}"/> -->
+<!--                       </apex:facet>  -->
+<!--                    </apex:actionStatus> -->
+                   
+                   <apex:actionStatus id="mySaveStatus2">                    
+                      <apex:facet name="start">
+                          <apex:image value="/img/loading.gif" title="Consultando..."/>
+                      </apex:facet>
+                      <apex:facet name="stop"> 
+                      </apex:facet> 
+                   </apex:actionStatus>
+                    <apex:commandButton action="{!calculaPrecios2}" value="{!$Label.VFP11_00018_AR}" styleClass="bigButton" status="mySaveStatus2" rendered="{!allowEdit}" rerender="form"/>
+          
+                </apex:pageBlockButtons>
+            </apex:pageBlock>
+            
+            <apex:outputtext >{!$Label.VFP11_00020_AR}</apex:outputtext>
+    
+            <!-- this is the lower table: search bar and search results -->
+            <apex:pageBlock >
+            
+                &nbsp;
+                <apex:outputPanel styleClass="busca">
+                    <b>{!$Label.VFP11_00019_AR}: </b>
+                </apex:outputPanel>
+
+                <apex:actionRegion renderRegionOnly="false" immediate="true">
+                
+                    <apex:actionFunction name="fetchResults" action="{!updateAvailableListCheck}" reRender="searchResults" status="searchStatus"/>
+                    
+                    <!-- here we invoke the scripting to get out fancy 'no button' search bar to work -->
+                    <apex:inputText value="{!searchString}" onkeydown="if(event.keyCode==13){this.blur();}else{resetTimer();}" style="width:300px"/>
+                    &nbsp;&nbsp;
+                    
+                    
+                    
+                    <!-- Combo de seleção da condição de pagamento.-->
+                    <apex:selectList id="theSite"  size="1" value="{!varPaymentVal}" >
+                        <apex:selectOptions value="{!condicao}"/> 
+                        <apex:actionSupport event="onchange" action="{!PaymentValues}" reRender="searchResults"/>
+                        <apex:actionSupport />
+                    </apex:selectList>
+                    &nbsp;&nbsp;&nbsp;
+                    
+                    <apex:commandButton value="{!$Label.VFP11_00021_AR}" id="btTodas" action="{!paymentValues}" onclick="setSelectTodas(this,'{!$Component.theSite}');">
+                    
+                    </apex:commandButton>
+                    
+                    <i>
+                        <!-- actionStatus component makes it easy to let the user know when a search is underway -->
+                        <apex:actionStatus id="searchStatus" startText="searching..." stopText=" "/>
+                    </i>
+                </apex:actionRegion>
+                
+                <!-- Botão para inserir os itens selecionados no carrinho -->
+                <apex:commandButton style="float:left" value="{!$Label.VFP11_00025_AR}" action="{!addItensToShoppingCart}" reRender="selected,searchResults,mensagens" rendered="{!allowEdit}"/>
+                            
+                <br/>
+                <br/>
+            
+                <apex:outputPanel id="searchResults">                
+                <apex:pageBlockTable value="{!lstWProducts}" var="a">                    
+                        <apex:column headerValue="{!$Label.VFP11_00023_AR}" styleClass="centraliza" headerClass="centraliza">
+                            <apex:inputCheckbox value="{!a.isSelected}" />
+                        </apex:column>
+                        <apex:column headerValue="{!$ObjectType.Product2.Label}"><apex:outputlink value="/{!a.app.Product__c}" >{!a.app.Product__r.Name}</apex:outputlink></apex:column>
+                        <apex:column headerValue="{!$Label.VFP11_00006_AR}" value="{!a.app.Product__r.ProductCode}" />
+                        <apex:column headerValue="{!$Label.VFP11_00007_AR}" value="{!a.app.PaymentConditionDescription__c}"/>
+                        <apex:column headerValue="{!$Label.VFP11_00008_AR}" value="{!measurementUnit}"/>
+                        <apex:column headerValue="{!$Label.VFP11_00022_AR}" value="{!a.app.PercentualBonus__c}"/>
+                    </apex:pageBlockTable>
+                    
+                    <!-- We put up a warning if results exceed 100 rows  -->
+                    <apex:outputPanel styleClass="fyi" rendered="{!overLimit}">
+                        <br/>
+                        {!$Label.VFC11_00009_AR}
+                        <br/>
+                    </apex:outputPanel>
+                    
+                </apex:outputPanel>
+                
+
+            
+            </apex:pageBlock>
+                <apex:commandButton style="float:left" value="{!$Label.VFP11_00025_AR}" action="{!addItensToShoppingCart}" reRender="selected,searchResults,mensagens" rendered="{!allowEdit}" oncomplete="subir();return false"/>
+            
+        </apex:outputPanel>
+        
+        <!-- Tela com o conteúdo do POPUP -->
+        <apex:outputPanel id="popup">
+            
+            <apex:outputPanel styleClass="customPopup" layout="block" rendered="{!displayPopUp}">
+               <apex:pageBlock >
+                    <apex:pageBlockTable value="{!itemOpp}" var="item" >
+                        <apex:column headerValue="Composición de precios" value="{!item.Campo_de_formatacao__c}"/>
+                        <br/><br/>
+                    </apex:pageBlockTable>
+                <apex:commandButton value="{!$Label.VFP11_00024_AR}" action="{!closePopup}" rerender="popup"/>
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </apex:outputPanel>        
+    </apex:form> 
+</apex:page>

@@ -1,0 +1,164 @@
+<aura:component implements="forceCommunity:availableForAllPageTypes" controller="LAT_CTY_B2B_PendingFiscalNotesCont">
+
+    <aura:attribute name="columns" type="List" />
+    <aura:attribute name="fiscalNotes" type="List" />
+    <aura:attribute name="keyField" type="String" default="id" />
+    <aura:attribute name="paidColumns" type="List" />
+    <aura:attribute name="paidFiscalNotes" type="List" />
+    <aura:attribute name="paidKeyField" type="String" default="id" />
+    <aura:attribute name="fileUploaded" type="Boolean" default="false" />
+    <aura:attribute name="esAdelanto" type="Boolean" default="false" />
+    <aura:attribute name="uploadDisabled" type="Boolean" default="false" />
+    <aura:attribute name="mostrarCuadroPago" type="Boolean" default="false" />
+    <aura:attribute name="selectedNotes" type="List" />
+    <aura:attribute name="selectedNCs" type="List" />
+    <aura:attribute name="notasDeCredito" type="Titulos__c[]" />
+    <aura:attribute name="keyFieldNC" type="String" default="id" />
+    <aura:attribute name="ncColumns" type="List" />
+    <aura:attribute name="b2bPayment" type="Object" />
+    <aura:attribute name="b2bPaymentId" type="String" />
+    <aura:attribute name="uploadedFileId" type="String" />
+    <aura:attribute name="uploadedFileIds" type="List" />
+    <aura:attribute name="isLoading" type="Boolean" default="false" />
+    <aura:attribute name="paymentAmmount" type="Double" default="0" />
+    <aura:attribute name="paymentAmmountNC" type="Double" default="0" />
+    <aura:attribute name="paymentAmmountFacturas" type="Double" default="0" />
+    
+
+
+    <aura:handler name="init" value="{! this }" action="{! c.doInit }" />
+
+    <div >
+        <div aura:Id="divInicio" class="slds-grid">
+            <lightning:card variant="narrow" title="Paso 1" iconName="action:info" class="slds-col slds-card_boundary top-card-margin">
+                <aura:set attribute="footer">
+                    <lightning:button label="Seleccionar Facturas" onclick="{!c.irAFacturasPendientes}" variant="neutral" />
+                </aura:set>
+                <p class="slds-p-horizontal_small slds-card__body_inner">
+                    Primero selecciona de la lista las facturas a pagar.
+                </p>
+            </lightning:card>
+            <lightning:card variant="narrow" title="Paso 2" iconName="action:check" class="slds-col slds-card_boundary left-card-margin">
+                <aura:set attribute="footer">
+                    <lightning:button label="Informar Pago" onclick="{!c.showFileUpload}" variant="neutral" />
+                </aura:set>
+                <p class="slds-p-horizontal_small slds-card__body_inner">
+                    Haz click en el boton Informar Pago.
+                </p>
+            </lightning:card>
+            <lightning:card variant="narrow" title="Paso 3" iconName="action:add_file" class="slds-col slds-card_boundary left-card-margin">
+                <aura:set attribute="footer">
+                    <lightning:button label="Pagar" onclick="{!c.pay}" disabled="{! v.uploadedFileIds.length==0 }" variant="brand" class="slds-border_top" />
+                </aura:set>
+                <p class="slds-p-horizontal_small slds-card__body_inner">
+                    Sube los comprobantes y haz click en el boton Pagar.
+                </p>
+            </lightning:card>
+        </div>
+        <br/>
+		<div aura:id="tablaFacturasPendientes" >
+        </div>
+        <lightning:tabset class="facturas-tabset">
+            <lightning:tab label="Facturas Pendientes">
+                
+        		<lightning:datatable data="{! v.fiscalNotes }" columns="{! v.columns }" keyField="{!v.keyField}" 
+                             onrowselection="{!c.handleSelect}" onrowaction="{!c.handleRowAction }"/>
+            </lightning:tab>
+            <lightning:tab label="Notas de Crédito">
+        		<lightning:datatable data="{! v.notasDeCredito }" columns="{! v.ncColumns }" keyField="{!v.keyFieldNC}" 
+                             onrowselection="{!c.handleSelectNC}"/>
+            </lightning:tab>
+        </lightning:tabset>
+        <br />
+        <div aura:id="cuadroDePago" >
+        </div>
+        <aura:if isTrue="{! v.mostrarCuadroPago }">
+            <lightning:card title="Subir Comprobantes de Pago" iconName="action:add_file" class="slds-card_boundary top-card-margin">
+                <aura:set attribute="actions">  
+                    <a href="javascript:;" onclick="{!c.cerrarCuadroPago}" ><lightning:icon iconName="utility:close" size="xx-small" alternativeText="Close" /></a>
+                	</aura:set>
+                <aura:set attribute="footer">
+                    <lightning:button label="Pagar" onclick="{!c.pay}" disabled="{! v.uploadedFileIds.length==0 }" variant="brand" class="slds-border_top" />
+                	<lightning:button label="Cancelar" onclick="{!c.cerrarCuadroPago}"  class="slds-border_top" />
+                
+                </aura:set>
+               
+                    <p class="slds-p-horizontal_small slds-card__body_inner">
+                        <p class="loadFilesInfo">
+                            Se pueden subir archivos en formato JPG, PNG y PDF.
+                            <br/><br/>
+                            Haz click en Cargar archivos y selecciona los documentos adecuados.
+                        </p>
+                        <lightning:fileUpload aura:id="fileUploader" name="fileUploader"
+                            accept=".jpeg, .jpg, .pdf, .png" multiple="true" 
+                            onuploadfinished="{! c.handleUploadFinished }" recordId="{! v.b2bPaymentId }"/>
+                    </p>
+                    <br/>
+                    <aura:if isTrue="{! v.uploadedFileIds.length >0 }">
+                        <div class="{!v.isLoading ? 'custom-loader' : 'custom-loader slds-hide'}">
+                            <span class="sync">Guardando...</span>
+                            <div class="backgroundInverse">
+                                <lightning:spinner alternativeText="Loading" variant="inverse" />
+                            </div>
+                        </div>
+                        <div class="slds-grid">
+                            <div class="slds-col">
+                                <ul style="text-align: -webkit-center;">
+                                  <li><p class="loadFilesInfo" style="margin-left: 10px;margin-bottom: 10px; color:green">
+                                      <b>Su comprobante se ha cargado exitosamente.</b></p>
+                                  </li>
+                                  <li>
+                                      <aura:iteration items="{! v.uploadedFileIds }" var="item">
+                                          <div >
+                                              <lightning:fileCard  fileId="{!item}"/>
+                                              <a class="botonBorrar" href="javascript:;" data-item="{!item}" onclick="{!c.eliminarArchivo}" >Quitar Archivo <lightning:icon style="vertical-align: top;" iconName="utility:delete" variant="inverse" size="xx-small" alternativeText="Close" /></a>                    
+                                              
+                                              </div>
+                                          
+                                      </aura:iteration>
+                                  </li>
+                                  
+								</ul>
+                            	
+                            	
+                            </div>
+                            <div class="slds-col">
+                                <ul >
+                                    <li >
+                                    	<span style="margin-left:10px;">Por favor ingrese el monto del comprobante y haga click en Informar Pago.</span>
+                                        <lightning:input value="{!v.paymentAmmount}" step="0.01" aura:id="paymentAmount" type="number" name="paymentAmount" formatter="currency" 
+                                            messageWhenValueMissing="Por favor ingrese el monto del comprobante." 
+                                                         label="Importe del Comprobante:" required="true" class="amountInput"/>
+                                        <div class="slds-m-around_medium">
+                                            <lightning:buttonIconStateful iconName="utility:check" selected="{!v.esAdelanto}" 
+                                                                          onclick="{!c.handleAdelantoButtonClick }" 
+                                                                          alternativeText="Like" />
+                                            <span style="margin-left:10px;">Es un Adelanto? </span>
+                                            
+                                        </div>
+                                        
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </aura:if>
+                
+            </lightning:card>
+        <aura:set attribute="else">
+            <span style="margin-right:15px;">Total Seleccionado : <ui:outPutNumber aura:id="myNumberFormat" format="$#,###,##0.00" value="{!v.paymentAmmount}"/></span><lightning:button label="Informar Pago" onclick="{!c.showFileUpload}" variant="neutral" /> 
+        </aura:set>
+        </aura:if>
+        <br/>
+        <br/>
+        <br/>
+        <label>
+            <h1 class="table-label">Facturas Canceladas ({! v.paidFiscalNotes.length })</h1>
+        </label>
+        <br/>
+
+        <lightning:datatable data="{! v.paidFiscalNotes }" columns="{! v.paidColumns }" keyField="{!v.paidKeyField}" 
+                             onrowselection="{!c.handleSelect}" onrowaction="{!c.handleRowAction }" hideCheckboxColumn="true"/>
+        <br />
+    </div>
+
+</aura:component>

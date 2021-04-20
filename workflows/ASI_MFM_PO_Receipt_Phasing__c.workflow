@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_MFM_CN_AutoReceiptNotification</fullName>
+        <description>ASI_MFM_CN_AutoReceiptNotification</description>
+        <protected>false</protected>
+        <recipients>
+            <type>owner</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_MFM_CN_Email_Templates/ASI_MFM_CN_AutoReceiptReminder</template>
+    </alerts>
+    <fieldUpdates>
+        <fullName>ASI_MFM_CN_UncheckNotificationBox</fullName>
+        <field>ASI_MFM_Auto_Receipt_Notification__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI_MFM_CN_UncheckNotificationBox</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_MFM_CN_NotifyBeforeOneWeekPerMonth</fullName>
+        <actions>
+            <name>ASI_MFM_CN_AutoReceiptNotification</name>
+            <type>Alert</type>
+        </actions>
+        <actions>
+            <name>ASI_MFM_CN_UncheckNotificationBox</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Receipt_Phasing__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>CN PO Receipt Phasing</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Receipt_Phasing__c.ASI_MFM_Auto_Receipt_Notification__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

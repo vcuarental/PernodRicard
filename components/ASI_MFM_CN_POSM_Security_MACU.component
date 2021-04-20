@@ -1,0 +1,361 @@
+<apex:component id="mcau" controller="ASI_MFM_CN_POSM_Security_MACUController" allowDML="true">
+    <apex:attribute name="pageController" description="The parent page controller" type="ASI_FOC_PageInterface" required="false" assignTo="{!myPageController}"/>
+    <apex:attribute name="componentKey" description="The key to identify this component" type="String" required="false" assignTo="{!myComponentKey}"/>
+    <apex:attribute name="isFastMode" description="Whether use fast mode to improve performance" type="Boolean" default="false" required="false" assignTo="{!isFastModeBool}" />
+    <apex:attribute name="sObjectType" description="The object to be edited in this page"  type="String" required="true" assignTo="{!sObjTypeStr}" />
+    <apex:attribute name="displayFields" description="The list of fields to display in table. Format: field1, field2__c" type="String" required="false" assignTo="{!displayFieldsStr}"/>
+    <apex:attribute name="whereStatement" description="The where statement when selecting records from {sObjTypeStr} object" type="String" required="false"  assignTo="{!whereStatm}"/>
+    <apex:attribute name="orderBy" description="The ORDER BY content" type="String" required="false"  assignTo="{!orderByStr}"/>
+    <apex:attribute name="includeRecordTypes" description="list of record type enabled in the page" type="String" required="false" assignTo="{!includeRecordTypesStr}" />
+    <apex:attribute name="fieldToURLParam" description="Default field values from url parameters. Format: Field1__c => param1" type="String" required="false" assignTo="{!fieldToURLParamStr}"/>
+    <apex:attribute name="pageBlockTitle" description="The title of pageBlock" type="String" required="false" assignTo="{!pageBlockTitleStr}"/>
+    <apex:attribute name="successLink" description="The link to redirect after successfully saved" type="String" required="true" assignTo="{!successLinkStr}" />
+    <apex:attribute name="cancelLink" description="The link to redirect when clicking cancel" type="String" required="true" assignTo="{!cancelLinkStr}" />
+    <apex:attribute name="mode" description="EDIT, NEW, BOTH" type="String" required="false" default="BOTH" assignTo="{!modeStr}" />
+    <apex:attribute name="isDefaultEdit" description="Whether the existing records are shown as edit by default" type="Boolean" required="false" default="false" assignTo="{!isDefaultEditVal}" />
+    <apex:attribute name="disableClone" description="Whether disable clone button" type="Boolean" required="false" default="false"/>
+    <apex:attribute name="disableAddNew" description="Whether disable add new button" type="Boolean" required="false" default="false"/>
+    <apex:attribute name="showAllRT" description="Whether show all record types in one page or use drop down list to switch" type="Boolean" default="true" required="false" assignTo="{!isShowAllRT}"/>
+    <apex:attribute name="rowActionRenderList" description="List of render items when selecting object" type="String" default="emptyPanel" required="false"/>
+    <apex:attribute name="pageBlockActionRenderList" description="List of render items when clicking page block buttons" type="String" default="wholeDataPanel" required="false"/>
+    <apex:attribute name="rowRemoveStatus" description="The status component ID when removing row" type="String" default="headerStatusLoading" required="false"/>
+    <apex:attribute name="pageBlockActionStatus" description="The status component ID for page block buttons" type="String" default="headerStatusLoading" required="false"/>
+    <apex:attribute name="firstRowForNew" description="Whether append the new row before first row" type="Boolean" default="true" required="false" assignTo="{!isUseFirstRowForNew}"/>
+    <apex:attribute name="altSObjectTypeName" description="Alternative name of this sojbect used by custom setting. Use it if object name and record type name is too long" type="String" required="false" assignTo="{!altSObjectTypeNameStr}"/>
+    <apex:attribute name="actionColWidth" description="Action column width string" default="150px" type="String" required="false"/>
+    
+    <style type="text/css">
+        .customErrorMsg {
+            color: #D74C3B;
+        }
+    </style>
+    
+    <script type="text/javascript">
+        function startSubmitAction() {
+            if (isSubmitting)
+                return false;
+            isSubmitting = true;
+            return true;
+        }
+        function endSubmitAction() {
+            if (!isDelaying) {
+                isDelaying = true;
+                setTimeout(function() {isSubmitting=false;isDelaying=false;}, 200);
+            }
+        }
+    
+        function displayLoadingRow(tableId) {
+            if (startSubmitAction()) {
+                var theTable = document.getElementById(tableId);
+                if (theTable && theTable.tagName == 'TABLE' && theTable.tBodies && theTable.tBodies.length > 0) {
+                    var theTBody = theTable.tBodies[0];
+                    var loadingRow = null;
+                    if ({!isUseFirstRowForNew} == true)
+                        loadingRow = theTBody.insertRow(0);
+                    else
+                        loadingRow = theTBody.insertRow(-1);
+                    loadingRow.innerHTML = '<td colspan="50" style="height:21px;text-align:center;vertical-align:middle;">Loading ...</td>';
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        function removeRow(elementInRow) {
+            if (startSubmitAction()) {
+                var theRow = searchClosestParentByTagName(elementInRow, 'TR');
+                if (theRow) {
+                    theRow.style.display = 'none';
+                    return true;
+                }
+            }
+            return false;
+        }
+    
+        function checkRequiredFieldsAndSave(bShowPopup) {
+            removeAllRequiredFieldErrors();
+            var allInputFields = document.getElementsByTagName("input");
+            var allSelectFields = document.getElementsByTagName("select");
+            var allFields = concatTwoElements(allInputFields, allSelectFields);
+            var errorFound = false;
+            for (var index in allFields) {
+                var inputField = allFields[index];
+                if (inputField.className && inputField.className == "required"
+                    && hasEmptyValue(inputField)) {
+                    var parentDiv = inputField.parentNode;
+                    while (parentDiv.tagName != "DIV")
+                        parentDiv = parentDiv.parentNode;
+                    var divChildNodes = parentDiv.childNodes;
+                    for (var childNodeIndex in divChildNodes) {
+                        var childNode = divChildNodes[childNodeIndex];
+                        if (childNode.className && childNode.className == "customErrorMsg") {
+                            errorFound = true;
+                            childNode.innerHTML = "<strong>Error: </strong>You must enter a value"
+                        }
+                    }
+                }
+            }
+            
+            var allLookupFields = document.getElementsByTagName("div");
+            for (var index in allLookupFields) {
+                var inputField = allLookupFields[index];
+                if (inputField.className && inputField.className == "required") {
+                    var bShowError = false;
+                    
+                    var lookupChildNodes = inputField.childNodes;
+                    for (var childNodeIndex in lookupChildNodes) {
+                        var childNode = lookupChildNodes[childNodeIndex];
+                        //alert(childNode.tagName);
+                        //alert(childNode.type);                        
+                        if (childNode.tagName == "SPAN" && childNode.className == "lookupInput") {
+                            var bCheckInput = false;
+                            var bIsEmpty = false;
+                            
+                            var spanChildNodes = childNode.childNodes;
+                            for (var spanChildNodeIndex in spanChildNodes) {
+                        		var spanChildNode = spanChildNodes[spanChildNodeIndex];
+                                if (spanChildNode.tagName == "INPUT" && spanChildNode.type == "text") {
+                                    bCheckInput = true;
+                                    bIsEmpty = hasEmptyValue(spanChildNode);
+                                    break;
+								}
+                            }
+
+                            if (bCheckInput) {
+                                bShowError = bIsEmpty;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (bShowError) {
+                        var parentDiv = inputField.parentNode;
+                        while (parentDiv.tagName != "DIV")
+                            parentDiv = parentDiv.parentNode;
+                        var divChildNodes = parentDiv.childNodes;
+                        for (var childNodeIndex in divChildNodes) {
+                            var childNode = divChildNodes[childNodeIndex];
+                            if (childNode.className && childNode.className == "customErrorMsg") {
+                                errorFound = true;
+                                childNode.innerHTML = "<strong>Error: </strong>You must enter a value"
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (errorFound) {
+                return false;
+            } else {
+                var bValid = false;
+                if (bShowPopup)
+                	bValid = commitAllAdmin();
+                else
+                    bValid = commitAll();
+                return bValid;
+            }
+        }
+    
+    	function deleteAllAction(bShowPopup) {
+            var bValid = false;
+            if (bShowPopup)
+                bValid = deleteAllAdmin();
+            else
+                bValid = deleteAll();
+            return bValid;
+		}
+        
+        function removeAllRequiredFieldErrors() {
+            var allErrorMsg = getElementsByClassName('customErrorMsg');
+            for (var index in allErrorMsg) {
+                allErrorMsg[index].innerHTML = "";
+            }
+        }
+        
+        function concatTwoElements(ele1, ele2) {
+            result = [];
+            for (var eleIndex in ele1) {
+                result.push(ele1[eleIndex]);
+            }
+            for (var eleIndex in ele2) {
+                result.push(ele2[eleIndex]);
+            }
+            return result;
+        }
+        
+        function hasEmptyValue(field) {
+            if (field.tagName == "INPUT") {
+                return (field.value == null || field.value == "");
+            } else if (field.tagName == "SELECT") {
+                if (field.options) {
+                    var selectValue = field.options[field.selectedIndex].value;
+                    return (selectValue == null || selectValue == "");
+                }
+            }
+        }
+        
+        function searchClosestParentByTagName(ele, theTagName) {
+            if (!ele || !theTagName)
+                return null;
+            var result = ele;
+            var theTagNameUpperCase = theTagName.toUpperCase();
+            while (result != null && result.tagName != theTagNameUpperCase) {
+                result = result.parentNode;
+            }
+            return result;
+        }
+        
+        if (typeof document.getElementsByClassName === 'undefined') {
+            document.getElementsByClassName = function(theClassName) {
+                var result = [];
+                var allEle = document.getElementsByTagName('*');
+                for (var allEleIndex in allEle) {
+                    var theEle = allEle[allEleIndex];
+                    if (theEle.className && theEle.className && (' ' + theEle.className + ' ').replace(/[\n\t]/g, " ").indexOf(' ' + theClassName + ' ') > -1)
+                        result.push(theEle);
+                }
+                return result;
+            }
+        }
+        
+        var isClicking = false;
+        var isSubmitting = false;
+        var isDelaying = false;
+    </script>
+
+    
+        <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+        <apex:pageBlock id="pageBlock" title="{!pageBlockTitleStr}" rendered="{!theRecordTypeElementList.size>0}">
+            <apex:pageBlockButtons id="buttonArea" location="both" rendered="{!!RENDER_CUSTOM_BTN}">
+                <apex:commandButton id="saveAllBtn" value="Save All" onclick="checkRequiredFieldsAndSave(false)" reRender="saveAllBtn" rendered="{!successLinkStr!=''}"/>
+                <apex:commandButton id="saveAllBtnAdmin" value="Save All" onclick="checkRequiredFieldsAndSave(true)" reRender="saveAllBtnAdmin" rendered="{!successLinkStr==''}"/>
+                
+                <apex:commandButton id="deleteAllBtn" value="Delete All" onclick="deleteAllAction(false)" reRender="deleteAllBtn" rendered="{!successLinkStr!=''}"/>
+                <apex:commandButton id="deleteAllBtnAdmin" value="Delete All" onclick="deleteAllAction(true)" reRender="deleteAllBtnAdmin" rendered="{!successLinkStr==''}"/>
+                
+                <apex:commandButton action="{!cancelPage}" value="Cancel" immediate="true" rendered="{!cancelLinkStr!=''}"/>
+                <apex:commandButton action="{!refreshPage}" value="Cancel" immediate="true" rendered="{!cancelLinkStr==''}"/>
+
+                <apex:repeat id="pbBtnRepeat" value="{!pageBlockActionBtnList}" var="btn">
+                    <input type="button" class="btn" onclick="triggerPBAction('{!btn.id}');return false;" value="{!btn.label}"/>
+                </apex:repeat>
+            </apex:pageBlockButtons>
+            <apex:actionFunction name="triggerPBAction" action="{!triggerPageBlockAction}" reRender="{!pageBlockActionRenderList}" status="{!pageBlockActionStatus}">
+                <apex:param name="PARAM_PB_BTN_ID" value=""/>
+            </apex:actionFunction>
+            <apex:outputPanel id="headerPanel" rendered="{!!RENDER_CUSTOM_BTN}">
+                <apex:pageMessages id="msgs"/>
+                <apex:actionFunction name="refresh" action="{!refresh}" reRender="wholeDataPanel" status="headerStatusLoading"/>
+                <apex:actionFunction name="commitAll" action="{!commitAll}" status="headerStatusLoading"/>
+                <apex:actionFunction name="commitAllAdmin" action="{!commitAll}" status="headerStatusLoading" oncomplete="alert('Save Complete!'); return false;"/>
+                <apex:actionFunction name="deleteAll" action="{!clearAll}" status="headerStatusLoading"/>
+                <apex:actionFunction name="deleteAllAdmin" action="{!clearAll}" status="headerStatusLoading" reRender="tablePanel" oncomplete="alert('Delete Complete!'); return false;"/>
+                
+                <apex:actionFunction name="testAll" action="{!refreshPage}" status="headerStatusLoading"/>
+                
+                <apex:outputPanel id="rtSelect" rendered="{!NOT(showAllRT) && (numOfRecordType > 1)}">
+                    <apex:outputLabel value="Record Type: "/>
+                    <apex:selectList value="{!selectedRecordType}" required="true" multiselect="false" size="1" onchange="refresh()">
+                        <apex:selectOptions value="{!recordTypeOptionList}" />
+                    </apex:selectList>
+                    <br/>
+                </apex:outputPanel>
+                <br/>
+                <apex:actionStatus id="headerStatusLoading" startText="Loading..." startStyle="font-weight:bold;font-size:110%;"/>
+                <br/>
+            </apex:outputPanel>
+            <apex:outputPanel id="wholeDataPanel">
+                <apex:pageBlockSection id="pBlockSectionOpenAll" title="OPEN TO ALL USERS" columns="1" collapsible="false" rendered="{!RENDER_OPEN_TO_ALL}">
+                    <apex:outputPanel >
+                        <apex:inputCheckbox value="{!PARAM_OPEN_TO_ALL}" styleClass="search-input"/>
+						<!--
+                        <apex:inputCheckbox value="{!PARAM_OPEN_TO_ALL}" styleClass="search-input">
+                            <apex:actionSupport event="onchange" action="{!checkOpenToAll}" reRender="pBlockSectionOpenAll" status="openAllStatusLoading">
+                			</apex:actionSupport>
+                        </apex:inputCheckbox>
+						-->
+                    	<apex:outputLabel value="If this is checked, this item group is OPEN to ALL USERS. The following security table would be IGNORED in POSM Item Group Catalog page."/>
+                        <!--
+                        <br/>
+                        <apex:actionStatus id="openAllStatusLoading" startText="Setting up..." startStyle="font-weight:bold;font-size:110%;"/>
+                        <br/>
+						-->
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+                <apex:variable var="showNewBtn" value="{!modeStr != MODE_EDIT && NOT(disableAddNew)}" />
+                <apex:repeat id="repeatRT" value="{!theRecordTypeElementList}" var="RTEle" >
+                    <apex:variable var="rtDevName" value="{!RTEle.myRecordType.DeveloperName}" />
+                    <apex:pageBlockSection id="pBlockSection" title="{!RTEle.myRecordType.Name}" columns="1" collapsible="false" rendered="{!showAllRT || rtDevName == selectedRecordType}" >
+                        <apex:actionStatus id="newRowStatus" onstart="displayLoadingRow('{!$Component.mcau_mainTable}');" />
+                        <apex:outputPanel id="tablePanel" styleClass="tablePanel">
+                            <apex:pageBlockTable id="mcau_mainTable" value="{!RTEle.myDisplayRecordList}" var="tableRow" rules="cols" styleClass="mainDataTable">
+                                <apex:column width="{!actionColWidth}">
+                                    <apex:facet name="header">
+                                        <apex:outputPanel id="addNewPanel" rendered="{!modeStr != MODE_EDIT && NOT(disableAddNew)}">
+                                            <apex:outputText value="Add New" style="text-decoration:underline;font-weight:normal;cursor:pointer;"/>
+                                            <apex:actionSupport event="onclick" action="{!addNewRow}" reRender="tablePanel" status="newRowStatus" oncomplete="endSubmitAction();">
+                                                <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            </apex:actionSupport>
+                                        </apex:outputPanel>
+                                    </apex:facet>
+                                    <apex:outputPanel id="cloneActionPanel" rendered="{!NOT(disableClone)}">
+                                        <apex:commandLink action="{!cloneRow}" value="Clone" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" status="newRowStatus"
+                                            oncomplete="endSubmitAction()">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="editActionPanel" rendered="{!NOT(tableRow.isEdit)}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!enableForEdit}" value="Edit" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="removeNewActionPanel" rendered="{!tableRow.isNew}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!removeNew}" value="Remove" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" onclick="if (!startSubmitAction()) return false;" status="{!rowRemoveStatus}"
+                                            oncomplete="endSubmitAction();">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="deleteOldActionPanel" rendered="{!NOT(tableRow.isNew)}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!deleteOld}" value="Delete" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" onclick="if (!startSubmitAction()) return false;" status="{!rowRemoveStatus}"
+                                            oncomplete="endSubmitAction();">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                </apex:column>
+                                <apex:repeat id="showColsRepeat" value="{!RTEle.myDisplayColList}" var="displayCol">
+                                    <apex:column headerValue="{!displayCol.colLabel}" width="{!displayCol.colWidth}" style="vertical-align: top;">
+                                        <apex:repeat id="showFieldRepeat" value="{!displayCol.displayFieldList}" var="displayField">
+                                            <apex:variable id="allowEditVar" var="allowEdit" value="{!AND(displayField.readonlyMode != 'a', OR(tableRow.isEdit && displayField.readonlyMode != 'n', tableRow.isNew && displayField.readonlyMode != 'o'))}"/>
+                                            <apex:outputLabel value="{!displayField.label}:" rendered="{!NOT(ISBLANK(displayField.label))}" style="font-weight:bold"/>
+                                            <apex:outputField value="{!tableRow.mySObj[displayField.name]}" rendered="{!NOT(allowEdit)}" style="width: {!displayField.width}"/>
+                                            <apex:actionSupport event="ondblclick" action="{!enableForEdit}" reRender="tablePanel" rendered="{!NOT(allowEdit)}">
+                                                <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                                <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                            </apex:actionSupport>
+                                            <!-- Due to unknown reason, the following outputPanel cannot use allowEdit as rendered value. Otherwise, it has bug. -->
+                                            <apex:outputPanel id="inputFieldPanel" rendered="{!AND(displayField.readonlyMode != 'a', OR(tableRow.isEdit && displayField.readonlyMode != 'n', tableRow.isNew && displayField.readonlyMode != 'o'))}">
+                                                <div class='{!IF(displayField.isRequired, "requiredInput", "none")}'>
+                                                    <div class='{!IF(displayField.isRequired, "requiredBlock", "none")}'></div>
+                                                    <apex:inputField value="{!tableRow.mySObj[displayField.name]}" required="false" styleClass="{!IF(displayField.isRequired, "required", "none")}" style="width: {!displayField.width}"/>
+                                                    <div class="customErrorMsg"></div>
+                                                </div>
+                                            </apex:outputPanel>
+                                        </apex:repeat>
+                                    </apex:column>
+                                </apex:repeat>
+                            </apex:pageBlockTable>
+                        </apex:outputPanel>
+                    </apex:pageBlockSection>
+                </apex:repeat>
+            </apex:outputPanel>
+        </apex:pageBlock>
+        <apex:outputPanel id="emptyPanel"></apex:outputPanel>
+        <apex:actionStatus id="dummyStatus"/>
+</apex:component>

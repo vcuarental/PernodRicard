@@ -1,0 +1,1566 @@
+<apex:page showHeader="false" sidebar="false" docType="HTML-5.0" standardController="Account" extensions="LAT_Edit_AccountMobileFSController">
+	<html>
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+		<!-- Bootrap 3.0 -->
+		<apex:stylesheet value="//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" />
+
+		<!-- DataTables.net -->
+		<apex:stylesheet value="https://cdn.datatables.net/1.10.12/css/jquery.dataTables.min.css" />
+
+		<apex:stylesheet value="{!URLFOR($Resource.LAT_CompassResources, 'static/css/main.css')}" />
+		<apex:stylesheet value="{!URLFOR($Resource.LAT_CompassResources, 'static/css/edit-account-fieldset.css')}" />
+
+		<!-- Jquery -->
+		<apex:includeScript value="https://code.jquery.com/jquery-1.12.3.js" />
+
+		<script src="../../soap/ajax/42.0/connection.js" type="text/javascript"></script>
+		<script src="../../soap/ajax/42.0/apex.js" type="text/javascript"></script>
+		<apex:includeScript value="//maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js" />
+		<apex:includeScript value="//cdn.datatables.net/1.10.12/js/jquery.dataTables.min.js" />
+    <style type="text/css">
+    .msg-ativar {
+      color: white;
+    }  
+
+    </style>
+
+
+		<script type="text/javascript">
+
+			const variables = {
+				accountId: "{!Account.Id}",
+				requiredFields: {!requiredFieldsMapMessageString},
+				mapFieldSetWithFields: {!mapFieldSetWithFieldsString},
+				isClone: {!isClone },
+				accIdURL: '{!accIdURL}',
+				canCreateSegment : {!canCreateSegment }
+      		}
+
+			const remoteActions = {
+				getLookupFieldInformation: '{!$RemoteAction.LAT_Edit_AccountMobileFSController.getLookupFieldInformation}',
+				validateAccountDataRemoting: '{!$RemoteAction.LAT_Edit_AccountMobileFSController.validateAccountDataRemoting}',
+				sentToApprovalRemoting: '{!$RemoteAction.LAT_Edit_AccountMobileFSController.sentToApprovalRemoting}',
+				validateRequiredFields: '{!$RemoteAction.LAT_Edit_AccountMobileFSController.validateRequiredFields}',
+				doSave: '{!$RemoteAction.LAT_Edit_AccountMobileFSController.doSave}'
+			}
+
+			function segmentationClicked(segId) {
+				window.location = "/apex/LAT_BR_SegmentationSlctMobile?retURL={!JSENCODE('/apex/LAT_BR_Edit_AccountMobileFieldSets?id='+Account.Id)}&sfdc.override=1&id=" + segId;
+			}
+
+			function segmentationClickedReadOnly(segId) {
+				window.location = "/apex/LAT_BR_SegmentationSlctMobile?retURL={!JSENCODE('/apex/LAT_BR_Edit_AccountMobileFieldSets?id='+Account.Id)}&sfdc.override=1&readonly=1&id=" + segId;
+			}
+
+			function novaSegmentationClicked() {
+				window.location.href = "/apex/LAT_BR_SegmentationSlctNewMobile?retURL={!JSENCODE('/apex/LAT_BR_Edit_AccountMobileFieldSets?id='+Account.Id)}&sfdc.override=1&accId={!Account.Id}";
+			}
+
+			function getNewCreditAnalysisResponsePage() {
+				 return "https://" + location.hostname + "/apex/LAT_BR_MobileNewCreditAnalysis?CF00ND0000005SKk1={!JSENCODE(Account.Name)}&CF00ND0000005SKk1_lkid={!Account.Id}&scontrolCaching=1&retURL=%2F{!Account.Id}&isInsert=1&sfdc.override=1&isMobile=1&isdtp=vw&accId={!Account.Id}";
+			}
+
+			var accountJS = {!accJS};
+			var accountFieldsJS = {!accFieldsJS};
+			var horarioJS = {!horarioJS};
+
+		</script>
+
+		<apex:includeScript value="{!URLFOR($Resource.LAT_CompassResources, 'static/js/polyfills.js')}" />
+		<apex:includeScript value="{!URLFOR($Resource.LAT_CompassResources, 'static/js/utils.js')}" />
+		<apex:includeScript value="{!URLFOR($Resource.LAT_CompassResources, 'static/js/cnpj-validator.js')}" />
+		<apex:includeScript value="{!URLFOR($Resource.LAT_CompassResources, 'static/js/edit-account.js')}"/>
+
+	</head>
+
+	<body>
+		<div class="loading hidden">Loading&#8230;</div>
+		<apex:form >
+			<apex:pageMessages id="messages" />
+			<apex:actionFunction action="{!selectRType}" name="selectRTypeAF" />
+			<apex:actionFunction action="{!cancelSeg}" name="cancelSegmentationJs" />
+			<apex:actionFunction action="{!saveSegmentation}" name="saveSegmentationJs" />
+			<apex:actionFunction action="{!editSegmentation}" name="segmentationEditJs" />
+			<apex:actionFunction action="{!deleteClient}" name="deleteClient" />
+			<apex:actionFunction action="{!changeStatus}" name="changeStatus" />
+
+			<apex:outputPanel id="accountPanel" rendered="{!IF(rtSelection,false,true)}">
+
+				<div class="container2" style="display:{!IF(OR(isNewSegmentation,isEditSegmentation,isNewCreditAnal,isEditCreditAnal),'none','block')}">
+					<div class="row">
+						<!--Left Side bar with Sections  -->
+						<div class="col-md-3 ">
+
+
+							<div class="col-md-12 sectionsLeftSide " style="overflow-y: auto; ">
+
+								<apex:outputPanel layout="block" styleClass="current-status" rendered="{! AND (Account != null, Account.Status__c != null )}">
+									<h2>
+										STATUS:
+									</h2>
+									<span>
+										{!Account.Status__c}
+									</span>
+
+								</apex:outputPanel>
+
+								<apex:variable var="count" value="{!1}" />
+								<apex:repeat value="{!AccountMobileFieldSetNames}" var="f">
+									<div id="{!f.Name}" class="sidebar-item" style="{!IF(count == 1,'background-color: #008DBB','')}" onclick="saveSection('{!f.Name}');">
+										<span>{!f.Label}</span>
+										<span class="sidebar-loading pull-right hidden"></span>
+									</div>
+									<apex:variable value="{!count + 1}" var="count" />
+								</apex:repeat>
+								<apex:outputPanel layout="none" rendered="{!showAdditionalInformation}">
+									<div id="informacoes-adicionais" onclick="onTopScroll();" class="{!IF(accIdURL !=  NULL,'','disabled-section')}">
+										Informações Adicionais
+									</div>
+								</apex:outputPanel>
+								<apex:outputPanel layout="none" rendered="{!showSchedule}">
+									<div id="horarios" onclick="onTopScroll(); saveSection('horarios');" class="{!IF(accIdURL != NULL,'','disabled-section')}">
+										<span>Horários</span>
+										<span class="sidebar-loading pull-right hidden"></span>
+									</div>
+								</apex:outputPanel>
+								<div id="segmentation" onclick="onTopScroll();" class="{!IF(accIdURL !=   NULL,'','disabled-section')}">
+									Segmentação
+								</div>
+								<div id="segmentacao" onclick="onTopScroll();" class="{!IF(accIdURL != NULL,'','disabled-section')}">
+									Questionário Segmentação
+								</div>
+								<apex:outputPanel layout="none" rendered="{!showCreditAnal}">
+									<div id="analisisDeCredito" class="{!IF(accIdURL != NULL,'','disabled-section')}">
+										Análise de Crédito
+									</div>
+								</apex:outputPanel>
+								<div id="prenchimiento-cadastro" class="{!IF(accIdURL != NULL,'','disabled-section')}">
+									Pendências Cadastrais
+								</div>
+							</div>
+							<!-- CUSTOM BUTTONS SAVE AND CANCEL -->
+							<!-- If the account is locked, we must hide the buttons -->
+							<apex:outputPanel layout="none"  rendered="{!! AND( OR(AND (Account != null, Account.Status__c != null, Account.Status__c == 'Cliente cadastrado no CRM' ),AND(Account != null, Account.Status__c != null, Account.Rating =='Cliente inativo' )), Account.Status__c != 'Novo cadastro')}">
+								<apex:outputPanel layout="none" rendered="{!!isLocked}">
+									<div class="row">
+										<div class="col-md-12">
+											<div class="col-md-12">
+                        <apex:outputPanel layout="none" rendered="{!OR (Account.Status__c == 'Novo cadastro', Account.Status__c == 'Reprovado', Account.Status__c == 'Não aprovado')}">
+												<button type="button" class="btn btn-success buttonSave buttonAprove {!IF(isLocked,'addDisabled','')} {!IF(accIdURL != NULL,'','disabled-section')}"
+												onclick="validateApproval();return false;">
+													Enviar para Aprovação
+												</button>
+                        </apex:outputPanel>
+											</div>
+										</div>
+									</div>
+
+									<div class="row">
+										<div class="col-md-12">
+											<div class="col-md-12">
+												<button type="button" id="cancel-button" class="btn btn-success buttonCancel hidden" onclick="openConfirmModal();return false;">Cancelar</button>
+											</div>
+											<div class="col-md-12">
+												<button type="button" class="btn btn-success buttonSave" onclick="saveAccount(); return false;">{!$Label.LAT_VFP04_00002}</button>
+											</div>
+										</div>
+									</div>
+								</apex:outputPanel>
+						</apex:outputPanel>
+
+								
+
+							<apex:outputPanel layout="block" styleClass="row" rendered="{! AND(!isLocked, OR(AND (Account != null, Account.Status__c != null, Account.Status__c == 'Cliente cadastrado no CRM' ),AND(Account != null, Account.Status__c != null, Account.Rating =='Cliente inativo' )), Account.Status__c != 'Novo cadastro')}">
+								<div class="col-md-12">
+									<div class="col-md-12">
+										<button type="button" id="backToEdit-button" onclick="openModalFunction('modal-novo-cadastro')" class="btn btn-full btn-success newButton secondary">Editar</button>
+                    			<apex:outputPanel layout="none"  rendered="{!Account.Rating == 'Cliente inativo' }">
+
+									<div class="row">
+										<div class="col-md-12">
+											<div class="col-md-12 current-status msg-ativar">
+												<span>Clique Editar para Ativar o cliente</span>
+											</div>
+										</div>
+									</div>
+								</apex:outputPanel>>
+									</div>
+								</div>
+
+							</apex:outputPanel>
+							<apex:outputPanel layout="block" styleClass="row" rendered="{!isLocked}">
+								<div class="col-md-12">
+									<div class="col-md-12">
+										
+                    			
+
+									<div class="row">
+										<div class="col-md-12">
+											<div class="col-md-12 current-status msg-ativar">
+												<span>O cliente está em aprovação e, portanto, está bloqueado para edição. Para verificar o status de aprovação, retorne e clique na  Histórico de Aprovação</span>
+											</div>
+										</div>
+									</div>
+									</div>
+								</div>
+
+							</apex:outputPanel>
+						
+							
+
+						</div>
+						<!-- FIELDS By Section (Page Laouyt Account On Trade-Off Trade) -->
+						<!-- It will iter over Field Set for Account and build sections with its fields -->
+						<div class="col-md-9 pre-scrollable" id="fieldsRight">
+							<apex:outputPanel id="sectionsAccountFields" rendered="{!IF(OR(isNewSegmentation,isEditSegmentation),false,true)}">
+								<div class="row" id="fieldsSection">
+									<apex:variable var="count" value="{!1}" />
+									<apex:repeat value="{!AccountMobileFieldSetNames}" var="s">
+										<div class="col-md-12" id="{!s.Name +'fields'}" style="display: {!IF(count == 1,'block','none')};">
+											<div class="row">
+												<apex:repeat value="{!mapFieldSetWithFields[s.Name]}" var="f">
+													<div class="col-md-6">
+														<div class="form-group row">
+															<label for="exampleInputEmail1" class="col-md-4 col-form-label  labelsColor">
+																{!f.Label}
+															</label>
+															<apex:outputPanel layout="none" rendered="{!IF(f.Type == 'reference',true,false)}">
+																<div class="col-md-8">
+																	<div class="custom-search-input">
+																		<div class="input-group col-md-12">
+																			<apex:outputlabel value="" styleclass="label-{!f.FieldPath} hidden" />
+																			<apex:outputLabel styleclass="form-control input-lg {!f.FieldPath}" value="{! acc[ lookupRefNames[f.fieldPath] ] }" rendered="{!AND(NOT(isClone),f.fieldPath != 'ParentId')}"
+																			/>
+																			<apex:outputLabel styleclass="form-control input-lg {!f.FieldPath}" value="{! IF(acc[ lookupRefNames[f.fieldPath] ] != null, acc[ lookupRefNames[f.fieldPath] ], '') } "
+																			 rendered="{!f.fieldPath == 'ParentId'}" />
+																			<apex:outputLabel styleclass="form-control input-lg {!f.FieldPath}" value="{!acc.Name}" rendered="{!AND(isClone,f.fieldPath == 'ParentId')}"
+																			/>
+																			<div id="hidden-{!f.fieldPath}">
+																				<apex:inputHidden value="{!acc[f.fieldPath]}" />
+																			</div>
+																			<span class="input-group-btn">
+																				<button class="btn btn-info btn-lg" type="button" onclick="openLookupByObjectType('{!f.Label}','{!f.FieldPath}','Account'); return false;">
+																					<i class="glyphicon glyphicon-search"></i>
+																				</button>
+																			</span>
+																		</div>
+																	</div>
+																</div>
+															</apex:outputPanel>
+															<apex:outputPanel rendered="{!IF(f.Type == 'reference',false,true)}" layout="none">
+																<div class="col-md-8">
+																	<apex:inputField rendered="{!IF(f.FieldPath == 'RecordTypeId',false,true)}" styleClass="form-control input-lg {!f.FieldPath} {!IF(f.FieldPath == 'Carriers_Numbers__c','hasReadOnly','')}"
+																	 value="{!acc[f.fieldPath]}" onchange="inputAccValueChanged('{!f.fieldPath}', this)" />
+																	<span class="error-message"></span>
+																</div>
+															</apex:outputPanel>
+														</div>
+													</div>
+												</apex:repeat>
+												<apex:outputPanel rendered="{!CONTAINS(s.Name, 'Basic_Info')}">
+													<apex:repeat value="{!LatAccountFieldSet}" var="f">
+														<div class="col-md-6">
+															<div class="form-group row">
+																<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">
+																	{!f.Label}
+																</label>
+																<apex:outputPanel layout="none" rendered="{!IF(f.Type == 'reference',true,false)}">
+																	<div class="col-md-8">
+																		<div clss="custom-search-input">
+																			<div class="input-group col-md-12">
+																				<apex:outputlabel value="" styleclass="label-{!f.FieldPath} hidden" />
+																				<apex:outputLabel styleclass="form-control input-lg {!f.FieldPath}" value="Object" rendered="{!AND(NOT(isClone),f.fieldPath != 'ParentId')}"
+																				/>
+																				<apex:outputLabel styleclass="form-control input-lg {!f.FieldPath}" value="{!accFields.Name}" rendered="{!AND(isClone,f.fieldPath == 'ParentId')}"
+																				/>
+																				<div id="hidden-{!f.fieldPath}">
+																					<apex:inputHidden value="{!accFields[f.fieldPath]}" />
+																				</div>
+																				<span class="input-group-btn">
+																					<button class="btn btn-info btn-lg" type="button" onclick="openLookupByObjectType('{!f.Label}','{!f.FieldPath}', 'AccountFields'); return false;">
+																						<i class="glyphicon glyphicon-search"></i>
+																					</button>
+																				</span>
+																			</div>
+																		</div>
+																	</div>
+																</apex:outputPanel>
+																<apex:outputPanel rendered="{!IF(f.Type == 'reference',false,true)}" layout="none">
+																	<div class="col-md-8">
+																		<apex:inputField rendered="{!IF(f.FieldPath == 'RecordTypeId',false,true)}" styleClass="form-control input-lg {!f.FieldPath} {!IF(OR(f.FieldPath == 'Client_code_AN8__c',AND(OR(f.FieldPath == 'Client_country_AN8__c'|| f.FieldPath == 'Rating' || f.FieldPath == 'Carriers_Numbers__c',f.FieldPath == 'Status__c'),NOT(isClone))),'hasReadOnly','')}"
+																		 value="{!accFields[f.fieldPath]}" onchange="inputAccFieldsValueChanged('{!f.fieldPath}', this)" />
+																	</div>
+																</apex:outputPanel>
+															</div>
+														</div>
+													</apex:repeat>
+												</apex:outputPanel>
+											</div>
+										</div>
+										<apex:variable value="{!count + 1}" var="count" />
+									</apex:repeat>
+								</div>
+							</apex:outputPanel>
+							<!-- HORARIOS SECTION -->
+							<div class="row">
+								<div class="col-md-12" id="horariosfields" style="display: none;">
+									<nav>
+										<div id="tab-visitas" class="nav-tab selected" onclick="selectHorarioTab(0)">
+											Visitas
+										</div>
+										<div id="tab-janela" class="nav-tab" onclick="selectHorarioTab(1)">
+											Recebimento de Carga
+										</div>
+									</nav>
+									<div class="horario-header"> Dias e horários de atendimento (Se não marcado aceita qualquer dia) </div>
+									<div id="campos-horario-visita" class="feiras">
+										<div class="row">
+											<div class="row col-lg-12 dayNameClass">
+												<div class="col-lg-2">
+													<apex:outputLabel for="{!horario.Monday__c}" value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Monday__c}" onchange="inputHorarioValueChanged('Monday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Monday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Monday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value=" {!horario.Monday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Monday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Monday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>x
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday__c.Label}" />
+													<apex:inputField styleClass="form-control  day-check" value="{!horario.Tuesday__c}" onchange="inputHorarioValueChanged('Tuesday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Tuesday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Tuesday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Tuesday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Tuesday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12">
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Wednesday__c}" onchange="inputHorarioValueChanged('Wednesday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Wednesday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Wednesday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Wednesday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Wednesday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12">
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Thursday__c}" onchange="inputHorarioValueChanged('Thursday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Thursday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Thursday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value=" {!horario.Thursday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Thursday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value=" {!horario.Thursday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Thursday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Friday__c}" onchange="inputHorarioValueChanged('Friday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value=" {!horario.Friday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Friday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Friday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Friday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Friday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Saturday__c}" onchange="inputHorarioValueChanged('Saturday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Saturday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Saturday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Saturday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Saturday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Sunday__c}" onchange="inputHorarioValueChanged('Sunday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_1st_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_1st_period_begin_Time__c}" onchange="inputHorarioValueChanged('Sunday_1st_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_1st_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_1st_period_End_Time__c}" onchange="inputHorarioValueChanged('Sunday_1st_period_End_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_2nd_period_begin_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_2nd_period_begin_Time__c}" onchange="inputHorarioValueChanged('Sunday_2nd_period_begin_Time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_2nd_period_End_Time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_2nd_period_End_Time__c}" onchange="inputHorarioValueChanged('Sunday_2nd_period_End_Time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12"></div>
+										</div>
+									</div>
+									<div id="campos-horario-janela" class="feiras hidden">
+										<div class="row">
+											<div class="row col-lg-12 dayNameClass">
+												<div class="col-lg-2">
+													<apex:outputLabel for="{!horario.Monday_order__c}" value="  {!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_order__c.Label}"
+													/>
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Monday_order__c}" onchange="inputHorarioValueChanged('Monday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Monday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Monday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Monday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Monday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Monday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Monday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_order__c.Label}" />
+													<apex:inputField styleClass="form-control  day-check" value="{!horario.Tuesday_order__c}" onchange="inputHorarioValueChanged('Tuesday__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Tuesday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Tuesday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Tuesday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Tuesday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Tuesday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Tuesday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12">
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_Order__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Wednesday_Order__c}" onchange="inputHorarioValueChanged('Wednesday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_1st_period_Order_Begin_time__c.Label}"
+													/>
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Wednesday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Wednesday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_2nd_period_Order_Begin_time__c.Label}"
+													/>
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Wednesday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Wednesday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Wednesday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Wednesday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12">
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_Order__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Thursday_Order__c}" onchange="inputHorarioValueChanged('Thursday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Thursday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Thursday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Thursday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Thursday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Thursday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Thursday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_order__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Friday_order__c}" onchange="inputHorarioValueChanged('Friday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Friday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Friday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Friday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Friday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Friday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Friday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_order__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Saturday_order__c}" onchange="inputHorarioValueChanged('Saturday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Saturday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Saturday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Saturday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Saturday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Saturday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Saturday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+										</div>
+										<hr/>
+										<div class="row">
+											<div class="col-lg-12 dayNameClass row">
+												<div class="col-lg-2">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_Order__c.Label}" />
+													<apex:inputField styleClass="form-control day-check" value="{!horario.Sunday_Order__c}" onchange="inputHorarioValueChanged('Sunday_order__c', this)"
+													/>
+												</div>
+												<div class="col-lg-10">
+												</div>
+											</div>
+											<div class="row col-lg-12">
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_1st_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_1st_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Sunday_1st_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_1st_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_1st_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Sunday_1st_period_Order_End_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_2nd_period_Order_Begin_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_2nd_period_Order_Begin_time__c}" onchange="inputHorarioValueChanged('Sunday_2nd_period_Order_Begin_time__c', this)"
+													/>
+												</div>
+												<div class="col-lg-3">
+													<apex:outputLabel value="{!$ObjectType.LAT_CWH_ClientWorkHour__c.fields.Sunday_2nd_period_Order_End_time__c.Label}" />
+													<apex:inputField styleClass="form-control input-lg" value="{!horario.Sunday_2nd_period_Order_End_time__c}" onchange="inputHorarioValueChanged('Sunday_2nd_period_Order_End_time__c', this)"
+													/>
+												</div>
+											</div>
+											<div class="row col-lg-12"></div>
+										</div>
+									</div>
+								</div>
+							</div>
+							<!-- SEGMENTATION SECTION -->
+							<div class="row" id="">
+								<div class="col-md-12" id="segmentacaofields" style="display: none;">
+									<apex:outputPanel id="segList" rendered="{!IF(isNewSegmentation == false,true,false)}">
+										<apex:inputHidden id="segIdParamClass" value="{!segIdParam}" />
+										<div id="segList">
+											<div>
+												<div class="relatedListSectionHeader left_position">
+													<apex:outputPanel rendered="{!canCreateSegment}">
+														<button type="button" class="btn btn-success newButton secondary pull-right" onclick="novaSegmentationClicked();">
+															+ Nova Segmentação
+														</button>
+													</apex:outputPanel>
+													<apex:outputPanel rendered="{!NOT(canCreateSegment)}">
+														<button type="button" class="btn btn-success newButton secondary pull-right" style="opacity: 0.4" disabled="true">
+															+ Nova Segmentação
+														</button>
+
+
+													</apex:outputPanel>
+
+
+													{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.labelPlural}
+												</div>
+											</div>
+											<div class="row ">
+												<apex:outputPanel rendered="{!NOT(canCreateSegment)}">
+													<div class="error-info">{!segmentError}</div>
+
+												</apex:outputPanel>
+												<table id="tableSegmentation" class="table">
+													<thead>
+														<tr>
+															<th></th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Name.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Channel__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Client_type__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Sub_channel__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Segment__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Estrategia_comercial__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.Status__c.Label}</th>
+															<th>{!$ObjectType.LAT_BR_ClientChannelSegmentation2__c.fields.CreatedDate.Label}</th>
+														</tr>
+													</thead>
+													<tbody>
+														<apex:outputPanel rendered="{!AND(clientChannelSegmentation != null, clientChannelSegmentation.size > 0) }">
+															<!-- <apex:outputPanel rendered="{!clientChannelSegmentation.size > 0 }">  -->
+															<apex:repeat value="{!clientChannelSegmentation}" var="seg">
+																<tr>
+																	<td>
+																		<apex:outputpanel layout="none" rendered="{!OR(AND(AND(clientChannelSegmentation.size == 1,OR(AND(Account.Status__c == 'Novo cadastro',Account.Rating !='Cliente inativo'), Account.Status__c == 'Não aprovado')),seg.Status__c == 'Active'),seg.Status__c == 'Draft')}">
+																			<div id="{!seg.Id}">
+																				<button class="btn newButton" onclick="segmentationClicked('{!seg.Id}');return false;" style="width:100% !important;">Editar</button>
+																			</div>
+																		</apex:outputpanel>
+																		<apex:outputpanel layout="none" rendered="{!clientChannelSegmentation.size > 0 }">
+																			<apex:outputpanel layout="none" rendered="{!!OR(AND(AND(clientChannelSegmentation.size == 1,OR(AND(Account.Status__c == 'Novo cadastro',Account.Rating !='Cliente inativo'), Account.Status__c == 'Não aprovado')),seg.Status__c == 'Active'),seg.Status__c == 'Draft')}">
+																				<div id="{!seg.Id}">
+																						<button class="btn newButton" onclick="segmentationClickedReadOnly('{!seg.Id}');return false;" style="width:100% !important;">Visualizar</button>
+																					</div>
+																			</apex:outputpanel>
+																			
+																		</apex:outputpanel>
+
+																		<!-- <apex:outputpanel layout="none" rendered="{!clientChannelSegmentation.size > 0 }">
+																			
+																			<div id="{!seg.Id}">
+																				<button class="btn newButton" onclick="segmentationClickedReadOnly('{!seg.Id}');return false;" style="width:100% !important;">Visualizar</button>
+																			</div>
+																		</apex:outputpanel> -->
+																	</td>
+																	<td>{!seg.Name}</td>
+																	<td>{!seg.Channel__c}</td>
+																	<td>{!seg.Client_type__c}</td>
+																	<td>{!seg.Sub_channel__c}</td>
+																	<td>{!seg.Segment__c}</td>
+																	<td>{!seg.Estrategia_comercial__c}</td>
+																	<td>
+																		<apex:outputField value="{!seg.Status__c}" />
+																	</td>
+																	<td>{!seg.CreatedDate}</td>
+																</tr>
+															</apex:repeat>
+														</apex:outputPanel>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									</apex:outputPanel>
+								</div>
+							</div>
+							<!-- SEGMENTATION SECTION -->
+							<div class="row" id="">
+								<div class="col-md-12" id="segmentationfields" style="display: none;">
+									<apex:outputPanel rendered="{!hasSegment}">
+										<div class="row">
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Canal:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Channel__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Tipo de Cliente:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Client_type__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Sub-Canal:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Sub_channel__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Segmento:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Segment__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Perfil:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Perfil__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Formato:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.FORMATO__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Estratégia Comercial:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Estrategia_comercial__c}"
+														/>
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Benefício Fiscal:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Beneficio_Fiscal__c}" />
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Prior. de Investimento:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.PRIOR_DE_INVESTIMENTO__c}"
+														/>
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">Política de Preço:</label>
+													<div class="col-md-8">
+														<input type="text" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.Obtained_POLiTICA_DE_PRECO_Udc__r.Name}"
+														/>
+													</div>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-group row">
+													<label class="col-md-4 col-form-label labelsColor" for="exampleInputEmail1">TBCI:</label>
+													<div class="col-md-8">
+														<input type="checkbox" class="form-control disabled-lookup input-lg" disable="true" value="{!segment.TBCI__c}" />
+													</div>
+												</div>
+											</div>
+										</div>
+									</apex:outputPanel>
+								</div>
+							</div>
+							<!-- ANALISIS DE CREDITO SECTION -->
+							<div class="row" id="">
+								<div class="col-md-12" id="analisisDeCreditofields" style="display: none;">
+									<apex:outputPanel id="credList">
+										<apex:inputHidden id="credIdParamClass" value="{!credIdParam}" />
+										<div>
+											<div>
+												<apex:outputPanel rendered="{!NOT(showNewCredAnalisisBtn)}">
+													<button  disabled="true" rendered="{!showNewCredAnalisisBtn}" type="button" class="btn btn-success newButton secondary pull-right" onclick="newCreditAnalysis();">+ Análise de crédito</button>
+												</apex:outputPanel>
+												<apex:outputPanel rendered="{!showNewCredAnalisisBtn}">
+													<button  rendered="{!showNewCredAnalisisBtn}" type="button" class="btn btn-success newButton secondary pull-right" onclick="newCreditAnalysis();">+ Análise de crédito</button>
+												</apex:outputPanel>
+												<div class="relatedListSectionHeader left_position">{!$ObjectType.Analise_de_credito__c.labelPlural}</div>
+											</div>
+											<div class="row ">
+												<table id="tableSegmentation" class="table">
+													<thead>
+														<tr>
+															<th></th>
+															<th>{!$ObjectType.Analise_de_credito__c.fields.Name.Label}</th>
+															<th>{!$ObjectType.Analise_de_credito__c.fields.Sugestao_do_analista__c.Label}</th>
+															<th>{!$ObjectType.Analise_de_credito__c.fields.CreatedDate.Label}</th>
+															<th>{!$ObjectType.Analise_de_credito__c.fields.LastModifiedDate.Label}</th>
+															<th>{!$ObjectType.Analise_de_credito__c.fields.LAT_BR_Status__c.Label}</th>
+														</tr>
+													</thead>
+													<tbody>
+														<apex:outputPanel rendered="{!listCreditAnal.size > 0 }">
+															<apex:repeat value="{!listCreditAnal}" var="cred">
+																<tr>
+																	<td>
+																		<div id="{!cred.Id}">
+																			<button class="btn newButton" onclick="creditClicked('{!cred.Id}');return false;" style="width:100% !important;">{!IF(OR(cred.LAT_BR_Status__c=='Em Preenchimento', Account.Status__c == 'Novo cadastro'),'Editar', 'Visualizar')}</button>
+																		</div>
+																		<!--<button class="btn newButton lookslikelink" onclick="sendApprovalCredit('{!cred.Id}'); return false;" style="width:100% !important;">Enviar para Aprovação</button>-->
+																	</td>
+																	<td>{!cred.Name}</td>
+																	<td>{!cred.Sugestao_do_analista__c}</td>
+																	<td>{!cred.CreatedDate}</td>
+																	<td>{!cred.LastModifiedDate}</td>
+																	<td>{!cred.LAT_BR_Status__c}</td>
+																</tr>
+															</apex:repeat>
+														</apex:outputPanel>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									</apex:outputPanel>
+								</div>
+							</div>
+
+
+							<div class="row" id="">
+								<div class="col-md-12" id="prenchimiento-cadastrofields" style="display: none;">
+									<div class="col-md-6">
+										<div class="form-group row">
+											<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.Account.fields.LAT_InformationUnfilled__c.Label}</label>
+											<div class="col-md-8">
+												<apex:outputField styleclass="form-control input-lg infoUnfilled htmlDetailElementTable" value="{!acc.LAT_InformationUnfilled__c}"/>
+                   
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="modal fade" id="myModal" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header">
+									<button type="button" class="close" data-dismiss="modal">&times;</button>
+									<h4 class="modal-title" id="modalHeader"></h4>
+								</div>
+								<div class="modal-body" id="modalBody">
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-success buttonSave" data-dismiss="modal" onclick="closeMyModal();">Ok</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- ERROR MODAL -->
+					<div class="modal fade" id="modal-error" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header text-left">
+									<button type="button" class="close" data-dismiss="modal">&times;</button>
+									<span class="modal-title" id="modal-error-header"></span>
+								</div>
+								<div class="modal-body" id="modal-error-body">
+									<div id="modal-body-title" class="modal-body-title"></div>
+									<div id="modal-error-subtitle"></div>
+									<div id="modal-error-content"></div>
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-error" data-dismiss="modal" onclick=" closeErrorModal();">Close</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- CONFIRM MODAL -->
+					<div class="modal fade" id="modal-confirm" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header text-left">
+									<button type="button" class="close" data-dismiss="modal">&times;</button>
+									<span class="modal-title" id="modal-confirm-header">Atenção</span>
+								</div>
+								<div class="modal-body" id="modal-confirm-body">
+									<div id="modal-confirm-body-title" class="modal-body-title">Atenção</div>
+									<div id="modal-confirm-content">Deseja excluir o cliente?</div>
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-confirm" data-dismiss="modal" onclick="confirmModalOk();">Confirmar</button>
+									<button type="button" class="btn btn-cancel" data-dismiss="modal" onclick="closeConfirmModal();">Cancelar</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- CONFIRM CHANGE STATUS TO NOVO CADASTRO -->
+					<div class="modal fade" id="modal-novo-cadastro" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header text-left">
+									<button type="button" class="close" data-dismiss="modal">&times;</button>
+									<span class="modal-title" id="modal-confirm-header">Atenção</span>
+								</div>
+								<div class="modal-body" id="modal-confirm-body">
+									<!-- <div id="modal-confirm-body-title" class="modal-body-title">Atenção</div> -->
+									<div id="modal-confirm-content">Ao confirmar o Status do cliente será alterado para "Novo Cadastro". <br/> Ao concluir as alterações desejadas, Salve o cliente e Envie a Aprovação.</div>
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-confirm buttonSave btn-auto" data-dismiss="modal" onclick="confirmNovoCadastro();">Confirmar</button>
+									<button type="button" class="btn btn-cancel buttonCancel btn-auto" data-dismiss="modal" onclick="closeModalFunction('modal-novo-cadastro');">Cancelar</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- MODAL FOR LOOKUP RELATIONSHIPS -->
+					<div class="modal fade" id="modal-alert" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header">
+									<button type="button" class="close" data-dismiss="modal">&times;</button>
+									<h4 class="modal-title" id="modalHeader1"></h4>
+								</div>
+								<div class="modal-body" id="modalBody1">
+									<span id='modal-alert-content' />
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-success buttonSave" data-dismiss="modal" onclick=" closeAlert();">Ok</button>
+								</div> 
+							</div>
+						</div>
+					</div>
+					<!-- MODAL FOR LOOKUP RELATIONSHIPS -->
+					<div class="modal fade" id="myModalconfirm" role="dialog">
+						<div class="modal-dialog modal-lg">
+							<div class="modal-content customModal">
+								<div class="modal-header">
+									<button type="button" class="close" data-dismiss="modal"></button>
+									<h4 class="modal-title" id="modalHeader2"></h4>
+								</div> 
+								<div class="modal-body" id="modalBody2">
+									<span id='ernesto-content-confirm' />
+								</div>
+								<div class="modal-footer">
+									<div class="col-md-12">
+										<div class="col-md-3">
+										</div>
+										<div class="col-md-3">
+											<button type="button" class="btn btn-success buttonSave" data-dismiss="modal" onclick="closeConfirmOk()">Ok</button>
+										</div>
+										<div class="col-md-3">
+											<button type="button" class="btn btn-full btn-success buttonCancel" data-dismiss="modal" onclick="closeConfirmCancel()">Cancelar</button>
+										</div>
+										<div class="col-md-3">
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<!-- NEW/EDIT SEGMENTATION-->
+				<apex:outputPanel styleClass="newSeg" id="newEditSeg" rendered="{!IF(OR(isNewSegmentation,isEditSegmentation),true,false)}">
+					<div class="container">
+						<div style="margin-bottom:4%;">
+							<button type="button" class="btn btn-success newButton" onclick="cancelSegmentation();">{!$LABEL.LAT_VFP04_00003}</button>
+						</div>
+						<apex:outputPanel styleClass="newSeg" id="newSegmentationOffTrade" rendered="{!IF(isOffTrade,true,false)}">
+							<div class="col-md-12 pre-scrollable" id="fieldsRight">
+								<div class="row" id="fieldsSection">
+									<div class="col-md-12">
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_BusinessTargetAudience__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="   {!segmentation.LAT_BR_BusinessTargetAudience__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_PortfolioType__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_PortfolioType__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_MainAttentionChannel__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_MainAttentionChannel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_PerformingArea__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value=" {!segmentation.LAT_BR_PerformingArea__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_SKUCategoriesAmount__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_SKUCategoriesAmount__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_RelationshipLevel__c.Label}</label>
+												<div class="col-md-8">
+													<input type="text" value="{!segmentation.LAT_BR_RelationshipLevel__c}" disabled="true" class="form-control input-lg disabled"
+													/>
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_RelationshipLevel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_FiscalBenefit__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_FiscalBenefit__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_StoresTypes__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_StoresTypes__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_StoreScope__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_StoreScope__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_StoreSize__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value=" {!segmentation.LAT_BR_StoreSize__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_Justificativa__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_Justificativa__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedChannel__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedChannel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedSubChannel__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg addDisabled" value="{!segmentation.LAT_BR_ObtainedSubChannel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedSegment__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value=" {!segmentation.LAT_BR_ObtainedSegment__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedBusinessSize__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedBusinessSize__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedProfile__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedProfile__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedPriorityLevel__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedPriorityLevel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedFiscalBenefit__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedFiscalBenefit__c}" />
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+							<hr/>
+							<!-- MODAL FOR LOOKUP RELATIONSHIPS -->
+							<div class="modal fade" id="myModal" role="dialog">
+								<div class="modal-dialog modal-lg">
+									<div class="modal-content customModal">
+										<div class="modal-header">
+											<button type="button" class="close" data-dismiss="modal">&times;</button>
+											<h4 class="modal-title" id="modalHeader"></h4>
+										</div>
+										<div class="modal-body" id="modalBody"></div>
+										<div class="modal-footer">
+											<button type="button" class="btn btn-success buttonCancel" data-dismiss="modal">Cancelar</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</apex:outputPanel>
+						<apex:outputPanel rendered="{!IF(isOffTrade,false,true)}">
+							<div class="col-md-12 pre-scrollable" id="fieldsRight">
+								<div class="row" id="fieldsSection">
+									<div class="col-md-12">
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_MainBillFocus__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_MainBillFocus__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_PubPhysicalSpace__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_PubPhysicalSpace__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_MainConsumptionOccasion__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_MainConsumptionOccasion__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ActivitiesStartTime__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ActivitiesStartTime__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_Music__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_Music__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_MainBrandsSold__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_MainBrandsSold__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ConsumerProfile__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ConsumerProfile__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_Brigade__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_Brigade__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_MainDrinks__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_MainDrinks__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_AverageSodaCansPrice__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_AverageSodaCansPrice__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_AverageMainMealPrice__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_AverageMainMealPrice__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_PeopleCapacity__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_PeopleCapacity__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_AdultEntertainmentHouse__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_AdultEntertainmentHouse__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_HasCompetitorContract__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_HasCompetitorContract__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_Justificativa__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_Justificativa__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_IconicHouse__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_IconicHouse__c}" />
+												</div>
+											</div>
+										</div>
+										<label for="exampleInputEmail1" class="col-md-12">Segmentação Obtida</label>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedSubChannel__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg addDisabled" value="{!segmentation.LAT_BR_ObtainedSubChannel__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ONSegment__c.Label}</label>
+												<div class="col-md-8">
+													<apex:inputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ONSegment__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedBusinessSize__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedBusinessSize__c}" />
+												</div>
+											</div>
+										</div>
+										<div class="col-md-6">
+											<div class="form-group row">
+												<label for="exampleInputEmail1" class="col-md-4 col-form-label labelsColor">{!$ObjectType.LAT_BR_ClientChannelSegmentation__c.fields.LAT_BR_ObtainedProfile__c.Label}</label>
+												<div class="col-md-8">
+													<apex:outputField styleClass="form-control input-lg" value="{!segmentation.LAT_BR_ObtainedProfile__c}" />
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</apex:outputPanel>
+						<div class="col-md-6">
+							<button type="button" class="btn btn-success buttonSave" onclick="$('.loading').show(); saveSegmentationJs();return false;">{!$Label.LAT_VFP04_00002}</button>
+						</div>
+					</div>
+				</apex:outputPanel>
+			</apex:outputPanel>
+			<!-- PANEL GENERAL DEL RECORD TYPE -->
+			<!-- Record Type Selection -->
+			<apex:outputPanel id="rtSelectionPanel" styleClass="rtSelectionPanel" rendered="{!rtSelection}">
+				<div class="container">
+					<div class="form-group">
+						<div class="row">
+							<div class="col-md-4 col-lg-4">
+								<br />
+								<label for="exampleInputEmail1" class="labelsColor">Selecione Tipo de Cliente</label>
+								<apex:inputField styleclass="form-control input-lg" value="{!acc.RecordTypeId}" />
+							</div>
+						</div>
+						<div class="row" style="margin-top: 20px">
+							<div class="col-md-4 col-lg-4">
+								<button type="button" class="btn btn-success buttonSave" onclick="$('.loading').show();selectRecordTypeJs();return false;">{!$Label.LAT_VFP04_00002}</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</apex:outputPanel>
+		</apex:form>
+	</body>
+
+	</html>
+</apex:page>

@@ -1,0 +1,166 @@
+<aura:component description="EUR_CRM_FilterBuilder" controller="EUR_CRM_FilterBuilderController">
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+
+    <aura:attribute name="filterConditionItems" type="List" access="public"/>
+    <aura:attribute name="parentRelationsToFilter" type="List" access="public"/>
+    <aura:attribute name="filterLogicPrefix" type="String" access="public"/>
+    <aura:attribute name="filterLogicEnd" type="String" access="public"/>
+    <aura:attribute name="tableHeader" type="String" access="public"/>
+    <aura:attribute name="sObjectName" type="String" access="public" required="true"/>
+    <aura:attribute name="sObjectFields" type="List" access="private"/>
+    <aura:attribute name="restrictFieldsFromSelect" type="List" access="public"/>
+    <aura:attribute name="filterLogic" type="String" access="private"/>
+    <aura:attribute name="isCustomFilterLogic" type="Boolean" access="public"/>
+    <aura:attribute name="filterItemsRangeCount" type="Map" access="public" default="{ 'min': 3, 'max': 25 }"/>
+    <aura:attribute name="operatorOptions" type="List" access="private" default="[
+        'equals',
+        'not equal to',
+        'less than', 
+        'greater than',
+        'less or equal',
+        'greater or equal',
+        'contains',
+        'does not contain',
+        'starts with',
+        'ends with',
+        'includes',
+        'excludes'
+    ]"/>
+
+    <aura:handler name="populateValuesEvent" event="c:EUR_CRM_PopulateValuesEvent" action="{!c.populateValues}"/>
+    <aura:registerEvent name="filtersValidationEvent" type="c:EUR_CRM_FiltersValidationEvent"/>
+
+    <aura:method name="validate" action="{!c.validate}" access="public"
+                 description="Method to validate entered data">
+    </aura:method>
+
+    <aura:method name="addParentObjectFilters" action="{!c.addParentObjectFilters}" access="public"
+                 description="Method to pass add filters by parent sobjects">
+        <aura:attribute name="parentRelationsToFilter" type="List"/>
+    </aura:method>
+
+    <aura:method name="setInitialItems" action="{!c.setInitialItems}" access="public"
+                 description="Method to pass loaded or required items">
+        <aura:attribute name="conditionItems" type="List"/>
+        <aura:attribute name="filterLogic" type="String"/>
+    </aura:method>
+
+    <div class="slds-panel__section">
+        <h3 class="{!'slds-text-heading--small slds-m-vertical--medium slds-section-title--divider ' + (empty(v.tableHeader) ? 'slds-hide' : 'slds-show')}">Step 2. Enter selection criteria for this rule</h3>
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+            <thead>
+            <tr class="slds-text-title_caps">
+                <th scope="col">
+                    <div class="slds-truncate" title="Index">№</div>
+                </th>
+                <th scope="col">
+                    <div class="slds-truncate" title="Field">Field</div>
+                </th>
+                <th scope="col">
+                    <div class="slds-truncate" title="Operator">Operator</div>
+                </th>
+                <th scope="col">
+                    <div class="slds-truncate" title="Value">Value</div>
+                </th>
+                <th scope="col">
+                    <div class="slds-truncate" title="Filter Logic"></div>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <aura:iteration items="{!v.filterConditionItems}" var="item" indexVar="index">
+                <tr>
+                    <td scope="col">
+                        <div class="slds-truncate" title="Index">{!index + 1}</div>
+                    </td>
+                    <td scope="row" data-label="Field">
+                        <div data-id="{!index}" class="row-index slds-truncate" title="Field">
+                            <aura:if isTrue="{!item.required}">
+                                <span class="required">*</span>
+                                <ui:outputText value="{!item.label}"/>
+                                <aura:set attribute="else">
+                                    <!-- name="field-select" -->
+                                    <lightning:select class="hide-label" label="Select Field:" name="{!index}" aura:id="field" value="{!item.field}" onchange="{!c.onItemFieldValueChange}">
+                                        <option value="">--None--</option>
+                                        <aura:iteration items="{!v.sObjectFields}" var="field">
+                                            <option value="{!field.name}">{!field.label}</option>
+                                        </aura:iteration>
+                                    </lightning:select>
+                                </aura:set>
+                            </aura:if>
+                        </div>
+                    </td>
+                    <td data-label="Operator">
+                        <aura:if isTrue="{!item.required}">
+                            <ui:outputText value="{!item.operator}"/>
+                            <aura:set attribute="else">
+                                <lightning:select class="hide-label" label="Select Operator:" name="operator-select" aura:id="operator" value="{!item.operator}">
+                                    <aura:iteration items="{!item.operatorOptions}" var="operator">
+                                        <option value="{!operator}">{!operator}</option>
+                                    </aura:iteration>
+                                </lightning:select>
+                            </aura:set>
+                        </aura:if>
+                    </td>
+                    <td data-label="Value">
+                        <aura:if isTrue="{!item.fieldDescribe.inputType == 'options'}">
+                            <c:EUR_CRM_Picklist aura:id="picklistCmp" options="{!item.fieldDescribe.picklistOptions}" index="{!index}"/>
+                        </aura:if>
+                        <!--<aura:if isTrue="{!item.fieldDescribe.inputType == 'date'}">-->
+                        <!--<ui:inputDate value="{!item.value}" displayDatePicker="false"/>-->
+                        <!--</aura:if>-->
+                        <!--<aura:if isTrue="{!item.fieldDescribe.inputType == 'datetime'}">-->
+                        <!--<ui:inputDateTime value="{!item.value}" displayDatePicker="false"/>-->
+                        <!--</aura:if>-->
+                        <aura:if isTrue="{!item.fieldDescribe.fieldType == 'REFERENCE'}">
+                            <c:EUR_CRM_LookupField objectAPIName="{!item.fieldDescribe.parentSObject}" variant="label-hidden"
+                                                   showIcon="false" showAddNew="false" selectedId="{!item.value}"/>
+                        </aura:if>
+                        <aura:if isTrue="{!and(item.fieldDescribe.fieldType != 'REFERENCE',
+                        or(item.fieldDescribe.inputType == 'text', item.fieldDescribe == null))}">
+                            <ui:inputText aura:id="itemValue" value="{!item.value}" required="true" size="80" maxlength="80"/>
+                        </aura:if>
+                    </td>
+                    <td data-label="Filter Logic">
+                        <div class="slds-truncate" title="Filter Logic">
+                            <aura:if isTrue="{!and(!equals(index + 1, v.filterConditionItems.length), !v.isCustomFilterLogic)}">
+                                <ui:outputText value="AND"/>
+                            </aura:if>
+                        </div>
+                    </td>
+                </tr>
+            </aura:iteration>
+            </tbody>
+        </table>
+    </div>
+    <div class="slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+        <button aura:id="addRowBtn" class="slds-button slds-button--brand" onclick="{!c.addItem}">Add Row</button>
+        <button aura:id="removeRowBtn" class="slds-button slds-button--brand" onclick="{!c.removeItem}">Remove Row</button>
+    </div>
+    <div class="slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+        <ui:outputURL class="{!v.isCustomFilterLogic ? 'slds-hide' : ''}" value="javascript:void(0);" label="Add filter logic..." click="{!c.enableCustomFilterLogic}"/>
+        <ui:outputURL class="{!!v.isCustomFilterLogic ? 'slds-hide' : ''}" value="javascript:void(0);" label="Clear filter logic..." click="{!c.disableCustomFilterLogic}"/>
+    </div>
+    <div class="{!'slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium' + (!v.isCustomFilterLogic ? ' slds-hide' : '')}">
+        <div class="slds-grid slds-wrap slds-grid_pull-padded">
+            <div class="{!'slds-size--2-of-12 slds-medium-size--2-of-12 slds-large-size--2-of-12 slds-align--absolute-center ' + (empty(v.filterLogicPrefix) ? 'slds-hide' : 'slds-show')}">
+                <ui:outputText class="slds-m-top--medium" value="{!v.filterLogicPrefix}"/>
+            </div>
+            <div class="slds-size--6-of-12 slds-medium-size--6-of-12 slds-large-size--6-of-12 slds-p-around--small">
+                <ui:inputText label="Filter Logic:" required="true" aura:id="filterLogic" value="{!v.filterLogic}"/>
+            </div>
+            <div class="{!'slds-size--1-of-12 slds-medium-size--1-of-12 slds-large-size--1-of-12 slds-align--absolute-center ' + (empty(v.filterLogicEnd) ? 'slds-hide' : 'slds-show')}">
+                <ui:outputText class="slds-m-top--medium" value="{!v.filterLogicEnd}"/>
+            </div>
+            <div class="slds-size--3-of-12 slds-medium-size--2-of-12 slds-large-size--2-of-12 slds-align--absolute-center">
+                <a target="_blank" href="https://help.salesforce.com/articleView?id=filter_logic.htm">
+                Tips<lightning:icon class="slds-button__icon--small slds-m-around--x-small" iconName="utility:info" size="xx-small"/></a>
+            </div>
+        </div>
+        <div class="slds-m-around--medium">
+            <img src="/img/report_boolean_filter.gif" alt="Open tips link above for help using filters." width="533" height="211" title="Open tips link above for help using filters."/>
+        </div>
+    </div>
+    <lightning:spinner aura:id="spinner" alternativeText="spinner" variant="brand" size="large"/>
+</aura:component>

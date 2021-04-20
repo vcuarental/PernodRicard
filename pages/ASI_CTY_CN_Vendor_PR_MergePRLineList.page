@@ -1,0 +1,307 @@
+<apex:page standardStylesheets="true" standardcontroller="ASI_MFM_Purchase_Request_Line__c" extensions="ASI_CTY_CN_Vendor_PR_MerPRLineController" docType="html-5.0">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <title>Merge PR Line Item List</title>
+    <meta name="description" content=""/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="google" content="notranslate"/>
+    
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/papaparse.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/angular.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-3.4.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-ui.min.js')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>
+</head>
+
+<style>
+    .DetailInfo {
+        /* display: none; */
+        position: fixed;
+        /* border-radius: 8px; */
+            border-top: 4px solid transparent;
+        z-index: 999;
+        overflow: auto !important;
+        background-color: #ffffff;
+        background-size: 100% 100%;
+        top: 15%;
+        right: 10%;
+        width: 80%;
+        height: 70%;
+        /* border: blue; */
+        -webkit-box-shadow: #e0e3e5 0px 0px 20px;
+        -moz-box-shadow: #666 0px 0px 20px;
+        /* -webkit-border-radius: 8px; */
+        -moz-border-radius: 8px;
+        margin-top: 2px;
+        padding: 10px;
+    }
+
+    .DetailInfo input[type='text'] {
+        width: 50px;
+        height:25px;
+    }
+
+    .DetailInfo select{
+        width: 80px;
+        height:25px;
+    }
+
+    .updatetime {
+        /* display: none; */
+        position: fixed;
+        /* border-radius: 8px; */
+            border-top: 4px solid transparent;
+        z-index: 999;
+        overflow: auto !important;
+        background-color: #ffffff;
+        background-size: 100% 100%;
+        top: 30%;
+        right: 33%;
+        width: 30%;
+        height: 10%;
+        /* border: blue; */
+        -webkit-box-shadow: #e0e3e5 0px 0px 20px;
+        -moz-box-shadow: #666 0px 0px 20px;
+        /* -webkit-border-radius: 8px; */
+        -moz-border-radius: 8px;
+        margin-top: 2px;
+        padding: 10px;
+    }
+
+    .updatetime input[type='text'] {
+        width: 50px;
+        height:25px;
+    }
+    .updatetime select{
+        width: 80px;
+        height:25px;
+    }
+
+   .shadow{
+        width:100%;
+        height:100%;
+        position:absolute;
+        left:0;
+        top:0;
+        z-index:998;
+        background-color:rgba(8, 7, 7, 0.6);
+        opacity:0.6;
+        display:none;
+    }
+    .addBox{
+        z-index:999;
+    }
+
+    .quoteList {
+        table-layout: fixed;
+    }
+
+    .quoteList tr>td {
+        word-break: break-all;
+    }
+
+    button:disabled {
+        color: #bcbec2;
+        background: #f4f4f5 !important;
+        border-color: #e9e9eb;
+        cursor: not-allowed;
+    }
+
+    @-webkit-keyframes fadenum{ /*设置内容由显示变为隐藏*/
+        0%{opacity: 0;}
+        100%{opacity: 1;}
+    }
+
+    @-moz-keyframes fadenum{ /*设置内容由显示变为隐藏*/
+        0%{opacity: 0;}
+        100%{opacity: 1;}
+    }
+
+    @-o-keyframes fadenum{ /*设置内容由显示变为隐藏*/
+        0%{opacity: 0;}
+        100%{opacity: 1;}
+    }
+
+    @keyframes fadenum{ /*设置内容由显示变为隐藏*/
+        0%{opacity: 0;}
+        100%{opacity: 1;}
+    }
+
+    .quoteList tr td {
+        position: relative;
+    }
+
+    .sirApproval {
+        border-radius: 0.5rem;
+        border: 2px solid #AAAAAA;
+        background-color: white;
+        font-size: 14px;
+        color: red;
+        padding: 8px;
+
+        display: none;
+        width: max-content;
+        max-width: 290px;
+        box-shadow: darkgrey 0px 0px 5px 0px ;
+        
+        -webkit-animation: fadenum 1s ease;
+        -moz-animation: fadenum 1s ease;
+        animation:fadenum 1s ease;
+    }
+
+    .sirRejected:hover .sirApproval {
+        display: block;
+        position: absolute;
+        z-index: 999;
+        left: 40px;
+        top: -20px;
+    }
+
+    .quoteListBody {
+        width: 1267px;
+        overflow: auto;
+    }
+
+    .buttonGroup div {
+        display: inline-block;
+    }
+</style>
+
+<apex:form >
+    <body>
+        <!--遮罩层-->
+        <div class="shadow"></div>
+        <div  ng-app="myapp" ng-controller="myCtrl" ng-init="initPage()">
+            <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb ;
+            height: 2000px;opacity :0.65;width:100%;z-index: 9999;" ng-show="reloading" >
+                <div class="waitingHolder" style="position: fixed;top : 30%; right:50%;width: 91px;" >
+                    <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                    <span class="waitingDescription" >Waiting ...</span >
+                </div>
+            </div>
+
+            <div class="pbBody">
+                <table border="0" cellpadding="0" cellspacing="0" class="list" style="width: 100%">
+                    <colgroup span="6"></colgroup>
+                    <thead class="">
+                        <tr class="headerRow">
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div>
+                                    <label>
+                                        Purchase Request Line
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div>
+                                    <label>
+                                        Purchase Request
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div>
+                                    <label>
+                                        MkT
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div>
+                                    <label>
+                                        Item Group
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1" scope="col">
+                                <div >
+                                    <label>
+                                        Sample Required
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div >
+                                    <label>
+                                        Total Quantity Required
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div >
+                                    <label>
+                                        Status
+                                    </label>
+                                </div>
+                            </th>
+                            <th class="headerRow" colspan="1"  scope="col">
+                                <div >
+                                    <label>
+                                        Win Suppiler
+                                    </label>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                   
+                    <tbody>
+                        <tr class="dataRow even first" ng-repeat='item in mergePRLineList track by $index'>
+                            <td class="dataCell " colspan="1" id="{{item.Id}}">
+                                <a ng-click="jumpLineDeatail(item.Id)" href="#">{{item.Name}}</a>
+                            </td>
+                            <td class="dataCell " colspan="1" id="ceshi">
+                                <a ng-click="jumpLineDeatail(item.ASI_MFM_Purchase_Request__r.Id)" href="#">{{item.ASI_MFM_Purchase_Request__r.Name}}</a>
+                            </td>
+                            <td class="dataCell " colspan="1" id="ceshi">
+                                {{item.ASI_MFM_Purchase_Request__r.CreatedBy.Name}}
+                            </td>
+                            <td class="dataCell " colspan="1" id="ceshi">
+                                <a ng-click="jumpLineDeatail(item.ASI_CTY_CN_Vendor_Item_Group_Code__r.Id)" href="#">{{item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c}}</a>
+                            </td>
+                            <td class="dataCell " colspan="1" >
+                                {{item.ASI_CTY_CN_Vendor_Sample_Required__c}}
+                            </td>
+                            <td class="dataCell " colspan="1" >
+                                {{item.ASI_CTY_CN_Vendor_Total_Quantity__c}}
+                            </td>
+                            <td class="dataCell " colspan="1" ng-model="item.status">
+                                {{item.ASI_CTY_CN_Vendor_Status__c}}
+                            </td>
+                            <td class="dataCell " colspan="1" ng-model="item.status">
+                                <a href="#" ng-click="jumpLineDeatail(item.ASI_CTY_CN_Vendor_Select_Quotation__r.Id)">{{item.ASI_CTY_CN_Vendor_Select_Quotation__r.Name}}
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+</apex:form>
+
+<script type="text/javascript">
+	var myApp = angular.module('myapp',[]);
+    myApp.controller('myCtrl',function($scope,$filter,$location){
+    	$scope.initPage = function() {
+            $scope.reloading = true;
+            var mergePRLineList = {!purLineList};
+            if (mergePRLineList == null || typeof(mergePRLineList) == 'undefined') {
+                mergePRLineList = [];
+            }
+            $scope.mergePRLineList = mergePRLineList;
+            $scope.reloading = false;
+        };
+
+        // 跳转到对象详情页面
+        $scope.jumpLineDeatail = function(id) {
+            //window.location = '/'+result.objId;
+            var url = '../' + id;
+            window.open(url);
+        };
+    });
+</script>
+</apex:page>

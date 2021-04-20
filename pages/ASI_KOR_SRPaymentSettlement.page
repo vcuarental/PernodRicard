@@ -1,0 +1,1648 @@
+<!--
+/**********************************************************************************
+ * Name : ASI_KOR_SRPaymentSettlement
+ * Created : Vincent Lam
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * ??										Created
+ * 2017-02-13       Laputa: Vincent         [VL 1.0] add new column Total Basic, Prepayment and Final Total; 
+ * 											if the payment is not in proposal, not allow to change pay option
+ * 2017-02-22		Laputa: Vincent			[VL 2.0] create new section (class) for CA brand grouping
+ * 2017-05-25		Laputa: Vincent			[VL 3.0] P4.2 layout
+ * 2017-08-02		Laputa: Vincent			[VL 4.0] P4.2 report link
+ * 2017-08-09		Laputa: Vincent			[VL 5.0] P4.2 show >1000 venue summary
+ * 2017-08-14		Laputa: Vincent			[VL 6.0] P4.2 stop quick save refreshing venue summary
+ * 2017-09-08		Laputa: Vincent			[VL 7.0] P4.2 add function to refreshing venue summary only
+ **********************************************************************************/
+-->
+<apex:page sidebar="false" standardController="ASI_KOR_SR_Payment_Settlement_Header__c" extensions="ASI_KOR_SRPaymentSettlementController">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_KOR_VFPageResources, 'PR_KOR_Resouce/css/demo_table.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.dataTables.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/FixedColumns.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+    
+    <style>
+        .overBudget{
+        background-color: red;
+        }
+        .withinBudget{
+        background-color: green;
+        }
+        input.error-input {
+        border-color: red;
+        }
+        .wrap{ 
+        width:100%;
+        
+        }
+        .leftXX{
+        width: 15%;
+        float: left;
+        display:none;
+        position:absolute;
+        left:10px;
+        top: 365px;
+        z-index:999;
+        }
+        .right{
+        float: left;
+        width: 100%;
+        }
+        .unitCostInput{
+        width:65px;
+        }
+        
+        .targetVolume{
+        width:65px;
+        }
+        .dataTables_empty {
+        text-align: center;
+        height:100px !important;
+        }
+        table.display {
+        
+        }
+        th {
+        overflow:hidden;
+        text-align:center;
+        }
+        .dataTables_filter {
+        }
+        
+        .gradeA{
+        text-align:center;
+        }
+        .gradeD{
+        text-align:center;
+        }
+        
+        .venueStatus {
+        width:80px;
+        text-align: center;
+        }
+        
+        .totalbasicca{
+        width:65px;
+        }
+        .capunitcost{
+        width:65px;
+        }
+        .propUnitCost{
+        
+        }
+        
+        .businessRationale{
+        
+        width: 100px;
+        
+        }
+        
+        .required {
+        border-color: red;
+        }
+        
+        input.btn[name="del"] {
+        display: none;
+        }
+        input.btn[name="clone"] {
+        display: none;
+        }
+        input.btn[name="share"] {
+        display: none;
+        }
+        input.btn[name="edit_settlement"] {
+        display: none;
+        }
+        input.btn[name="edit"] {
+        display: none;
+        }
+        input.btn[name="view_proposals"] {
+        display: none;
+        }
+        
+        .gradeCA{
+        text-align:center;
+        }
+        table.display tr.odd.gradeCA{
+        	background-color: #CEF1FF;
+        }
+        table.display tr.even.gradeCA{
+        	background-color: #BEECFE;
+        }
+        table.display tr.odd.gradeCB{
+        	background-color: #ddddff;
+        }
+        table.display tr.even.gradeCB{
+        	background-color: #EFEFFF;
+        }
+		
+        .detailRemarks{
+			width: 100px;
+        }
+        
+        .venueStatus {
+        width:90px;
+        text-align: center;
+        }
+		
+        table.display tr:nth-child(odd).gradeCA{
+        	background-color: #CEF1FF;
+        }
+        table.display tr:nth-child(even).gradeCA{
+        	background-color: #BEECFE;
+        }
+        table.display tr:nth-child(odd).gradeCB{
+        	background-color: #ddddff;
+        }
+        table.display tr:nth-child(even).gradeCB{
+        	background-color: #EFEFFF;
+        }
+        
+    </style>
+    <script type="text/javascript" charset="utf-8">
+    if (!window.console) console = {log: function() {}};
+    var filterToggle = true;
+    var quickSaveFlag = false;
+    var currentVenue ='';
+    var changeFlag = false;
+    
+    
+    var req = 0;
+    
+    function format(l){
+        var jThis = $(l);
+        inputChange(jThis);
+        CurrencyUtil.renderInput(jThis);
+        var inputNum = CurrencyUtil.currencyToFloat(jThis.val());
+        console.log('Test currency: ' + inputNum);
+        validateInput(/^[\d|,]*\.?\d*$/.test(jThis.val()), jThis);
+    }
+    
+    function initializeVenueSummary(){
+        var oTable = $('#venueSummaryTable').dataTable({
+            "bDestroy":true,
+            "bStateSave":true,
+            "bJQueryUI": false,
+            "sScrollY": "250",
+            "sScrollX": "100%",
+            "bPaginate": true,
+            "sPaginationType": "full_numbers",
+            "bSort":false
+        });
+        
+        $("#venueSummaryTable tbody").click(function(event) {
+            if(changeFlag){
+                var flag2 = confirm('You have made some changes without saving, switching to another venue will lose all the data you have entered. Do you want to continue?');
+                if(flag2){
+                    
+                    $(oTable.fnSettings().aoData).each(function (){
+                        $(this.nTr).removeClass('row_selected');
+                    });
+                    $(event.target.parentNode).addClass('row_selected');
+                    currentVenue = $(event.target.parentNode).attr('id');
+                    
+                    selectVenue(currentVenue);
+                }
+            }else{
+                
+                $(oTable.fnSettings().aoData).each(function (){
+                    $(this.nTr).removeClass('row_selected');
+                });
+                $(event.target.parentNode).addClass('row_selected');
+                currentVenue = $(event.target.parentNode).attr('id');
+                selectVenue(currentVenue);
+                
+            }
+        });
+        
+    }
+    
+    function onchangeContact()
+    {
+        changeFlag = true;
+    }
+    
+    function initializeSummaryTable(){
+        var dtable = $('#summaryTableByBrand').dataTable({
+            "bDestroy":true,
+            "bJQueryUI": false,
+            "sScrollY": "100%",
+            "sScrollX": "100%",
+            "bPaginate": true,
+            "bSort":false,
+            "sPaginationType": "full_numbers"              
+            
+        } );
+    }
+    function colorStat(){
+        $("[id$=venueStatus]").each(function(index){
+            var stat = $(this).text();
+            if(stat == 'OK' )
+                $(this).parent().css( "background-color", "green" );
+            else if(stat == 'Exceed Budget' )
+                $(this).parent().css( "background-color", "red" );
+                else if(stat == 'Too Small' )
+                    $(this).parent().css( "background-color", "yellow" );
+        });
+    }        
+    function initializeDetailTable(){
+        var dtable = $('#detailsTable').dataTable({
+            "bJQueryUI": false,
+		/* [VL 3.0] BEGIN */
+		/*
+            "bDestroy":true,
+            "bStateSave":true,
+            "iDisplayLength":800,
+		*/
+		/* [VL 3.0] END */
+            "sScrollY": "585px",
+            "sScrollX": "100%",
+            "bPaginate": false,
+            "bAutoWidth": true,
+            "bSort":false
+		/* [VL 3.0] BEGIN */
+		/*,
+            "sPaginationType": "full_numbers"
+		*/
+		/* [VL 3.0] END */
+            
+        } );
+        if($('#detailsTable').find('td').hasClass('dataTables_empty')){
+            $('#detailsTable').find('tbody tr').empty();
+            $('#detailsTable').find('tbody tr').append('<td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/>');
+        }
+        
+		/* [VL 3.0] BEGIN */
+		/*
+        var o =  new FixedColumns( dtable,{
+            "iLeftColumns": 5,
+            "iLeftWidth": 400,
+            "iRightColumns":2,
+            "iRightWidth":250
+        });
+        $(o.dom.grid.wrapper).width($(o.dom.grid.wrapper).width());
+		*/
+		
+        updateInputfields();
+		/* [VL 3.0] END */
+        
+        $(dtable).on('draw',colorStat);
+    }
+    
+    
+    $(document).ready( function () {
+        initializeDetailTable();
+		/* [VL 3.0] BEGIN */
+		/*
+        initializeSummaryTable();  
+		*/		
+		/* [VL 3.0] BEGIN */
+        initializeVenueSummary();
+        addEventHook();
+        $(".ASI_KOR_Pay_Option__c").trigger( "change" );
+        /* Patched by Vincent 20160128 BEGIN 
+             * changeFlag will always be TRUE after execute $(".ASI_KOR_Pay_Option__c").trigger( "change" );
+             */
+    changeFlag = false;    
+    /* Patched by Vincent 20160128 END */
+});
+    
+    function addEventHook()
+    {
+        $("select[id*='ASI_KOR_Pay_Option__c']").change(function() {
+            console.log("Changed");
+            currId = $(this).attr('id');
+            spanId = currId.replace('ASI_KOR_Pay_Option__c','ASI_KOR_Final_CA_Amount_excl_Basic__c');
+            totalCostCap = currId.replace('ASI_KOR_Pay_Option__c','ASI_KOR_Total_Cost_Cap__c');
+            totalCostBasic = currId.replace('ASI_KOR_Pay_Option__c','ASI_KOR_CA_Amount_excl_Basic__c');         
+            randomReason = currId.replace('ASI_KOR_Pay_Option__c','ASI_KOR_Random_Reason__c');   
+            
+            randomReasonStr = 'select[id*="'+randomReason+'"]';
+            
+            str = 'span[id*="'+spanId+'"]';
+            
+            detailID = currId.replace('ASI_KOR_Pay_Option__c','detailID');
+            valueID = 'input[id*="'+detailID+'"]';
+            actualID = $(valueID).val();
+            
+            divReadOnly = '#' + actualID + '_ASI_KOR_Final_CA_Amount_excl_Basic_div__c';
+            divEdit = '#' + actualID + '_ASI_KOR_Final_CA_Amount_excl_Basic_edit_div__c';
+            
+            console.log(divReadOnly);
+            console.log(divEdit);
+            
+            if ($(this).val() == 'Full')
+            {                      
+                valueAmount = 'input[id*="'+totalCostBasic+'"]';  
+                $(str).text($(valueAmount).val());
+            } else if ($(this).val() == 'Scheme')
+            {
+                valueAmount = 'input[id*="'+totalCostCap+'"]';  
+                $(str).text($(valueAmount).val());                      
+            } else if ($(this).val() == 'Random') {
+                $(divReadOnly).hide();
+                $(divEdit).show();
+                $(randomReasonStr).prop('disabled', false);    
+            } 
+                else 
+                {
+                    $(str).text("0");                            
+                }
+            
+            if($(this).val() != 'Random') {
+                $(divEdit).hide();
+                $(divReadOnly).show();
+                $(randomReasonStr).val('');
+                $(randomReasonStr).prop('disabled', 'disabled');         
+            }        
+            
+            /* [VL 1.0] BEGIN */
+            notInProposal = currId.replace('ASI_KOR_Pay_Option__c','ASI_KOR_System_Generated__c'); 
+            console.log($('input[id*="'+notInProposal+'"]').val());
+            if ($('input[id*="'+notInProposal+'"]').val()=='true') $(this).prop('disabled', true);                
+            /* [VL 1.0] END */
+            
+            changeFlag = true;               
+            
+        });
+        
+		/* [VL 3.0] BEGIN */
+		/*
+        $("input[id*='ASI_KOR_Final_CA_Amount_excl_Basic_Edit__c']").change(function() { 
+            currId = $(this).attr('id');
+            caAmoutFinal = $(this).val();
+            caAmoutFinal = caAmoutFinal.replace(/\D/g,'');
+            caAmoutFinal = normalizeFloat(caAmoutFinal, [",",""]);
+            
+            actualVolumeID = currId.replace('ASI_KOR_Final_CA_Amount_excl_Basic_Edit__c','ASI_KOR_Actual_Volume__c');
+            actualVolumeSpan = 'span[id*="'+actualVolumeID+'"]';
+            actualVolume = $(actualVolumeSpan).text();
+            actualVolume = actualVolume.replace(/\D/g,'');
+            actualVolume = normalizeFloat(actualVolume, [",",""]);
+            
+            unitCostACID = currId.replace('ASI_KOR_Final_CA_Amount_excl_Basic_Edit__c','ASI_KOR_Unit_Cost_Cap_Actual_Volume__c');
+            unitCostACSpan = 'span[id*="'+unitCostACID+'"]';
+            unitCostAC = $(unitCostACSpan).text();
+            unitCostAC = unitCostAC.replace(/\D/g,'');
+            unitCostAC = normalizeFloat(unitCostAC, [",",""]);
+            
+            approvedUnitCostID = currId.replace('ASI_KOR_Final_CA_Amount_excl_Basic_Edit__c','ASI_KOR_Approved_Unit_Cost_CA_Only__c');
+            approvedUnitCostSpan = 'span[id*="'+approvedUnitCostID+'"]';
+            approvedUnitCost = $(approvedUnitCostSpan).text();
+            approvedUnitCost = approvedUnitCost.replace(/\D/g,'');
+            approvedUnitCost = normalizeFloat(approvedUnitCost, [",",""]);
+            
+            console.log(caAmoutFinal);
+            console.log(actualVolume);
+            console.log(unitCostAC);
+            console.log(approvedUnitCost);
+            
+            maxVal = 0;
+            if(approvedUnitCost * actualVolume > unitCostAC * actualVolume) {
+                maxVal = approvedUnitCost * actualVolume;
+            } else {
+                maxVal = unitCostAC * actualVolume;
+            }
+            
+            if(caAmoutFinal > maxVal) {
+                alert('Final CA (excl. basic) cannot be over ' + maxVal + '.');
+                $(this).val(maxVal);
+            }
+            
+        });
+		*/
+		/* [VL 3.0] END */
+        
+    }
+    
+    function normalizeFloat(number, chars) {
+        var lastIndex = -1;
+        if(typeof number === 'undefined'){
+            return number;
+        }
+        for(i=0; i < chars.length; i++) {
+            t = number.lastIndexOf(chars[i]);
+            
+            if (t > lastIndex) {
+                lastIndex = t;
+            }
+        }
+        
+        if (lastIndex == -1) {
+            lastIndex = number.length;
+        }
+        
+        var whole = number.substring(0, lastIndex);   
+        var precision = number.substring(lastIndex);
+        for (i=0; i < chars.length; i++) {
+            whole = whole.replace(chars[i], '');
+            precision = precision.replace(chars[i],'.');           
+        }
+        number = whole + precision;
+        f = parseFloat(number.replace(/,/g, '')) ;
+        //f = parseFloat(number);
+        f = (f!=null&&f!=undefined&&!isNaN(f))?f:0;
+        return f;
+    }
+    
+	/* [VL 3.0] BEGIN */
+	/*
+    function handleQuickSave() {
+        quickSave();
+        return false;
+    }
+	*/
+    function handleQuickSave(){
+        quickSaveFlag = true;
+        var flag = checkRequiredFields();
+        if(flag){
+            changeFlag = false;
+			/* [VL 6.0] BEGIN */
+			doQuickSave();
+			/* [VL 6.0] END */
+        }else{
+            quickSaveFlag = false;
+            
+        }
+        return flag;
+    }
+    function handleSave(){ 
+        quickSaveFlag = true;
+        var flag = checkRequiredFields();
+        if(flag){
+            changeFlag = false;
+            return true;
+        }else{
+            
+        }
+        return false;
+    }
+    function handleSubmit(){
+		/* [VL 3.0] BEGIN */
+		/*
+        if(confirm('Submit?')){
+		*/
+        if(confirm('전송하시겠습니까?')){
+		/* [VL 3.0] END */
+            quickSaveFlag = true;
+            var flag = checkRequiredFields();
+            if(flag){
+                changeFlag = false;
+                return true;
+            }else{
+                //
+            }
+            return false;
+        }else{
+            return false;
+        }
+    }
+	/* [VL 3.0] END */
+    
+    
+    function changeStatColor(){
+        $("[id$=venueStatus]").each(function(index){
+            var stat = $(this).text();
+            if(stat == 'OK' )
+                $(this).parent().css( "background-color", "green" );
+            else if(stat == 'Exceed Budget' || stat == 'Too big' )
+                $(this).parent().css( "background-color", "red" );
+                else if(stat == 'Too Small' )
+                    $(this).parent().css( "background-color", "yellow" );
+            console.log('hello' + stat);
+        });
+    }
+    function preProcessDataTable(){
+        /*
+               var oTable2 = $('#detailsTable').dataTable();
+               oTable2.clearTable();
+               oTable2.fnDestroy();
+               */
+}
+    
+    function processDataTable(){
+        initializeDetailTable();    
+        addEventHook();     
+        /* Patched by Vincent 20160128 BEGIN
+             * changeFlag will always be TRUE after execute $(".ASI_KOR_Pay_Option__c").trigger( "change" );    
+            changeFlag = false;    
+            */          
+    /* Patched by Vincent 20160128 END */
+    changeStatColor();
+    $(".ASI_KOR_Pay_Option__c").trigger( "change" );  
+    /* Patched by Vincent 20160128 BEGIN */
+    changeFlag = false;    
+    /* Patched by Vincent 20160128 END */
+    
+}
+    
+    function preProcessDataTable2(){
+        var oTable1 = $('#detailsTable').dataTable();
+        oTable1.clearTable();
+        oTable1.fnDestroy();
+        
+        var oTable2 = $('#summaryTableByBrand').dataTable();
+        oTable2.clearTable();
+        oTable2.fnDestroy();                 
+        
+        var oTable3 = $('#venueSummaryTable').dataTable();
+        oTable3.clearTable();
+        oTable3.fnDestroy();
+    }
+    function processDataTable2(){
+        //initializeDetailTable();
+        //initializeSummaryTable();
+        //initializeVenueSummary();
+        addEventHook();     
+        /* Patched by Vincent 20160128 BEGIN
+             * changeFlag will always be TRUE after execute $(".ASI_KOR_Pay_Option__c").trigger( "change" );    
+            changeFlag = false;    
+            */          
+    /* Patched by Vincent 20160128 END */ 
+    $(".ASI_KOR_Pay_Option__c").trigger( "change" );   
+    /* Patched by Vincent 20160128 BEGIN */
+    changeFlag = false;    
+    /* Patched by Vincent 20160128 END */         
+}
+    
+    function callPayOptionChange() {
+        
+        $(".ASI_KOR_Pay_Option__c").trigger( "change" );
+        console.log('callPayOptionChange');
+        
+        /* Patched by Vincent 20160128 BEGIN */
+        changeFlag = false;    
+        /* Patched by Vincent 20160128 END */
+    }
+	
+	
+    /* [VL 3.0] BEGIN */
+    function inputChange(x){
+        var rowId =  $(x).parent().parent().attr("id");
+        var row= $('#detailsTable').find('#'+rowId);
+		
+        var incentiveUC =  $(row).find("input[id*='incentiveUC']").val();
+		incentiveUC = incentiveUC == null ? 0 : Number(incentiveUC.replace(/\,/g,''));
+		var settlementUC = $(row).find('input.settlementUC').val();
+		settlementUC = settlementUC == null ? 0 : Number(settlementUC.replace(/\,/g,''));
+		var actualVolume = $(row).find("input[id*='actualVolume']").val();
+		actualVolume = actualVolume == null ? 0 : Number(actualVolume.replace(/\,/g,''));
+		var venueStat = $('#'+rowId).find("span.venueStatus");
+		var totalPrepayment = $(row).find("input[id*='totalPrepayment']").val();
+		totalPrepayment = totalPrepayment == null ? 0 : Number(totalPrepayment.replace(/\,/g,''));
+		
+		statChangerP4(settlementUC,incentiveUC,venueStat);
+		
+		var totalVI =  $(row).find("span.totalVI");
+		var temp = settlementUC * actualVolume;
+		$(totalVI).text(CurrencyUtil.numToCurrency(temp));
+		
+		var totalFinal =  $(row).find("span.totalFinal");
+		var temp = settlementUC * actualVolume + totalPrepayment;
+		$(totalFinal).text(CurrencyUtil.numToCurrency(temp));
+    }
+	
+    function updateInputfields(){
+		
+        $('#detailsTable').find('tbody').find('tr').each(function(index){
+            
+            var rowId = $(this).attr('id');
+            var row = $('#detailsTable').find('#'+rowId);
+			
+            var incentiveUC =  $(row).find("input[id*='incentiveUC']").val();
+			incentiveUC = incentiveUC == null ? 0 : Number(incentiveUC.replace(/\,/g,''));
+            var settlementUC = $(row).find('input.settlementUC').val();
+			settlementUC = settlementUC == null ? 0 : Number(settlementUC.replace(/\,/g,''));
+			var actualVolume = $(row).find("input[id*='actualVolume']").val();
+			actualVolume = actualVolume == null ? 0 : Number(actualVolume.replace(/\,/g,''));
+			var totalPrepayment = $(row).find("input[id*='totalPrepayment']").val();
+			totalPrepayment = totalPrepayment == null ? 0 : Number(totalPrepayment.replace(/\,/g,''));
+            var venueStat = $('#'+rowId).find("span.venueStatus");
+            
+            statChangerP4(settlementUC,incentiveUC,venueStat);
+            
+            var totalVI =  $(row).find("span.totalVI");
+            var temp = settlementUC * actualVolume;
+            $(totalVI).text(CurrencyUtil.numToCurrency(temp));
+			
+            var totalFinal =  $(row).find("span.totalFinal");
+            var temp = settlementUC * actualVolume + totalPrepayment;
+            $(totalFinal).text(CurrencyUtil.numToCurrency(temp));
+        });
+    }
+	
+    function statChangerP4(settlementUC,incentiveUnitCost,venueStat){
+        if(settlementUC!=='' && settlementUC <= Number(incentiveUnitCost)){
+            $(venueStat).text('Within Scheme');
+            $(venueStat).css( "background-color", "green" );
+            $(venueStat).parent().css( "background-color", "green" );
+            
+        }
+            else if(settlementUC > Number(incentiveUnitCost)){
+                $(venueStat).text('Exceed Scheme');
+                $(venueStat).parent().css( "background-color", "red" );
+                $(venueStat).css( "background-color", "red" );
+            }
+    }
+	
+    function format(temp){
+        var jThis = $(temp);
+        inputChange(jThis);
+        CurrencyUtil.renderInput(jThis);
+        var inputNum = CurrencyUtil.currencyToFloat(jThis.val());
+        //console.log('Test currency: ' + inputNum);
+        validateInput(/^[\d|,]*\.?\d*$/.test(jThis.val()), jThis);
+    }
+    
+    function validateInput(isValid, theInput) {
+        if (!isValid) theInput.addClass('error-input');
+        else theInput.removeClass('error-input');
+    }
+    
+    function checkRequiredFields(){
+        var flag = true;
+        $('#detailsTable').find('tbody').find('tr').each(function(index){
+            var rowId = $(this).attr('id');
+			if (rowId!='venueSubtotal') {
+				
+				var row = $("#detailsTable").find('#'+rowId);
+				
+				var br  =  $('#'+rowId).find(".detailRemarks");
+				var stat = $('#'+rowId).find("span.venueStatus").text();
+				var settlementUC = $(row).find('input.settlementUC').val();
+				settlementUC = settlementUC == null ? 0 : Number(settlementUC.replace(/\,/g,''));
+				var incentiveUC = $(row).find("input[id*='incentiveUC']").val();
+				incentiveUC = incentiveUC == null ? 0 : Number(incentiveUC.replace(/\,/g,''));
+				var plannedUC = $(row).find("input[id*='plannedUC']").val();
+				plannedUC = plannedUC == null ? 0 : Number(plannedUC.replace(/\,/g,''));
+				var notInPlanning = $(row).find("input[id*='notInPlanning']").val();
+				notInPlanning = notInPlanning == 'true' ? true : false;
+				/*
+				console.log('=========' + stat + $(br).val());
+				if(stat == 'Exceed Budget' && ($(br).val() == null || $(br).val()=='')){
+					$(br).focus();
+					flag = false;
+					alert('Remarks Required');
+					return false;
+				}
+				*/
+				if (notInPlanning && settlementUC > 0 && ($(br).val() == null || $(br).val()=='')) {
+					$(br).focus();
+					flag = false;
+					//alert('Please input Remarks for Not In Planning payments.');
+					alert('Plan에 없는 항목(Not In Planning)에 Remark를 입력해주세요.');
+					return false;
+				} else 
+				if (settlementUC > plannedUC && ($(br).val() == null || $(br).val()=='')) {
+					$(br).focus();
+					flag = false;
+					//alert('Please input Remarks for payments with settlement unit cost > planned unit cost.');
+					alert('Settlement Unit Cost가 Planned Unit Cost 보다 큽니다. Remark를 입력해주세요.');
+					return false;
+				}
+			}
+        });
+        return flag;
+	}
+    /* [VL 3.0] END */
+    
+	
+	/* [VL 3.0] BEGIN */
+	var tableToExcel = (function() {
+	  var uri = 'data:application/vnd.ms-excel;base64,'
+		, template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><meta http-equiv="content-type" content="text/plain; charset=UTF-8"/></head><body><table>{table}</table></body></html>'
+		, base64 = function(s) { return window.btoa(unescape(encodeURIComponent(s))) }
+		, format = function(s, c) { return s.replace(/{(\w+)}/g, function(m, p) { return c[p]; }) }
+	  return function(table, name) {
+		if (!table.nodeType) table = document.getElementById(table)
+		var ctx = {worksheet: name || 'Worksheet', table: table.innerHTML}
+		window.location.href = uri + base64(format(template, ctx))
+	  }
+	})()
+	/* [VL 3.0] END */
+	
+    </script>
+    <apex:detail inlineEdit="false"  subject="{!srPaymentSettlementHeader.id}" title="true" relatedList="false" />
+    <div class="wrap">
+        <div class="leftXX">
+        </div>
+        <div id="demo" class="right">
+            <apex:form >
+                <apex:actionStatus id="idStatus" onstop="processDataTable()" onstart="preProcessDataTable();">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="background-color:#FF0000;height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:150px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus> 
+                <apex:pageBlock title="Venue Summary" >
+					<!-- {VL 7.0} BEGIN -->
+					<apex:commandButton action="{!refreshVenueSummary}" value="Refresh" reRender="venueSummaryTable" oncomplete="initializeVenueSummary()"  style="width: 70px; margin-left:4px;"/>
+					<!-- {VL 7.0} END -->
+                    <apex:outputPanel id="venueSummaryTable">
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" id="venueSummaryTable">
+                            <thead>
+                                <tr>
+                                    <th style='text-align: left'>Venue Code</th>
+                                    <th style='text-align: left'>Venue Name</th> 
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <th style='text-align: right'>CA<br/>(excl. Basic)</th>
+                                    <th style='text-align: right'>Final CA<br/> (excl. Basic)</th>
+									-->
+                                    <!-- [VL 3.0] END -->
+                                    <!-- [VL 1.0] BEGIN -->
+                                    <th style='text-align: right'>Final<br/>VI</th>
+                                    <th style='text-align: right'>Total<br/>Pre-Payment</th>
+                                    <th style='text-align: right'>Final<br/>Total</th>
+                                    <!-- [VL 1.0] END -->
+                                </tr>
+                            </thead>
+                            <tfoot>
+                                <th></th> 
+                                <th></th> 
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                <th></th>
+                                <th></th>
+									-->
+                                    <!-- [VL 3.0] END -->
+                                <!-- [VL 1.0] BEGIN -->
+                                <th></th> 
+                                <th></th>
+                                <th></th>
+                                <!-- [VL 1.0] END -->
+                            </tfoot>
+                            <tbody>
+								<!-- [VL 5.0] BEGIN -->
+                                <apex:repeat value="{!VenueSummaryList_split}" var="venueSummaryList">
+								<!-- [VL 5.0] END -->
+                                <apex:repeat value="{!venueSummaryList}" var="venueSummary">
+                                    <tr class="gradeA" id="{!venueSummary.venueId}" style='text-align:right; '>
+                                        <td style='text-align: left'><apex:outputText value="{!venueSummary.venueCode}"/></td>
+                                        <td style='text-align: left'><apex:outputText value="{!venueSummary.venueName}"/></td> 
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                        <td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!venueSummary.totalCAAmountExlBasic}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!venueSummary.totalFinalCAAmountExlBasic}"/>
+                                            </apex:outputText>
+                                        </td>
+									-->
+                                    <!-- [VL 3.0] END -->
+                                        <!-- [VL 1.0] BEGIN -->
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!venueSummary.totalBasic}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!venueSummary.totalPrepayment}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!venueSummary.totalFinal}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <!-- [VL 1.0] END -->
+                                    </tr>
+                                </apex:repeat>
+								<!-- [VL 5.0] BEGIN -->
+                                </apex:repeat>
+								<!-- [VL 5.0] END -->
+                            </tbody>
+                        </table>
+                    </apex:outputPanel>
+                    <br/><br/>
+                </apex:pageBlock> 
+            </apex:form>
+            <apex:form >
+				<!-- {VL 6.0} BEGIN -->
+                <apex:actionStatus id="idStatus1" onstop="processDataTable()" onstart="preProcessDataTable();">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="background-color:#FF0000;height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:150px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus> 
+				<!-- {VL 6.0} END -->
+                <apex:actionStatus id="idStatus2" onstop="processDataTable2()" onstart="preProcessDataTable2();">
+                    <apex:facet name="start">
+                        <apex:outputPanel styleClass="waitingSearchDiv"
+                                          style="background-color:#FF0000;height:100%;width:100%;display:block; position:relative;z-index:999">
+                            <apex:outputPanel styleClass="waitingHolder"
+                                              style="top:150px; width:105px;">
+                                <apex:image styleClass="waitingImage" url="/img/loading.gif" />
+                                <apex:outputText styleClass="waitingDescription"
+                                                 value=" Processing ..." />      
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus>
+                <apex:pageBlock title="SR Payment Settlement" >
+                    <apex:outputPanel id="detailsTableR">
+						<!-- [VL 4.0] BEGIN -->
+						<apex:outputPanel rendered="{!!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}">
+						<input type="button" onclick="window.open('/{!ExceptionalReport_unitCost}?pv2={!Year}&pv3={!Month}','_blank')" value="Exceptional Report (Unit Cost)" />
+						<input type="button" onclick="window.open('/{!ExceptionalReport_notPlanned}?pv2={!Year}&pv3={!Month}','_blank')" value="Exceptional Report (Not In Planning)" />
+						<br/>
+						<br/>
+						</apex:outputPanel>
+						<!-- [VL 4.0] END -->
+                        <apex:pageMessages id="messages"  escape="false"/>
+                        <center>
+							<!-- [VL 3.0] BEGIN -->
+							<!--
+                            <apex:commandButton action="{!handleSubmit}"  value="Submit" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+							-->
+                            <apex:commandButton onclick="return handleSubmit();" action="{!handleSubmit}"  value="Submit" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+							<!-- [VL 3.0] BEGIN -->
+                            <apex:commandButton action="{!handleRecall}"  value="Recall" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Submitted')}"/>
+                        </center>
+                        <center>
+							<!--
+                            <apex:commandButton action="{!normalSave}"  value="Save" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+                            <apex:commandButton onclick="return handleQuickSave();" value="Quick Save" style="width: 70px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}" />
+							-->
+                            <apex:commandButton action="{!normalSave}" onclick="return handleSave();"  value="Save" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+							<!-- [VL 6.0] BEGIN -->
+							<!--
+                            <apex:commandButton action="{!quickSave}" onclick="return handleQuickSave();" value="Quick Save" style="width: 70px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}" />
+							-->
+							<apex:outputPanel id="quickSaveBtn1_render"  rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}">
+							<input type="button" class="btn" id="quickSaveBtn1"  onclick="handleQuickSave();" value="Quick Save" style="width:70px;" />
+							</apex:outputPanel>
+							<!-- [VL 6.0] END -->
+                        </center>
+                        <table cellpadding="0" cellspacing="0" border="0" class="display"
+                               id="detailsTable">
+                            <thead>
+                                <tr><apex:outputText value="{!ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Month__c+ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Year__c+ASI_KOR_SR_Payment_Settlement_Header__c.OwnerId+ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_BM_Payment_Settlement_Header__c } "  rendered="false"/>
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_Venue_Code__c.Label}</th>
+                                    <th>Venue<br/>Name</th>
+                                    <th>Venue<br/>Capacity</th>
+                                    <th>Keyman<br/>Name</th>                            
+                                    <th>Keyman<br/>Code</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_Brand__c.Label}</th>    
+                                    !-- [VL 1.0] BEGIN --
+                                    !--<th>CA<br/>Brand</th>--  
+                                    !-- [VL 1.0] END --
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_Grade__c.Label}</th>
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_Channel__c.Label}</th>                                              
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_UOM__c.Label}</th>            
+                                    <th>Approved<br/>CA Unit Cost</th>
+                                    <th>Approved<br/>Unit Cost<br/>(Basic+CA)</th>
+                                    <th>Target<br/>Volume</th>
+                                    <th>Actual<br/>Volume</th>
+                                    <th>Progression<br/>vs. Target</th>
+                                    <th>Unit Cost Cap <br/>Based on<br/>Actual Volume</th>
+                                    <th>Total CA<br/>at scheme</th>
+                                    <th>Total CA<br/>at approved</th>
+                                    <th>Final CA<br/> (excl. Basic)</th>      
+                                    !-- [VL 1.0] BEGIN --
+                                    <th>Final<br/>Basic</th>    
+                                    <th>Total<br/>Pre-payment</th>   
+                                    <th>Final<br/>Total</th>    
+                                    <th>Not In<br/>Proposal</th>   
+                                    !-- [VL 1.0] END --
+                                    <th>Pay<br/>Option</th> 
+                                    <th>{!$ObjectType.ASI_KOR_SR_Payment_Settlement_Detail__c.Fields.ASI_KOR_Random_Reason__c.Label}</th>    
+									-->
+                                    <th style="text-align: left">Venue<br/>Code</th>
+                                    <th style="text-align: left">Venue<br/>Name</th>
+                                    <th style="text-align: left">Brand</th>         
+                                    <th style="text-align: left">Venue<br/>Type</th>                                   
+                                    <!--<th style="text-align: left">UOM</th>   -->         
+                                    <th style="text-align: right">Target<br/>Volume</th>
+                                    <th style="text-align: right">Planned<br/>Unit Cost</th>
+                                    <th style="text-align: right">Actual<br/>Volume</th>
+                                    <th style="text-align: right">Settlement<br/>Unit Cost</th>
+                                    <th style="text-align: right">Total<br/>VI</th>    
+                                    <th style="text-align: right">Prepayment<br/>Volume</th>
+                                    <th style="text-align: right">Total Pre-<br/>payment</th>   
+                                    <th style="text-align: right">Final<br/>Total</th>    
+                                    <th style="text-align: center">Not In<br/>Planning</th>    
+									<th style="display:none;"></th> 
+                                    <th style="text-align: center">Scheme<br/>Status</th>  
+                                    <th style="text-align: center">Remarks</th>  
+                                    <!-- [VL 3.0] END -->   
+                                </tr>                  
+                            </thead>
+                            <tfoot>
+                                <tr>
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>  
+                                    !-- [VL 1.0] BEGIN --
+                                    !--<th></th>   --
+                                    !-- [VL 1.0] END --
+                                    <th></th>                        
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>   
+                                    !-- [VL 1.0] BEGIN --
+                                    <th></th>    
+                                    <th></th>    
+                                    <th></th>       
+                                    <th></th> 
+                                    !-- [VL 1.0] END --
+                                    <th></th>
+                                    <th></th>
+									-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>                                            
+                                    <th></th>            
+                                    <!--<th></th>-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>    
+                                    <th></th>   
+                                    <th></th>    
+                                    <th></th>     
+                                    <th></th>       
+                                    <th style="display:none;"></th>   
+                                    <th></th>  
+                                    <th></th>  
+                                    <!-- [VL 3.0] END -->   
+                                </tr>
+                            </tfoot>
+                            <tbody>
+                                <apex:repeat value="{!paymentSettlementDetailsByVenueList}" var="detailsByVenue">
+                                    <!-- [VL 2.0] BEGIN -->
+                                    <!--
+                                    <apex:repeat value="{!detailsByVenue.paymentSettlementDetails}" var="detail">
+                                    -->
+                                    <apex:repeat value="{!detailsByVenue.paymentSettlementDetailsByCAbrand}" var="detailsCA">
+                                    	<apex:repeat value="{!detailsCA.paymentSettlementDetails}" var="detail">
+                                    <!-- [VL 2.0] END -->
+                                            <tr id='{!detail.ASI_KOR_Brand__c}{!detail.ASI_KOR_Venue_Code__c}_detailrow' class="gradeA"> 
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Venue_Name__r.ASI_KOR_Customer_Code__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Venue_Name__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Venue_Name__r.ASI_KOR_Venue_Capacity__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Keyman_Code__c}" /></td>                                                                           
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Keyman_Name__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Brand__c}" /></td>  
+                                                !-- [VL 1.0] BEGIN --
+                                                !--<td>
+                                                    <apex:outputField value="{!detail.ASI_KOR_Brand__r.ASI_KOR_CA_Brand__c}" rendered="{!detail.ASI_KOR_Brand__r.ASI_KOR_CA_Brand__c!=null}"/>
+                                                    <apex:outputField value="{!detail.ASI_KOR_Brand__c}" rendered="{!detail.ASI_KOR_Brand__r.ASI_KOR_CA_Brand__c==null}"/>
+                                                </td>--
+                                                !-- [VL 1.0] END --
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Grade__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Channel__c}" /></td>                                
+                                                <td><apex:outputField value="{!detail.ASI_KOR_UOM__c}" /></td>
+                                                <td><apex:outputField id="ASI_KOR_Approved_Unit_Cost_CA_Only__c" value="{!detail.ASI_KOR_Approved_Unit_Cost_CA_Only__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Approved_Unit_Cost_Basic_CA__c}" /></td>                                
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Target_Volume__c}" /></td>
+                                                <td><apex:outputField id="ASI_KOR_Actual_Volume__c" value="{!detail.ASI_KOR_Actual_Volume__c}" /></td>
+                                                <td>
+                                                    <div class="{!if(detail.ASI_KOR_Progression__c==null || detail.ASI_KOR_Progression__c < 100,'overBudget','withinBudget')}" style="border: 1px; padding:2px 2px 2px 2px; width: 90px; float:right; text-align:center">
+                                                        <apex:outputField value="{!detail.ASI_KOR_Progression__c}" />
+                                                    </div>
+                                                    <br/><br/>
+                                                </td>
+                                                <td><apex:outputField id="ASI_KOR_Unit_Cost_Cap_Actual_Volume__c" value="{!detail.ASI_KOR_Unit_Cost_Cap_Actual_Volume__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Total_Cost_Cap__c}" /><apex:inputHidden id="ASI_KOR_Total_Cost_Cap__c" value="{!detail.ASI_KOR_Total_Cost_Cap__c}" /></td>
+                                                <td><apex:outputField value="{!detail.ASI_KOR_CA_Amount_excl_Basic__c}" /><apex:inputHidden id="ASI_KOR_CA_Amount_excl_Basic__c" value="{!detail.ASI_KOR_CA_Amount_excl_Basic__c}" /></td>                                
+                                                <td>
+                                                    <apex:inputHidden id="detailID" value="{!detail.id}" />
+                                                    <div style="" id="{!detail.id}_ASI_KOR_Final_CA_Amount_excl_Basic_div__c">
+                                                        <apex:outputField id="ASI_KOR_Final_CA_Amount_excl_Basic__c" value="{!detail.ASI_KOR_Final_CA_Amount_excl_Basic__c}" />
+                                                    </div>
+                                                    <div style="" id="{!detail.id}_ASI_KOR_Final_CA_Amount_excl_Basic_edit_div__c">
+                                                        <apex:inputField style="width:80px" id="ASI_KOR_Final_CA_Amount_excl_Basic_Edit__c" value="{!detail.ASI_KOR_Final_CA_Amount_excl_Bsic_Random__c}" />
+                                                    </div>
+                                                </td>      
+                                                !-- [VL 1.0] BEGIN --
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Final_Basic_Amount__c}" /><apex:inputHidden id="ASI_KOR_Final_Basic_Amount__c" value="{!detail.ASI_KOR_Final_Basic_Amount__c}" /></td>    
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Pre_Payment_Amount__c}" /><apex:inputHidden id="ASI_KOR_Pre_Payment_Amount__c" value="{!detail.ASI_KOR_Pre_Payment_Amount__c}" /></td>  
+                                                <td><apex:outputField value="{!detail.ASI_KOR_Final_Total_Amount__c}" /><apex:inputHidden id="ASI_KOR_Final_Total_Amount__c" value="{!detail.ASI_KOR_Final_Total_Amount__c}" /></td>  
+                                                <td><apex:outputField value="{!detail.ASI_KOR_System_Generated_Proposal__c}" /><apex:inputHidden id="ASI_KOR_System_Generated__c" value="{!detail.ASI_KOR_System_Generated_Proposal__c}" /></td>  
+                                                !-- [VL 1.0] END -- 
+                                                <td><apex:inputField id="ASI_KOR_Pay_Option__c" styleClass="ASI_KOR_Pay_Option__c" value="{!detail.ASI_KOR_Pay_Option__c}" /></td>    
+                                                <td><apex:inputField style="width:100px" id="ASI_KOR_Random_Reason__c" value="{!detail.ASI_KOR_Random_Reason__c}" /></td>
+									-->
+                                                <td style="text-align: left"><apex:outputText value="{!detail.ASI_KOR_Venue_Name__r.ASI_KOR_Customer_Code__c}" /></td>
+                                                <td style="text-align: left"><apex:outputField value="{!detail.ASI_KOR_Venue_Name__c}" /></td>
+                                                <td style="text-align: left;width:60px"><apex:outputField value="{!detail.ASI_KOR_Brand__c}" /></td>                            
+                                                <td style="text-align: left"><apex:outputText value="{!detail.ASI_KOR_Venue_Name__r.ASI_KOR_Venue_Type__c}" /></td>   
+                                                <!--<td style="text-align: left"><apex:outputText value="{!detail.ASI_KOR_UOM__c}" /></td>  -->                         
+                                                <td style="text-align: right">
+													<apex:outputText value="{0, number, ###,###,###,##0}"> 
+														<apex:param value="{!detail.ASI_KOR_Target_Volume__c}"/>
+													</apex:outputText>
+												</td>
+                                                <td style="text-align: right">
+													<apex:outputText value="{0, number, ###,###,###,##0}"> 
+														<apex:param value="{!detail.ASI_KOR_Approved_Unit_Cost_Basic_CA__c}"/>
+													</apex:outputText>
+													<apex:inputHidden value="{!detail.ASI_KOR_Approved_Unit_Cost_Basic_CA__c}"  id="plannedUC"/>
+												</td>     
+                                                <td style="text-align: right">
+													<apex:outputText value="{0, number, ###,###,###,##0}"> 
+														<apex:param value="{!detail.ASI_KOR_Actual_Volume__c}"/>
+													</apex:outputText>
+													<apex:inputHidden value="{!detail.ASI_KOR_Actual_Volume__c}"  id="actualVolume"/>
+												</td>
+												<td style="text-align: right">
+													<apex:inputField style="width:65px;text-align:right" styleClass="settlementUC" id="ASI_KOR_Settlement_Unit_Cost__c" value="{!detail.ASI_KOR_Settlement_Unit_Cost__c}" onKeyup="format(this)" onchange="inputChange(this)" rendered="{!AND(!ISBLANK(detail.ASI_KOR_Actual_Volume__c), detail.ASI_KOR_Actual_Volume__c!=0)}"/>
+													<apex:outputText value="{0, number, ###,###,###,##0}" rendered="{!OR(ISBLANK(detail.ASI_KOR_Actual_Volume__c), detail.ASI_KOR_Actual_Volume__c=0)}"> 
+														<apex:param value="{!detail.ASI_KOR_Settlement_Unit_Cost__c}"/>
+													</apex:outputText>
+												</td>
+                                                <td style="text-align: right">
+													<apex:outputText value="{!detail.ASI_KOR_Final_Basic_Amount__c}"  styleClass="totalVI" />
+												</td>    
+                                                <td style="text-align: right">
+													<apex:outputText value="{!detail.ASI_KOR_Actual_Pre_payment_Volume__c}" />
+												</td>    
+                                                <td style="text-align: right">
+													<apex:outputText value="{0, number, ###,###,###,##0}"> 
+														<apex:param value="{!detail.ASI_KOR_Pre_Payment_Amount__c}"/>
+													</apex:outputText>
+													<apex:inputHidden value="{!detail.ASI_KOR_Pre_Payment_Amount__c}"  id="totalPrepayment"/>
+												</td>  
+                                                <td style="text-align: right">
+													<apex:outputText value="{!detail.ASI_KOR_Final_Total_Amount__c}"  styleClass="totalFinal" />
+												</td>  
+                                                <td style="text-align: center">
+													<apex:outputField value="{!detail.ASI_KOR_System_Generated_Proposal__c}" />
+													<apex:inputHidden value="{!detail.ASI_KOR_System_Generated_Proposal__c}"  id="notInPlanning"/>
+												</td>  
+                                                <td style="display:none;"><apex:inputHidden id="incentiveUC" value="{!detail.ASI_KOR_Unit_Cost_Cap_Actual_Volume__c}" /></td>
+												<td style="text-align: center">
+													<div style="border: 1px; padding:1px; width:60px; text-align:center; margin: 0 auto;">
+														<span class='venueStatus' style="font-weight:bold "></span> 
+													</div>
+												</td>
+												<td style="text-align: center"><apex:inputtextarea styleClass="detailRemarks" id="ASI_KOR_Remarks__c" value="{!detail.ASI_KOR_Remarks__c}" rows="2" /></td>
+                                                
+                                    <!-- [VL 3.0] END -->   
+                                            </tr>                             
+                                        </apex:repeat>
+                                        <!-- [VL 2.0] BEGIN --> 
+                                        <!--<tr class="gradeCA" style="font-weight:bold">
+                                            <td>{!detailsCA.caBrand}</td>
+                                            <td>SUB TOTAL</td>
+                                            <td></td>   
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>  
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.actualVolume}"/>
+                                                </apex:outputText></td>                               
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.CAAmountexclBasic}"/>
+                                                </apex:outputText></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.finalCAAmountexclBasic}"/>
+                                                </apex:outputText></td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.finalBasic}"/>
+                                                </apex:outputText>
+                                            </td>    
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.finalPrepayment}"/>
+                                                </apex:outputText>
+                                            </td>    
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!detailsCA.finalTotal}"/>
+                                                </apex:outputText>
+                                            </td>      
+                                            <td></td>   
+                                            <td></td>
+                                            <td></td>
+                                        </tr>     -->                      
+                                    </apex:repeat>
+                                        <!-- [VL 2.0] END -->
+                                    <script>
+                                    /* Patched by Vincent 20160128 BEGIN 
+                            $(".ASI_KOR_Pay_Option__c").trigger( "change" );
+                            */
+                                    /* Patched by Vincent 20160128 END */
+                                    </script>
+                                    <tr class="gradeD" style="font-weight:bold" id="venueSubtotal">
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                        <td>VENUE</td>
+                                        <td>SUB TOTAL</td>
+                                        <td><apex:selectList value="{!detailsByVenue.contactId}" multiselect="false" size="1" onchange="onchangeContact();">                                    
+                                            <apex:selectOptions value="{!currentContacts }" />    
+                                            </apex:selectList>
+                                        </td>   
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>  
+                                        !-- [VL 1.0] BEGIN --
+                                        !--<td></td>--
+                                        !-- [VL 1.0] END --
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>                                
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.CAAmountexclBasic}"/>
+                                            </apex:outputText></td>
+                                        <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalCAAmountexclBasic}"/>
+                                            </apex:outputText></td>
+                                        !-- [VL 1.0] BEGIN --
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalBasic}"/>
+                                            </apex:outputText>
+                                        </td>    
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalPrepayment}"/>
+                                            </apex:outputText>
+                                        </td>    
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalTotal}"/>
+                                            </apex:outputText>
+                                        </td>      
+                                        <td></td>
+                                        !-- [VL 1.0] END --  
+                                        <td></td>
+                                        <td></td>
+									-->
+                                        <td style="text-align: left">VENUE</td>
+                                        <td style="text-align: left">SUB TOTAL</td>
+                                        <td></td>
+                                        <td></td>
+                                        <!--<td></td>       -->                         
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td style="text-align: right">
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalBasic}"/>
+                                            </apex:outputText>
+                                        </td>    
+                                        <td></td>
+                                        <td style="text-align: right">
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalPrepayment}"/>
+                                            </apex:outputText>
+                                        </td>    
+                                        <td style="text-align: right">
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!detailsByVenue.finalTotal}"/>
+                                            </apex:outputText>
+                                        </td>      
+                                        <td></td>    
+                                        <td style="display:none;"></td>
+                                        <td></td>
+                                        <td></td>
+                                    <!-- [VL 3.0] END -->   
+                                    </tr>                         
+                                </apex:repeat>               
+                            </tbody>                 
+                        </table>
+                        <br/><br/>
+                        <center>
+                            <apex:commandButton action="{!handleSubmit}"  value="Submit" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+                            <apex:commandButton action="{!handleRecall}"  value="Recall" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Submitted')}"/>
+                        </center>
+                        <center>
+							<!--
+                            <apex:commandButton action="{!normalSave}"  value="Save" style="width: 60px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+                            <apex:commandButton onclick="return handleQuickSave();"  value="Quick Save" style="width: 70px" rendered="{!(ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Draft'||ASI_KOR_SR_Payment_Settlement_Header__c.ASI_KOR_Status__c=='Rejected')}"/>
+							-->
+                        </center>
+                        <!--
+<apex:actionFunction action="{!quickSave}" name="quickSave" rerender="venueSummaryTable,detailsTableR,summaryTable,messages" status="idStatus2" onComplete="callPayOptionChange();"/>
+-->
+						<!-- [VL 3.0] BEGIN -->
+						<apex:actionFunction action="{!normalSave}" name="normalSave" rerender="detailsTableR, messages" status="idStatus2"/>
+						<!-- [VL 3.0] END -->
+                        <apex:actionFunction action="{!quickSave}" name="quickSave" rerender="detailsTableR, messages" status="idStatus2" onComplete="callPayOptionChange();"/>
+						<!-- {VL 6.0} BEGIN -->
+						<apex:actionFunction action="{!quickSave}" name="doQuickSave" reRender="messages, detailsTableR, quickSaveBtn1_render" status="idStatus1"></apex:actionFunction>
+						<!-- {VL 6.0} END -->
+                    </apex:outputPanel>
+                </apex:pageBlock>
+            </apex:form>
+        </div>
+        
+        <div id="demo">
+            <apex:pageBlock title="SR Payment Settlement by Brands" >
+                <apex:form >
+                    <apex:outputPanel id="summaryTable">
+									<!-- [VL 3.0] BEGIN -->
+					<input type="button" onclick="tableToExcel('summaryTableByBrand', 'W3C Example Table')" value="Export to Excel" />
+									<!-- [VL 3.0] END -->
+                        <table cellpadding="0" cellspacing="0" border="0" class="display"
+                               id="summaryTableByBrand">
+                            <thead>
+                                <tr style="text-align: right">
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <th style="text-align: right">Brand</th>
+                                    <th style="text-align: right">UOM</th>
+                                    <th style="text-align: right">Approved<br/>Basic + CA Unit Cost</th>
+                                    <th style="text-align: right">Settlement<br/>Unit Cost</th>
+                                    <th style="text-align: right">Target <br/>Volume</th>                       
+                                    <th style="text-align: right">Actual <br/>Volume</th>
+                                    <th style="text-align: right">Progression <br/>vs. Target</th>
+                                    <th style="text-align: right">CA<br/> (excl. Basic)</th>
+                                    <th style="text-align: right">Final CA<br/> (excl. Basic)</th> 
+                                    !-- [VL 1.0] BEGIN --
+                                    <th style="text-align: right">Final<br/>Basic</th>  
+                                    <th style="text-align: right">Total<br/>Prepayment</th>  
+                                    <th style="text-align: right">Final<br/>Total</th>  
+                                    !-- [VL 1.0] END --   
+									-->
+                                    <th style="text-align: left">Brand</th>
+                                    <th style="text-align: left">UOM</th>
+                                    <th style="text-align: right">Target <br/>Volume</th>                       
+                                    <th style="text-align: right">Actual <br/>Volume</th>
+                                    <th style="text-align: right">Settlement<br/>Unit Cost</th>
+                                    <th style="text-align: right">Total<br/>VI</th>  
+                                    <th style="text-align: right">Pre-payment<br/>Volume</th>  
+                                    <th style="text-align: right">Total<br/>Pre-payment</th>  
+                                    <th style="text-align: right">Total<br/>Volume</th> 
+                                    <th style="text-align: right">Final<br/>Total</th>  
+                                    <!-- [VL 3.0] END -->   
+                                    
+                                </tr>
+                            </thead>
+                            <tbody>
+									<!-- [VL 3.0] BEGIN -->
+                                <tr class="gradeA" style="font-weight:bold; text-align:right">
+                                    <td style=" text-align:left">TOTAL</td>
+                                    <td></td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalTargetVolume}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalNormalVolume}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalUnitCost}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalFinalBasic}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalPrepaymentVolume}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalPrepayment}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalVolumeAll}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!SRTotalFinal}"/>
+                                        </apex:outputText>
+                                    </td>
+                                </tr> 
+									<!-- [VL 3.0] END -->
+                                <apex:repeat value="{!srSettlementByBrandCategoryList}" var="srSettlementByBrandByCategory">
+                                    <!-- [VL 3.0] BEGIN -->
+                                    <tr class="gradeCA" style="font-weight:bold; text-align:right">
+                                        <td style="font-weight:bold; text-align:left"><apex:outputText value="{!srSettlementByBrandByCategory.category }"/></td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalVolume}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalNormalVolume}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.ActualUnitCost}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalFinalBasic}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalPrepaymentVolume}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalPrepayment}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalVolumeAll}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!srSettlementByBrandByCategory.TotalFinal}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                    </tr>
+								</apex:repeat>
+                                <apex:repeat value="{!srSettlementByBrandCategoryList}" var="srSettlementByBrandByCategory">
+									<!-- [VL 3.0] END -->
+                                    <apex:repeat value="{!srSettlementByBrandByCategory.srPaymentSettlementByBrands}" var="srSettlementByBrandEx">
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                        <tr class="gradeCB"  style=" text-align:right">
+                                            <td><apex:outputField value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Brand__c}"/></td>
+                                            <td><apex:outputField value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_UOM__c }"/></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Approved_Unit_Cost_Basic_CA__c}"/>
+                                                </apex:outputText></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!srSettlementByBrandEx.settlementUnitCost}"/>
+                                                </apex:outputText></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Target_Volume__c}"/>
+                                                </apex:outputText></td>
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Volume__c}"/>
+                                                </apex:outputText></td>
+                                            <td >
+                                                <div class="{!if(srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Progression__c==null || srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Progression__c < 100,'overBudget','withinBudget')}" style="border: 1px; padding:2px 2px 2px 2px; width: 90px; float:right; text-align:center">
+                                                    <apex:outputField value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Progression__c}"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Total_CA_Amount_excl_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Total_Final_CA_Amount_excl_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+                                            !-- [VL 1.0] BEGIN --
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Total_Final_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Pre_Payment_Amount__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Final_Total_Amount__c}"/>
+                                                </apex:outputText>
+                                            </td>   
+                                        </tr>
+                                            !-- [VL 1.0] END --    
+									-->  
+									<apex:outputPanel rendered="{!srSettlementByBrandEx.Display}">
+                                        <tr class="gradeCB"  style=" text-align:right">
+                                            <td style="text-align:left"><apex:outputField value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Brand__c}"/></td>
+                                            <td style="text-align:left"><apex:outputField value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_UOM__c }"/></td>
+                                            <td>
+												<apex:outputText value="{0, number, ###,###,###,##0}">
+													<apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Target_Volume__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td>
+												<apex:outputText value="{0, number, ###,###,###,##0}">
+													<apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Volume__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td>
+												<apex:outputText value="{0, number, ###,###,###,##0}">
+													<apex:param value="{!ROUND(srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Total_Final_Basic__c/IF(srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Volume__c==0,1,srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Volume__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Total_Final_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+											<td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Pre_payment_Volume__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Pre_Payment_Amount__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+											<td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Actual_Volume_Total__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!srSettlementByBrandEx.paymentSettlementByBrand.ASI_KOR_Final_Total_Amount__c}"/>
+                                                </apex:outputText>
+                                            </td>   
+                                        </tr>
+									</apex:outputPanel>
+                                    <!-- [VL 3.0] END -->  
+                                    </apex:repeat>
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <tr class="gradeD" style="font-weight:bold; text-align: right">
+                                        <td><apex:outputText value="{!srSettlementByBrandByCategory.category}"/></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srSettlementByBrandByCategory.totalCAAmountexclBasic}"/>
+                                            </apex:outputText></td>
+                                        <td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srSettlementByBrandByCategory.totalFinalCAAmountexclBasic}"/>
+                                            </apex:outputText></td> 
+                                        !-- [VL 1.0] BEGIN --
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            	<apex:param value="{!srSettlementByBrandByCategory.totalFinalBasic}"/>
+                                            </apex:outputText>
+                                        </td>  
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            	<apex:param value="{!srSettlementByBrandByCategory.totalPrepayment}"/>
+                                            </apex:outputText>
+                                        </td>  
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            	<apex:param value="{!srSettlementByBrandByCategory.totalFinal}"/>
+                                            </apex:outputText>
+                                        </td>  
+                                        !-- [VL 1.0] END --    
+                                    </tr>
+									-->
+                                    <!-- [VL 3.0] END -->   
+                                </apex:repeat>
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                <tr class="gradeA" style="font-weight:bold; text-align: right">
+                                    <td>SALES REP TOTAL</td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                        <apex:param value="{!srTotalCAAmountexclBasic}"/>
+                                        </apex:outputText></td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalFinalCAAmountexclBasic}"/>
+                                        </apex:outputText>
+                                    </td> 
+                                    !-- [VL 1.0] BEGIN --
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalFinalBasic}"/>
+                                        </apex:outputText>
+                                    </td>  
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalPrepayment}"/>
+                                        </apex:outputText>
+                                    </td>  
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!srTotalFinal}"/>
+                                        </apex:outputText>
+                                    </td>  
+                                    !-- [VL 1.0] END -- 
+                                </tr> 
+									-->
+                                    <!-- [VL 3.0] END --> 
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <!-- [VL 3.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th> 
+                                    <th></th>  
+                                    !-- [VL 1.0] BEGIN --
+                                    <th></th>  
+                                    <th></th>  
+                                    <th></th>  
+                                    !-- [VL 1.0] END --  
+									-->  
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th> 
+                                    <th></th>  
+                                    <th></th> 
+                                    <th></th> 
+                                    <!-- [VL 3.0] END -->   
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </apex:outputPanel>
+                    <apex:actionFunction name="handleSummary" rerender="summaryTable" status="idStatus1"/>
+                    <apex:actionFunction action="{!selectVenue}" name="selectVenue" rerender="detailsTableR" status="idStatus" onComplete="callPayOptionChange();">
+                        <apex:param name="firstParam"  assignTo="{!selectedVenues}" value="" />
+                    </apex:actionFunction>
+                    <br/><br/>  
+                </apex:form> 
+            </apex:pageBlock>
+        </div>
+    </div>
+</apex:page>

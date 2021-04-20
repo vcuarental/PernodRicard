@@ -1,0 +1,836 @@
+<!--
+/*********************************************************************************
+ * Name: ASI_CRM_SG_FreeGoodsItem_Page
+ * Description: VF page for SG CRM FOC / POSM edit page
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2014-12-05       Laputa: Conrad          Created
+ * 2015-01-08       Laputa: Conrad          Dynamic Page: Cater POSM and FOC recordtype for the header
+ * 2015-02-10       Laputa: Conrad          Added Committed Quantity Logic (Post-BETA)
+ * 2016-03-24       Laputa: Vincent         [VL 1.0] If this FOC request is created by FOC generation (check type = Sales Incentive), block line item from edit
+ *                                          [VL 1.1] Add new column for Sales Incentive - Actual Quantity (Bottle)
+ * 2016-05-10       Laputa: Hugo            [HC 1.0] Add function for checking number is positive integer or not. 
+ *                                                   Not allow user input decimal number in Request Quantity and Actual Quantity field
+ * 2016-06-10       Laputa: Vincent         [VL 2.0] Add new column for Sales Incentive - Adjustment Remarks
+ * 2017-05-02       Laputa: Vincent         [VL 3.0] Hide Committed Quantity and Available Quantity column for FOC
+ * 2017-10-31       Wilken Lee              [WL 4.0] Display FOC Type options based on old Contract or RTM Contract
+ * 2018-04-14       Laputa: Vincent         [VL 5.0] P4.2: show promotion
+ */
+-->
+
+<apex:page standardController="ASI_FOC_Free_Goods_Request__c" extensions="ASI_CRM_SG_FreeGoodsItem_Controller" sidebar="false" showheader="false">
+
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/styles/common.css')}" />
+
+
+<link href="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+
+<!-- this guy first -->
+<script type="text/javascript">__sfdcSessionId = '{!$Api.Session_Id}';</script>
+
+<!-- this guy second -->
+<script src="/soap/ajax/29.0/connection.js" type="text/javascript"></script>
+
+<script>
+    $ = jQuery.noConflict();
+    
+    var eventDescriptionItemCount = 0;
+    var trainingDescriptionItemCount = 0;
+    
+    var colLabel_Action = "Action";     
+    var colLabel_Brand = "Brand";       
+    var colLabel_BrandQuality = "Brand Quality"; 
+    var colLabel_Volume = "Volume";     
+    
+    var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : true,
+        "aLengthMenu":[10,25,50],
+        "iDisplayLength":25,
+        "bSort" : false,
+        "oLanguage" : {"sSearch": "Filter"}
+    };
+    
+    //DataTable Variable
+    var cliSKU;
+    var cmSKU;
+    var cliFreeGoods;
+    var cmFreeGoods;
+    var cliEvents;
+    var cmEvents;
+    var summaryEvents;
+    var cliCash;
+    var cliAP;
+    var cliPaymentSchedule1;
+    var cliPaymentSchedule2;
+    
+    $(document).ready(
+        function(){
+            setTables();
+            
+        }
+    );
+    
+    function setSKUTable(){
+        
+        var recordtypeHeader = '{!freeGoodHeader.recordtype.developername}';
+        
+        var cliSKU_dataTableProperties = basicDataTableProperties;
+        
+        if(recordtypeHeader.indexOf('ASI_CRM_SG_POSM') > -1) {
+        
+            cliSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU"},
+                {"sTitle": "Request Quantity"},
+                {"sTitle": "Committed Quantity"},
+                {"sTitle": "Available Quantity"}
+            ];
+        } else if(recordtypeHeader.indexOf('ASI_CRM_SG_FOC') > -1) {
+        
+            /* [VL 1.1] BEGIN */
+            /*
+            cliSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU"},
+                {"sTitle": "FOC Type"},
+                {"sTitle": "A/G Code"},
+                {"sTitle": "Request Quantity (Bottle)"},
+                {"sTitle": "Unit Price"},
+                {"sTitle": "Amount"},
+                {"sTitle": "Committed Quantity"},
+                {"sTitle": "Available Quantity"}
+            ];
+            */
+            if ('{!isSalesIncentive}'=='true'){
+                cliSKU_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "SKU"},
+                    {"sTitle": "FOC Type"},
+                    {"sTitle": "A/G<br/>Code"},
+                    {"sTitle": "Request<br/>Quantity<br/>(Bottle)"},
+                    {"sTitle": "Actual<br/>Quantity<br/>(Bottle)"},
+                    /* [VL 2.0] BEGIN */
+                    {"sTitle": "Adjustment<br/>Remarks"},
+                    /* [VL 2.0] END */
+                    {"sTitle": "Unit<br/>Price"},
+                    {"sTitle": "Amount"}
+                    /* [VL 3.0] BEGIN */
+                    /*
+                    ,{"sTitle": "Committed<br/>Quantity"},
+                    {"sTitle": "Available<br/>Quantity"}
+                    */
+                    /* [VL 3.0] END */
+                ];
+            } 
+            /* [VL 5.0] BEGIN */
+            else
+            if ('{!isPromotionIncentive}'=='true'){
+                cliSKU_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "SKU"},
+                    {"sTitle": "FOC Type"},
+                    {"sTitle": "A/G<br/>Code"},
+                    {"sTitle": "Offtake (9L)"},
+                    {"sTitle": "Promotion<br/>Mechanic"},
+                    {"sTitle": "Request<br/>Quantity<br/>(Bottle)"},
+                    {"sTitle": "Carry<br/>Over<br/>(Bottle)"},
+                    {"sTitle": "Unit<br/>Price"},
+                    {"sTitle": "Amount"}
+                    ,{"sTitle": "Promotion"}
+                ];
+            } 
+            /* [VL 5.0] END */
+            else {
+                cliSKU_dataTableProperties["aoColumns"] = [
+                    {"sTitle": colLabel_Action},
+                    {"sTitle": "SKU"},
+                    {"sTitle": "FOC Type"},
+                    {"sTitle": "A/G<br/>Code"},
+                    {"sTitle": "Request<br/>Quantity<br/>(Bottle)"},
+                    {"sTitle": "Unit<br/>Price"},
+                    {"sTitle": "Amount"}
+                    /* [VL 3.0] BEGIN */
+                    /*
+                    ,{"sTitle": "Committed<br/>Quantity"},
+                    {"sTitle": "Available<br/>Quantity"}
+                    */
+                    /* [VL 3.0] END */
+                ];
+            }
+            /* [VL 1.1] BEGIN */
+        }
+        
+        cliSKU =  $("#{!FREEGOODS_TABLE}SKU").dataTable(cliSKU_dataTableProperties);
+
+        var cmSKU_dataTableProperties = basicDataTableProperties;
+        cmSKU_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "SKU"},
+            {"sTitle": "Sub-Brand"}
+        ];
+        cmSKU =  $("#available_SKU").dataTable(cmSKU_dataTableProperties);
+    
+    }
+    
+    $.fn.digits = function(){ 
+        return this.each(function(){ 
+            $(this).text( $(this).text().replace(/(\d)(?=(\d\d\d)+(?!\d))/g, "$1,") ); 
+        })
+    }
+    
+    function setCellReadOnly(cpiRowCell) {
+    
+        cpiRowCell.prop("readOnly",true);
+        cpiRowCell.css("background", "LightGray");
+    
+    }
+    
+    function setTables(){
+        setSKUTable();
+        
+        //if('{!freeGoodHeader.recordtype.developername}' == 'ASI_CRM_SG_FOC') {
+        
+            $('#{!FREEGOODS_TABLE}SKU > tbody  > tr').each(function() {
+                /* [VL 1.1] BEGIN */
+                /*
+                $(this).find("input.requestQuantity").trigger("change");
+                */
+                if ('{!isSalesIncentive}'=='true') $(this).find("input.actualRequestQuantity").trigger("change");
+                else $(this).find("input.requestQuantity").trigger("change");
+                /* [VL 1.1] END */
+                setCellReadOnly($(this).find("input.agCode"));
+            });
+        //}
+        
+        $("span.numbers").digits();
+        $("span.unitPrice").digits();
+        $("span.committedQty").digits();
+        $("span.availableQty").digits();
+        
+        /* [VL 1.0] BEGIN */
+        if('{!isEdit}' == 'false') {
+            $(":input").prop("disabled", true);
+        } else {
+            if ('{!isSalesIncentive}' == 'true') {
+                $(".focType").prop("disabled", true);
+                $(".requestQuantity").prop("disabled", true);
+            }
+            /* [VL 5.0] BEGIN */
+            if ('{!isPromotionIncentive}' == 'true') {
+                $(".focType").prop("disabled", true);
+                $(".requestQuantity").prop("disabled", true);
+            }
+            /* [VL 5.0] END */
+        }
+        /* [VL 1.0] END */
+    }
+    
+    function validateNumber(input){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{0})?$"); 
+        return numRe.test(input);
+    }
+    
+    function validateFloat(input, precision){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{1,"+precision+"})?$"); 
+        return numRe.test(input);
+    }
+
+    function isNumber(n) { return /^-?[\d.]+(?:e-?\d+)?$/.test(n); } 
+    
+    function normalizeFloat(number, chars) {
+        var lastIndex = -1;
+        if(typeof number === 'undefined' || typeof number === 'number'){
+            return number;
+        }
+        for(i=0; i < chars.length; i++) {
+            t = number.lastIndexOf(chars[i]);
+
+            if (t > lastIndex) {
+                lastIndex = t;
+            }
+        }
+
+        if (lastIndex == -1) {
+            lastIndex = number.length;
+        }
+
+        var whole = number.substring(0, lastIndex);   
+        var precision = number.substring(lastIndex);
+        for (i=0; i < chars.length; i++) {
+            whole = whole.replace(chars[i], '');
+            precision = precision.replace(chars[i],'');           
+        }
+        number = whole + precision;
+        //f = parseFloat(number.replace(/,/g, '')) ;
+        f = parseFloat(number);
+
+        return f;
+    }
+    
+    function precise_round(num,decimals){
+        return Math.round(num*Math.pow(10,decimals))/Math.pow(10,decimals);
+    }
+    
+    function loading(val) {
+        if (val) {
+          document.getElementById('contentLoading').style.display = 'block';
+          document.getElementById('contentLoaded').style.display = 'none';
+        }
+        else {
+          document.getElementById('contentLoading').style.display = 'none';
+          document.getElementById('contentLoaded').style.display = 'block';
+        }
+    }
+    
+    function startLoading(){
+        $('#load_scrl').css('top', $(document).scrollTop() + 200);
+        $('.loadingBox').show();
+    }
+    function endLoading(){
+             $('.loadingBox').hide();
+    }
+    
+    /* **************************************************************** SKU TAB: AutoCalc Amount *********************************** */
+    function calculateAmount(cpiRow){
+    
+        var totalResult = 0;
+        
+        if (cpiRow!=undefined){
+            if('{!freeGoodHeader.recordtype.developername}'.indexOf('ASI_CRM_SG_FOC') > -1) {
+                /* [VL 1.1] BEGIN */
+                /*
+                var qty = cpiRow.find("input.requestQuantity").val();
+                */
+                var qty = ('{!isSalesIncentive}'=='true') ? cpiRow.find("input.actualRequestQuantity").val() : cpiRow.find("input.requestQuantity").val();
+                /* [VL 1.1] END */
+                var price = cpiRow.find("span.unitPrice").text();
+            
+                qty = normalizeFloat(qty, [","]);
+            
+                qty = (qty!=null&&qty!=undefined&&qty!="NaN")?parseFloat(qty):0;
+            
+                price = normalizeFloat(price, [","]);
+                price = (price!=null&&price!=undefined&&price!="NaN")?parseFloat(price):0;
+            
+                totalResult = price * qty;
+            
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                totalResult = parseFloat(Math.round(totalResult * 100) / 100).toFixed(2);
+            } 
+                
+            var qty = cpiRow.find("input.requestQuantity").val();
+            qty = normalizeFloat(qty, [","]);
+            qty = (qty!=null&&qty!=undefined&&qty!="NaN")?parseFloat(qty):0;
+                
+            var availableQty = cpiRow.find("span.availableQty").text();
+            availableQty = normalizeFloat(availableQty, [","]);
+            availableQty = (availableQty!=null&&availableQty!=undefined&&availableQty!="NaN"&&availableQty!='undefined')?parseFloat(availableQty):0;
+                
+            /*if(qty > availableQty) {
+                alert('Request quantity cannot be over Available Quantity');
+                cpiRow.find("input.requestQuantity").val(0);
+            }*/
+        }
+        
+        return totalResult;
+    
+    }
+    
+    /* **************************************************************** SKU TAB: AutoCalc Committed Qty *********************************** */
+    function calculateCommittedQty(cpiRow, itemID){
+    
+        var totalResult = 0;
+        
+        if(itemGroupMap == undefined || itemGroupMap == null)
+        {
+            initializeItemMap();
+        }
+        
+        
+        if (('{!freeGoodHeader.ASI_FOC_Request_Status__c}' == 'Submitted' || '{!freeGoodHeader.ASI_FOC_Request_Status__c}' == 'Approved')
+            && '{!freeGoodHeader.ASI_CRM_Sync_to_JDE__c}' == 'false') {
+            
+            var qty = cpiRow.find("span.committedQty").text();
+            qty = normalizeFloat(qty, [","]);
+            qty = (qty!=null&&qty!=undefined&&qty!="NaN")?parseFloat(qty):0;
+            
+            
+            if(itemID in committedMap) {
+                qty = committedMap[itemID];
+            } else {
+                committedMap[itemID] = qty;
+            }
+            
+            var requestQtyStatic = 0;
+            
+            if(itemID in itemGroupMap) {
+                requestQtyStatic = itemGroupMap[itemID];
+                requestQtyStatic = normalizeFloat(requestQtyStatic, [","]);
+            }
+            
+            requestQtyStatic = (requestQtyStatic!=null&&requestQtyStatic!=undefined&&requestQtyStatic!="NaN"&&requestQtyStatic!='undefined')?parseFloat(requestQtyStatic):0;
+            
+            var requestQty = cpiRow.find("input.requestQuantity").val();
+            
+            if(!isNumber(requestQty)) {
+                cpiRow.find("span.availableQty").text(qty);
+                return;
+            }
+            
+            requestQty = normalizeFloat(requestQty, [","]);
+            requestQty = (requestQty!=null&&requestQty!=undefined&&requestQty!="NaN"&&requestQty!='undefined')?parseFloat(requestQty):0;
+            
+            var differenceQty = requestQty - requestQtyStatic;
+            
+            totalResult = qty + differenceQty;
+            
+            var availableQty = cpiRow.find("span.availableQty").text();
+            availableQty = normalizeFloat(availableQty, [",",]);
+            availableQty = (availableQty!=null&&availableQty!=undefined&&availableQty!="NaN"&&availableQty!='undefined')?parseFloat(availableQty):0;
+            
+            /*if(totalResult > availableQty) {
+                alert('Committed Quantity cannot be over Available Quantity');
+                cpiRow.find("input.requestQuantity").val(requestQtyStatic);
+                cpiRow.find("span.availableQty").text(qty);
+            } else {*/
+                cpiRow.find("span.availableQty").text(totalResult);
+            //}
+            
+        }    
+    
+    }
+
+    /* **************************************************************** SKU TAB: AutoCalc Fill AG Code *********************************** */
+    function focTypeChange(cpiRow){
+    
+        if(FOCTypeMap == undefined || FOCTypeMap == null)
+        {
+            initializeItemMap();
+        }
+        
+        if (cpiRow!=undefined && '{!freeGoodHeader.recordtype.developername}'.indexOf('ASI_CRM_SG_FOC') > -1){
+            var currentFOCType = cpiRow.find("select.focType").val();
+            if(FOCTypeMap[currentFOCType] == undefined) {
+                cpiRow.find("input.agCode").val('');
+            } else {
+                var agCodeDef = FOCTypeMap[currentFOCType].ASI_CRM_SG_AG_Code_GL_Class__c;
+                cpiRow.find("input.agCode").val(agCodeDef);
+            }
+        }
+        
+    }
+    
+    function isNumber(n) { return /^-?[\d.]+(?:e-?\d+)?$/.test(n); } 
+    
+    /* [HC 1.0] BEGIN */
+    function isInteger(n) { return /^\+?(0|[\d,]*)$/.test(n); }
+    /* [HC 1.0] END */
+
+    //Map Table
+    var itemGroupMap;
+    var committedMap = {};
+    var FOCTypeMap;
+    
+    /* **************************************************************** INITIALIZE Request Item Static Info *********************************** */
+    function initializeItemMap() {
+    
+        if(itemGroupMap == undefined || itemGroupMap == null)
+        {
+            try
+            {
+                var itemGroupList = sforce.connection.query("SELECT ID, Name, ASI_FOC_Request_Quantity_Bottle__c FROM ASI_FOC_Request_Item__c WHERE ASI_FOC_Request_Order__c = '{!freeGoodHeader.id}'");
+                var records = itemGroupList.getArray("records");
+                itemGroupMap = {};
+        
+                for (var i=0; i< records.length; i++) {
+                    var record = records[i];
+                    itemGroupMap[record.Id] = record.ASI_FOC_Request_Quantity_Bottle__c;
+                }
+                
+            }
+            catch (error)
+            {
+                alert(error.faultstring);
+            }
+        }
+        
+        if(FOCTypeMap == undefined || FOCTypeMap == null)
+        {
+            try
+            {
+                var itemGroupList = sforce.connection.query("SELECT Name, ASI_CRM_SG_FOC_Type__c, ASI_CRM_SG_AG_Code_GL_Class__c, ASI_CRM_SG_SFDC_Approval__c FROM ASI_CRM_SG_FOC_Type_Mapping__c");
+                var records = itemGroupList.getArray("records");
+                FOCTypeMap = {};
+        
+                for (var i=0; i< records.length; i++) {
+                    var record = records[i];
+                    FOCTypeMap[record.ASI_CRM_SG_FOC_Type__c] = record;
+                }
+            }
+            catch (error)
+            {
+                alert(error.faultstring);
+            }
+        }
+    
+    }
+    
+</script>
+
+<style>
+body {
+    margin-top: 40px;
+    font-size: 12px;
+    font-family: Helvetica,Arial,Verdana,sans-serif;
+    width:100%;
+}
+        
+.loadingOverlay{
+    opacity: 0.4;
+    postion: absolute;
+    top:0px;
+    left:0px;
+    background-color:#001100;
+    width:100%;
+    z-index: 5000
+}
+
+#container1{
+    width:100%;
+}
+
+#tabLink{
+    font-size: 10px;
+}
+
+.overlay {
+            display: none;
+            height: 100%;
+            left: 0;
+            position: fixed;
+            top: 0;
+            opacity: 0.3;
+            -moz-opacity: 0.3;
+            width: 100%;
+            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+            filter: alpha(opacity=30);
+            background: #000;
+            -khtml-opacity: 0.3;
+            z-index: 1000;
+        }
+.loader {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+    left: 50%;
+}
+
+input.error-input {
+    border-color: red;
+}
+
+</style>
+
+</head>
+
+<body>
+    <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+     
+    <apex:form >
+    <apex:pageMessages id="pageMsg" escape="false"></apex:pageMessages>
+    
+    <div id="contentLoading" style="display:none;">
+        <div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    
+    <div id="load_scrl" class="loadingBox loader" style="display:none"><div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    <div class="loadingBox overlay"> </div>
+    
+    <apex:actionFunction name="retrieveSKUbySubBrand" action="{!retrieveSKUbySubBrand}" oncomplete="setTables();"/>
+        
+    <apex:pageBlock id="main_pageBlock">
+         <apex:pageblockButtons >
+        <apex:commandLink value="Save" 
+            status="loading"
+            action="{!saveRequestItem}"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;">
+            <apex:param name="IS_QUICK_SAVE" value="false"/>
+        </apex:commandLink>
+        <apex:commandButton value="Quick Save" 
+            rerender="pageMsg"
+            oncomplete="console.log('Quick Save Done');"
+            status="loading"
+            action="{!saveRequestItem}">
+            <apex:param name="IS_QUICK_SAVE" value="true"/>
+        </apex:commandButton>
+        <apex:commandLink value="Cancel" action="{!cancel}" 
+            immediate="true"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;"/>
+        </apex:pageblockButtons>
+        
+        <apex:pageBlockSection columns="1">
+            <apex:outputField value="{!freeGoodHeader.Name}"/>
+
+            
+        </apex:pageBlockSection>
+        
+        
+        
+        
+        <div id="mechanicTypeTabs" class="tabLink">
+            <ul>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU">SKU</a></apex:outputPanel></li>
+                
+            </ul>
+            
+            <div id="tab_SKU">
+                    <apex:pageBlock id="pageBlock_SKU"> 
+                        <apex:pageBlockSection id="section_lineItem_SKU" title="Request Lines" columns="1">
+                            
+                            <apex:outputPanel layout="block" >
+                                <table id="{!FREEGOODS_TABLE}SKU">
+                                    <apex:repeat var="cpiKey" value="{!allRequestItemMap}">
+                                    <apex:repeat var="cpiObj" value="{!allRequestItemMap[cpiKey]}">
+                                    <tr id="row_SKU_{!cpiKey}" class="cpiContent">
+                                        <td>
+                                            <!-- [VL 1.0] BEGIN -->
+                                            <!--
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeRequestSKU}"
+                                            rerender="pageBlock_SKU,  pageMsg"
+                                            onComplete="console.log('Remove CPI'); setTables();"
+                                            status="loading">
+                                            -->
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeRequestSKU}"
+                                            rerender="pageBlock_SKU,  pageMsg"
+                                            onComplete="console.log('Remove CPI'); setTables();"
+                                            rendered="{!AND(isEdit, !isSalesIncentive, !isPromotionIncentive)}"
+                                            status="loading">
+                                            <!-- [VL 1.0] END -->
+                                                <apex:param name="PARAM_FREEGOODS_SKU_ID" value="{!cpiKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                       <td><apex:outputField value="{!cpiObj.requestItem.ASI_FOC_SKU__c}"/></td>
+                                        <apex:outputtext rendered="{!CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC')}">
+                                            <td>
+                                                <!--[WL 4.0 BEGIN]-->
+                                                <apex:selectList value="{!cpiObj.requestItem.ASI_CRM_SG_FOC_Type__c}" size="1" required="true" rendered="{!NOT(isSalesIncentive && isPromotionIncentive)}"
+                                                styleclass="focType"
+                                                onChange="focTypeChange($('#row_SKU_{!cpiKey}'));"
+                                                style="width:250px">
+                                                    <apex:selectOptions value="{!FOCTypeSelectOptions}"></apex:selectOptions>
+                                                </apex:selectList>
+                                                <apex:outputtext rendered="{!isSalesIncentive}" value="{!cpiObj.requestItem.ASI_CRM_SG_FOC_Type__c}"/>
+                                                <!--[WL 4.0 END]
+                                                <apex:inputField value="{!cpiObj.requestItem.ASI_CRM_SG_FOC_Type__c}"
+                                                required="true"
+                                                styleclass="focType"
+                                                onChange="focTypeChange($('#row_SKU_{!cpiKey}'));"
+                                                style="width:150px">
+                                                </apex:inputField>-->
+                                            </td>
+                                        </apex:outputtext>
+                                        <apex:outputtext rendered="{!CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC')}">
+                                            <td><apex:inputField value="{!cpiObj.requestItem.ASI_CRM_SG_A_G_Code__c}"
+                                                required="false"
+                                                styleclass="agCode"
+                                                style="width:50px">
+                                                </apex:inputField>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!-- [VL 5.0] BEGIN -->
+                                        <!--  [VL 5.0] BEGIN --> 
+                                        <apex:outputtext rendered="{!AND(CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC'), isPromotionIncentive)}">
+                                            <td><apex:outputField value="{!cpiObj.requestItem.ASI_CRM_Offtake_Quantity_9L__c}">
+                                                </apex:outputField>
+                                            </td>
+                                            <td><apex:outputField value="{!cpiObj.requestItem.ASI_CRM_Promotion_Mechanic_Text__c}">
+                                                </apex:outputField>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!--  [VL 5.0] END -->
+                                        <!-- [VL 5.0] END -->
+                                        <!-- [HC 1.0] BEGIN -->
+                                        <td><apex:inputField value="{!cpiObj.requestItem.ASI_FOC_Request_Quantity_Bottle__c}"
+                                            required="false"
+                                            onChange="$('#amount_{!cpiKey}').text(calculateAmount($('#row_SKU_{!cpiKey}')));
+                                                       calculateCommittedQty($('#row_SKU_{!cpiKey}'), '{!cpiObj.requestItem.id}');
+                                                       if(!isInteger($('#row_SKU_{!cpiKey}').find('input.requestQuantity').val()) 
+                                                          && $('#row_SKU_{!cpiKey}').find('input.requestQuantity').val()) 
+                                                          { alert('Request Quantity must be positive integer!') };"
+                                            styleclass="requestQuantity"
+                                                style="width:50px">
+                                            </apex:inputField>
+                                        </td>
+                                        <!--  [VL 1.1] BEGIN --> 
+                                        <apex:outputtext rendered="{!AND(CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC'), isSalesIncentive)}">
+                                            <td>
+                                                <apex:inputField value="{!cpiObj.requestItem.ASI_FOC_Actual_Quantity_Bottle__c}"
+                                                required="false"
+                                                 onChange="$('#amount_{!cpiKey}').text(calculateAmount($('#row_SKU_{!cpiKey}')));
+                                                       calculateCommittedQty($('#row_SKU_{!cpiKey}'), '{!cpiObj.requestItem.id}');
+                                                       if(!isInteger($('#row_SKU_{!cpiKey}').find('input.actualRequestQuantity').val()) 
+                                                          && $('#row_SKU_{!cpiKey}').find('input.actualRequestQuantity').val()) 
+                                                          { alert('Actual Quantity must be positive integer!')};"
+                                                styleclass="actualRequestQuantity"
+                                                style="width:50px">
+                                                </apex:inputField>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!--  [VL 1.1] END -->
+                                        <!--  [VL 2.0] BEGIN --> 
+                                        <apex:outputtext rendered="{!AND(CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC'), isSalesIncentive)}">
+                                            <td>
+                                                <!-- [VL 5.0] BEGIN --> 
+                                                <apex:inputField value="{!cpiObj.requestItem.ASI_CRM_Adjustment_Remarks__c}"
+                                                required="false"
+                                                styleclass="adjustmentRemarks"
+                                                style="width:100px">
+                                                </apex:inputField>  
+                                                <!-- [VL 5.0] END --> 
+                                            </td>
+                                        </apex:outputtext>
+                                        <!--  [VL 2.0] END -->
+                                        <!--  [VL 5.0] BEGIN --> 
+                                        <apex:outputtext rendered="{!AND(CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC'), isPromotionIncentive)}">
+                                            <td><apex:outputField value="{!cpiObj.requestItem.ASI_CRM_Carry_Over_Bottle__c}">
+                                                </apex:outputField>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!--  [VL 5.0] END -->
+                                        <!-- [HC 1.0] END -->
+                                        <apex:outputtext rendered="{!CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC')}">
+                                            <td><span class="unitPrice">
+                                                {!cpiObj.requestItem.ASI_CRM_SG_Unit_Price__c}
+                                                </span>
+                                            </td>
+                                        </apex:outputtext>
+                                        <apex:outputtext rendered="{!CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC')}">
+                                            <td>
+                                                <span class="numbers" id="amount_{!cpiKey}">
+                                                    {!cpiObj.requestItem.ASI_CRM_SG_Amount__c}
+                                                </span>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!-- [VL 3.0] BEGIN -->
+                                        <apex:outputtext rendered="{!CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_POSM')}">
+                                        <!-- [VL 3.0] END -->
+                                            <td><span id="committed_{!cpiKey}" class="committedQty"> 
+                                                    {!cpiObj.committedQty}
+                                                </span>
+                                            </td>
+                                            <td><span class="availableQty"> 
+                                                    {!cpiObj.requestItem.ASI_CRM_SG_Available_Quantity__c}
+                                                </span>
+                                            </td>
+                                        <!-- [VL 3.0] BEGIN -->
+                                        </apex:outputtext>
+                                        <!-- [VL 3.0] END -->
+                                        <!--  [VL 5.0] BEGIN --> 
+                                        <apex:outputtext rendered="{!AND(CONTAINS(freeGoodHeader.recordtype.developername,'ASI_CRM_SG_FOC'), isPromotionIncentive)}">
+                                            <td><apex:outputField value="{!cpiObj.requestItem.ASI_CRM_Promotion_Detail__r.ASI_HK_CRM_Promotion__r.ASI_CRM_Promotion_Plan__c}">
+                                                </apex:outputField>
+                                            </td>
+                                        </apex:outputtext>
+                                        <!--  [VL 5.0] END -->
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                        <!-- [VL 1.0] BEGIN -->
+                        <!--
+                        <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1" rendered="{!isEdit}">
+                        -->
+                        <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1" rendered="{!AND(isEdit, !isSalesIncentive, !isPromotionIncentive)}">
+                        <!-- [VL 1.0] END -->
+                            <apex:pageBlockSectionItem >
+                            
+                                <apex:outputLabel value="SKU" />
+                                <apex:outputPanel >
+                                    <apex:inputText value="{!skuNameFilter}" />
+                                </apex:outputPanel>
+                                
+                            </apex:pageBlockSectionItem>
+                            
+                            <apex:pageBlockSectionItem >
+                                <apex:outputLabel value="Sub-Brand" />
+                                <apex:outputPanel >
+                                    <apex:selectList value="{!subBrandSelected}" size="1" label="Sub-Brand" id="subBrandBlock">
+                                        <apex:selectOptions value="{!subBrandSelectOptions}"></apex:selectOptions>
+                                    </apex:selectList>
+                                    <apex:commandbutton value="Search" action="{!retrieveSKUbySubBrand}" rerender="pageBlock_SKU, pageMsg" onComplete="setTables();" status="loading"/>
+                                </apex:outputPanel>
+                            </apex:pageBlockSectionItem>
+                            
+                            <apex:pageBlockSectionItem >
+                                </apex:pageBlockSectionItem>
+                            <apex:outputPanel layout="block">
+                                <table id="available_SKU">
+                                    <apex:repeat var="csKey" value="{!allSKUMap}">
+                                    <apex:repeat var="csObj" value="{!allSKUMap[csKey]}">
+                                    <tr>
+                                        <td>
+                                            <apex:commandLink value="Add"
+                                            rendered="true" 
+                                            immediate="true"
+                                            action="{!addRequestItem}"
+                                            rerender="pageBlock_SKU,  pageMsg"
+                                            onComplete="console.log('Add CPI'); setTables();"
+                                            status="loading"> 
+                                                <apex:param name="PARAM_FREEGOOD_SOURCE_ITEM_ID" value="{!csKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                        <td><apex:outputField value="{!csObj.Name}"/></td>
+                                        <td><apex:outputField value="{!csObj.ASI_MFM_Sub_brand__c}"/></td>
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                           </apex:outputPanel>
+                        </apex:pageBlockSection>
+                    </apex:pageBlock>
+                
+            </div>
+            
+        </div>
+        
+        
+        <script>
+            $("#mechanicTypeTabs").tabs();
+        </script>
+        
+    </apex:pageBlock>
+    
+    </apex:form>
+
+</body>
+</apex:page>

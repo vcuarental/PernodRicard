@@ -1,0 +1,759 @@
+<apex:page showHeader="false" cache="false" docType="html-5.0" standardStylesheets="false"
+           standardController="ASI_MFM_Plan__c" extensions="ASI_MFM_KR_PlanBudgetCheckingCtrl">
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+       <!--------------------------------------------------   Added by Kammy on 3 Mar 2016 Start:--------------------------------------------------------------->
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_6, '/ASI_JS_Bootstrap_V3_3_6/dist_less/css/bootstrap.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+       
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, 'build.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_FixedColumns_V3_2_1, 'FixedColumns-3.2.1/css/fixedColumns.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_FixedColumns_V3_2_1, 'FixedColumns-3.2.1/css/fixedColumns.bootstrap.min.css')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" /> 
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_6, '/ASI_JS_Bootstrap_V3_3_6/dist_less/js/bootstrap.min.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_FixedColumns_V3_2_1, 'FixedColumns-3.2.1/js/dataTables.fixedColumns.min.js')}" />
+
+         <!--------------------------------------------------   Added by Kammy on 3 Mar 2016 End. --------------------------------------------------------------->
+   
+   
+        
+        <script type="text/javascript">   
+        $j = jQuery.noConflict();
+        var resultTable = null;
+        var totalNumberOfItem = 0;
+        var info = null;
+        var selectedPlanId ='';
+        var groupCol = 0;
+        var commentFields = '';
+        Visualforce.remoting.timeout = 120000; // Set timeout at page level
+        
+        function initKRBudgetViewPage(config) {
+            if (config) {
+                totalNumberOfItem = config.totalNumberOfItem;
+                selectedPlanId = config.selectedPlanId;
+                //commentFields = config.commentFields;
+                setResultTable(true);
+                //setTimeout(function(){ checkWidth();}, 3000);
+                $j('#theLink').click();
+                $j('.panel-group').on('hidden.bs.collapse', toggleIcon);
+                $j('.panel-group').on('shown.bs.collapse', toggleIcon);
+                //Collapse the panel first
+                $j('#collapse1').collapse({
+                  toggle: true
+                });
+
+            }
+        };        
+
+    
+        /*******************************
+        * ACCORDION WITH TOGGLE ICONS
+        *******************************/
+    	function toggleIcon(e) {
+            $j(e.target)
+                .prev('.panel-heading')
+                .find(".more-less")
+                .toggleClass('glyphicon-minus glyphicon-plus');
+        }
+
+             
+         function checkWidth() {
+                var windowsize = window.innerWidth;//$j(window).width();
+                //var w = window.innerWidth;
+                var changesize = windowsize *0.2;
+                
+                wrapper_size = (windowsize - changesize) +"px";
+                //console.log("check window size:" + windowsize);
+                $j(".dataTables_wrapper").css("width",wrapper_size);
+                /*
+                 if(windowsize<1000){
+                     wrapper_size = (windowsize - 150) +"px";
+                     console.log(wrapper_size);
+                     
+                 }else{
+                      $j(".dataTables_wrapper").css("width","1500px");
+                 }*/
+            }
+    
+            
+        function setResultTable(newTable){
+            ASI_MFM_KR_PlanBudgetCheckingCtrl.getresultSetByPlanId(selectedPlanId, function(result, event){
+            if(event.type === 'exception') {
+                console.log("ASI_MFM_KR_PlanBudgetCheckingCtrl.getresultSetByPlanId exception"); 
+                console.log(event);
+            } else if(event.status){
+                    if(result){
+                        //console.log(result);
+                        //console.log(result.results); 
+                        
+                        var budgetType = result['BudgetType'];
+                        console.log("budgetType :" + budgetType);
+                        
+                        
+                        var budgetTypeHtml = '<b>Current Budget Type: </b>' + budgetType  +'</br>';
+                        var CommittedAmountHtml ='<b>Other Committed: </b>If Plan is approved, then sum of Plan amount. If Plan is closed, then sum of Roll-up of A&P Card + Approved PO amount + Closed PO actual spending + Approved/Completed Direct Payment amount'  +'</br>';     
+                        var remainingHtml = '<b>Remaining: </b>' + budgetType  +' - Committed' +'</br>';
+                        var thisPlanHtml = '<b>This Plan: </b>If Plan is approved or closed, the value will show zero' +'</br>';
+                        var vsRemainingHtml = '<b>Over Budget: </b>If This Plan>Remaining, Yes; If This Plan<=Remaining, No' +'</br>';
+                        var CommentHtml = '<b>Plan Comment: </b> '+ commentFields +'</br>';
+                                                 
+                        $j('.informationBlock').append( budgetTypeHtml).append(CommittedAmountHtml).append(remainingHtml).append(thisPlanHtml).append(vsRemainingHtml).append(CommentHtml);//*.append(thisPlanHtml).append(vsRemainingHtml)
+                        
+                        var FY  = result['FY'];
+                        var Code = result['Code'];
+                        
+                        $j(".FY").text(Code + " / " + FY);
+                        
+                        var headers=[""], tablehtml='';
+                        
+                        //headers.push('AP Code');
+                        //headers.push('Brand Group');
+                        //var tablehtml = '<tr><th>'+headers.join('</th><th>')+'</th></tr>';
+                        
+                        var fields = ['APType', 'BrandGroup', 'BudgetAmount', 'CommittedAmount','Remaining' ,'TotalPlanAmount', 'Overbudget'];/*'TotalPlanAmount', 'vsRemaining'*/
+                        
+                        var aoColumns = [];
+                        for (var i = 0; i < fields.length; i++) {
+                            aoColumns.push({'mData': fields[i]});
+                        }
+
+                        var aaData =[];
+                        $j.each(result.results, function(index, value) {
+
+                                    var tempData = [];
+                                    for (var i = 0; i < fields.length; i++) {
+                                        if(value[fields[i]])
+                                         tempData.push(value[fields[i]]);  
+                                         else  tempData.push(0);  
+                                    }
+                                    aaData.push(tempData);  
+
+                        });
+                        
+
+                        $j('#table').append(tablehtml);
+                        var table = $j('#table').DataTable({  
+                                                "aaData": aaData,
+                                                "responsive": true,
+                                                "order": [[ 0, 'asc' ]],
+                                                "bDestroy":true,
+                                                "bAutoWidth":true,
+                                                "language": {
+                                                    "emptyTable": "Budget Checking will be available after Plan Line Details are entered correctly. Please add Plan Line Details by using Manage All button."
+                                                },
+                                                "columns":[
+                                                {
+                                                    title:'A&amp;P Type',
+                                                    name:'APType',
+                                                    "visible": false
+                                                },
+                                                {
+                                                    title:'Brand Group',
+                                                    name:'BrandGroup',
+                                                    "sortable": false
+                                                },{
+                                                    title:budgetType,
+                                                    name:'BudgetAmount',
+                                                    "sortable": false
+                                                },{
+                                                    title:'Other Committed',
+                                                    name:'CommittedAmount',
+                                                    "sortable": false
+                                                },{
+                                                    title:'Remaining',
+                                                    name:'Remaining',
+                                                    "sortable": false
+                                                },{
+                                                    title:'This Plan',
+                                                    name:'TotalPlanAmount',
+                                                    "sortable": false,
+                                                },/*{
+                                                    title:'vs. Remaining',
+                                                    name:'vsRemaining',
+                                                    "sortable": false
+                                                },*/{
+                                                    title:'Over Budget',
+                                                    name:'Overbudget',
+                                                    "sortable": false
+                                                }
+                                                ],
+                                                "aoColumnDefs": [ {
+                                                    "aTargets": [ 2 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                        return formatNumber(data)+ ''; 
+                                                    }
+                                                },
+                                                 {
+                                                    "aTargets": [ 3 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                        return formatNumber(data)+ ''; 
+                                                    }
+                                                },
+                                                 {
+                                                    "aTargets": [ 4 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                        return formatNumber(data)+ ''; 
+                                                        //return  formatNumber(full[2] - full[3]) + ''; 
+                                                    }
+                                                 },
+                                                 {
+                                                    "aTargets": [ 5 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                        return formatNumber(data)+ ''; 
+                                                    }
+                                                },/*
+                                                 {
+                                                    "aTargets": [ 6 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                        return formatNumber(data)+ ''; 
+                                                    }
+                                                },*/
+                                                 {
+                                                    "aTargets": [ 6 ],
+                                                    "mRender": function ( data, type, full ) {
+                                                         var bolVal = function ( i ) {
+                                                            return i===true?'YES':'NO';
+                                                         }
+                                                         return  bolVal(data) + ''; 
+                                                         
+                                                        //return formatNumber(data)+ ''; 
+                                                    }
+                                                }],
+                                                "drawCallback": function ( settings ) {
+                                                    var api = this.api();
+                                                    var rows = api.rows( {page:'current'} ).nodes();
+                                                    var last=null;
+                                                    
+                                                    api.column(0, {page:'current'} ).data().each( function ( group, i ) {
+                                                        if ( last !== group ) {
+                                                            var unescapeString = group.replace(/[^a-z0-9\s]/gi, '').replace(/[_\s]/g, '_');
+                                                            $j(rows).eq(i).before(
+                                                             $j("<tr></tr>", {
+                                                                    "class": "group",
+                                                                    "data-id": group
+                                                                }).append('<td colspan="1" class="groupcell">'+group+' Total </td>')
+                                                            .append($j("<td></td>", {
+                                                                "id": "budgetAmount" +unescapeString,
+                                                                "class": "noCount currencyCls groupcell",
+                                                                "text": "0.00"
+                                                            }))
+                                                            .append($j("<td></td>", {
+                                                                "id": "CommittedAmount" + unescapeString,
+                                                                "class": "noCount currencyCls groupcell",
+                                                                "text": "0.00"
+                                                            }))
+                                                            .append($j("<td></td>", {
+                                                                "id": "Remaining" + unescapeString,
+                                                                "class": "noCount currencyCls groupcell",
+                                                                "text": "0.00"
+                                                            }))
+                                                            .append($j("<td></td>", {
+                                                                "id": "ThisPlan" + unescapeString,
+                                                                "class": "noCount currencyCls groupcell",
+                                                                "text": "0.00"
+                                                            }))/*
+                                                            .append($j("<td></td>", {
+                                                                "id": "vsRemaining" + unescapeString,
+                                                                "class": "noCount currencyCls groupcell",
+                                                                "text": "0.00"
+                                                            }))*/
+                                                            .append($j("<td></td>", {
+                                                                "id": "overBudget" + unescapeString,
+                                                                "class": "boolCls",
+                                                                "text": "YES"
+                                                            }))
+                                                            .prop('outerHTML'));
+
+                                                            last = group;
+                                                        }
+                                                        
+                                                        val = api.row(api.row($j(rows).eq(i)).index()).data();
+                                                        //console.log(val[0]);
+                                                        //console.log(val[3]);
+                                                        var CommonAPType = val[0].replace(/[^a-z0-9\s]/gi, '').replace(/[_\s]/g, '_');
+                                                        var intVal = function ( i ) {
+                                                            //console.log(i);
+                                                            return typeof i === 'string' ? i.replace(/\s/g, '').replace(/[\$,]/g, '')*1 : typeof i === 'number' ?	i : 0;
+                                                        };
+                                                    
+                                                        var budgetAmount = intVal($j("#budgetAmount" + CommonAPType).text()) + parseFloat(val[2]);
+                                                        var CommittedAmount = intVal($j("#CommittedAmount" + CommonAPType).text()) + parseFloat(val[3]);
+                                                        var remainAmount = intVal($j("#Remaining" + CommonAPType).text()) + parseFloat(val[4]);
+                                                        var planAmount = intVal($j("#ThisPlan" + CommonAPType).text()) + parseFloat(val[5]);
+                                                        //var vsRemaining = intVal($j("#vsRemaining" + CommonAPType).text()) + parseFloat(val[6]);
+                                                        
+                                                        
+                                                        $j("#budgetAmount" + CommonAPType).text(formatNumber(budgetAmount)); 
+                                                        $j("#CommittedAmount" + CommonAPType).text(formatNumber(CommittedAmount));
+                                                        $j("#Remaining" + CommonAPType).text(formatNumber(remainAmount));
+                                                        $j("#ThisPlan" + CommonAPType).text(formatNumber(planAmount));
+                                                        //$j("#vsRemaining" + CommonAPType).text(formatNumber(vsRemaining)); 
+                                                        
+                                                        if (remainAmount >= planAmount){
+                                                            $j("#overBudget" + CommonAPType).text("NO"); 
+                                                            $j("#overBudget" + CommonAPType).addClass("withBudget");
+                                                        }else{
+                                                            $j("#overBudget" + CommonAPType).text("YES"); 
+                                                            $j("#overBudget" + CommonAPType).addClass("overBudget");
+                                                        }
+                                                        
+                                                        $j(".groupcell").each(function( i ) {
+                                                                var amount = intVal($j(this).html()); 
+                                                                
+                                                                if(amount<0) {
+                                                                    //console.log(amount);
+                                                                    $j(this).addClass("negative");
+                                                                    }else {
+                                                                        $j(this).removeClass("negative");
+                                                                        }
+                                                        });
+                                                        
+                                                    } );                                                    
+                                                },
+                                                "footerCallback": function (row, data, start, end, display) {
+                                                        var api = this.api(), data;
+                                                        console.log("drawfooter");
+                                                        // Remove the formatting to get integer data for summation
+                                                        var intVal = function ( i ) {
+                                                            return typeof i === 'string' ?
+                                                                i.replace(/[\$,]/g, '')*1 :
+                                                                typeof i === 'number' ?
+                                                                    i : 0;
+                                                        };
+                                                        
+                                                        // Total over all pages
+                                                        totalBudget = api
+                                                            .column( 2 )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+
+                                                        totalCommitted = api
+                                                            .column( 3 )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                            
+                                                        totalRemaining = api
+                                                            .column( 4 )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                   
+                                                        totalThisPlan = api
+                                                            .column( 5 )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                    /*
+                                                        totalvsRemaining = api
+                                                            .column( 6 )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                  */          
+                                                        // Total over this page
+                                                        pageBudgetTotal = api
+                                                            .column( 2, { page: 'current'} )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+
+                                                        pageCommittedTotal = api
+                                                            .column( 3, { page: 'current'} )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+
+                                                        pageRemainingTotal = api
+                                                            .column( 4, { page: 'current'} )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                          
+                                                        pagePlanAmountTotal = api
+                                                            .column( 5, { page: 'current'} )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                                      /*      
+                                                        pagevsRemainingTotal = api
+                                                            .column( 6, { page: 'current'} )
+                                                            .data()
+                                                            .reduce( function (a, b) {
+                                                                return intVal(a) + intVal(b);
+                                                            }, 0 );
+                                             			*/
+                                                        // Update footer
+                                                        $j( api.column( 2 ).footer() ).html(
+                                                            //''+ formatNumber(pageBudgetTotal) +' ( '+ formatNumber(totalBudget) +' total)'
+                                                            ''+ formatNumber(totalBudget)
+                                                        );    
+
+                                                        $j( api.column( 3 ).footer() ).html(
+                                                            //''+ formatNumber(pageCommittedTotal) +' ( '+ formatNumber(totalCommitted) +' total)'
+                                                            ''+ formatNumber(totalCommitted)
+                                                        );    
+                                                        
+                                                        $j( api.column( 4 ).footer() ).html(
+                                                           // ''+ formatNumber(pageRemainingTotal) +' ( '+ formatNumber(totalRemaining) +' total)'
+                                                           ''+formatNumber(totalRemaining)
+                                                        );    
+                                                   
+                                                        $j( api.column( 5 ).footer() ).html(
+                                                            //''+ formatNumber(pagePlanAmountTotal) +' ( '+ formatNumber(totalThisPlan) +' total)'
+                                                            ''+formatNumber(totalThisPlan)
+                                                        );    
+                                                       /*  
+                                                        $j( api.column( 6 ).footer() ).html(
+                                                           // ''+ formatNumber(pagevsRemainingTotal) +' ( '+ formatNumber(totalvsRemaining) +' total)'
+                                                           ''+formatNumber(totalvsRemaining)
+                                                        );  
+                                                    */
+                                                    
+                                                        if(totalRemaining>=totalThisPlan){
+                                                               
+                                                                $j("#budgetValidation").addClass("withBudget");
+                                                                $j( api.column( 6 ).footer() ).html('NO');
+                                                        }else{
+                                                                $j("#budgetValidation").addClass("overBudget");
+                                                                $j( api.column( 6 ).footer() ).html('YES');
+                                                        }
+                                                            
+                                                      
+                                                        
+                                                        $j(".thcell2").each(function( i ) {
+                                                                var amount = intVal($j(this).html()); 
+                                                            //console.log(amount);
+                                                            	if(amount<0){
+                                                                    	$j(this).addClass("negative");
+                                                            			} else {
+                                                                        $j(this).removeClass("negative");
+                                                                        }
+                                                        });                                                        
+                                                   
+                                                },
+                                                "fnRowCallback": function( nRow, aData, iDisplayIndex, iDisplayIndexFull ) {
+
+                                                        
+                                                        for(var i=1, l=6 ; i < l; i++){
+                                                            $j(nRow).find('td:eq('+ i+')').addClass("currencyCls");
+                                                        }
+
+                                                        
+                                                        for(var i=1, l=6; i < l; i++){
+                                                            if(aData[i]<0){
+                                                                var posIndex = i-1;
+                                                                $j(nRow).find('td:eq('+ posIndex+')').addClass("negative");
+                                                            } 
+                                                        }
+                                                        
+                                                        $j(nRow).find('td:eq(5)').addClass("boolCls");
+                                                        
+                                                        if ( aData[4] >=aData[5] ){
+                                                             $j(nRow).find('td:eq(5)').addClass("withBudget");
+                                                        }else{
+                                                             $j(nRow).find('td:eq(5)').addClass("overBudget");
+                                                        }
+                                                },
+                                                "initComplete": function(settings, json) {
+                                                              // Execute on load
+                                                              checkWidth();
+                                                         }
+                                                
+                                                });
+                                                
+                                                // Order by the grouping
+                            $j('#table tbody').on( 'click', 'tr.group', function () {
+                                var currentOrder = table.order()[0];
+                                if ( currentOrder[0] === 2 && currentOrder[1] === 'asc' ) {
+                                    table.order( [ 0, 'desc' ] ).draw();
+                                }
+                                else {
+                                    table.order( [ 0, 'asc' ] ).draw();
+                                }
+                            } );
+                    }
+                }
+            },
+    		   {buffer: false,escape: true} 
+                //, timeout: 120000
+    		   );
+    		   
+    		   
+
+        }
+
+        function formatNumber(n) {
+            return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        
+        $j(document).ready(function(){
+
+            initKRBudgetViewPage({
+                selectedPlanId : "{!ASI_MFM_Plan__c.Id}"
+            });  
+            
+            
+        });
+        
+        </script>
+        <style type="text/css">
+
+        body {
+            font-family: Tahoma,Arial,Helvetica,sans-serif;
+            font-size:12px;
+        }
+        /* Ensure that the demo table scrolls */
+            th, td { white-space: nowrap; }
+            div.dataTables_wrapper {
+                width: 1500px;
+          
+            }
+            
+        .tableStyle{
+        /*border: 1px solid black;
+            border-spacing: 0;
+            border-collapse: collapse;
+            width:20%;*/
+            font-family:century gothic,verdana,arial,helvetica,sans-serif;
+            flex-wrap: wrap;
+            align-content: center;
+            content: 'This is your custom tooltip text';
+            }
+            
+         .td{
+            /*border: 1px solid black;       width:30%;*/
+            border-spacing: 0;
+            border-collapse: collapse;
+      /*
+            flex-wrap: wrap;*/
+            align-content: center;
+            }
+
+
+            .tableStyle th{
+                text-align: center !important;
+            }
+        
+            .changecss{
+            background-color: #d0e4fe ;
+            color: #C0C0C0 !important;
+            } 
+            
+        /*
+         * Processing indicator
+         */
+        .dataTables_processing {
+            position: absolute !important;
+            top: 50%  !important;
+            left: 50%  !important;
+            width: 250px  !important;
+            height: 50px  !important;
+            margin-left: -125px  !important;
+            margin-top: -15px  !important;
+            padding: 14px 0 2px 0  !important;
+            border: 1px solid #ddd  !important;
+            text-align: center  !important;
+            color: #999 !important;
+            font-size: 14px  !important;
+            background-color: white  !important;
+            z-index: 1000 !important;
+        }
+        
+        .withValue{
+             background:#dff0d8;
+        }
+        
+        input:invalid,
+        input:out-of-range {
+            border-color:hsl(0, 50%, 50%);
+            background:hsl(0, 50%, 90%);
+        }
+        
+        .bs .table>thead>tr>th {
+            vertical-align: bottom;
+            /*border-bottom: 1px solid #000000 !important;*/
+        }
+        
+        .bs .table {
+            margin-bottom: 0px !important;
+        }
+        
+        .bs .table>thead>tr:first-child>th:nth-child(-n){
+            vertical-align: bottom;
+            border-bottom: 1px solid #000000 !important;
+        }
+        
+        .input-disabled{background-color:#EBEBE4;border:1px solid #ABADB3;padding:2px 1px;}
+
+        tr.group,
+        tr.group:hover {
+            background-color: #f0f4fa !important;
+        }        
+
+        tr.topHeader,
+        tr.secondHeader,
+        tr.topHeader:hover, 
+        tr.secondHeader:hover,
+        tr.footerCls,
+        tr.footerCls:hover{
+            background-color: #003366 ;
+        } 
+        
+        .thcell{
+            font-weight:bold;
+            color:white;
+            text-align: center !important;
+        }
+
+        .thcell2{
+            font-weight:bold;
+            color:white;
+        }
+        
+        .groupcell {
+            font-weight:bold;
+            color:#003366;
+           }
+           
+        .noCount{
+            font-weight:bold;
+           
+        }
+        
+        .currencyCls{
+             text-align: right !important;
+        }
+        
+        .boolCls{
+            color:white;
+            font-weight:bold;
+            text-align: center !important;
+        }
+        
+        .overBudget{
+            background-color :Red !important;
+        }
+        
+        .withBudget{
+            background-color : #7eb679 !important;
+        }
+        
+        .budgetValidation{
+            font-weight:bold;
+            color:white;          
+        }
+            
+    
+    	.panel-title > a {
+    		display: block;
+    		padding: 15px;
+    		text-decoration: none;
+    	}
+    
+    	.more-less {
+    		float: right;
+    		color: #212121;
+    	}
+
+    
+    	.negative {
+    		color: red !important;  
+    	}
+    	
+        </style>
+
+
+    </head>
+    
+    
+    <body class="bs">
+        <div class="container-fluid">
+              <div class="row">
+                    <div class="col-xs-12 col-md-12">
+                          <div class="panel-group" id="accordion">
+                                    <div class="panel panel-info">
+                                        <div class="panel-heading">
+                                            <a data-toggle="collapse" data-parent="#accordion" href="#collapse1"><B>ADDITIONAL INFORMATION - {!ASI_MFM_Plan__c.Name}</B><i class="more-less glyphicon glyphicon-minus"></i></a>
+                                        </div>
+                                         <div id="collapse1" class="panel-collapse collapse in">
+                                            <div class="panel-body">
+                                                    <p class="text-primary informationBlock">
+                                                      
+                                                    <div id="commentDiv">
+                                                        {!ASI_MFM_Plan__c.ASI_MFM_Comment__c}
+                                                    </div>                
+                                                    </p>   
+
+                                                    <apex:outputLink value="/apex/ASI_MFM_KR_PlanBudgetCheckingVFP?id={!ASI_MFM_Plan__c.Id}" id="theLink" target="_blank">
+                                                        Open as New-window:  <span class="glyphicon glyphicon-new-window"></span>
+                                                        </apex:outputLink>
+                                            </div>
+                                        </div>
+                                      </div>
+                        
+                            </div>
+                    </div>
+                    
+                    
+
+                                  
+              </div>
+              <div class="row">
+                <div class="col-xs-12 col-md-12">
+                    <div class="table-responsive"> 
+                     <table id="table" class="table table-condensed cell-border display responsive nowrap" cellspacing="0" width="100%">
+                        <thead>
+                            <tr class="topHeader">
+                                <th colspan="7" class="thcell FY"></th> <!--8--> 
+                            </tr>
+                            <tr class="secondHeader">
+                                <th  class="thcell"></th>
+                                <th  class="thcell"></th>
+                                <th  class="thcell"></th>
+                                <th  class="thcell"></th>
+                                <th  class="thcell"></th>
+                                <th  class="thcell"></th>
+                               <!-- <th  class="thcell"></th>--> 
+                                <th  class="thcell"></th>                        
+                            </tr>  
+                        </thead>
+                        <tfoot>
+                            <tr class="footerCls">
+                                <th class="thcell2" colspan="2" style="text-align:left">Total</th>
+                                <th class="thcell2" style="text-align:right"></th>
+                                <th class="thcell2" style="text-align:right"></th>
+                                <th class="thcell2" style="text-align:right"></th> 
+                                <th class="thcell2" style="text-align:right"></th>
+                                <!--  <th class="thcell2" style="text-align:right"></th> --> 
+                                <th class="budgetValidation" id="budgetValidation" style="text-align:center"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    </div>
+                </div>
+              </div>
+
+      
+
+        </div>
+    </body>
+    
+</apex:page>

@@ -1,0 +1,262 @@
+<apex:component >
+    <apex:attribute name="ComponentId" description="The value of Id" type="String"   default="content"   />
+    <apex:attribute name="sObjectType" description="The value of sObjectType" type="String"   />
+    <apex:attribute name="PanelTitle" description="The value of Panel Title" type="String"   />
+    
+    <apex:attribute name="SelectStatement" description="Select Statement for SOQL " type="String"  />
+    <apex:attribute name="whereStatement" description="where Statement for SOQL " type="String" required="false"  default="   "    />
+    <apex:attribute name="displayFields" description="The value of Fields to display " type="String" />
+    <apex:attribute name="DisplayLabel" description="The value of Fields to display " type="String"  />
+    
+     <apex:attribute name="SummaryLabel" description="The value of Label to display " type="String"  default="Total" />
+    <apex:attribute name="DisplaySummary" description="Display Summary row in the table" type="Boolean" default="false" required="false"    />
+     <apex:attribute name="SummaryFields" description="Fields to Summary " type="String"  />
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.13.3/react.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/0.13.3/JSXTransformer.js"></script>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}" />
+     
+    
+    <script type="text/javascript">
+    var __sfdcSessionId = '{!GETSESSIONID()}';
+    </script>
+    <script src="../../soap/ajax/40.0/connection.js"  type="text/javascript" />
+    
+    
+    
+    <body>
+        <div id="{!ComponentId}"  > </div>
+        
+        <script type="text/jsx">
+            var data=[];   
+            var SectionView = React.createClass({
+                getInitialState: function() {
+                    return {data:[]};
+                },
+                componentDidMount: function() {
+                    var QueryStatement = 'select '+"{!SelectStatement}"+  ' from '+"{!sObjectType}" + ' '+ "{!whereStatement}" ;
+                    var result = sforce.connection.query(QueryStatement);
+                    var records = result.getArray("records");//console.log('sObjectType  : '+   '{!sObjectType}');
+                    for (var i=0; i< records.length; i++) {
+                      var record = records[i];
+                        data.push(record);//console.log(record);
+                    }
+                    this.setState({data: data});
+                },
+                render: function() {
+                    var LabelStr='{!DisplayLabel}';// console.log(LabelStr);
+                    var LabelList=LabelStr.split(',');
+                     var HeaderNodes = LabelList.map(function (item) {
+                          return (
+                            <HeaderElement name={item} > </HeaderElement>
+                          );
+                    });
+                    
+                    const PanelStyle = {
+                          'margin-bottom': '0',
+                          'border-radius': '4px',
+                          'border': '1px solid',
+                          'border-color': '#337ab7'
+                      };
+                    const  HeadingStyle = {
+                         'color': '#fff',
+                        'background-color': '#337ab7',
+                        'border-bottom': '0',
+                        'padding': '10px 15px',
+                        'border-top-right-radius': '3px',
+                        'border-top-left-radius': '3px'
+                      };
+                    const  BodyStyle = {
+                         'padding': '0.5em'
+                      };
+                     const  TableStyle = {
+                         'width': '100%',
+                         'max-width':'100%',
+                         'margin-bottom': '20px',
+                         'border-spacing': '0',
+                         'border-collapse': 'collapse'
+                      };
+                    
+                    var DisplayFooter = '{!DisplaySummary}';//console.log(DisplayFooter); 
+                    const CanDisplay = (DisplayFooter==='true') ? true: false;
+                    
+                    return (
+                        <div style={PanelStyle} >
+                        	<div style={HeadingStyle} >{!PanelTitle} </div>
+                        	<div style={BodyStyle} >
+                        		<table style={TableStyle} >
+                        			<thead > 
+                        				{HeaderNodes}
+                        			</thead>
+                        			<DataListView data={this.state.data}  />
+                        			{CanDisplay ? (<FootElement data={this.state.data}  />):null}
+                        		</table>
+                        	</div>
+                        </div>
+                    );
+                }
+            });
+            
+            
+              
+            var HeaderElement = React.createClass({
+                render: function() {
+                    const  Thtyle = {
+                         'text-align': 'center',
+                         'border-bottom': '2px solid #ddd' 
+                      };
+                    return (<th style={Thtyle} > {this.props.name}</th> );
+                }
+            });
+
+               
+            var DataListView = React.createClass({
+                render: function() {//console.log(this.props.data);
+                    var TdLine = this.props.data.map(function (item) { ////console.log('{!sObjectType}');//console.log(item);
+                        return (<LineItem data={item}> </LineItem>);
+                    });
+                    
+                    return (<tbody>{TdLine}</tbody>);
+                }
+            });       
+                    
+                        
+                             
+                             
+             var LineItem = React.createClass({
+                render: function() {
+                    
+                    var displayFieldsStr= '{!displayFields}';//console.log(' Log 1.0 : '+ displayFieldsStr);
+                    
+                    
+                    //Fixing display field attr
+                    var FieldList=[];
+                    var TempList=displayFieldsStr.split(',');
+                    
+                    for(var i=0; i<TempList.length;i++){
+                        var FieldNameStr = TempList[i];
+                        
+                        var tempObject ={Name:FieldNameStr, ISLookUp:false};
+                        
+                        //check if it is lookup field
+                        if(FieldNameStr.indexOf(";") > -1){ // contain ";" 
+                            tempObject.ISLookUp=true;
+                             var FNList= FieldNameStr.split(';');
+                            tempObject.Id = FNList[0].substring(1,FNList[0].length);
+                            	tempObject.Name = FNList[1].substring(0,FNList[1].length-1);
+                            if(FieldNameStr.indexOf(".") > -1){// contain 'r'
+                            	tempObject.lookUpObject1 =tempObject.Name.split('.')[0];
+                            	tempObject.LookupLevel =tempObject.Name.split('.').length - 1 ;
+                            	//To-Do: you can add two level lookup in this part   
+                            }else{
+                                tempObject.LookupLevel=0;
+                            }
+                           
+                        }
+                        
+                        FieldList.push(tempObject);
+                    }// console.log(FieldList);
+                    
+                    var DataLine = this.props.data;//console.log(DataLine);
+                    var ItemsNodes = FieldList.map(function (item) {//console.log(item+'Enter TD NODE'+DataLine[item]);
+                        
+                        var  Thtyle = {
+                            'border-bottom': '2px solid #ddd',
+                            'padding': '0.6em'
+                    	};
+                        
+                        if(item.ISLookUp){//  console.log(item.Id+'Enter TD NODE'+item.Name + item.LookupLevel);
+                             //  it is look up field   
+                            if(item.LookupLevel == 0 ){ // console.log(DataLine[item.Name] + 'Log 1.0 '+  DataLine[item.Id] );console.log(item.Id+'Enter TD NODE'+item.Name + item.LookupLevel);
+                                
+                                return (<td style={Thtyle} ><a href = {'/' + DataLine[item.Id]}  target="_blank"  >{DataLine[item.Name]}</a></td>);
+                            }else if(item.LookupLevel == 1 ){//console.log(DataLine[item.lookUpObject1]);
+                                
+                                return (<td style={Thtyle} ><a href = {'/' + DataLine[item.lookUpObject1].Id}  target="_blank"  >{DataLine[item.lookUpObject1].Name}</a></td>);
+                            }else{
+                                
+                                return (<td style={Thtyle} > </td>);
+                            }
+                        }else{
+                            var DisplayField =DataLine[item.Name];  //console.log(typeof DisplayField); 
+                          
+                            //check if it number, if it is number , then format number. Since 'DisplayField' is object type, if we remove 'DisplayField', system will display all null as 0.0            
+                            if(!isNaN(DisplayField)  && DisplayField ){ //:  console.log(typeof DisplayField+ 'now DisplayField : '+DisplayField);
+                            	DisplayField = parseFloat(Math.round(DisplayField * 100) / 100).toFixed(2);
+                        		DisplayField=DisplayField.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                                
+                               //change css 
+                                Thtyle['text-align']='right';
+                                var NumberCSS = {
+                                    'margin-right': '3em' 
+                                };
+                                    
+                                return (<td style={Thtyle} ><div style={NumberCSS}>{DisplayField}</div>   </td>);
+                                            
+                            }else{
+                                return (<td style={Thtyle} >{DisplayField}</td>);
+                            }
+                            
+                        }
+                        
+                    });
+                    return ( <tr> {ItemsNodes}</tr>);
+                }
+            });                 
+                       
+                    
+            
+            var FootElement = React.createClass({
+                formatNumber: function (n) {
+                    var  n = parseFloat(Math.round(n * 100) / 100).toFixed(2);
+                    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                },
+           		render: function() {
+                    var MasterData = this.props.data;
+                    var LabelStr='{!SummaryFields}';
+                    var LabelList=LabelStr.split(',');// console.log('*******SummaryFields******'); //var SumStr=formatNumber(sum).toString();
+                    var FooterNodes = LabelList.map(function (item) {//console.log(item);
+                        
+                        if(item.replace(/\s/g, '').length>0 ){ //  Detect String which contain only spaces 
+                            var sum=0.0;
+                            for(var i=0; i < MasterData.length ; i++){
+                                if(MasterData[i][item]){//console.log(typeof MasterData[i][item] +  ' || '+MasterData[i][item]);
+                                    sum+=Number(MasterData[i][item]);
+                            	}
+                        	}
+                        	//format number 
+                        	sum = parseFloat(Math.round(sum * 100) / 100).toFixed(2);
+                        	var SumStr=sum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                            
+                            var tdcss= {
+                             'text-align': 'right'
+                            }
+                            var NumberCSS = {
+                                    'margin-right': '3em' 
+                            };
+                            return (<td style={tdcss} > <div style={NumberCSS} > {SumStr} </div> </td>);
+                        }else{
+                         	return (<td> </td>);
+                        }
+                                         
+                    }); 
+                    
+                    var SummaryStr='{!SummaryLabel}';
+                    return (<tfoot> <tr> <td>{SummaryStr}</td> {FooterNodes} </tr> </tfoot>);
+                }
+            });         
+                                           
+                                              
+                                              
+            React.render(
+                <SectionView />,
+                document.getElementById('{!ComponentId}')
+            );
+            
+            
+            </script>
+    
+    </body>
+</apex:component>

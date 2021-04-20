@@ -1,0 +1,806 @@
+<apex:page standardController="ASI_MFM_Payment__c"  sidebar="false"  docType="html-5.0" extensions="ASI_MFM_KR_OffsetManageAllController" action="{!init}">
+    
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/SimpleTable.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />   
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        
+        <script type="text/javascript">
+        $j = jQuery.noConflict();
+        var headerId = null;
+        var resultTable;
+        var SearchTable;
+        var returnURL;
+        var datatableILength = 15;   
+        var initCurrency; 
+        var allowReceiptAmountFloat = false;
+        var Customers = [];
+        var Module;
+        var SQLstatement=null;
+        var PrePayment;
+        var totalAmountDecimalPlace = 2;
+        var finishRetrievePaymentLineItems = false;
+        var origLineItems = [];
+        var subBrand = ['Loading'];
+        var ACCodes = ['Loading'];
+        var api;
+        var VenueWhere=[];
+        
+        
+        window.onload =  function(){
+            returnURL = gup('retURL');
+        };
+        
+        function gup( name ){  //this function just grabs HTTP params by name
+            
+            name = name.replace(/[\[]/,"\\\[").replace(/[\]]/,"\\\]"); 
+            var regexS = "[\\?&]"+name+"=([^&#]*)"; 
+            var regex = new RegExp( regexS ); 
+            var results = regex.exec( window.location.href );
+            if( results == null )    return ""; 
+            else    return results[1];}
+        
+        
+        
+        /*method for stop enter to submit form*/
+        function stopRKey(evt) {
+            var evt = (evt) ? evt : ((event) ? event : null);
+            var node = (evt.target) ? evt.target : ((evt.srcElement) ? evt.srcElement : null);
+            if ((evt.keyCode == 13) && (node.type=="text")) {return false;}
+        }
+        
+        document.onkeypress = stopRKey; 
+        
+        function initPaymentManageAllPage(config) {
+            if (config) {
+                SQLstatement=config.SQLstatement;
+                headerId = config.headerId;
+                initCurrency = config.initCurrency;
+                PrePayment = config.PrePayment;
+                if(initCurrency!=="KRW") { 
+                    allowReceiptAmountFloat = true;
+                    totalAmountDecimalPlace = 2;
+                }
+                Module=config.Module;
+                retrieveCustomer();
+                setResultTable(true);
+                //setSearchable(true);
+                
+            }
+        }
+        
+        
+        
+        $j(document).on('mousemove', function(e){
+            $j('#loadtext').css({
+                left:  e.pageX,
+                top:   e.pageY
+            });
+        });
+        
+        
+        /*method for stop enter to submit form*/
+        function stopRKey(evt) {
+            var evt = (evt) ? evt : ((event) ? event : null);
+            var node = (evt.target) ? evt.target : ((evt.srcElement) ? evt.srcElement : null);
+            if ((evt.keyCode == 13) && (node.type=="text")) {return false;}
+        }
+        
+        document.onkeypress = stopRKey; 
+        
+        function formatNumber(n) {
+            return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        
+        function htmlEncode( input ) {
+            var e = document.createElement('div');
+            e.innerHTML = input;
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        };
+        
+        function retrieveCustomer() {
+           
+            var whereClause =   ' WHERE (RecordType.DeveloperName = \'ASI_CRM_KR_Wholesaler\'  or RecordType.DeveloperName = \'ASI_CRM_KR_Venue\' )  '+SQLstatement;
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_OffsetManageAllController.findCustomers}','ASI_CRM_AccountsAdditionalField__c', whereClause 
+                , callbackCustomer
+                ,  { buffer: false,escape: true}
+            );       
+        }
+        
+        function callbackCustomer(result, event){
+            if (event.status) {
+                if (result) {
+                    
+                    Customers = [];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        var cu = new Object();
+                        cu.label =  htmlEncode(result[i]["Name"]);
+                        cu.value =  htmlEncode(result[i]["Id"]);
+                        if(result[i]["ASI_CRM_CN_Address__c"]){
+                            cu.desc = htmlEncode(result[i]["ASI_CRM_CN_Address__c"]);
+                        }else{
+                            cu.desc='';
+                        }
+                        if(result[i]["ASI_CRM_CN_Phone_Number__c"]) 
+                            cu.phone =htmlEncode(result[i]["ASI_CRM_CN_Phone_Number__c"]);
+                        else cu.phone ='';
+                        Customers.push(cu);
+                         if(result[i].RecordType.DeveloperName=='ASI_CRM_KR_Venue'){
+                            VenueWhere.push(cu);
+                        }
+                    }
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+        
+        
+        
+        
+        function setResultTable(newTable){
+            retrieveCustomer();
+            resultTable =  $j('#dt_PaymentLineItems').on( 'init.dt', function () {                
+            }).DataTable({   
+                
+                "bDestroy":true,
+                "bSearch":false,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "bAutoWidth":false,                        
+                "bSort": false, 
+                "iDisplayLength":datatableILength,
+                "sPaginationType": "full_numbers",
+                "bLengthChange": false,
+                "columnDefs": [{
+                    "targets": [ 0 ],
+                    "searchable": false,
+                    "orderable": false
+                }],
+                "initComplete": function(){
+                    //calculateSum();
+                },
+                "fnDrawCallback": function() {
+                    
+                    api = this.api();
+                    
+                    $j('.payline_amount input').change();
+                    $j('.payline_adjust input').change();
+                    
+                    $j('.amount').numericInput({ allowNegative: true ,allowFloat: allowReceiptAmountFloat });
+                    $j('.vatamount').numericInput({  allowNegative: true , allowFloat: allowReceiptAmountFloat });
+                    
+                    $j('.payline_amount input').on("focus", function() {
+                        
+                    }).change(function () {
+                        console.log("need to re-calculate the amount");
+                        calculateSum();
+                        
+                    });
+                },
+                "footerCallback": function( tfoot, data, start, end, display ) {
+                    api = this.api();
+                    calculateSum();
+                    
+                } 
+            });
+        }
+        
+        function callbackLineItem(lineItems, event) {
+            if (event.status) {
+                if (lineItems) {
+                    origLineItems = [];
+                    var size = lineItems.length;
+                    for (var i = 0; i < size; i++) {
+                        var lineItem = lineItems[i];
+                        origLineItems[lineItem.Id] = lineItem;
+                    }
+                    finishRetrieveLineItems = true;
+                    //displayDataIfReady();
+                }
+            } else {
+                // TODO: Handle error
+                //displayErrorMsg(event.message);
+            }
+        }
+        function calculateSum(){
+            /*
+            var sum = 0;
+            
+            api.column(11).nodes().to$().each(function(index) { 
+                $j(this).find('.amount').each(function() { 
+                    
+                    var columnAmount = $j(this).val().replace(/[$,]+/g,"");
+                    console.log('columnAmount: '+columnAmount);
+                    if(!isNaN(columnAmount) && columnAmount.length!=0) {
+                        
+                        sum += parseFloat(columnAmount);
+                    }
+                    console.log('find:'+$j(this).val() );
+                });
+            });
+            
+            var totalAmountColumn = api.column(11);
+            
+            $j( totalAmountColumn.footer() ).html(formatNumber(sum.toFixed(totalAmountDecimalPlace)));     
+            */
+            
+        }
+        
+        function initalizeAutoCompleteComponent() {
+            //Customer 
+            $j(".CustomerClass").autocomplete
+            (
+                {
+                    source:
+                    Customers,
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("No result found");
+                        }
+                    },
+                    minLength: 1,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                        //  $j(this).val(ui.item.label);
+                        $j(".ui-autocomplete > li").attr("title", ui.item.phoe);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function() {
+                
+                $j(this).autocomplete("search", "");
+            }
+                   )
+            .each(function() {
+                $j(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                    return $j("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                    .appendTo(ul); 
+                };                        
+            });
+            
+                    
+            
+            //VenueWhere 
+            $j(".VenueWhereClass").autocomplete
+            (
+                {
+                    source:
+                    VenueWhere,
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("No result found");
+                        }
+                    },
+                    minLength: 1,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                      //  $j(this).val(ui.item.label);
+                        $j(".ui-autocomplete > li").attr("title", ui.item.phoe);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function() {
+                
+                $j(this).autocomplete("search", "");
+            }
+                   )
+            .each(function() {
+                $j(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                    return $j("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                    .appendTo(ul); 
+                };                        
+            });
+            
+        }
+        
+        $j(document).ready(function() {
+            
+            
+            initPaymentManageAllPage({
+                headerId: '{!header.Id}',
+                initCurrency: '{!Header.ASI_MFM_Currency__c}',
+                PrePayment:'{!Header.ASI_MFM_Venue_Loan_Payment__c}',
+                Module:'{!Module}',
+                SQLstatement:'{!SQLstatement}'
+            });
+            //iterate through each textboxes and add keyup    handler to trigger sum event  
+            $j('.amount').bind("keyup change", function(e) {
+                calculateSum();
+            })
+        } );
+        function disableButton() {
+            $j('#divpaymentForm .btn').button('loading');
+        } 
+        </script>
+        
+        <style type="text/css">
+            div.hid {display: none;}
+            
+            .dateFormat{
+            display:none;
+            }
+            .bs.panel-heading.div-size {
+            border-radius: 10px;
+            }
+            
+            .required {
+            border-left: 3px solid darkred !important;  
+            }
+            
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }
+            
+            .form-group.required .control-label:after {
+            content:"*";
+            color:red;
+            }    
+            
+            .amount{
+            border-left: 3px solid darkred !important;          
+            
+            }
+            
+            
+            
+            /* highlight results */ 
+            .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+            }
+            
+            /* loading - the AJAX indicator */
+            .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+            }
+            
+            
+            .ui-autocomplete-input{ 
+            //border-left: 3px solid darkred !important;    
+            }
+            
+            .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            /* prevent horizontal scrollbar */
+            overflow-x: hidden;
+            overflow:auto;
+            /* add padding to account for vertical scrollbar */
+            padding-right: 20px;
+            left: 0;
+            }
+            /* IE 6 doesn't support max-height
+            * we use height instead, but this forces the menu to always be this tall
+            */
+            *html .ui-autocomplete {
+            height: 200x;
+            }
+            
+            
+            .dropdownDiv {
+            border-radius: 5px;
+            margin-bottom: 5px;
+            color: #666;
+            display: inline-block;
+            padding: 5px;
+            background: #ddd
+            
+            }
+            .headsUpDiv {
+            padding: 5px; 
+            border-radius: 3px; 
+            background-color: rgb(217, 237, 247); 
+            color: #31708f; 
+            border: 1px solid #9acfea; 
+            display: inline-block;
+            }
+            .btn-size {
+            height: 30px;
+            }
+            .div-size {
+            height: 30px;
+            }
+            .btn-round {
+            width: 40px;
+            height: 40px;
+            border-radius: 50% !important;
+            font-size: 14px !important;
+            }
+            
+            
+            .btn-round.btn-lg {
+            width: 48px;
+            height: 48px;
+            }
+            
+            .btn-round.btn-sm {
+            width: 34px;
+            height: 34px;
+            }
+            
+            .btn-round.btn-xs {
+            width: 24px;
+            height: 24px;
+            }
+            /*
+            .lookupInput a{
+            display: block;
+            position: absolute !important;
+            top:0px !important;
+            }
+            
+            .lookupInput img{
+            float: right;
+            }
+            
+            span.lookupInput {
+            position: relative !important;
+            display:inherit !important;
+            }
+            
+            .lookupInput a, .lookupInput a{
+            border:none !important;
+            background: none !important;
+            }
+            */
+            .LookupCss input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            
+            }
+            
+            .LookupSearch input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            }
+            
+            .LookupSearchRequired input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            border-left: 3px solid darkred !important;
+            }
+            
+            .headerNum {
+            font-weight:bold;
+            text-align: right;
+            }
+            .headerCen {
+            text-align: center !important;
+            }
+        </style>
+        
+    </head>
+    
+    <apex:form id="frm_paymentForm" styleclass="objectFormCls">
+        <div id="divpaymentForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-12">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="paymentDetailPanel">
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">Payment Details</h5>
+                        </div>
+                        <div class="bs panel-body">                                           
+								<div class="bs row" >
+                                    <!---------Input Header------------->
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Promotion Month:</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputText value="{!HeaderLine.ASI_MFM_Promotion_Month__c}" styleClass="form-control searchcss input-sm"  html-placeholder="YYYYMM"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Promotion Code:</apex:outputLabel>
+                                        <div  class="form-group divsearch LookupSearchRequired" id="PlanName">
+                                            <apex:inputField value="{!HeaderLine.ASI_MFM_Plan_Number__c}" html-placeholder=" Plan ID"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Cash Out Payment ID:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupSearch">
+                                            <apex:inputField value="{!HeaderLine.ASI_MFM_Cashout_Payment_Number__c}" html-placeholder=" Cash Out Payment ID"/>
+                                        </div>
+                                    </div> 
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Offset Payment ID:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupSearch">
+                                            <apex:inputField value="{!OffsetHeaderLine.ASI_MFM_Cashout_Payment_Number__c}" html-placeholder=" Offset Payment ID"/>
+                                        </div>
+                                    </div> 
+									
+									
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Sub Ledger:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupSearch">
+                                            <apex:inputField value="{!HeaderLine.ASI_MFM_KR_subLedger__c}"   html-placeholder=" Sub Ledger"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Sub-brand:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupSearch">
+                                            <apex:inputField value="{!HeaderLine.ASI_MFM_Sub_brand__c}"   html-placeholder=" Sub-brand"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Status:</apex:outputLabel>
+                                         <apex:selectList value="{!Header.ASI_MFM_Status__c}" size="1" label="Status:" styleClass="form-control searchcss input-sm">
+                                                <apex:selectOption itemValue="" itemLabel=""/>
+                                                <apex:selectOption itemValue="Draft" itemLabel="Draft"/>
+                                                <apex:selectOption itemValue="Submitted" itemLabel="Submitted"/>
+                                                <apex:selectOption itemValue="Approved" itemLabel="Approved"/>
+                                                <apex:selectOption itemValue="Complete" itemLabel="Complete"/>
+                                         </apex:selectList>   
+                                    </div>
+									
+                                   
+                                </div>
+                            </div>
+                    </apex:outputPanel>
+                </div>
+                <!-----------------------------------------------  Payment Line Items    ------------------------------------------------------------------->
+                <div class="bs col-xs-12">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">Payment Line Items</h5>
+                        </div>   
+                        <div class="bs panel-body">  
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(SearchPermission,'display:none;','')}"  id="SearchFailPart">
+                                <strong>Error,Can not Search!  </strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                <strong>Error,Can not Save!  </strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            
+                            
+                            <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Save Success!</strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>
+                            
+                            
+                            <div class='bs wrapper text-left' >                                         
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size" 
+                                                          value="Search"
+                                                          style="font-weight: bold"
+                                                          action="{!searchPayment}"
+                                                          status="ActionStatus"
+                                                      	  onclick="resultTable.page.len( -1 ).draw(false);"
+														  oncomplete="console.log('Search');setResultTable(true);"    
+                                                          reRender="SaveFailPart, SaveSuccessPart, LinePanel, porLinePanel,SearchFailPart">
+                                    </apex:commandButton>
+								</div>&nbsp;   
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Save"
+                                                        action="{!onCommitted}"
+                                                        status="ActionStatus"
+                                                        onclick="resultTable.page.len( -1 ).draw(false);"
+                                                        oncomplete="console.log('Quick Save');setResultTable(true);"    
+                                                        reRender="SaveFailPart, SaveSuccessPart, LinePanel, porLinePanel,SearchFailPart"
+                                                        html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                                    </apex:commandButton>
+                                </div>&nbsp;
+                            </div>
+                            
+                         <!--   For Testing Only :{!exchangeRateTable}---->
+                            
+                            <table id="dt_PaymentLineItems"  class="hover responsive no-wrap compact" style="width: 100%;" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th class="headerCen"  colspan ="2"  >Action</th>
+                                        <th>Status</th>
+                                        <th>Offset Payment ID</th>
+                                        <th>PM</th>
+                                        <th>Promotion Code</th>
+                                        <th>Cash Out Payment Id</th>
+                                        <th>Description</th>
+                                        <th>Sub Ledger</th>
+                                        <th>Sub-brand</th>
+                                        <th>Offset Amount</th>
+                                        <th>Type</th>
+                                        
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <apex:repeat value="{!allPaymentLineItemMap}" var="PolId">
+                                        <tr>
+                                            <td>
+                                             <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                               style="border: none;background-color: transparent;"
+                                                               reRender="SaveFailPart, SaveSuccessPart, LinePanel, porLinePanel,SearchFailPart" 
+                                                               action="{!cloneLine}"
+                                                               status="ActionStatus"       
+                                                               onclick="disableButton();"
+                                                               oncomplete="setResultTable(true);"
+                                                               html-formnovalidate="formnovalidate" 
+                                                               rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"
+                                                               title="Clone line "
+                                                               html-data-loading-text="Loading..." >
+                                                    <span class="bs glyphicon glyphicon-duplicate"  style="color:black;font-size: 20px;"></span>
+                                                    <apex:param name="PARAM_clone_ID" value="{!PolId}" />
+                                                </apex:commandLink>
+                                                  <apex:outputLabel style="border: none;background-color: transparent;"
+                                                                  title="Can not delete!"
+                                                                  styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                  rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}">
+                                                    <span class="bs glyphicon glyphicon-duplicate"  style="color:black;font-size: 20px;" > </span>
+                                                </apex:outputLabel> 
+                                            </td>
+                                            <td>
+                                                <apex:commandLink styleClass="bs btn btn-danger btn-round pull-left btn-sm" 
+                                                                  style="border: none;background-color: transparent;"
+                                                                  reRender="SaveFailPart, SaveSuccessPart, LinePanel, porLinePanel,SearchFailPart" 
+                                                                  action="{!removePaymentLine}"
+                                                                  onclick="disableButton();"
+                                                                  status="ActionStatus"
+                                                                  oncomplete="console.log('Remove');setResultTable(true);"
+                                                                  rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"
+                                                                  immediate="false"
+                                                                  html-data-loading-text="Loading..." 
+                                                                  >
+                                                    <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;"></span><apex:param name="PARAM_PORLine_ID" value="{!PolId}" />
+                                                    <apex:param name="PARAM_PAYLine_ID" value="{!PolId}" />
+                                                </apex:commandLink>
+                                                <apex:outputLabel style="border: none;background-color: transparent;"
+                                                                  title="Can not delete!"
+                                                                  styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                  rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}">
+                                                    <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;" > </span>
+                                                </apex:outputLabel> 
+                                                
+                                            </td>
+                                            <td><apex:outputField value="{!allPaymentLineItemMap[PolId].pay.ASI_MFM_Status__c}"></apex:outputField></td> 
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPaymentLineItemMap[PolId].pay.id}" target="_blank">
+                                                    {!allPaymentLineItemMap[PolId].pay.name}
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><apex:outputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Promotion_Month__c}">
+                                                </apex:outputField>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPaymentLineItemMap[PolId].Plan.id}" target="_blank">
+                                                    {!allPaymentLineItemMap[PolId].Plan.name}
+                                                </apex:outputLink>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPaymentLineItemMap[PolId].payCashout.id}" target="_blank">
+                                                    {!allPaymentLineItemMap[PolId].payCashout.name}
+                                                </apex:outputLink>
+                                            </td>
+                                            <td>
+                                                <apex:inputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Payment_List_Item_Description__c}" styleclass="bs form-control input-sm required"  html-placeholder="Description" required="false" style="width: 10em" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"></apex:inputField>
+												<apex:outputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Payment_List_Item_Description__c}" styleclass="bs form-control input-sm" style="width: 10em" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}" html-readonly="true"  ></apex:outputField>
+                                            </td>
+											<td class="LookupCss" > <apex:inputField styleclass="required" value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_KR_subLedger__c}" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"></apex:inputField>
+                                            	<apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPaymentLineItemMap[PolId].subLedger.Id}" target="_blank" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}">
+                                                    {!allPaymentLineItemMap[PolId].subLedger.name}
+                                                </apex:outputLink>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPaymentLineItemMap[PolId].SBCode.id}" target="_blank">
+                                                    {!allPaymentLineItemMap[PolId].SBCode.name}
+                                                </apex:outputLink>
+                                            </td>
+											<td  class="payline_amount" id="payline_amount_{!PolId}_textfield" > 
+                                                <apex:inputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Payment_Amount__c}" styleclass="bs form-control amount input-sm"  html-placeholder="Amount" style="text-align: right;" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"  ></apex:inputField>
+                                                <apex:outputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Payment_Amount__c}" styleclass="bs form-control amount input-sm"  style="text-align: right;" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}" html-readonly="true"  ></apex:outputField>
+                                            </td>
+                                            <td  class="payline_type" id="payline_type_{!PolId}_textfield" > 
+                                                <apex:inputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Type__c}" styleclass="bs form-control input-sm required"  html-placeholder="Type" style="text-align: right;" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,true,false)}"  ></apex:inputField>
+                                                <apex:outputField value="{!allPaymentLineItemMap[PolId].payl.ASI_MFM_Type__c}" styleclass="bs form-control input-sm"  style="text-align: right;" rendered="{!if(allPaymentLineItemMap[PolId].editable=true,false,true)}" html-readonly="true"  ></apex:outputField>
+                                            </td>
+                                            
+                                        </tr>
+                                    </apex:repeat>        
+                                </tbody>
+                                <!--
+                                <tfoot>
+                                    <tr class="summary">
+                                        <th style="{!IF(Module='POL','display:none;','')}" colspan="2" ></th>
+                                        <th colspan="7"></th>
+                                        <th>Total:</th>
+                                        <th style="text-align:center" id="total_payment_amount"></th>
+                                        <th colspan="3" ></th>
+                                        
+                                    </tr>
+                                </tfoot>
+								-->
+                            </table>            
+                        </div>
+                    </apex:outputPanel>
+                    
+                </div>
+            </div>
+            <apex:actionstatus id="ActionStatus">
+                <apex:facet name="start">
+                    <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                         height: 1000%; width:1000%; opacity:0.65;"> 
+                        <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                            &nbsp;&nbsp;&nbsp;
+                            <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                            <span class="waitingDescription">Please Wait...</span>
+                        </div>
+                    </div>
+                </apex:facet>
+            </apex:actionstatus>   
+        </div>
+    </apex:form>
+</apex:page>

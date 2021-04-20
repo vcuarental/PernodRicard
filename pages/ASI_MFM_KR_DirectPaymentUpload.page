@@ -1,0 +1,297 @@
+<apex:page standardController="ASI_MFM_Plan__c" extensions="ASI_MFM_KR_DirectPaymentUploadCtrl"  >
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" /> 
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        
+    </head>
+    <style>
+        .LookupCss input[type="text"] {
+        padding: 5px 10px;
+        font-size: 12px;
+        line-height: 1.5;
+        border-radius: 3px;
+        color: #555;
+        background-color: #fff;
+        background-image: none;
+        border: 1px solid #ccc;
+        
+        }
+        .requirefield{
+        border-left: 3px solid darkred !important;          
+        }
+        
+        .required {
+        border-left: 3px solid darkred !important;  
+        }
+            
+    </style>
+    <script type="text/javascript">
+    var exchangeRateTable;
+    
+    $(document).ready(function(){
+        retrieveExchangeRate();
+    });
+    
+    function retrieveExchangeRate() {
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_MFM_KR_DirectPaymentUploadCtrl.retrieveExchangeRate}'
+            , ConstructFX
+            , {escape: true}
+        );       
+    }
+    
+    function ConstructFX(result, event){
+        if (event.status) {
+            if (result) {
+                exchangeRateTable=result;
+            }
+        }
+    }
+    
+    //When change exchaneg rate calls this function
+    function ChangeFX(){
+        //Get Selected currency
+        var selectSection= document.getElementById("FXPart").children[0];
+        var selectOpt = selectSection.options;
+        var selectedCurrency= selectOpt[selectSection.selectedIndex].value;
+        
+        
+        //Get exchange rate from table
+        var EXnumber=1.0;
+        if(selectedCurrency!='KRW'){
+            EXnumber= Number(exchangeRateTable[selectedCurrency]);
+        }
+        
+        //change exchange Rate
+        document.getElementById("RatePart").children[0].value=EXnumber; 
+    }
+    
+    function generateCSVByJS(){// console.log('{!header.ASI_MFM_Plan__c}'); //document.getElementsByClassName("InvoiceNumberInput")[0].value//document.getElementsByClassName("InvoiceDateInput")[0].value// console.log(document.getElementById("FXPart").children[0]+ 'ENtere generateCSVByJS '+document.getElementsByClassName("SupplierNameID")[0].parentElement.parentElement.childNodes[1].value );
+        
+        if(document.getElementsByClassName("SupplierNameID")[0].parentElement.parentElement.childNodes[0].value){
+            var url='/apex/ASI_MFM_KR_DPLineExportPage?&wrapMassAction=1&scontrolCaching=1&Planid='+'{!header.ASI_MFM_Plan__c}'+'&SupplierID='+
+                document.getElementsByClassName("SupplierNameID")[0].parentElement.parentElement.childNodes[0].value;
+            
+            if(document.getElementsByClassName("InvoiceNumberInput")[0].value){
+                url+='&InvoiceNumber='+document.getElementsByClassName("InvoiceNumberInput")[0].value;
+            }
+            if(document.getElementsByClassName("InvoiceDateInput")[0].value){//console.log(document.getElementsByClassName("InvoiceDateInput")[0].value);
+                var dd=new Date(document.getElementsByClassName("InvoiceDateInput")[0].value);
+                url+='&InvoiceDate='+formatDate(dd); 
+            }
+            if(document.getElementsByClassName("TotalPaymentAmountIncludingTaxInput")[0].value){//console.log(document.getElementsByClassName("InvoiceDateInput")[0].value);
+                url+='&totalPayAmt='+document.getElementsByClassName("TotalPaymentAmountIncludingTaxInput")[0].value.replace(/\,/g,""); //20170207, edited by Leo
+            } 
+            var selectSection= document.getElementById("FXPart").children[0];
+            var selectOpt = selectSection.options;
+            var selectedCurrency= selectOpt[selectSection.selectedIndex].value;
+            url+='&CurrencyName='+selectedCurrency;
+            
+            if(selectedCurrency=='KRW'){
+                url+='&FX=1.00';
+            }else{
+                
+                if(document.getElementsByClassName("ExchangeRateIdInput")[0].value){
+                    url+='&FX='+document.getElementsByClassName("ExchangeRateIdInput")[0].value;
+                }else{
+                    alert('We found you have not Input exchange Rate.');
+                }
+                
+            }
+            
+            
+            selectSection= document.getElementById("CompanyPart").children[0];
+            selectOpt = selectSection.options;
+            var CompanyCurrency= selectOpt[selectSection.selectedIndex].value;
+            url+='&CompanyName='+CompanyCurrency;
+            
+            console.log(url);
+            window.open(url);
+        }else{
+            alert('We found you have not selected Supplier Name.');
+        }
+        
+        
+    }
+    
+    
+    
+    function formatDate(date) { //Format JavaScript Date to yyyy-mm-dd
+        var d = new Date(date),
+            month = '' + (d.getMonth() + 1),
+            day = '' + d.getDate(),
+            year = d.getFullYear();
+        
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        
+        return [year, month, day].join('-');
+    }
+    
+    </script>
+    
+    <body>
+        
+        <apex:form >
+            
+            <div class="container-fluid" style="margin:0;">
+                <div class="bs row">
+                    <apex:outputPanel styleclass="bs col-xs-12">
+                        <div class="panel panel-primary " id="HeaderPart">
+                            
+                            <div class="panel-heading" style="{!IF(isRedirect,'','display:none;')}" >
+                                
+                                <h5>
+                                    <apex:outputText style=" font-style:italic, color: #111; font-family: 'Helvetica Neue', sans-serif; font-size: 20px; font-weight: bold; letter-spacing: -1px; line-height: 1; text-align: center; "  rendered="{!If($CurrentPage.parameters.PlanName!='',true,false)}" value="Plan {!$CurrentPage.parameters.PlanName}" /> <br/> 
+                                    Step1: Input Required Information
+                                </h5>
+                            </div>           
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                <strong>Error! </strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            <div class="control-group panel-body " style="{!IF(isRedirect,'','display:none;')}"   >
+                                <div class="bs row" >
+                                  
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Company</apex:outputLabel>
+                                        <div class="form-group divsearch"   id="CompanyPart" >
+                                            <apex:selectList value="{!Header.ASI_MFM_Company__c}" size="1"  label="Company:" styleClass=" form-control searchcss input-sm" >
+                                                <apex:selectOption itemValue="PRK" itemLabel="PRK"/>
+                                                <apex:selectOption itemValue="PRKI" itemLabel="PRKI"/>
+                                            </apex:selectList>    
+                                        </div>
+                                    </div> 
+                                    
+                                    
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Currency:</apex:outputLabel>
+                                        
+                                        <div class="form-group divsearch"  id="FXPart" >
+                                            
+                                            <apex:selectList value="{!Header.ASI_MFM_Currency__c}" size="1" label="Currency:" styleClass="form-control searchcss input-sm"  onChange="ChangeFX();" >
+                                                <apex:selectOption itemValue="KRW" itemLabel="KRW"/>
+                                                <apex:selectOption itemValue="AUD" itemLabel="AUD"/>
+                                                <apex:selectOption itemValue="EUR" itemLabel="EUR"/>
+                                                <apex:selectOption itemValue="GBP" itemLabel="GBP"/>
+                                                <apex:selectOption itemValue="HKD" itemLabel="HKD"/>
+                                                <apex:selectOption itemValue="SGD" itemLabel="SGD"/>
+                                                <apex:selectOption itemValue="USD" itemLabel="USD"/>
+                                            </apex:selectList>    
+                                            
+                                        </div>
+                                    </div> 
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Exchange Rate:</apex:outputLabel>
+                                        <div class="form-group divsearch" id="RatePart">
+                                            <apex:inputText id="ExchangeRateIdInput"
+                                                            value="{!Header.ASI_MFM_Exchange_Rate__c}"
+                                                            styleClass="form-control searchcss input-sm ExchangeRateIdInput"  
+                                                            html-placeholder="Exchange Rate"/>
+                                        </div>
+                                    </div> 
+                                    
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Invoice Number:</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.ASI_MFM_Invoice_Number__c}" 
+                                                             styleClass="InvoiceNumberInput form-control searchcss input-sm"  html-placeholder="Invoice Number"/>
+                                        </div>
+                                    </div> 
+                                    
+                                      
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Supplier:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupCss">
+                                            <apex:inputField value="{!Header.ASI_MFM_Supplier_Name__c}" styleClass="SupplierNameID" html-placeholder=" Supplier"/>
+                                        </div>
+                                    </div> 
+                                    
+                                   
+                                </div>
+                                
+                                
+                                <div class="bs row" >
+                                     <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Invoice Date:</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.ASI_MFM_Invoice_Date__c}"
+                                                             styleClass=" InvoiceDateInput form-control searchcss input-sm" style="width: 10em;"    html-placeholder="Invoice Date"/>
+                                        </div>
+                                    </div> 
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Total Payment Amount<br/>(Including VAT):</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.ASI_MFM_KR_TotalPayAmtIncludeVAT__c}"
+                                                             styleClass=" TotalPaymentAmountIncludingTaxInput form-control searchcss input-sm required"
+                                                             style="width: 10em;"    html-placeholder="Total Payment Amount"/>
+                                        </div>
+                                    </div> 
+                                    
+                                    <div class="col-md-4"><!--<apex:commandLink action="{!generateCSV}" styleClass="bs btn btn-success btn-md "style="margin-left: 7px;"  target="_blank"   >Generate CSV  </apex:commandLink><apex:commandButton styleClass="bs btn btn-success btn-md "style="margin-left: 7px;"  value="Generate CSV"  action="{!generateCSV}" />-->
+                                        <apex:commandButton styleClass="bs btn btn-success btn-md "
+                                                            style="margin-left: 7px;"  value="Generate Excel"  onclick="generateCSVByJS()" />
+                                        
+                                    </div>     
+                                </div>
+                            </div>
+                        </div>
+                    </apex:outputPanel>   
+                    
+                </div>
+                <div class="row">
+                    
+                </div> 
+                
+            </div>
+            
+            <div class="row">
+                &nbsp;&nbsp;
+            </div>
+        </apex:form>
+        <apex:form >
+            <div style="{!IF(isRedirect,'','display:none;')}" > 
+                <c:ASI_MFM_KR_UploadNoTempComp TitleName="Step 2: Direct Payment Upload"
+                                               ObjectAPINameAtt="ASI_MFM_Payment_Line_Item__c"
+                                               RecordTypeAtt="KR Payment Line Item"
+                                               FieldsAtt="ASI_MFM_Plan_Line_Item__c,ASI_MFM_Payee__c,ASI_MFM_Company__c,ASI_MFM_Currency_Sys__c,ASI_MFM_BC_Code__c,ASI_MFM_Invoice_Number__c,ASI_MFM_Invoice_Date__c,ASI_MFM_KR_subLedger__c,ASI_MFM_AP_Code__c,ASI_MFM_GST_Amount__c,ASI_MFM_Where_Customer__c,ASI_MFM_Beneficiary_Customer__c,ASI_MFM_Payment_Amount__c,ASI_MFM_AP_Remark__c"
+                                               FieldsLabelAtt="Plan Line Item,Payee,Company,Currency,Exchange Rate,Invoice Number,Invoice Date,Subledger,AP Code,Total Payment Amount (Including VAT),Where Customer,Beneficiary Customer,Payment Amount,AP Remark"
+                                               EXIDAtt="ASI_MFM_Plan_Line_Item__c/ASI_MFM_Plan_Line_Item__c:Plan Line Item&Name,Plan Line Item RecordType&Recordtypeid;
+                                                        ASI_MFM_AP_Code__c/ASI_MFM_AP_Code__c:AP Code&ASI_MFM_AP_Code__c,AP Recordtype&recordtypeid;
+                                                        ASI_CRM_AccountsAdditionalField__c/ASI_MFM_Where_Customer__c:Where Customer&ASI_CRM_MY_CustomerCode__c,Where Customer Recordtype&recordtypeid;
+                                                        ASI_CRM_AccountsAdditionalField__c/ASI_MFM_Beneficiary_Customer__c:Beneficiary Customer&ASI_CRM_MY_CustomerCode__c,Beneficiary Customer Recordtype&recordtypeid;
+                                                        ASI_TnE_Branch_Channel__c/ASI_MFM_KR_subLedger__c:Subledger&Name,Subledger Recordtype&recordtypeid;"
+                                               templateAtt="ASI_MFM_KR_PlanTemplate"
+                                               optAllNoneAtt="true"
+                                               urlAtt="{!$CurrentPage.parameters.id}"
+                                               inlineVFAtt="true"
+                                               DefaultValuesAtt="Plan Line Item RecordType:KR Plan Line Item;Subledger Recordtype:KR Branch+Channel;AP Recordtype:KR AP Code;Beneficiary Customer Recordtype:Wholesaler (KR); Where Customer Recordtype:Venue (KR);"
+                                               recEXIDAtt="Payment Line Item External ID"
+                                               recEXIDColAtt="ASI_MFM_Payment_Line_Item_External_ID__c"
+                                               ParentObjectAPINameAtt="ASI_MFM_Mass_Upload_Log__c"
+                                               ParentObjectUploadMsgAtt="ASI_MFM_Error_Message__c"
+                                               UpsertModeAtt="true"
+                                               BatchModeAtt="true"
+                                               EmailNotificationAtt="true"
+                                               isOffSetPayment="false"
+                                               />            
+                
+                
+            </div> 
+            
+        </apex:form>
+        
+    </body>
+    
+</apex:page>

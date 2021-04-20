@@ -1,0 +1,257 @@
+<!--
+ - Created by Murat Can on 25/08/2020.
+ -->
+
+<aura:component description="EUR_TR_CreateSurvey" controller="EUR_TR_CreateSurveyController"
+                implements="force:hasRecordId,lightning:actionOverride,flexipage:availableForRecordHome">
+    <aura:attribute name="master" type="EUR_TR_Survey__c" default="{'sobjectType': 'EUR_TR_Survey__c'}" />
+    <aura:attribute name="details" type="EUR_TR_Survey__c[]" />
+    <aura:attribute name="deleteList" type="EUR_TR_Survey__c[]" />
+    <aura:attribute name="submitButtonLabel" type="String" default="Anketi Kaydet" />
+    <aura:attribute name="isReadOnly" type="Boolean" default="false" />
+    <aura:attribute name="isLoading" type="Boolean" default="false" />
+    <aura:attribute name="isModalOpen" type="Boolean" default="false" />
+    <aura:attribute name="users" type="List" />
+    <aura:attribute name="assignedUsers" type="List" />
+
+    <c:EUR_TR_CommonUtility aura:id="commonUtility"/>
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+    <lightning:navigation aura:id="navService"/>
+    <aura:handler event="aura:locationChange" action="{!c.refreshSurveyForm}"/>
+
+    <div class="slds-is-relative">
+        <aura:if isTrue="{!v.isLoading}">
+            <lightning:spinner />
+        </aura:if>
+
+        <lightning:card title="Anket Tanımı" iconName="standard:question_best" >
+            <aura:set attribute="actions">
+                <lightning:button label="{!v.submitButtonLabel}" iconName="utility:save" variant="brand" onclick="{!c.handleSaveButton}" type="submit"/>
+            </aura:set>
+
+            <lightning:recordEditForm objectApiName="EUR_TR_Survey__c">
+                <lightning:messages />
+                <lightning:layout multipleRows="true" class="slds-m-around_medium">
+                    <lightning:layoutItem size="6">
+                        <lightning:inputField fieldName="EUR_TR_Description__c" value="{!v.master.EUR_TR_Description__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                    </lightning:layoutItem>
+                    <lightning:layoutItem size="6">
+                        <lightning:inputField fieldName="EUR_TR_ValidFrom__c" value="{!v.master.EUR_TR_ValidFrom__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                    </lightning:layoutItem>
+                    <lightning:layoutItem size="6">
+                        <lightning:inputField fieldName="EUR_TR_CaptureMoment__c" value="{!v.master.EUR_TR_CaptureMoment__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                    </lightning:layoutItem>
+                    <lightning:layoutItem size="6">
+                        <lightning:inputField fieldName="EUR_TR_ValidThru__c" value="{!v.master.EUR_TR_ValidThru__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                    </lightning:layoutItem>
+                    <!--
+                    <aura:if isTrue="{!or(equals(v.master.EUR_TR_CaptureMoment__c, 'BeforeDayStart'), equals(v.master.EUR_TR_CaptureMoment__c, 'BeforeDayEnd'))}">
+                        <lightning:layoutItem size="6" class="slds-p-around_xx-small">
+                            <lightning:button label="Kullanıcı Atamasını Yap" iconName="utility:adduser" onclick="{!c.toggleModalOpen}"/>
+                        </lightning:layoutItem>
+                    </aura:if>
+                    -->
+                    <lightning:layoutItem size="6">
+                        <lightning:input label="Zorunlu" value="{!v.master.EUR_TR_Mandatory__c}" checked="{!v.master.EUR_TR_Mandatory__c}" type="checkbox" class="slds-m-around_xx-small" />
+                    </lightning:layoutItem>
+                    <lightning:layoutItem size="6">
+                        <lightning:input label="Puanlamalı mı?" value="{!v.master.EUR_TR_IsScored__c}" checked="{!v.master.EUR_TR_IsScored__c}" type="checkbox" class="slds-m-around_xx-small" />
+                    </lightning:layoutItem>
+                </lightning:layout>
+            </lightning:recordEditForm>
+        </lightning:card>
+
+        <lightning:card title="Anket Soruları" iconName="standard:question_feed" >
+            <aura:set attribute="actions">
+                <lightning:button label="Yeni Soru" iconName="action:new" onclick="{!c.handleNewQuestionButton}"/>
+            </aura:set>
+
+            <lightning:layout multipleRows="true" class="slds-m-around_medium">
+
+                <lightning:layoutItem size="12">
+                    <aura:if isTrue="{!empty(v.details)}">
+                        <div class="slds-align_absolute-center" style="height:5rem">
+                            Soru bulunmamaktadır.
+                        </div>
+
+                        <aura:set attribute="else">
+                            <aura:iteration items="{!v.details}" var="detail" indexVar="detailIndex">
+                                <lightning:card title="{!'Soru - ' + detail.EUR_TR_QuestionOrder__c}" iconName="standard:question_feed" class="slds-card_boundary">
+                                    <aura:set attribute="actions">
+                                        <lightning:button label="Sil" iconName="action:delete" name="{!detailIndex}" onclick="{!c.handleDeleteQuestionButton}" variant="destructive-text"/>
+                                    </aura:set>
+
+                                    <lightning:recordEditForm objectApiName="EUR_TR_Survey__c" >
+                                        <lightning:messages />
+                                        <lightning:layout multipleRows="true" class="slds-m-around_medium">
+                                            <lightning:layoutItem size="3">
+                                                <lightning:inputField fieldName="EUR_TR_QuestionOrder__c" value="{!detail.EUR_TR_QuestionOrder__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                                                <lightning:input label="Zorunlu" value="{!detail.EUR_TR_Mandatory__c}" checked="{!detail.EUR_TR_Mandatory__c}" type="checkbox" onchange="{!c.handleMandatoryToggle}" name="{!detailIndex}" class="slds-m-around_xx-small" />
+                                                <div class="slds-text-body_small slds-m-around_xx-small">
+                                                    <b>Fotoğraf Zorunlu</b> seçeneğini seçebilmeniz için lütfen <b>Zorunlu</b> olarak işaretleyin.
+                                                </div>
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem size="3">
+                                                <lightning:inputField fieldName="EUR_TR_Description__c" value="{!detail.EUR_TR_Description__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                                                <lightning:input label="Fotoğraf Zorunlu" value="{!detail.EUR_TR_PictureRequired__c}" checked="{!detail.EUR_TR_PictureRequired__c}" type="checkbox" onchange="{!c.handleMandatoryToggle}" name="{!detailIndex}" class="slds-m-around_xx-small" />
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem size="3">
+                                                <lightning:inputField fieldName="EUR_TR_QuestionType__c" value="{!detail.EUR_TR_QuestionType__c}" disabled="{!v.isReadOnly}" aura:id="inputComp" required="true" />
+                                                <aura:if isTrue="{!not(empty(detail.Id))}">
+                                                    <div class="slds-p-around_xx-small" >
+                                                        <lightning:fileUpload label="Dosya Yükle"
+                                                                              recordId="{!detail.Id}"
+                                                                              multiple="true"
+                                                                              title="Dosya Yükle"
+                                                                              disabled="{!v.isReadOnly}"
+                                                                              name="{!detail.Id}"
+                                                                              onuploadfinished="{!c.handleFileUploaded}"
+                                                        />
+                                                        <aura:if isTrue="{!not(empty(detail.AttachedContentDocuments))}">
+                                                            <label class="slds-form-element__label">Dosyalar</label>
+                                                            <lightning:layout multipleRows="true">
+                                                                <aura:iteration items="{!detail.AttachedContentDocuments}" var="file">
+                                                                    <lightning:layoutItem>
+                                                                        <lightning:fileCard fileId="{!file.ContentDocumentId}" description="{!file.Title}" />
+                                                                    </lightning:layoutItem>
+                                                                </aura:iteration>
+                                                                <lightning:layoutItem>
+                                                                </lightning:layoutItem>
+                                                            </lightning:layout>
+                                                        </aura:if>
+                                                    </div>
+                                                </aura:if>
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem size="3">
+                                                <aura:if isTrue="{!equals(detail.EUR_TR_QuestionType__c, 'Checkbox')}" >
+                                                    <aura:if isTrue="{!v.master.EUR_TR_IsScored__c}">
+                                                        <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                              value="{!detail.EUR_TR_PointsToEarn__c}"
+                                                                              aura:id="inputComp"
+                                                                              required="true"
+                                                        />
+                                                        <aura:set attribute="else">
+                                                            <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                                  value="{!detail.EUR_TR_PointsToEarn__c}"
+                                                                                  disabled="true"
+                                                                                  required="false"
+                                                            />
+                                                        </aura:set>
+                                                    </aura:if>
+                                                    <lightning:input label="Puan Kazandıracak Checkbox Yanıt" value="{!detail.EUR_TR_AnswerCheckboxToEarnPoints__c}"  checked="{!detail.EUR_TR_AnswerCheckboxToEarnPoints__c}" disabled="{!or(v.isReadOnly, not(v.master.EUR_TR_IsScored__c))}" type="checkbox" class="slds-m-around_xx-small" />
+                                                </aura:if>
+
+                                                <aura:if isTrue="{!or(equals(detail.EUR_TR_QuestionType__c, 'Numeric'), equals(detail.EUR_TR_QuestionType__c, 'Text'))}" >
+                                                    <lightning:layout multipleRows="true">
+                                                        <lightning:layoutItem size="6">
+                                                            <lightning:inputField fieldName="EUR_TR_Min__c" value="{!detail.EUR_TR_Min__c}" disabled="{!v.isReadOnly}" />
+                                                        </lightning:layoutItem>
+                                                        <lightning:layoutItem size="6">
+                                                            <lightning:inputField fieldName="EUR_TR_Max__c" value="{!detail.EUR_TR_Max__c}" disabled="{!v.isReadOnly}" />
+                                                        </lightning:layoutItem>
+                                                        <aura:if isTrue="{!notequals(detail.EUR_TR_QuestionType__c, 'Text')}">
+                                                            <lightning:layoutItem size="6">
+                                                                <lightning:inputField fieldName="EUR_TR_MinToEarnPoints__c" value="{!detail.EUR_TR_MinToEarnPoints__c}" disabled="{!or(v.isReadOnly, not(v.master.EUR_TR_IsScored__c))}" required="true" />
+                                                            </lightning:layoutItem>
+                                                            <lightning:layoutItem size="6">
+                                                                <lightning:inputField fieldName="EUR_TR_MaxToEarnPoints__c" value="{!detail.EUR_TR_MaxToEarnPoints__c}" disabled="{!or(v.isReadOnly, not(v.master.EUR_TR_IsScored__c))}" required="true" />
+                                                            </lightning:layoutItem>
+                                                        </aura:if>
+                                                        <aura:if isTrue="{!v.master.EUR_TR_IsScored__c}">
+                                                            <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                                  value="{!detail.EUR_TR_PointsToEarn__c}"
+                                                                                  aura:id="inputComp"
+                                                                                  required="true"
+                                                            />
+                                                            <aura:set attribute="else">
+                                                                <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                                      value="{!detail.EUR_TR_PointsToEarn__c}"
+                                                                                      disabled="true"
+                                                                                      required="false"
+                                                                />
+                                                            </aura:set>
+                                                        </aura:if>
+                                                    </lightning:layout>
+                                                </aura:if>
+
+                                                <aura:if isTrue="{!or(equals(detail.EUR_TR_QuestionType__c, 'Radio'), equals(detail.EUR_TR_QuestionType__c, 'MultiSelect'))}" >
+                                                    <label class="slds-form-element__label">Seçenekler (Doğru Seçenek - Soru Sırası - Açıklama - Kazanılacak Puan)</label>
+
+                                                    <div class="slds-p-left_xx-small slds-p-right_xx-small">
+                                                        <aura:iteration items="{!detail.Options__r}" var="option" indexVar="optionIndex">
+                                                            <lightning:recordEditForm objectApiName="EUR_TR_Survey__c">
+                                                                <lightning:layout multipleRows="false" horizontalAlign="spread" >
+                                                                    <lightning:layoutItem  flexibility="auto">
+                                                                        <lightning:input label="" value="{!option.EUR_TR_AnswerRadioToEarnPoints__c}" checked="{!option.EUR_TR_AnswerRadioToEarnPoints__c}" onchange="{!c.handleCheckboxButton}" disabled="{!or(v.isReadOnly, not(v.master.EUR_TR_IsScored__c))}" type="checkbox-button" name="{!detailIndex + '-' + optionIndex}"/>
+                                                                    </lightning:layoutItem>
+                                                                    <lightning:layoutItem  size="2" flexibility="auto" class="slds-p-left_xx-small slds-p-right_xx-small">
+                                                                        <lightning:inputField fieldName="EUR_TR_QuestionOrder__c" value="{!option.EUR_TR_QuestionOrder__c}" disabled="{!v.isReadOnly}" variant="label-hidden" aura:id="inputComp" required="true" />
+                                                                    </lightning:layoutItem>
+                                                                    <lightning:layoutItem  flexibility="auto" >
+                                                                        <lightning:inputField fieldName="EUR_TR_Description__c" value="{!option.EUR_TR_Description__c}" disabled="{!v.isReadOnly}" variant="label-hidden" aura:id="inputComp" required="true" />
+                                                                    </lightning:layoutItem>
+                                                                    <lightning:layoutItem size="3" flexibility="auto" class="slds-p-left_xx-small slds-p-right_xx-small">
+                                                                        <aura:if isTrue="{!v.master.EUR_TR_IsScored__c}">
+                                                                            <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                                                  value="{!option.EUR_TR_PointsToEarn__c}"
+                                                                                                  variant="label-hidden"
+                                                                                                  aura:id="inputComp"
+                                                                                                  required="true"
+                                                                            />
+                                                                            <aura:set attribute="else">
+                                                                                <lightning:inputField fieldName="EUR_TR_PointsToEarn__c"
+                                                                                                      value="{!option.EUR_TR_PointsToEarn__c}"
+                                                                                                      variant="label-hidden"
+                                                                                                      disabled="true"
+                                                                                                      required="false"
+                                                                                />
+                                                                            </aura:set>
+                                                                        </aura:if>
+                                                                    </lightning:layoutItem>
+                                                                    <lightning:layoutItem  flexibility="auto">
+                                                                        <lightning:buttonIcon iconName="utility:close" alternativeText="Kaldır" name="{!detailIndex + '-' + optionIndex}" onclick="{!c.handleDeleteOptionButton}"/>
+                                                                    </lightning:layoutItem>
+                                                                </lightning:layout>
+                                                            </lightning:recordEditForm>
+                                                        </aura:iteration>
+                                                        <lightning:button label="Yeni Seçenek" iconName="action:new" onclick="{!c.handleNewOptionButton}"  name="{!detailIndex}" class="slds-button_stretch"/>
+                                                    </div>
+                                                </aura:if>
+                                            </lightning:layoutItem>
+                                        </lightning:layout>
+                                    </lightning:recordEditForm>
+                                </lightning:card>
+                            </aura:iteration>
+                        </aura:set>
+                    </aura:if>
+                </lightning:layoutItem>
+                <lightning:layoutItem size="12" class="slds-m-top_medium slds-m-bottom_medium">
+                    <lightning:button label="Yeni Soru" iconName="action:new" onclick="{!c.handleNewQuestionButton}" class="slds-button_stretch slds-p-around_small" />
+                </lightning:layoutItem>
+            </lightning:layout>
+        </lightning:card>
+
+        <!--
+        <aura:if isTrue="{!v.isModalOpen}">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <div class="slds-modal__content slds-p-around_medium" >
+                        <div class="slds-m-around_small">
+                            <lightning:dualListbox label= "Kullanıcıları Seçiniz"
+                                                   sourceLabel="Tüm Kullanıcılar"
+                                                   selectedLabel="Seçilen Kullanıcılar"
+                                                   options="{!v.users}"
+                                                   value="{!v.assignedUsers}"/>
+                        </div>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning:button variant="destructive-text" label="Kapat" title="Kapat" onclick="{!c.toggleModalOpen}" />
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+        -->
+    </div>
+</aura:component>

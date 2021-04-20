@@ -1,0 +1,420 @@
+<!--
+ - Created by Alan Lau 2 on 14/1/2019.
+ -->
+<apex:page id="ASI_CRM_Purchase_Contract_ReportPage" controller="ASI_CRM_Purchase_Contract_ReportPageCtrl"
+           docType="html-5.0">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script>
+
+        const IS_SALES_ADMIN = '{! isSalesAdmin }' === 'true';
+        const USER_FULLNAME = '{! $User.LastName + ' ' + $User.FirstName }';
+        const DEFAULT_STATUES = ['Activated', 'Approved', 'Complete'];
+        const INPUT_FIELD_TYPES = {
+            TEXT: 'text',
+            DATE: 'date',
+            CHECKBOX: 'checkbox',
+            SELECT: 'select'
+        };
+        const EXPORT_FILE_FORMATS = {
+            EXCEL: 'xls',
+            CSV: 'csv'
+        };
+        const EXPORT_FILE_ENCODINGS = {
+            UTF8: 'UTF-8',
+            ISO8859: 'ISO-8859-1'
+        };
+
+        const CommonUtil = function () {
+
+            function formatDate(dateObject) {
+                if (!dateObject) return;
+
+                let dd = dateObject.getDate();
+                let mm = dateObject.getMonth() + 1;
+                let yyyy = dateObject.getFullYear();
+
+                if (dd < 10) dd = '0' + dd;
+                if (mm < 10) mm = '0' + mm;
+
+                return mm + '/' + dd + '/' + yyyy;
+            }
+
+            return {
+                formatDate: formatDate
+            }
+        }();
+
+        const InputFieldUtil = function () {
+
+            function getTextInputValue(inputFieldObject) {
+                return inputFieldObject.val();
+            }
+
+            function getSelectInputValue(inputFieldObject) {
+                return inputFieldObject.val();
+            }
+
+            function getDateInputValue(inputFieldObject) {
+                const date = new Date(inputFieldObject.val());
+                let value;
+                if (inputFieldObject.val() && date.toString() !== 'Invalid Date') {
+                    value = CommonUtil.formatDate(date);
+                } else {
+                    value = '';
+                }
+                return value;
+            }
+
+            function getCheckboxInputValue(inputFieldObject) {
+                return inputFieldObject.is(':checked');
+            }
+
+            return {
+                getTextInputValue: getTextInputValue,
+                getSelectInputValue: getSelectInputValue,
+                getDateInputValue: getDateInputValue,
+                getCheckboxInputValue: getCheckboxInputValue,
+            }
+        }();
+
+        const parameterKeyFieldMap = {
+            'pv0': 'itemGroupName',
+            'pv1': 'shipToName',
+            'pv2': 'startDate',
+            'pv3': 'endDateTo',
+            'pv4': 'recordTypeName',
+            'pv5': 'salesGroup',
+            'pv6': 'status',
+            'pv7': 'endDate',
+            'pv8': '',
+            'pv9': 'ownerName',
+        };
+
+        let batchId = '{! batchId }';
+
+        function ReportParameters() {
+            this.reportId = '';
+            this.effective = true;
+
+            this.itemGroupName = null;
+            this.shipToName = null;
+            this.startDate = null;
+            this.endDateTo = null;
+            this.recordTypeName = null;
+            this.salesGroup = null;
+            this.status = DEFAULT_STATUES.join(',');
+            this.endDate = null;
+            this.ownerName = IS_SALES_ADMIN ? null : USER_FULLNAME;
+        }
+
+        ReportParameters.prototype.getReportUrl = function () {
+
+            const urlParameterValues = Object.keys(parameterKeyFieldMap)
+                    .filter(key => {
+                        const reportParameterKey = parameterKeyFieldMap[key];
+                        if (!reportParameterKey) return false;
+
+                        const value = this[reportParameterKey];
+
+                        return !(value === undefined || value === null);
+                    }).map(key => {
+                        const reportParameterKey = parameterKeyFieldMap[key];
+                        const value = this[reportParameterKey];
+
+                        return `${key}=${value}`;
+                    });
+
+            return `${this.reportId}?${urlParameterValues.join('&')}`;
+        };
+
+        ReportParameters.prototype.setValue = function (key, value) {
+            if (!key || value === undefined) return;
+
+            if (Object.values(parameterKeyFieldMap).includes(key)) {
+                this[key] = value;
+            } else if (key === 'effective') {
+                this.setEffective(value);
+            } else {
+                this[key] = value;
+            }
+        };
+
+        ReportParameters.prototype.setReportId = function (reportId) {
+            this.reportId = reportId;
+        };
+
+        ReportParameters.prototype.setEffective = function (isEffective) {
+            this.effective = isEffective;
+            if (!isEffective) {
+                this.status = '';
+                this.endDate = CommonUtil.formatDate(new Date(2000, 1, 1));
+            } else {
+                this.status = DEFAULT_STATUES.join(',');
+                this.endDate = CommonUtil.formatDate(new Date());
+            }
+        };
+
+        const reportParameters = new ReportParameters();
+
+        reportParameters.setEffective(true);
+
+        function setParameterValue(inputFieldDom, fieldName) {
+            const inputField = $(inputFieldDom);
+            const inputFieldType = inputField.attr('type');
+
+            let value;
+            if (inputFieldType === INPUT_FIELD_TYPES.TEXT) {
+                value = InputFieldUtil.getTextInputValue(inputField);
+            } else if (inputFieldType === INPUT_FIELD_TYPES.DATE) {
+                value = InputFieldUtil.getDateInputValue(inputField);
+            } else if (inputFieldType === INPUT_FIELD_TYPES.CHECKBOX) {
+                value = InputFieldUtil.getCheckboxInputValue(inputField);
+            } else if (inputFieldType === undefined && inputField.prop('tagName').toLowerCase() === INPUT_FIELD_TYPES.SELECT) {
+                value = InputFieldUtil.getSelectInputValue(inputField);
+            }
+
+            if (value === '') value = null;
+
+            reportParameters.setValue(fieldName, value);
+            hideSectionTwoDiv();
+        }
+
+        function openPurchaseContractReport(reportId) {
+
+            reportParameters.setReportId(reportId);
+            console.log(reportParameters.getReportUrl());
+            window.open(reportParameters.getReportUrl(), '', 'height=600,width=1000,left=100,top=80,scrollbars=yes,toolbar=no,status=no');
+            document.getElementById("confirmCloneContractsForm").style.display = "block";
+        }
+
+        function openNewPurchaseContractLineReport(reportId) {
+            window.open(reportId + '?pv0=' + batchId, '', 'height=600,width=1000,left=100,top=80,scrollbars=yes,toolbar=no,status=no');
+        }
+
+        function downloadReport(reportId) {
+            window.open(reportId + '?pv0=' + batchId + '&export=1&enc=' + EXPORT_FILE_ENCODINGS.UTF8 + '&xf=' + EXPORT_FILE_FORMATS.EXCEL);
+        }
+
+        function hideSectionTwoDiv() {
+            document.getElementById("sectionTwoDiv").style.display = "none";
+        }
+
+        function showSectionTwoDiv() {
+            document.getElementById("sectionTwoDiv").style.display = "block";
+        }
+
+        function isMandatoryFieldEmpty() {
+            const itemGroupName = reportParameters.itemGroupName;
+            const shipToName = reportParameters.shipToName;
+
+            let isMandatoryFieldEmpty = true;
+
+            if ((itemGroupName != null && "" !== itemGroupName.trim()) || (shipToName != null && "" !== shipToName.trim())) {
+                isMandatoryFieldEmpty = false;
+            }
+
+            return isMandatoryFieldEmpty;
+        }
+
+        function blockStepTwo() {
+            window.alert('Please input Item Group or BS/Retailer/Ship To.');
+            hideSectionTwoDiv();
+        }
+
+        function updateBatchId(newBatchId) {
+            batchId = newBatchId;
+        }
+
+    </script>
+    <style>
+        td.reportSearchForm-width-10 {
+            width: 10%;
+        }
+
+        td.reportSearchForm-width-40 {
+            width: 40%;
+        }
+
+        .reportSearchForm-width-100 {
+            width: 100%;
+        }
+
+        span.reportSearchForm-color-red {
+            color: red;
+        }
+
+        .reportSearchForm-spinner {
+            background-color: #DCD6D6;
+            height: 100%;
+            opacity: 0.65;
+            width: 100%;
+        }
+
+        .reportSearchForm-spinner .waitingHolder {
+            top: 74px;
+            width: 91px;
+        }
+    </style>
+    <apex:pageBlock title="Find Contracts">
+
+        <apex:form title="searchContractsForm" id="searchContractsForm">
+            <apex:actionstatus id="actStatusId">
+                <apex:facet name="start">
+                    <div class="waitingSearchDiv reportSearchForm-spinner" id="el_loading">
+                        <div class="waitingHolder">
+                            <img class="waitingImage" src="/img/loading.gif" title="Please Wait..."/>
+                            <span class="waitingDescription">Loading...</span>
+                        </div>
+                    </div>
+                </apex:facet>
+            </apex:actionstatus>
+            <table class="reportSearchForm-width-100">
+                <tbody>
+                <tr>
+                    <td class="reportSearchForm-width-10">
+                        Item Group<span class="reportSearchForm-color-red">*</span>:
+                    </td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:inputField id="itemGroupName" value="{!reportSearchForm.ASI_CRM_Item_Group__c}"
+                                         onChange="setParameterValue(this, 'itemGroupName');"/>
+                    </td>
+                    <td class="reportSearchForm-width-10">
+                        BS/Retailer/Ship To<span class="reportSearchForm-color-red">*</span>:
+                    </td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:inputField id="shipToName"
+                                         value="{!reportSearchForm.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__c}"
+                                         onChange="setParameterValue(this, 'shipToName');"/>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="reportSearchForm-width-10">Start Date From:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:input id="startDate" type="date" value="{!reportParameters.startDate}"
+                                    onChange="setParameterValue(this, 'startDate');"/>
+                    </td>
+                    <td class="reportSearchForm-width-10">End Date To:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:input id="endDate" type="date" value="{!reportParameters.endToDate}"
+                                    onChange="setParameterValue(this, 'endDateTo');"/>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="reportSearchForm-width-10">Record Type:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:selectList id="recordTypeName" value="{!reportParameters.recordTypeName}" size="1"
+                                         onchange="setParameterValue(this, 'recordTypeName');">
+                            <apex:selectOptions value="{! purchaseContractRecordTypesPickListOptions }"/>
+                        </apex:selectList>
+                    </td>
+                    <td class="reportSearchForm-width-10">Sales Group:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:inputField id="salesGroup"
+                                         value="{!reportSearchForm.ASI_CRM_Purchase_Contract__r.ASI_CRM_Sales_Group__c}"
+                                         onChange="setParameterValue(this, 'salesGroup');"
+                                         html-placeholder="e.g. C1,C2(comma-separated)"/>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="reportSearchForm-width-10">Effective:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:inputCheckbox id="effective" value="{! reportParameters.isEffective }"
+                                            onchange="setParameterValue(this, 'effective');"/>
+                    </td>
+                    <td class="reportSearchForm-width-10">Owner:</td>
+                    <td class="reportSearchForm-width-40">
+                        <apex:inputField id="ownerName"
+                                         value="{! reportSearchForm.ASI_CRM_Purchase_Contract__r.OwnerId }"
+                                         rendered="{!isSalesAdmin}" onChange="setParameterValue(this, 'ownerName');"
+                                         required="false"/>
+                        <apex:outputText value="{! $User.FirstName + ' ' + $User.LastName }"
+                                         rendered="{!!isSalesAdmin}"/>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3"></td>
+                    <td style="text-align: end">
+                        <apex:commandButton value="Search" action="{!searchPurchaseContractReport}"
+                                            onComplete="updateBatchId('{! batchId }')"
+                                            onClick="!isMandatoryFieldEmpty() ? showSectionTwoDiv() : blockStepTwo()"
+                                            status="actStatusId" reRender="sectionTwo, sectionThree"/>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </apex:form>
+    </apex:pageBlock>
+
+    <div id="sectionTwoDiv" style="display: block">
+        <apex:outputPanel id="sectionTwo">
+            <apex:pageBlock title="Review Contracts in Report" rendered="{!isStepOneFinished && !isStepTwoFinished}">
+                <apex:pageMessages />
+
+                <span>Please review the search results by clicking the <a
+                        onclick="openPurchaseContractReport('/{!purchaseContractReportId}')"><b
+                        style="color: blue">link</b></a>. If the contracts are the ones you want to generate, please confirm below:</span>
+                <div id="confirmCloneContractsForm" style="display: none">
+                    <apex:pageBlockSection title="Confirm Clone the Contracts" rendered="{!isStepOneFinished}">
+                        <apex:form title="confirmCloneContractsForm">
+                            <apex:commandButton id="confirmButton" value="Confirm" action="{!clonePurchaseContracts}"
+                                                status="actStatusId" reRender="sectionTwo, sectionThree"/>
+                            <br/>
+                            Please be noted the following about newly generated contracts:
+                            <ul>
+                                <li>Contract No. = [New Contract No.]</li>
+                                <li>Status = Draft</li>
+                                <li>Start Date = Today</li>
+                                <li>Application Date = Today</li>
+                                <li>Remark = [Blank]</li>
+                                <li>The rest follow the original contract</li>
+                            </ul>
+                        </apex:form>
+                    </apex:pageBlockSection>
+                </div>
+            </apex:pageBlock>
+        </apex:outputPanel>
+    </div>
+
+    <apex:outputPanel id="sectionThree">
+        <apex:pageBlock title="New Contracts" rendered="{!isStepTwoFinished}">
+            <apex:pageMessages />
+            <table>
+                <tr>
+                    <td>The contracts have been generated.</td>
+                </tr>
+                <tr>
+                    <td>- To review the contracts, please click the <a
+                            onclick="openNewPurchaseContractLineReport('/{!purchaseContractLineItemReportId}')"><b
+                            style="color: blue">link</b></a>.
+                    </td>
+                </tr>
+                <tr>
+                    <td>- To export contract details for adjustment, please click the <a
+                            onclick="downloadReport('/{!purchaseContractLineItemReportId}')"><b style="color: blue">download</b></a>.
+                    </td>
+                </tr>
+            </table>
+        </apex:pageBlock>
+    </apex:outputPanel>
+
+    <apex:pageBlock title="Upload Contract Line Items">
+        <apex:form >
+            <c:ASI_CRM_Purchase_Contract_MassUpload TitleName="Upload Contract Line Items"
+                                                    ObjectAPINameAtt="ASI_CRM_Purchase_Contract_Line_Item__c"
+                                                    FieldsAtt="ASI_CRM_Purchase_Contract__c,ASI_CRM_Pay_To__c,ASI_CRM_Item_Group__c,ASI_CRM_Rebate_Type__c,ASI_CRM_Reg_Volume_Monthly__c,ASI_CRM_Target_Volume_Unit__c,ASI_CRM_Current_Direct_Rebate__c,ASI_CRM_Current_Indirect_Rebate__c,ASI_CRM_Unit_Price__c,ASI_CRM_RSP_before_Rebate__c,ASI_CRM_RSP_after_Rebate__c,ASI_CRM_Remarks__c"
+                                                    FieldsLabelAtt="Contract No.,Pay To,Item Group,Rebate Type,Reg Volume (Monthly),Target Volume Unit,Current Direct Rebate,Current Indirect Rebate,Unit Price/Cost,RSP before Rebate,RSP after Rebate,Remarks"
+                                                    EXIDAtt="ASI_CRM_Purchase_Contract__c/ASI_CRM_Purchase_Contract__c:Contract No.&Name
+                                                    ;ASI_MFM_Item_Group__c/ASI_CRM_Item_Group__c:Item Group&ASI_MFM_Item_Group_Code__c"
+                                                    optAllNoneAtt="true"
+                                                    inlineVFAtt="true"
+                                                    UpsertModeAtt="true"
+                                                    BatchModeAtt="false"
+                                                    EmailNotificationAtt="true"
+                                                    recEXIDAtt="Purchase Contract Line Item ID"
+                                                    recEXIDColAtt="Id"
+            />
+        </apex:form>
+    </apex:pageBlock>
+
+</apex:page>

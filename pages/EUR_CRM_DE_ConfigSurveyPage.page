@@ -1,0 +1,291 @@
+<apex:page standardController="EUR_CRM_Account__c" extensions="EUR_CRM_DE_SurveyControllerExt" recordSetVar="EUR_CRM_Accounts" tabStyle="EUR_CRM_Survey_Header__c">
+<script type="text/javascript">
+    function doCheckboxChange(cb,itemId){
+        console.log(">>>>" + itemId);
+        if(cb.checked==true){
+
+            aSelectQuestion(itemId);
+        }else{
+            aDeselectQuestion(itemId);
+        }
+    }
+ </script>
+<apex:includescript value="{!URLFOR($Resource.EUR_CRM_Survey_Resource, 'jquery/jquery.min.js')}"> </apex:includescript>
+<apex:includescript value="{!URLFOR($Resource.EUR_CRM_Survey_Resource, 'jquery/jquery-ui.js')}"></apex:includescript>
+<apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_Survey_Resource, 'css/jquery-ui.css')}"></apex:stylesheet>
+<apex:includescript value="{!URLFOR($Resource.EUR_CRM_Survey_Resource, 'plugin/jquery.vfFloatingHeaders.js')}" />
+<style>
+ #sortable { list-style-type: none; margin: 0; padding: 0; width: 60%; }
+ #sortable li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.2em; height: 18px; }
+ #sortable li span { position: absolute; margin-left: -1.3em; }
+ .tableContainer { height:300px; width: 100%; overflow: auto; }       
+ .floatingStyle { position:relative; } 
+</style>
+<apex:includescript value="/soap/ajax/21.0/connection.js"> </apex:includescript>
+<apex:includescript value="/soap/ajax/21.0/apex.js"> </apex:includescript>
+<script>
+ //$x = jQuery.noConflict();
+
+ $(document).ready(function (){ 
+    dosort();
+    $('#searchQ').keyup(function(){
+        searchTable($(this).val());
+    });
+ });
+ 
+    function dosort(){
+        $( "#sortable" ).sortable({
+            update: function(event, ui) {
+            sforce.connection.sessionId = '{!$Api.Session_ID}';
+            $("#msg").toggle();
+            var result = $(this).sortable('toArray');
+            length = result.length;
+                for( i=0; i < length; i++){
+                    
+                    var surveyQuestion = new sforce.SObject("EUR_CRM_Survey_Question__c");
+                    surveyQuestion.id = result[i];
+                    surveyQuestion.EUR_CRM_Sequence__c = i;                           
+                    final = sforce.connection.update([surveyQuestion]);
+                }
+               $("#msg").toggle();
+            }
+        });
+        
+    $( "#sortable" ).disableSelection();
+    $('.floatingHeaderTable').vfFloatingHeaders();
+    }
+
+
+    function searchTable(searchText){
+        /*get Table using its Id */
+        var table = $('table[id$=qTable]');
+        table.find('tr').each(function(index, row){
+            var allCells = $(row).find('td');
+            if(allCells.length > 0){
+                var found = false;
+                allCells.each(function(index, td){
+                    var regExp = new RegExp(searchText, 'i');
+                    if(regExp.test($(td).text())){
+                        found = true;
+                        return false;
+                    }
+                });
+                if(found == true)$(row).show();else $(row).hide();
+            }
+        });
+    }            
+    
+    
+    function redirectSurvey(){
+        window.top.location = '/{!surveyHeader.Id}';
+    }
+
+</script> 
+ 
+<apex:sectionHeader title="{!surveyHeader.Name}" subtitle="{!$Label.EUR_CRM_Config_Survey}"/>
+<apex:outputlink value="/{!surveyHeader.Id}" style="font-family: Verdana; text-decoration:none;">&nbsp;«&nbsp;{!$Label.EUR_CRM_Back_to_Survey}&nbsp;{!surveyHeader.Name}</apex:outputlink>
+<p />
+<apex:form >
+
+    <apex:actionFunction name="aSelectQuestion" action="{!doSelectQuestion}" rerender="none">
+          <apex:param name="contextItem" value="" assignTo="{!contextItem}"/>
+    </apex:actionFunction>
+    <apex:actionFunction name="aDeselectQuestion" action="{!doDeselectQuestion}" rerender="none">
+        <apex:param name="contextItem" value="" assignTo="{!contextItem}"/>
+    </apex:actionFunction>
+
+    <!--Replace Publish Button-->
+    <!--apex:commandButton value="{!$Label.EUR_CRM_Survey_Publish}" action="{!publishSurvey}" disabled="{!surveyHeader.EUR_CRM_Active__c}" oncomplete="redirectSurvey();"-->
+    <!--<apex:actionFunction name="aPublish" action="{!publishSurvey}" rerender="none" oncomplete="redirectSurvey();"/>-->
+    <!--<apex:actionFunction name="aUpdateFilterOption" action="{!updateFilterOption}" reRender="accTable,message,mpb" />-->
+    <apex:pageblock id="survey_header" title="{!$Label.EUR_CRM_Survey_Step1}">
+        <script>
+            $(document).ready(function (){ 
+                $('#searchQ').keyup(function(){
+                    searchTable($(this).val());
+                });
+            });
+        </script>
+          <apex:pagemessages id="message"/> 
+          <apex:pageBlockButtons location="bottom">
+              <apex:commandButton value="{!$Label.EUR_CRM_Add_Questions}" action="{!addSurveyQuestions}" reRender="survey_header,survey_questions" oncomplete="dosort();" disabled="{!surveyHeader.EUR_CRM_Active__c}"/>
+          </apex:pageBlockButtons>
+          <!--
+          <apex:pageblockSection title="Survey Details">
+              <apex:inputfield value="{!surveyHeader.Name}" />
+              <apex:inputfield value="{!surveyHeader.EUR_CRM_Valid_From__c}" />
+              <apex:outputfield value="{!surveyHeader.EUR_CRM_Active__c}" />
+              <apex:inputfield value="{!surveyHeader.EUR_CRM_Valid_Until__c}" />
+          </apex:pageblockSection>
+          -->
+          <apex:pageBlockSection columns="1">
+              <apex:outputpanel >
+                  <apex:commandButton value="<" action="{!previousQuestionPage}" reRender="survey_header" oncomplete="dosort()" disabled="{!!hasPreviousQuestionPage}" />
+                  <apex:commandButton value=">" action="{!nextQuestionPage}" reRender="survey_header" oncomplete="dosort()" disabled="{!!hasNextQuestionPage}" />
+                  <span style="margin-left: 360px;">Search</span> <input type="text" id="searchQ"/>
+              </apex:outputpanel>
+              <apex:outputPanel styleClass="tableContainer" layout="block">
+              <apex:pageblockTable value="{!pageQuestionItems}" var="item" style="width: 60%;" styleclass="floatingHeaderTable" id="qTable">
+                  <apex:column width="30px;" >
+                      <apex:facet name="header">
+                          <apex:inputcheckbox value="{!isAllSelected}">
+                              <apex:actionSupport event="onclick" action="{!selectAllQuestions}" rerender="survey_header"/>
+                          </apex:inputCheckBox>
+                      </apex:facet>
+                      <apex:inputCheckbox value="{!item.IsSelected}" onclick="doCheckboxChange(this,'{!item.Question.Id}')"/>
+                      <!--
+                      <apex:inputCheckbox value="{!item.IsSelected}">
+                          <apex:actionSupport event="onclick" action="{!getSelectedItems}" rerender="survey_header"/>
+                      </apex:inputCheckbox>
+                      -->
+                  </apex:column>
+                  <apex:column headerValue="{!$Label.EUR_CRM_Question}">
+                      <apex:outputtext value="{!item.Question.EUR_CRM_Question_Statement__c}"/>
+                  </apex:column>
+              </apex:pageblockTable>
+           </apex:outputPanel>
+          </apex:pageBlockSection>
+    </apex:pageblock>
+        
+    <apex:pageblock title="{!$Label.EUR_CRM_Survey_Questions}" id="survey_questions"  >
+        <apex:outputLabel value="{!$Label.EUR_CRM_Survey_Question_Sequence_Info}"/><br/><br/>
+        <ul id="sortable">
+            <apex:variable var="rowIndex" value="{!0}"/>
+                <apex:repeat id="list" value="{!surveyQuestions}" var="svquestion">
+                <li id="{!svquestion.Id}">
+                    <span class="ui-icon ui-icon-arrowthick-2-n-s" id="{!svquestion.Id}"></span>
+                    <apex:commandLink style="font-size:0.8em; color:red;" action="{!removeSurveyQuestion}" value="{!$Label.EUR_CRM_Remove}" reRender="survey_questions,survey_header" oncomplete="dosort()" rendered="{!!surveyHeader.EUR_CRM_Active__c}">
+                        <apex:param value="{!rowIndex}" name="rowIndex" />
+                    </apex:commandLink>
+                    &nbsp;&nbsp;&nbsp;&nbsp;
+                    <apex:outputtext value="{!svquestion.EUR_CRM_Question__r.EUR_CRM_Question_Statement__c}" />
+                    <apex:variable value="{!rowIndex+1}" var="rowIndex" />
+                </li>
+            </apex:repeat>
+        </ul>
+    </apex:pageblock>
+       <!-- 
+    <apex:pageblock title="{!$Label.EUR_CRM_Survey_Step2}" id="filter">
+         <apex:pageBlockButtons location="bottom">
+             <apex:commandButton value="{!$Label.EUR_CRM_Survey_Publish}" action="{!publishSurvey}" disabled="{!surveyHeader.EUR_CRM_Active__c}" oncomplete="redirectSurvey();"/>
+         </apex:pageBlockButtons>
+         <apex:pageblockSection columns="1">
+             <apex:pageblockSectionItem >
+                <apex:outputLabel value="{!$Label.EUR_CRM_Account_Filter}"/>
+                <apex:outputpanel layout="none">
+                  <span class="requiredInput"><span class="requiredBlock" />
+                  <apex:selectList value="{!surveyHeader.EUR_CRM_Account_Filter_ID__c}" size="1" disabled="{!surveyHeader.EUR_CRM_Active__c}">
+                      <apex:actionSupport event="onchange" rerender="filter" action="{!updateOutletFilter}"/>
+                      <apex:selectOptions value="{!listviewoptions}"/>
+                  </apex:selectList>
+                  </span>
+                  </apex:outputpanel>
+            </apex:pageblockSectionItem>
+              <apex:pageblockSectionItem >
+                <apex:outputLabel for="num_records" value="{!$Label.EUR_CRM_Num_Of_Records}" />
+                <apex:outputText value="{!resultSize}"/>
+              </apex:pageblockSectionItem>
+          </apex:pageblockSection>
+    </apex:pageblock>-->
+</apex:form>
+<!--
+    <apex:pageblock title="{!$Label.EUR_CRM_Survey_Step2}" id="filter">
+         <apex:pageBlockSection columns="1">
+         	<apex:pageblockSectionItem>
+            <apex:outputLabel value="Account Filter Method"/>
+            <apex:outputPanel layout="none">
+              <span class="requiredInput">
+                <span class="requiredBlock" />
+                <apex:form>
+                  <apex:selectList value="{!filterOpValue}" size="1" id="filterOp"  disabled="{!surveyHeader.EUR_CRM_Active__c}">
+                  	<apex:actionSupport event="onchange" reRender="account_filter"  status="idStatus"/>
+                    <apex:selectOption itemLabel="Account List View" itemValue="listView"></apex:selectOption>
+                    <apex:selectOption itemLabel="PROS" itemValue="prosSeg" rendered="{!PROSFilter}"></apex:selectOption>
+                    <apex:selectOption itemLabel="Cust Tax" itemValue="custTax" rendered="{!CustFilter}"></apex:selectOption>
+                  </apex:selectList> 
+                </apex:form>
+              </span>
+            </apex:outputPanel>
+          </apex:pageblockSectionItem>
+         </apex:pageBlockSection>
+
+         <apex:pageblockSection columns="1" id="account_filter">
+            <apex:pageblockSectionItem rendered="{!IF(filterOpValue=='listView','True','False')}">
+                <apex:outputLabel value="{!$Label.EUR_CRM_Account_Filter}"/>
+                <apex:outputpanel layout="none">
+                  	<span class="requiredInput"><span class="requiredBlock" />
+                    <apex:form>
+                    	<apex:selectList value="{!surveyHeader.EUR_CRM_Account_Filter_ID__c}" size="1" disabled="{!surveyHeader.EUR_CRM_Active__c}">
+                      	<apex:actionSupport event="onchange" rerender="filter" action="{!updateOutletFilter}"/>
+                      	<apex:selectOptions value="{!listviewoptions}"/>
+                    	</apex:selectList>
+                    </apex:form>
+                  	</span>
+                    <apex:outputPanel>
+                      <br/>
+                      <apex:outputLabel for="num_records" value="Number of accounts in list view:" />
+                      <apex:outputText value="{!resultSize}"/>
+                    </apex:outputPanel>
+                    
+                </apex:outputpanel>
+            </apex:pageblockSectionItem>
+            <apex:pageblockSectionItem rendered="{!IF(filterOpValue=='prosSeg','True','False')}">
+            	<apex:outputLabel value="Filter Account By PROS"/>
+              
+              <c:EUR_CRM_AccountFilterByPROSSegment 
+                currentURL="apex/EUR_CRM_DE_ConfigSurveyPage?shid={!surveyHeader.Id}"
+                countryCodeAtt="DE"/>
+            </apex:pageblockSectionItem>
+            <apex:pageblockSectionItem rendered="{!IF(filterOpValue=='custTax','True','False')}">
+            	<apex:outputLabel value="Filter Account By Customer Taxonomy"/>
+              
+              <c:EUR_CRM_AccountFilterByCustTax
+                currentURL="apex/EUR_CRM_DE_ConfigSurveyPage?shid={!surveyHeader.Id}"
+                custTaxRtAtt="{!targetCustTax}"
+                aAccountCount="{!PageAccountCount}"/>
+
+            </apex:pageblockSectionItem>
+          </apex:pageblockSection>
+          <apex:pageBlockSection>
+            <input type="button" value="Apply Filter" onClick="aUpdateFilterOption()" />
+          </apex:pageBlockSection>
+     </apex:pageblock>
+      <apex:pageblock title="{!$Label.EUR_CRM_Survey_Step2}" id="account_selection" >
+            <apex:form>
+              <apex:outputPanel id="filteredAccountsTable">
+                <apex:pageBlock title="{!$Label.EUR_CRM_Filtered_Accounts}">
+                      <apex:pageBlockTable value="{!filteredAcctList}" var="acc" id="accTable">
+                        <apex:column value="{!acc.name}" headerValue="{!$ObjectType.EUR_CRM_Account__c.fields.Name.Label}"/>
+                      </apex:pageBlockTable>  
+                      </apex:pageBlock>
+                    </apex:outputPanel>
+            </apex:form>
+      <apex:pageblock rendered="{!surveyHeader.EUR_CRM_Active__c}">
+        <input type="button" value="{!$Label.EUR_CRM_Survey_Publish}" disabled="true" />
+      </apex:pageblock>
+      <apex:pageblock rendered="{!NOT(surveyHeader.EUR_CRM_Active__c)}">
+        <input type="button" value="{!$Label.EUR_CRM_Survey_Publish}" onClick="aPublish()" />
+      </apex:pageblock>
+  </apex:pageblock>
+-->
+
+
+  <apex:pageblock title="Account Selection" Id="accSelector">
+    <apex:form >
+      <c:EUR_CRM_SurveyAccountSelector countryCodeAtt="DE"
+       SurveyHeaderAtt="{!surveyHeader}"
+       currentURLAtt="/EUR_CRM_DE_ConfigSurveyPage?shid={!surveyHeader.id}">
+      </c:EUR_CRM_SurveyAccountSelector>
+    </apex:form>
+  </apex:pageblock>
+
+
+<!--
+  <apex:pageblock rendered="{!surveyHeader.EUR_CRM_Active__c}">
+        <input type="button" value="{!$Label.EUR_CRM_Survey_Publish}" disabled="true" />
+      </apex:pageblock>
+      <apex:pageblock rendered="{!NOT(surveyHeader.EUR_CRM_Active__c)}">
+        <input type="button" value="{!$Label.EUR_CRM_Survey_Publish}" onClick="aPublish()" />
+      </apex:pageblock>
+      -->
+</apex:page>

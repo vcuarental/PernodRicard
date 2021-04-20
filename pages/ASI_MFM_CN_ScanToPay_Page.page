@@ -1,0 +1,433 @@
+<apex:page controller="ASI_MFM_CN_ScanToPayController">
+    
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>     
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_DataTable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/SimpleTable.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'jquery-ui.min.js')}"/>  
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_DataTable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />  
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/numericInput.min.js')}" />    
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/CurrencyUtil.js')}" />
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, '/jquery-ui.css')}" />
+    <script type="text/javascript">
+    var supCode = ['Loading'];
+    var datatableILength = 15;
+    var msg ='';
+    $j = jQuery.noConflict();
+    $j(document).ready(function(){
+        //setResultTable(true);
+        $j('span.selectedPrefix').find('input').val($j('.prefixOption').val());
+        if(!{!initError})
+        	getLineItem();
+    });
+    
+    $j(function(){
+    	dialog = $j( ".dialog-form" ).dialog({
+            autoOpen: false,
+            height: 300,
+            width: 350,
+            modal: true,
+            buttons: {
+                Submit: function() {
+                    convertPayment();
+                    dialog.dialog( "close" );
+                }
+            },
+        });
+    });
+    
+    function filter(value){
+        var table = $j('#dt_ItemLists')
+        table.dataTable().fnFilter($j(value).val(), 1);
+    }
+    function checkall(value){
+        
+        /*if(value.checked){
+            $j('.invoiceCheckBox').each(function(){
+                if(!this.disabled){
+                    this.checked = true;
+                }
+            });
+        }else{
+            $j('.invoiceCheckBox').each(function(){
+                this.checked = false;
+            });
+        }*/
+        var counting = 0;
+        var supplier = $j(value).closest('tr').find('td.supplier span').children().text();
+        var poNumber = $j(value).closest('tr').find('td.PONumber span').children().text();
+        var invoiceDate = $j(value).closest('tr').find('td .invoiceDate').text();
+        var taxCode = $j(value).closest('tr').find('td.taxCode span').children().text();
+        var bu = $j(value).closest('tr').find('td.BU span').children().text();
+        
+        $j('.invoiceCheckBox').each(function(){
+            
+            var supplier2 = $j(this).closest('tr').find('td.supplier span').children().text();
+            var poNumber2 = $j(this).closest('tr').find('td.PONumber span').children().text();
+            var invoiceDate2 = $j(this).closest('tr').find('td .invoiceDate').text();
+            var taxCode2 = $j(this).closest('tr').find('td.taxCode span').children().text();
+            var bu2 = $j(this).closest('tr').find('td.BU span').children().text();
+            
+            if(value.checked && !this.disabled){
+                
+                if(supplier2 === supplier && poNumber2 === poNumber /*&& invoiceDate2 === invoiceDate*/ && taxCode2 === taxCode && bu2 === bu){
+                    counting++;
+                    this.checked = true;
+                }else{
+                    
+                    this.checked = false;
+                }
+            }else if(!value.checked && !this.disabled){
+                
+                if(supplier2 === supplier && poNumber2 === poNumber /*&& invoiceDate2 === invoiceDate*/ && taxCode2 === taxCode && bu2 === bu){
+                    
+                    this.checked = false;
+                }
+            }
+        });
+        
+        $j('.bottom #counting').html(counting + ' invoices are selected');
+    }
+    
+    function htmlEncode(input) {
+        var e = document.createElement('div');
+        e.innerHTML = input;
+        //return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        return String(input).replace(/\&amp;/g,'&').replace(/\&lt;/g,'<').replace(/\&rt;/g,'>');
+    }
+    
+    function setResultTable(newTable){
+        resultTable =  $j('#dt_ItemLists').on( 'init.dt', function () {
+        }).DataTable({
+            "bDestroy":true,
+            "bSearch":false,
+            "dom": '<"top">rt<"bottom"ip><"clear">',
+            "bAutoWidth":false,
+            "scrollY":"500px",
+            "scrollCollapse": true,
+            "paging":false,
+            "bLengthChange": false,
+            "columnDefs": [{
+                "targets": [ 0 ],
+                "searchable": false,
+                "orderable": false
+            }   
+                          ],
+            "footerCallback": function( tfoot, data, start, end, display ) {   
+                api = this.api();
+            }
+        });
+        
+        $j('[data-toggle="tooltip"]').tooltip();
+        $j('.bottom').append('<br/><div aria-live="polite" role="status" id="counting" class="dataTables_info">0 invoices are selected</div>');
+    }
+    
+    function setPrefix(prefixId){
+        
+        $j('span.selectedPrefix').find('input').val($j(prefixId).val());
+    }
+    function setPrePayment(pre){
+        
+        $j('span.prePayment').find('input').val(pre);
+        if({!px_list != null && px_list.size > 1}){
+            dialog.dialog( 'open' );
+        }else{
+            convertPayment();
+        }
+    }
+    </script>
+    <style type="text/css">
+        .ui-helper-hidden-accessible { display:none; }
+        .ui-autocomplete {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 1000;
+            float: left;
+            display: none;
+            min-width: 160px;
+            _width: 160px;
+            padding: 4px 0;
+            margin: 2px 0 0 0;
+            list-style: none;
+            background-color: #ffffff;
+            border-color: #ccc;
+            border-color: rgba(0, 0, 0, 0.2);
+            border-style: solid;
+            border-width: 1px;
+            -webkit-border-radius: 5px;
+            -moz-border-radius: 5px;
+            border-radius: 5px;
+            -webkit-box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            -moz-box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            -webkit-background-clip: padding-box;
+            -moz-background-clip: padding;
+            background-clip: padding-box;
+            *border-right-width: 2px;
+            *border-bottom-width: 2px;
+            height: 300px; overflow-y: 
+            scroll; 
+            overflow-x: hidden;
+            .ui-menu-item > a.ui-corner-all {
+                display: block;
+                padding: 3px 15px;
+                clear: both;
+                font-weight: normal;
+                line-height: 18px;
+                color: #555555;
+                white-space: nowrap;
+        	}
+        }
+        .myButton {
+            -moz-box-shadow:inset 0px 1px 0px 0px #ffffff;
+            -webkit-box-shadow:inset 0px 1px 0px 0px #ffffff;
+            box-shadow:inset 0px 1px 0px 0px #ffffff;
+            background:-webkit-gradient(linear, left top, left bottom, color-stop(0.05, #ffffff), color-stop(1, #f6f6f6));
+            background:-moz-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-webkit-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-o-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-ms-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:linear-gradient(to bottom, #ffffff 5%, #f6f6f6 100%);
+            filter:progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffffff', endColorstr='#f6f6f6',GradientType=0);
+            background-color:#ffffff;
+            -moz-border-radius:6px;
+            -webkit-border-radius:6px;
+            border-radius:6px;
+            border:1px solid #79b7e7;
+            display:inline-block;
+            cursor:pointer;
+            color:#666666;
+            font-family:Arial;
+            font-size:15px;
+            font-weight:bold;
+            padding:6px 24px;
+            text-decoration:none;
+            text-shadow:0px 1px 0px #ffffff;
+        }
+        .myButton:hover {
+            background:-webkit-gradient(linear, left top, left bottom, color-stop(0.05, #f6f6f6), color-stop(1, #ffffff));
+            background:-moz-linear-gradient(top, #f6f6f6 5%, #ffffff 100%);
+            background:-webkit-linear-gradient(top, #f6f6f6 5%, #ffffff 100%);
+            background:-o-linear-gradient(top, #f6f6f6 5%, #ffffff 100%);
+            background:-ms-linear-gradient(top, #f6f6f6 5%, #ffffff 100%);
+            background:linear-gradient(to bottom, #f6f6f6 5%, #ffffff 100%);
+            filter:progid:DXImageTransform.Microsoft.gradient(startColorstr='#f6f6f6', endColorstr='#ffffff',GradientType=0);
+            background-color:#f6f6f6;
+        }
+        .myButton:active {
+            position:relative;
+            top:1px;
+        }
+        .button{
+            -moz-box-shadow:inset 0px 1px 0px 0px #ffffff;
+            -webkit-box-shadow:inset 0px 1px 0px 0px #ffffff;
+            box-shadow:inset 0px 1px 0px 0px #ffffff;
+            background:-webkit-gradient(linear, left top, left bottom, color-stop(0.05, #ffffff), color-stop(1, #f6f6f6));
+            background:-moz-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-webkit-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-o-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:-ms-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+            background:linear-gradient(to bottom, #ffffff 5%, #f6f6f6 100%);
+            filter:progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffffff', endColorstr='#f6f6f6',GradientType=0);
+            background-color:#ffffff;
+            -moz-border-radius:6px;
+            -webkit-border-radius:6px;
+            border-radius:6px;
+            border:1px solid #79b7e7;
+            display:inline-block;
+            cursor:pointer;
+            color:#666666;
+            font-family:Arial;
+            font-size:10px;
+            font-weight:bold;
+            padding:5px;
+            text-decoration:none;
+            text-shadow:0px 1px 0px #ffffff;
+        }
+    </style>
+    
+    <apex:form id="objectForm" styleclass="objectFormCls" >
+        <apex:pageMessages id="ErrorMsg" />
+        <span class="selectedPrefix"><apex:inputHidden value="{!selected_prefix}" /></span>
+        <span class="prePayment"><apex:inputHidden value="{!prePayment}" /></span>
+        <div id="divForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs table-responsive"> 
+                    <div class="bs col-xs-5">
+                        <apex:outputPanel styleclass="bs panel-primary" id="paymentDetailPanel">
+                            <div class="bs panel-heading div-size">
+                                <div style="font-size:15px;" class="bs panel-title">Invoice Management - Convert to Payment</div>
+                            </div>
+                            <div class="bs panel-body">
+                                <div class="bs table-responsive" >          
+                                    <table class="bs table table-condensed">
+                                        <tbody>
+                                            <tr>
+                                                <td style="font-weight: bold;border-top:0px">Invoice Status</td>
+                                                <td style="border-top:0px">
+                                                    <apex:selectList value="{!invoiceStatus}" multiselect="false" size="1" style="width:141px">
+                                                        <apex:selectOption itemValue="Open" itemLabel="Open"/>
+                                                        <apex:selectOption itemValue="Closed" itemLabel="Closed"/>
+                                                    </apex:selectList>
+                                                </td>
+                                                <td style="font-weight: bold;border-top:0px">PO Type</td>
+                                                <td style="border-top:0px">
+                                                    <apex:selectList value="{!POType}" multiselect="false" size="1" style="width:141px">
+                                                        <apex:selectOption itemValue="" itemLabel="--None--"/>
+                                                        <apex:selectOption itemValue="Image Outlet" itemLabel="Image Outlet"/>
+                                                        <apex:selectOption itemValue="In Channel Event" itemLabel="In Channel Event"/>
+                                                        <apex:selectOption itemValue="Memo" itemLabel="Memo"/>
+                                                        <apex:selectOption itemValue="Out Channel Event" itemLabel="Out Channel Event"/>
+                                                        <apex:selectOption itemValue="eMarket" itemLabel="eMarket"/>
+                                                        <apex:selectOption itemValue="Other" itemLabel="Other"/>
+                                                    </apex:selectList>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-weight: bold;border-top:0px">PO Number</td>
+                                                <td style="border-top:0px">
+                                                    <apex:inputText value="{!PONumber}"/>
+                                                </td>
+                                                <td style="font-weight: bold;border-top:0px">Supplier</td>
+                                                <td style="border-top:0px">
+                                                    <apex:inputText value="{!supplier}"/>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-weight: bold;border-top:0px">Fiscal Year</td>
+                                                <td style="border-top:0px">
+                                                    <apex:selectList value="{!fiscalYear}" size="1" style="width:141px">
+                                                        <apex:selectOptions value="{!fiscalYearOption}"  />
+                                                    </apex:selectList>
+                                                </td>
+                                                <td style="font-weight: bold;border-top:0px">Plan ID</td>
+                                                <td style="border-top:0px"><apex:inputText value="{!planId}"/></td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-weight: bold;border-top:0px">Budget Owner</td>
+                                                <td style="border-top:0px">
+                                                    <apex:selectList value="{!budgetOwner}" size="1" style="width:141px">
+                                                    	<apex:selectOptions value="{!budgetOwnerPickList.pickList}" />
+                                                    </apex:selectList>
+                                                </td>
+                                                <td style="font-weight: bold;border-top:0px">PO Raised By</td>
+                                                <td style="border-top:0px">
+                                                	<apex:selectList value="{!raised_by_filter}" size="1" style="width:141px">
+                                                    	<apex:selectOptions value="{!budgetOwnerPickList.pickList}" />
+                                                    </apex:selectList>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="font-weight: bold;border-top:0px">BU</td>
+                                                <td style="border-top:0px">
+                                                    <apex:selectList value="{!selectedBU}" size="1" style="width:141px">
+                                                        <apex:selectOptions value="{!BUOptions}" />
+                                                    </apex:selectList>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <apex:actionFunction name="getLineItem" action="{!getVATInvoice}" reRender="LinePanel, ErrorMsg" oncomplete="setResultTable(true);" status="ActionStatus" />
+                                    <div class="button" onclick="getLineItem();">
+                                        Search
+                                    </div>
+                                </div>
+                            </div>
+                        </apex:outputPanel> 
+                    </div>
+                    <div class="bs col-xs-12">
+                        <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                            <div class="bs panel-heading div-size" >
+                                <div style="font-size:15px;" class="bs panel-title">Invoice Detail</div>
+                            </div>
+                            <br/>
+                            <!--<apex:actionFunction name="closePayment" action="{!closePayment}" reRender="LinePanel, ErrorMsg" oncomplete="setResultTable(true);" status="ActionStatus" />-->
+                            <apex:actionFunction name="convertPayment" action="{!convertPayment}" reRender="LinePanel, ErrorMsg, paymentDialog" oncomplete="setResultTable(true);" status="ActionStatus" />
+                            <button type="button" data-toggle="tooltip" title="Convert to Payment" class="myButton" onclick="setPrePayment(false);">Convert to Payment</button>
+                            <button type="button" data-toggle="tooltip" title="Convert to Pre-Payment" class="myButton" onclick="setPrePayment(true);">Convert to Pre-Payment</button>
+                            <!--<button type="button" data-toggle="tooltip" title="TBC" class="myButton" onclick="closePayment();">Close Invoice</button>-->
+                            <br/>
+                            <br/>
+                            <div>
+                                Search PO No. : <input id="pofilter" size="30" type="text" onchange="filter(this)" onkeyup="filter(this)"/>
+                            </div>
+                            <div class="bs panel-body">
+                                <table id="dt_ItemLists" class="hover responsive no-wrap compact stripe" style="width: 100%;" cellspacing="0">
+                                    <thead>
+                                        <th>&nbsp;<!--<input type="checkbox" onchange="checkall(this)"/>--></th>
+                                        <th>PO No</th>
+                                        <th>PO Type</th><!--20170302,Elufa-->
+                                        <th>Supplier</th>
+                                        <th>Invoice No</th>
+                                        <th>Invoice Date</th>
+                                        <th>Tax Code</th>
+                                        <th>BU</th>
+                                        <th>Payment No</th>
+                                        <th>PO Amount</th>
+                                        <th>Receipt Not Paid</th>
+                                        <th>Invoice Amount</th>
+                                        <th>Invoice Amount(Before Tax)</th>
+                                        <th>Remarks</th>
+                                        <th>Overdue Date</th>
+                                        <th class="hidden">id</th>
+                                    </thead>
+                                    <tbody>
+                                        <apex:repeat value="{!invoiceList}" var="invoice">
+                                            <tr class="data-Row">
+                                                <td><apex:inputCheckbox onchange="checkall(this)" disabled="{!(invoice.VATInvoice.ASI_MFM_Payment_No__c != NULL && invoice.committed == TRUE) || invoiceStatus == 'Closed' || (invoice.VATInvoice.ASI_MFM_PO_No__r.ASI_MFM_PO_Type__c=='eMarket'&&!isProcurement)}" styleClass="invoiceCheckBox" value="{!invoice.checked}" /></td><!--20170302,Elufa,add disable check-->
+                                                <td class="PONumber"><apex:outputField value="{!invoice.VATInvoice.ASI_MFM_PO_No__c}"/></td>
+                                                <td><apex:outputText style="{!IF(invoice.VATInvoice.ASI_MFM_PO_No__r.ASI_MFM_PO_Type__c=='eMarket'&&!isProcurement,'color:red','')}" value="{!invoice.VATInvoice.ASI_MFM_PO_No__r.ASI_MFM_PO_Type__c}"/></td><!--20170302,Elufa-->
+                                                <td class="supplier"><apex:outputField value="{!invoice.VATInvoice.ASI_MFM_Supplier__c}"/></td>
+                                                <td><a href="/{!invoice.VATInvoice.Id}">{!invoice.VATInvoice.Name}</a></td>
+                                                <td><apex:outputText styleClass="invoiceDate" value="{0, Date, yyyy/MM/dd}"><apex:param value="{!invoice.VATInvoice.ASI_MFM_Invoice_Date__c}"/></apex:outputText></td>
+                                                <td class="taxCode"><apex:outputField value="{!invoice.VATInvoice.ASI_MFM_Tax_Code__c}"/></td>
+                                                <td class="BU"><apex:outputField value="{!invoice.VATInvoice.ASI_MFM_BU__c}"/></td>
+                                                <td><apex:inputField value="{!invoice.VATInvoice.ASI_MFM_Payment_No__c}" rendered="{!(invoice.VATInvoice.ASI_MFM_Payment_No__c == NULL || invoice.committed == FALSE) && invoiceStatus != 'Closed'}" /><apex:outputField value="{!invoice.VATInvoice.ASI_MFM_Payment_No__c}" rendered="{!(invoice.VATInvoice.ASI_MFM_Payment_No__c != NULL && invoice.committed == TRUE) || invoiceStatus == 'Closed'}" /></td>
+                                                <td style="text-align: right;"><apex:outputText value="{0, Number, ###,###,##0.00}"><apex:param value="{!invoice.VATInvoice.ASI_MFM_PO_Amount__c}"/></apex:outputText></td>
+                                                <td style="text-align: right;"><apex:outputText value="{0, Number, ###,###,##0.00}"><apex:param value="{!invoice.receiptNotPaid}"/></apex:outputText></td>
+                                                <td style="text-align: right;"><apex:outputText value="{0, Number, ###,###,##0.00}"><apex:param value="{!invoice.VATInvoice.ASI_MFM_Invoice_Amount__c}"/></apex:outputText></td>
+                                                <td style="text-align: right;"><apex:outputText value="{0, Number, ###,###,##0.00}"><apex:param value="{!invoice.VATInvoice.AS_MFM_Invoice_Amount_Before_Tax__c}"/></apex:outputText></td>
+                                                <td>{!invoice.VATInvoice.ASI_MFM_PO_Remarks__c}</td>
+                                                <td><apex:outputText value="{0, Date, yyyy/MM/dd}"><apex:param value="{!invoice.VATInvoice.ASI_MFM_Overdue_Date__c}"/></apex:outputText></td>
+                                                <td class="hidden">{!invoice.VATInvoice.id}</td>
+                                            </tr>
+                                        </apex:repeat>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </apex:outputPanel>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="dialog-form" title="Prefix">
+            <form>
+                <fieldset>
+                    Prefix : 
+                    <select class="prefixOption" onchange="setPrefix(this);">
+                        <apex:repeat value="{!px_list}" var="var">
+                            <option value="{!var.ASI_MFM_Prefix__c}">{!var.asi_mfm_prefix__r.Name}</option>
+                        </apex:repeat>
+                    </select>
+                </fieldset>
+            </form>
+        </div>
+    </apex:form>
+    <apex:actionstatus id="ActionStatus">
+        <apex:facet name="start">
+            <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;height: 100%; width:100%; opacity:0.65;position: fixed;" align="center" valign="top"> 
+                <div class="waitingHolder" id="loadtext" >
+                    &nbsp;&nbsp;&nbsp;
+                    <img class="waitingImage" src="/img/loading32.gif" title="Please Wait..." />
+                    <span class="waitingDescription">Please Wait...</span>
+                </div>
+            </div>
+        </apex:facet>
+    </apex:actionstatus>
+</apex:page>

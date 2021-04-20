@@ -1,0 +1,954 @@
+<apex:page standardController="ASI_TH_CRM_PaymentRequest__c"  extensions="ASI_CRM_CN_Payment_Header_Controller">
+    <style>
+    	.overPaid{
+        	color: red;
+        	font-weight: bold;
+        }
+    	.negative{
+        	color : red;
+        	font-weight : bold;
+        }
+
+        
+    </style>
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_Handsontable, 'handsontable/handsontable.full.min.js')}"/>
+    <div class="message errorM3 overPaidMsg" style="display : none;">
+        <table class="messageTable" cellspacing="0" border="0" style="padding:0px;margin:0px;">
+            <tbody>
+                <tr valign="top">
+                    <td><img class="msgIcon" title="Warning" src="/s.gif"/></td>
+                    <td class="messageCell">
+                        <div class="messageText">
+                            <span style="color:#cc0000">
+                                <h4>
+                                    Warning:
+                                </h4>
+                            </span>
+                            <span class="WarningMsg">
+                            </span>
+                            <br/>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                	<td></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+<script>
+        let isEdit = true;
+        let deletedLines = [];
+
+        // Price Promotion
+        let hot;
+        let pricePromotionJSON = {};
+        let colHeaders;
+        let promotionType = '{!PH.ASI_CRM_CN_Promotion_Type__c}';
+
+
+        // Free goods
+        let freeGoodsJSON = {!freeGoodsInterimDataJSON};
+        let freeGoods = [];
+
+        $(document).ready(function () {
+            retrieveFreeGoods();
+        });
+
+
+        function formatNumber(number) {
+            if (number && number.toLocaleString) {
+                return number.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+            return number;
+        }
+
+
+        function initAutoCompleteComponent() {
+
+            $(".free-goods-input").autocomplete({
+                source: freeGoods,
+                minLength: 0,
+                scroll: true,
+                select: function (event, ui) {
+                    $(this).val(ui.item.label);
+                    event.preventDefault();
+                },
+                focus: function (event, ui) {
+                    // event.preventDefault();
+                }
+            })
+
+
+        }
+
+        function retrieveFreeGoods() {
+            let whereClause = ' WHERE RecordType.DeveloperName = \'ASI_CRM_CN_CRM_Item_Group\' ';
+            if (promotionType != 'Consumer Promotion') {
+                whereClause = whereClause + ' AND ASI_CRM_CN_Consumer_Website__c = true AND ASI_CRM_Competitor__c = \'No\' AND (NOT ASI_MFM_Item_Group_Code__c like \'9L1%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9SC%\')  AND (NOT ASI_MFM_Item_Group_Code__c like \'9L2%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'9H%\') AND (NOT ASI_MFM_Item_Group_Code__c like \'Z%\') ' ;
+            }
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_CN_Payment_Header_Controller.retrieveFreeGoods}', 'ASI_MFM_Item_Group__c', whereClause
+                , function (result, event) {
+                    if (event.status && result) {
+                        freeGoods = result.map(function (res) {
+                            return {
+                                label: res["Name"],
+                                value: res["Id"],
+                                Name: res.Name,
+                                ASI_CRM_CN_Item_Group__r: res,
+                                unitPrice: res.T1_Price__r
+                            }
+                        });
+                    }
+                    initAutoCompleteComponent();
+                }
+                , {escape: true}
+            );
+        }
+
+
+        function drawTable(tableId) {
+            let freeGoodsColumns;
+
+            if (promotionType == 'Consumer Promotion')
+            {
+                freeGoodsColumns = [
+                    {
+                        title: isEdit ? '<button type="button" class="BSCommandButtonSM" onclick=\'addRow("' + tableId + '",' + JSON.stringify('') + ')\'>{!$Label.ASI_CRM_CN_Add_New}</button>' : '',
+                        render: function (data, type, row, meta) {
+                            if ($.isEmptyObject(row) || !isEdit) {
+                                return '';
+                            }
+                            return `<button type="button" class="BSCommandButtonSM" onclick="deleteRow(${meta.row},'${tableId}')"><span class="bs glyphicon glyphicon-trash" style="color:red;font-size: 20px;"></span></button>`;
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_MFM_Item_Group__c.fields.ASI_MFM_Item_Group_Code__c.Label}',
+                        data: 'ASI_CRM_CN_Item_Group__r.ASI_MFM_Item_Group_Code__c',
+                    },
+                    {
+                        //title: "{!$ObjectType.ASI_MFM_Item_Group__c.fields.Name.Label}",
+                        title: "赠品品类",
+                        data: 'ASI_CRM_CN_Item_Group__r.Name',
+                        render: function (data, type, row, meta) {
+                            data = data || '';
+                            if (isEdit) {
+                                return `<input value="${data}" class="ApexInputNumberField free-goods-input" onChange="onFreeGoodsChange(${meta.row}, this.value, '${tableId}')"/>`
+                            } else {
+                                return '<a href="/' + row.ASI_CRM_CN_Item_Group__c + '">' + data + '</a>';
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_CRM_Unit_Price__c', '${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_TH_CRM_Quantity__c.Label}',
+                        className: 'number summable',
+                        data: 'ASI_TH_CRM_Quantity__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_TH_CRM_Quantity__c','${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$Label.ASI_CRM_CN_CTD_Payable_Amount}',
+                        className: 'number summable',
+                        data: 'ASI_CRM_CN_Total_Payable__c',
+                    },
+                ];
+            }
+            else {
+                freeGoodsColumns = [
+                    {
+                        title: isEdit ? '<button type="button" class="BSCommandButtonSM" onclick=\'addRow("' + tableId + '",' + JSON.stringify('') + ')\'>{!$Label.ASI_CRM_CN_Add_New}</button>' : '',
+                        render: function (data, type, row, meta) {
+                            if ($.isEmptyObject(row) || !isEdit) {
+                                return '';
+                            }
+                            return `<button type="button" class="BSCommandButtonSM" onclick="deleteRow(${meta.row},'${tableId}')"><span class="bs glyphicon glyphicon-trash" style="color:red;font-size: 20px;"></span></button>`;
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_MFM_Item_Group__c.fields.ASI_MFM_Item_Group_Code__c.Label}',
+                        data: 'ASI_CRM_CN_Item_Group__r.ASI_MFM_Item_Group_Code__c',
+                    },
+                    {
+                        //title: "{!$ObjectType.ASI_MFM_Item_Group__c.fields.Name.Label}",
+                        title: "赠品品类",
+                        data: 'ASI_CRM_CN_Item_Group__r.Name',
+                        render: function (data, type, row, meta) {
+                            data = data || '';
+                            if (isEdit) {
+                                return `<input value="${data}" class="ApexInputNumberField free-goods-input" onChange="onFreeGoodsChange(${meta.row}, this.value, '${tableId}')"/>`
+                            } else {
+                                return '<a href="/' + row.ASI_CRM_CN_Item_Group__c + '">' + data + '</a>';
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_CN_Suggest_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_CN_Suggest_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+                            return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_CRM_Unit_Price__c.Label}',
+                        className: 'number',
+                        data: 'ASI_CRM_Unit_Price__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_CRM_Unit_Price__c', '${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields.ASI_TH_CRM_Quantity__c.Label}',
+                        className: 'number summable',
+                        data: 'ASI_TH_CRM_Quantity__c',
+                        render: function (data, type, row, meta) {
+                            let classes = [];
+
+
+                            if (isEdit) {
+                                classes.push('ApexInputNumberField');
+                                return `<input type="number"  class="${classes.join(' ')}" value="${data}" onChange="onFreeGoodsLineChange(${meta.row}, this.value, 'ASI_TH_CRM_Quantity__c','${tableId}')"/>`;
+                            } else {
+                                return `<span class="${classes.join(' ')}">${data}</span>`;
+
+                            }
+                        },
+                    },
+                    {
+                        title: '{!$Label.ASI_CRM_CN_CTD_Payable_Amount}',
+                        className: 'number summable',
+                        data: 'ASI_CRM_CN_Total_Payable__c',
+                    },
+                ];
+            }
+
+            let table = $(tableId).DataTable({
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                drawCallback: function () {
+                    initAutoCompleteComponent();
+                },
+                footerCallback: function (tfoot, data, start, end, display) {
+                    const api = this.api();
+                    let htmlString = '';
+
+                    const summableColumns = api.columns('.summable').indexes();
+
+                    api.columns().every(function () {
+                        const column = this;
+
+                        if (column.visible()) {
+                            htmlString += '<th>';
+
+                            let sum = '';
+                            if (summableColumns.indexOf(column.index()) !== -1) {
+                                sum = this
+                                    .data()
+                                    .reduce(function (a, b) {
+                                        const x = parseFloat(a) || 0;
+                                        const y = parseFloat(b) || 0;
+                                        return x + y;
+                                    }, 0);
+                                htmlString += formatNumber(sum);
+                            }
+                            htmlString += '</th>';
+
+                        }
+
+                    });
+                    $(tfoot).select('tr').html(htmlString);
+
+                },
+                columnDefs: [
+                    {
+                        targets: getColumnIndexesWithClass(freeGoodsColumns, 'number'),
+                        defaultContent: 0.00,
+                        render: function (data, type, row) {
+                            return formatNumber(data || 0);
+                        }
+                    },
+                    {
+                        targets: '_all',
+                        defaultContent: '',
+                    },
+                ],
+                data: freeGoodsJSON.paymentRequestLines,
+                columns: freeGoodsColumns
+            })
+            table.draw();
+        }
+
+        function saveRecord() {
+            updateLinesBeforeApex();
+            saveRecordApex(JSON.stringify(freeGoodsJSON), JSON.stringify(deletedLines || []));
+        }
+
+        function updateLinesBeforeApex() {
+            freeGoodsJSON.paymentRequestLines = $('#free_goods_table').DataTable().data().toArray();
+            console.log(freeGoodsJSON)
+        }
+
+    </script>
+
+
+    <!-- Free goods function -->
+    <script>
+
+        function addRow(tableId, module) {
+            const table = $(tableId).DataTable();
+            const newData = {
+                ASI_TH_CRM_Payment_Request__c: '{!PageId}',
+                ASI_CRM_CN_Suggest_Unit_Price__c: 0,
+                RecordTypeId: '{!freeGoodsRecordTypeId}',
+            };
+
+
+            table.row.add(newData);
+            $(tableId).DataTable().draw();
+        }
+
+        function deleteRow(rowIndex, tableId) {
+            const row = $(tableId).DataTable().row(rowIndex);
+            if (row.data().Id) {
+                deletedLines.push(row.data());
+            }
+            row.remove();
+            // invalidate row so every row redraw itself => update onchange function in render()
+            $(tableId).DataTable().rows().invalidate();
+            $(tableId).DataTable().draw();
+        }
+
+        function onFreeGoodsChange(rowIndex, newValue, tableId) {
+            let lineItem = $(tableId).DataTable().row(rowIndex).data();
+            let freeGood = freeGoods.find(function (freeGood) {
+                return freeGood.label === newValue;
+            });
+
+            if (freeGood) {
+                lineItem.ASI_CRM_CN_Item_Group__c = freeGood.value;
+                lineItem.ASI_CRM_CN_Item_Group__r = freeGood.ASI_CRM_CN_Item_Group__r;
+                delete lineItem.ASI_CRM_CN_Item_Group__r.T1_Price__r;
+                if (promotionType != 'Consumer Promotion' && freeGood.unitPrice != null && freeGood.unitPrice != 'undefined' && freeGood.unitPrice != '') {
+                    var t1Price = freeGood.unitPrice[0];
+                    //lineItem.ASI_CRM_Unit_Price__c = Math.floor(t1Price.ASI_CRM_CN_T1_Price__c * 102/100);
+                    lineItem.ASI_CRM_CN_Suggest_Unit_Price__c = Math.floor(t1Price.ASI_CRM_CN_T1_Price__c * 102/100);
+                }
+            }
+
+            $(tableId).DataTable().row(rowIndex).data(lineItem).draw();
+        }
+
+        function onFreeGoodsLineChange(rowIndex, newValue, change, tableId) {
+            const lineItem = $(tableId).DataTable().row(rowIndex).data();
+
+            if (change === 'ASI_CRM_Unit_Price__c') {
+                lineItem.ASI_CRM_Unit_Price__c = newValue || 0;
+            }
+            if (change === 'ASI_TH_CRM_Quantity__c') {
+                lineItem.ASI_TH_CRM_Quantity__c = newValue || 0;
+            }
+
+            var totalAmount = lineItem.ASI_CRM_Unit_Price__c * lineItem.ASI_TH_CRM_Quantity__c;
+            totalAmount = totalAmount || 0 ;
+            lineItem.ASI_CRM_CN_Total_Payable__c = totalAmount.toFixed(2);
+
+            $(tableId).DataTable().row(rowIndex).data(lineItem).draw();
+
+        }
+
+        function getColumnIndexesWithClass(columns, className) {
+            let indexes = [];
+            $.each(columns, function (index, columnInfo) {
+                if (columnInfo.className && columnInfo.className.split(' ').some(columnClassName => columnClassName === className)) {
+                    indexes.push(index);
+                }
+            });
+
+            return indexes;
+        }
+
+    </script>
+<apex:form id="promotionPaymentPage">
+<apex:pageMessages id="errorMsg" />
+<apex:pageblock title="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Label}" >
+    <apex:actionFunction name="saveRecordApex" action="{!UpdateDetailRecord}" reRender="promotionPaymentPage" status="ActionStatus">
+        <apex:param name="freeGoodsJSON" value=""/>
+    </apex:actionFunction>
+    <apex:pageblockButtons >
+        <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Save}" onclick="saveRecord();return false;" />
+        <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Cancel}" action="{!cancel}" />
+        <!--<apex:commandButton value="Calculate BRSF Total" action="{!calcBRSFTotal}" rerender="PSFtotal" />-->
+
+    </apex:pageblockButtons>
+    <apex:pageBlockSection title="{!$Label.ASI_CRM_CN_VF_LABEL_Header_Info}" id="det">
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_Start_Date__c.Label}"/>
+                    <apex:outputfield value="{!PH.ASI_CRM_CN_PO_Start_Date__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_PO_End_Date__c.Label}"/>
+                    <apex:outputfield value="{!PH.ASI_CRM_CN_PO_End_Date__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_BRSF_Start_Date__c.Label}" />
+<!--                    <apex:inputfield value="{!PH.ASI_CRM_CN_BRSF_Start_Date__c}">
+                    <apex:actionSupport event="onchange"  action="{!saveDate}"  rerender="BRSFDetail, det"/>
+                    </apex:inputfield> -->
+				<apex:inputfield value="{!PH.ASI_CRM_CN_BRSF_Start_Date__c}" styleClass="BRSFStartDate" >
+                    <apex:actionSupport event="onchange"  onsubmit="return confirmBRSFChange();"  rerender="BRSFDetail, det" />
+                    </apex:inputfield>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_BRSF_End_Date__c.Label}"/>
+                    <!--<apex:inputfield value="{!PH.ASI_CRM_CN_BRSF_End_Date__c}" styleClass="testing2">
+                    <apex:actionSupport event="onchange"  action="{!saveDate}"  rerender="BRSFDetail, det"/>
+                    </apex:inputfield>-->
+                    <apex:inputfield value="{!PH.ASI_CRM_CN_BRSF_End_Date__c}" styleClass="BRSFEndDate" >
+                    <apex:actionSupport event="onchange"  onsubmit="return confirmBRSFChange();"  rerender="BRSFDetail, det" />
+                    </apex:inputfield>
+                </apex:pageBlockSectionItem>
+	
+        <apex:actionFunction action="{!regenerateBRSFVol}" name="BRSFChange" rerender="BRSFDetail, det, PSFtotal, errorMsg" status="BRSFStatus"/>
+		<apex:actionFunction action="{!CancelBRSFChange}" name="CancelBRSFChange" rerender="det"/>
+<script>
+function confirmBRSFChange() {
+    
+    if( ($('.BRSFEndDate').val() != '' && $('.BRSFEndDate').val() != null && $('.BRSFStartDate').val() != '' && $('.BRSFStartDate').val() != null ) || ( ( $('.BRSFEndDate').val() == '' || $('.BRSFEndDate').val() == null ) && ( $('.BRSFStartDate').val() == '' || $('.BRSFStartDate').val() == null ) ) ){
+        if(confirm('After Changing BRSF Date, Volume will refresh, confirm?\n更改空瓶回收日期，系统会自动刷新销量，确定？')) {
+            
+            BRSFChange();
+            return false;
+        }
+        else{
+            CancelBRSFChange();
+            return false;
+        }
+    }
+}
+
+// 20151209 Ben @ Elufa System
+
+$(document).ready(function(){
+    $('.overPaidMsg').hide();
+    $('.payableVol').find('input').each(function(){
+    	checkOverPaid($(this));
+    });
+
+    //20160726 Ben @ Elufa
+    init();
+    //20160726 End
+});
+        //20160726 Ben @ Elufa
+        function init(){
+            var $inputEle = $('td span.OthersEstCost span').each(function(){
+                
+                calOthers(this);
+            });
+        }
+        //20160726 End
+function currencyToFloat(currencyStr){
+    if (typeof currencyStr === 'string') {
+        var numStr = currencyStr.replace(/,/g, '');
+        if (/^-?\d+\.?\d*$/.test(numStr)) {
+            return parseFloat(numStr);
+        }
+    }
+    return null;
+}        
+        
+function checkOverPaid(row){
+    var subBrandString = '{!$Label.ASI_CRM_CN_PaymentRequest_OverPaid}<br/>';
+    var a = currencyToFloat($(row).parent().parent().parent().find('span.actualVol').text());
+    var b = currencyToFloat($(row).parent().parent().parent().find('span.bottleCollected').text());
+    var c = currencyToFloat($(row).val());
+    var d = a <= b ? a : b;
+    c > d ? $(row).addClass('overPaid') : $(row).removeClass('overPaid');
+    
+    var count = 0;
+    var subBrandName = [];
+	$('.overPaid').each(function(){
+        subBrandName[count] = '[' + $(this).parent().parent().parent().find('span.subBrand').text() + ']&nbsp;';
+        count++;
+    });
+    
+    if(count > 0){
+        for(var i = 0; i < subBrandName.length ; i++){
+        	subBrandString += subBrandName[i];
+        }
+        $('.WarningMsg').html(subBrandString);
+        $('.overPaidMsg').show();
+    }else{
+    	$('.overPaidMsg').hide();
+    }
+}
+//End
+        
+        //20160613 Ben @ Elufa
+        function calOthers(ele){
+            
+            var $tr = $(ele).closest('tr');
+            var est = currencyToFloat($tr.find('td span.TotalEstCost input:text').val());
+            var cny = currencyToFloat($tr.find('td span.CNYEstCost input:text').val());
+            var maf = currencyToFloat($tr.find('td span.MAFEstCost input:text').val());
+            est = est ? est : 0;
+            cny = cny ? cny : 0;
+            maf = maf ? maf : 0;
+            var other = (est - cny - maf).toFixed(2);
+            var $inputEle = $tr.find('td span.OthersEstCost span');
+            
+            if(other < 0)
+                $inputEle.addClass('negative');
+            else
+                $inputEle.removeClass('negative');
+            
+            $inputEle.html(numToCurrency(other));
+        }
+        
+        function numToCurrency(num) {
+            
+            if (num !== undefined && num !== null && /^-?\d+\.?\d?\d?\d?\d?\d?\d?$/.test('' + num)) {
+                return ('' + num).replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+            }
+            return null;
+        }
+        //20160613 End
+</script>
+<!-- 20200609 -->
+    </apex:pageBlockSection>
+    <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_BRSF_Detail}" >
+        <apex:pageBlockButtons location="top">
+            <!--<apex:commandButton value="{!$Label.ASI_CRM_CN_VF_LABEL_BRSF_Report}" onClick="window.open('/apex/ASI_CRM_CN_BRSFFormPDFPage?id={!ph.id}');" action="{!updateAdjustment}"/>-->
+            <!--<apex:commandButton value="BRSF Report" onClick="window.open('/apex/ASI_CRM_CN_BRSFFormPDFPage?id?{!PH.id});" />-->
+            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_LABEL_BRSF_Report}" action="{!BRSFReport}" onComplete="window.open('/apex/ASI_CRM_CN_BRSFFormPDFPage?id={!ph.id}');" />
+            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Regen_Vol}" action="{!regenerateBRSFVol}" rerender="BRSFDetail, det,PSFtotal" status="BRSFStatus" />
+        </apex:pageBlockButtons>
+        <apex:pageBlockButtons location="bottom">
+            <apex:commandButton value="{!$Label.ASI_CRM_CN_VF_BTN_Cal_BRSF_Total}" action="{!calcBRSF_Total}" rerender="BRSFDetail, det,PSFtotal" status="BRSFTotal"/>
+            
+        </apex:pageBlockButtons>
+        <apex:actionstatus id="BRSFStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                       height: 100%;opacity:0.65;width:100%;"> 
+                    <div class="waitingHolder" style="top: 74.2px; width: 91px;">
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+        <apex:actionstatus id="BRSFTotal">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                       height: 100%;opacity:0.65;width:100%;"> 
+                    <div class="waitingHolder" style="top: 74.2px; width: 91px;">
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+        <apex:pageblocktable value="{!BRSFList}" var="row" id="BRSFDetail">
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Sub_Brand_Grade__c.Fields.Name.Label}</apex:facet>
+                <apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__r.ASI_CRM_CN_Sub_brand_Grade__r.Name}" rendered="{!!boolCNLanguage}"/>
+                <apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__r.ASI_CRM_CN_Sub_brand_Grade__r.ASI_CRM_Chinese_Name__c}" rendered="{!boolCNLanguage}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_MFM_Sub_brand__c.Fields.Name.Label}</apex:facet>
+                <!-- 20151209 Ben @ Elufa System -->
+                <span class="subBrand"><apex:outputField value="{!row.ASI_CRM_CN_Sub_Brand__c}"/></span>
+                <!-- End -->
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Incentive_BT__c.Label}</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Incentive_BT__c}" rendered="{!row.ASI_CRM_CN_Allow_Changing_Incentive__c}">
+                    <apex:actionSupport event="onchange"  action="{!calcBRSF_Total}"  rerender="totalPayable,PSFtotal"/>
+                </apex:inputField>
+                <apex:outputField value="{!row.ASI_CRM_CN_Incentive_BT__c}" rendered="{!!row.ASI_CRM_CN_Allow_Changing_Incentive__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Target_BT__c.Label}</apex:facet> 
+                <apex:outputField value="{!row.ASI_CRM_CN_Target_BT__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Actual_Vol__c.Label}</apex:facet> 
+                <!-- 20151209 Ben @ Elufa System -->
+                <span class="actualVol"><apex:outputField value="{!row.ASI_CRM_CN_Actual_Vol__c}"/></span>
+                <!-- End -->
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Completion_Rate__c.Label}</apex:facet> 
+                <apex:outputField value="{!row.ASI_CRM_CN_Completion_Rate__c}" />
+            </apex:column>
+<!--            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Suggested_Amount__c.Label}</apex:facet> 
+                <apex:outputField value="{!row.ASI_CRM_CN_Suggested_Amount__c}" />
+            </apex:column> -->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Total_Payable__c.Label}</apex:facet> 
+                <apex:outputField value="{!row.ASI_CRM_CN_Total_Payable__c}" id="totalPayable"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Payable_Vol__c.Label}</apex:facet> 
+                <span class="payableVol"><apex:inputField value="{!row.ASI_CRM_CN_Payable_Vol__c}" onchange="checkOverPaid($(this))" onkeydown="checkOverPaid($(this))" onkeypress="checkOverPaid($(this))" onkeyup="checkOverPaid($(this))">
+                <apex:actionSupport event="onchange"  action="{!calcBRSF_Total}"  rerender="totalPayable,PSFtotal"/>
+                </apex:inputField></span>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Bottle_Collected__c.Label}</apex:facet> 
+                <!-- 20151209 Ben @ Elufa System -->
+                <span class="bottleCollected"><apex:outputField value="{!row.ASI_CRM_CN_Bottle_Collected__c}"/></span>
+                <!-- End -->
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Collection_Rate__c.Label}</apex:facet>
+                <!--<apex:outputField value="{!row.ASI_CRM_CN_Collection_Rate__c}" /> -->
+                <apex:outputText value="{0,number,0}%"><apex:param value="{!row.ASI_CRM_CN_Collection_Rate__c}"/></apex:outputText>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Offtake_Vol__c.Label}</apex:facet> 
+                <apex:outputField value="{!row.ASI_CRM_CN_Offtake_Vol__c}"/>
+            </apex:column>
+        </apex:pageblocktable>
+    </apex:pageblock>
+    <apex:outputpanel id="PSFtotal" >
+    <apex:outputpanel rendered="{!showcalc}">
+        <apex:pageblocksection >
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$Label.ASI_CRM_CN_VF_LABEL_Completion_Rate}" />
+                <apex:outputText value="{0,number,0}%"><apex:param value="{!completionRate}"/></apex:outputText>
+                <!--<apex:outputField value="{!PH.ASI_CRM_CN_Completion_Rate__c}" />-->
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Payable_Amount__c.Label}" />
+                <apex:outputField value="{!PH.ASI_CRM_CN_Payable_Amount__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Overpayment_Reason__c.Label}" />
+                <!--<apex:inputText value="{!OverPaymentReason}"/>-->
+                <apex:outputPanel >
+                <apex:inputField id="overpayment_field" value="{!PH.ASI_CRM_CN_Overpayment_Reason__c}" >
+                </apex:inputField>
+                <apex:message for="overpayment_field"  rendered="{!require_overpayment_reason}"/>
+                </apex:outputPanel>
+            </apex:pageblocksectionitem>
+            
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Other_Reason__c.Label}" />
+                <apex:outputPanel >
+                <apex:inputField id="other_field" value="{!PH.ASI_CRM_CN_Other_Reason__c}">
+                </apex:inputField>
+                <apex:message for="other_field"  rendered="{!require_other_reason}"/>
+                </apex:outputPanel>
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.Fields.ASI_CRM_CN_Adjustment__c.Label}" />
+            <!--<apex:inputText value="{!adjustment}">-->
+                <apex:inputField value="{!PH.ASI_CRM_CN_Adjustment__c}" >
+                <apex:actionSupport event="onchange"  action="{!calcBRSFTotal}"  rerender="PSFtotal"/>
+                <!--</apex:inputText>-->
+                </apex:inputField>
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="{!$Label.ASI_CRM_CN_VF_LABEL_Actual_Payment}" />
+                <apex:outputText value="{0,number,###,###,##0.00}" id="actual"><apex:param value="{!actualPayment}"/></apex:outputText>
+                <!--<apex:outputField value="{!PH.ASI_CRM_CN_Actual_Payment__c}" id="actual" />-->
+            </apex:pageblocksectionitem>
+            <!--<apex:pageblocksectionitem >
+                <apex:outputLabel value="Over-Payment Comment" />
+                <apex:inputField value="{!PH.ASI_CRM_CN_Overpayment_Comment__c}"></apex:inputField>
+            </apex:pageblocksectionitem>--> 
+           
+        </apex:pageblocksection>
+        </apex:outputpanel>
+        </apex:outputpanel>
+    <apex:pageblock title="{!if(PH.ASI_CRM_New_FY_Payment__c, $Label.ASI_CRM_CN_VF_LABEL_PSF_Detail_NewFY, $Label.ASI_CRM_CN_VF_LABEL_PSF_Detail)}">
+        <apex:pageblockButtons location="top">
+            <!-- <apex:commandButton value="PSF Report" onClick="window.open('/apex/ASI_CRM_CN_PSFFormPDFPage?id={!ph.id}');">-->
+             <apex:commandButton value="{!if(PH.ASI_CRM_New_FY_Payment__c, $Label.ASI_CRM_CN_VF_LABEL_PSF_Report_NewFY, $Label.ASI_CRM_CN_VF_LABEL_PSF_Report)}" action="{!PSFReport}" onComplete="window.open('/apex/ASI_CRM_CN_PSFFormPDFPage?id={!ph.id}');">
+             
+             </apex:commandButton>
+             
+         </apex:pageblockButtons>
+        <apex:pageblocksection columns="1">
+            <apex:actionRegion >
+                <apex:pageblocktable value="{!PSF_Item_Map}" var="itm" id="item">
+                    <apex:column >                    
+                        <apex:facet name="header"><apex:commandLink value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_New}" action="{!AddNew_PSF}" rerender="mainblock, item" style="text-decoration:underline;"/></apex:facet>
+                        <apex:commandLink value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Clone}" action="{!Clone_PSF}" rerender="item" ><apex:param assignTo="{!rowidPSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                        <apex:outputText value=" / "></apex:outputText>
+                        <apex:commandLink value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Remove}" immediate="true" action="{!RemoveRow_PSF}" rerender="item" ><apex:param assignTo="{!rowidPSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                      <!--  <apex:commandLink value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Remove}" immediate="false" action="{!RemoveRow_PSF}" rerender="item" ><apex:param assignTo="{!rowidPSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>-->
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Payment_Description__c.Label}</apex:facet>
+                        <apex:inputField value="{!PSF_Item_Map[itm].ASI_CRM_CN_Payment_Description__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Period_Start__c.Label}</apex:facet>
+                        <apex:inputField value="{!PSF_Item_Map[itm].ASI_CRM_CN_Period_Start__c}" required="true"/>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Period_End__c.Label}</apex:facet>
+                        <apex:inputField value="{!PSF_Item_Map[itm].ASI_CRM_CN_Period_End__c}" required="true"/>
+                    </apex:column>
+                    <!--<apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Supporting_Document__c.Label}</apex:facet>
+                        <apex:inputField value="{!PSF_Item_Map[itm].ASI_CRM_CN_Supporting_Document__c}" />
+                    </apex:column>-->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_TH_CRM_Amount__c.Label}</apex:facet>
+                        <span class="TotalEstCost"><apex:inputField value="{!PSF_Item_Map[itm].ASI_TH_CRM_Amount__c}" /></span>
+                    </apex:column>
+                    <!--20160728 Ben @ Elufa-->
+                    <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}" >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CNY_Est__c.Label}</apex:facet>
+                        <span class="CNYEstCost"><apex:inputField rendered="{!isFestivalPSF}" value="{!PSF_Item_Map[itm].ASI_CRM_CNY_Est__c}"/></span>
+                    </apex:column>
+                    <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}" >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_MAF_Est__c.Label}</apex:facet>
+                        <span class="MAFEstCost"><apex:inputField rendered="{!isFestivalPSF}" value="{!PSF_Item_Map[itm].ASI_CRM_MAF_Est__c}"/></span>
+                    </apex:column>
+                    <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c && isFestivalPSF}" >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_Other_Est__c.Label}</apex:facet>
+                        <span class="OthersEstCost"><apex:inputField rendered="{!isFestivalPSF}" value="{!PSF_Item_Map[itm].ASI_CRM_Other_Est__c}"/></span>
+                    </apex:column>
+                    <!--20160728 End-->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Comment__c.Label}</apex:facet> 
+                        <apex:inputField value="{!PSF_Item_Map[itm].ASI_CRM_CN_Comment__c}"/>
+                    </apex:column>
+                </apex:pageblocktable>
+            </apex:actionRegion>
+        </apex:pageblocksection>
+    </apex:pageblock>
+    
+    <apex:pageblock title="{!$Label.ASI_CRM_CN_VF_LABEL_Other_Payment_Detail}">
+        <apex:pageblocktable value="{!OTPList}" var="row">
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Expense_Type__c.Label}</apex:facet>
+                <apex:outputField value="{!row.ASI_CRM_CN_Expense_Type__c}"/>
+            </apex:column>
+            <!--20160816, added by Leo-->
+            <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}">
+                <apex:facet name="header">{!if(!boolCNLanguage, 'Remaining Amount', '剩余金额')}</apex:facet>
+                <apex:outputText value="{0,number,#,###,##0.00}"><apex:param value="{!MPaymentSummary[row.ASI_CRM_CN_Expense_Type__c].PORemainAmt}"/></apex:outputText>
+            </apex:column>
+            <!--20160816, added by Leo-->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_TH_CRM_Amount__c.Label}</apex:facet>
+                <span class="TotalEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" value="{!row.ASI_TH_CRM_Amount__c}"/></span>
+            </apex:column>
+            <!--20160613 Ben @ Elufa-->
+            <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CNY_Est__c.Label}</apex:facet>
+                <span class="CNYEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_CNY_Est__c}"/></span>
+            </apex:column>
+            <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_MAF_Est__c.Label}</apex:facet>
+                <span class="MAFEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_MAF_Est__c}"/></span>
+            </apex:column>
+            <apex:column rendered="{!PH.ASI_CRM_New_FY_Payment__c}" >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_Other_Est__c.Label}</apex:facet>
+                <span class="OthersEstCost"><apex:outputField rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_Other_Est__c}"/></span>
+            </apex:column>
+            <!--20160613 End-->
+            <!--<apex:column >
+                    <apex:facet name="header"><apex:outputText value="{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Remaining_Amount__c.Label}"/></apex:facet>
+                    <apex:outputField value="{!row.ASI_CRM_CN_Remaining_Amount__c}" />
+            </apex:column>-->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.Fields.ASI_CRM_CN_Comment__c.Label}</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Comment__c}"/>
+            </apex:column>
+        </apex:pageblocktable>
+                    
+    </apex:pageblock>     
+    <!-- <apex:outputPanel layout="block" styleClass="row" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Promotion'}"> -->
+        <apex:pageBlock title="促销奖励所含赠酒明细" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Promotion'}">
+            <!-- <apex:variable var="" value="" rendered="{!PH.ASI_CRM_CN_Promotion_Type__c == 'Consumer Promotion'}">
+                <div class="PanelHeader">礼品及赠酒费用</div>
+            </apex:variable> -->
+            <!-- <apex:variable var="" value=""  rendered="{!PH.ASI_CRM_CN_Promotion_Type__c != 'Consumer Promotion'}"> -->
+            <!-- <div class="PanelHeader">促销奖励所含赠酒明细</div> -->
+            <!-- </apex:variable> -->
+            <div class="PanelBody">
+                <table id="free_goods_table" class="bs table table-condensed data-table">
+                    <tfoot>
+                    <tr></tr>
+                    </tfoot>
+                </table>
+
+                <script>
+                    drawTable('#free_goods_table');
+                </script>
+
+            </div>
+        </apex:pageBlock>
+    <!-- </apex:outputPanel> -->
+</apex:pageblock>
+</apex:form>
+</apex:page>
+<!--
+<apex:relatedList list="ProcessSteps" ></apex:relatedList>
+<apex:form >
+<apex:pageblock title="Edit Payment Details">
+ <apex:pageblockbuttons >
+            <apex:commandButton value="Save" action="{!GOURL}" />
+            <apex:commandButton value="Cancel" action="{!GOURL}" />
+            <apex:commandButton value="Calculate PSF Total" action="{!showcalcbtn}" rerender="PSFtotal" />
+        </apex:pageblockbuttons>       
+       <apex:pageblock title="BRSF">
+            <table width="100%" style="border: 1px solid #E4E7E7;" border="1" cellpadding="3" cellspacing="0">
+        <tr bgcolor="#E4E7E7">
+        <th><apex:outputLabel value="Standard" /></th>
+        <th><apex:outputLabel value="Sub-brand" /></th>
+        <th><apex:outputLabel value="Price/BT" /></th>
+        <th><apex:outputLabel value="Target(BT)" /></th>
+        <th><apex:outputLabel value="Actual Vol" /></th>
+        <th><apex:outputLabel value="Completion Rate" /></th>
+        <th><apex:outputLabel value="Total Payable" /></th>
+        <th><apex:outputLabel value="Payable Vol" /></th>
+        <th><apex:outputLabel value="Bottle Collected" /></th>
+        <th><apex:outputLabel value="Collection Rate" /></th>
+        <th><apex:outputLabel value="Offtake Vol" /></th>
+        </tr>
+        <apex:repeat value="{!BRSFList}" var="itm" id="item1">
+        <tr>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Standard__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Sub_brand__c}"/></td>
+        <td><apex:inputField value="{!itm.ASI_CRM_CN_Price_BT__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Target_BT__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Actual_Vol__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Completion_Rate__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Total_Payable__c}"/></td>
+        <td><apex:inputField value="{!itm.ASI_CRM_CN_Payable_Vol__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Bottle_Collected__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Collection_Rate__c}"/></td>
+        <td><apex:outputField value="{!itm.ASI_CRM_CN_Offtake_Vol__c}"/></td>
+        </tr>
+        </apex:repeat>
+    </table>
+    <br/><br/>
+    
+    <apex:outputpanel id="PSFtotal" >
+    <apex:outputpanel rendered="{!showcalc}">
+        <apex:pageblocksection >
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Completion Rate" />
+                <apex:outputField value="{!PH.ASI_CRM_CN_Completion_Rate__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Payable Amount" />
+                <apex:outputField value="{!PH.ASI_CRM_CN_Payable_Amount__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Over-Payment Reason" />
+                <apex:inputField value="{!PH.ASI_CRM_CN_Over_Payment_Reason__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Other Reason" />
+                <apex:inputField value="{!PH.ASI_CRM_CN_Other_Reason__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Adjustment" />
+                <apex:inputField value="{!PH.ASI_CRM_CN_Adjustment__c}" />
+            </apex:pageblocksectionitem>
+            <apex:pageblocksectionitem >
+                <apex:outputLabel value="Actual Payment" />
+                <apex:outputField value="{!PH.ASI_CRM_CN_Actual_Payment__c}" />
+            </apex:pageblocksectionitem>
+        </apex:pageblocksection>
+        </apex:outputpanel>
+        </apex:outputpanel>
+        </apex:pageblock>
+        <apex:outputPanel id="massCreateAndUpdate1">
+            <c:ASI_CRM_CN_MassCreateAndUpdateLookup id="massCreateAndUpdateCT" sObjectType="ASI_CRM_CN_Payment_Header_Line_Item_PSF__c"
+                displayFields="ASI_CRM_CN_Payment_Description__c, ASI_CRM_CN_Period_Start__c, ASI_CRM_CN_Period_End__c, ASI_CRM_CN_Supporting_Document__c"
+                whereStatement="ASI_CRM_CN_Payment_Header__c = '{!$CurrentPage.parameters.id}'"
+                pageBlockTitle="PSF"
+                successLink="/{!$CurrentPage.parameters.id}"
+                cancelLink="/{!$CurrentPage.parameters.id}"
+                mode="Both"
+                isDefaultEdit="true"
+                disableClone="false"
+                disableAddNew="false"
+                showAllRT="true"   
+                displayPickList="ASI_CRM_CN_Payment_Header__c"                                                     
+                componentKey="massCreateAndUpdate" />
+        </apex:outputPanel>        
+        <apex:pageBlock title="Other Payment Detail">
+            <table style="border: 1px solid #E4E7E7;" border="1" cellpadding ="3" cellspacing="0" width="100%">
+                <tr bgcolor="#E4E7E7">
+                    <th >Expenses Type</th>
+                    <th>Amount</th>
+                    <th>Comment</th>
+                </tr>
+                <tr>
+                    <td>Other Fix Cost</td>
+                    <td><apex:inputField style="width: 90%;" value="{!PH.ASI_CRM_CN_Other_Fix_Cost_Amount__c}"/></td>
+                    <td><apex:inputField style="width: 90%;" value="{!PH.ASI_CRM_CN_Other_Fix_Cost_Comment__c}"/></td>
+                </tr>
+                <tr>
+                    <td>Fix Event Cost</td>
+                    <td><apex:inputField style="width: 90%;" value="{!PH.ASI_CRM_CN_Fix_Event_Cost_Amount__c}"/></td>
+                    <td><apex:inputField style="width: 90%;" value="{!PH.ASI_CRM_CN_Fix_Event_Cost_Comment__c}"/></td>
+                </tr>
+            </table>
+        </apex:pageBlock>
+</apex:pageblock>
+</apex:form>
+</apex:page>-->

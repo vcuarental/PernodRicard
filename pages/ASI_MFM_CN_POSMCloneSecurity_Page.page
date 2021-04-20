@@ -1,0 +1,236 @@
+<apex:page Controller="ASI_MFM_CN_POSMCloneSecurity_Ctrl">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    <apex:includeScript value="{!$Resource.ASI_Datatable_Builder}"/>
+	<meta charset="UTF-8" />
+    <head>
+        <script>
+        var table;
+        var tableTo;
+        var searchResult={};
+        $(document).ready(function(){ 
+
+            $("[id$=cloneItemBtn]").removeClass("btn").addClass("hidden");
+            
+            $('.waitingSearchDiv').hide();
+            var columns = [
+                {title:"From",		data:"from", 	defaultContent:"", 		fieldType:TYPE_DISPLAY},
+                {title:"Detail",	data:"detail", 	defaultContent:"", 		fieldType:TYPE_DISPLAY, width:"60%"}
+            ];
+            var columnsTo = [
+                {title:"To",		data:"to", 	defaultContent:"", 	fieldType:TYPE_DISPLAY},
+                {title:"Detail",	data:"detail", 		defaultContent:"", 	fieldType:TYPE_DISPLAY, width:"60%"}
+            ];
+            var config = {
+                scrollX: false,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: [],
+                fixedColumns: false,
+                autoWidth: false,
+            };
+            var config2 = {
+                scrollX: false,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: [],
+                fixedColumns: false,
+                autoWidth: false,
+            };
+            var createdCell = function(nTd, oData, dataKey, iRow, iCol) {
+                //console.log(dataKey);
+            };
+            var oninput = function(nTd, result) {};
+            var onblur  = function(nTd, result, lookupObj) {};
+            table = new DataTableBuilder("posmItemTbl",config,columns,false,[],[],createdCell,oninput,onblur);
+            tableTo = new DataTableBuilder("posmItemTblTo",config2,columnsTo,false,[],[],createdCell,oninput,onblur);
+            table.setEditMode(false);
+            tableTo.setEditMode(false);
+
+		});
+        function onSelect(){
+            var type = $('#cloneType').val();
+            var typeName = 'Item Group';
+            if(type == 'item') { typeName = 'Item Group';}
+            else if (type == 'warehouse') {typeName = 'Warehouse';}
+            else {typeName = 'User';}
+            $('#searchFromId').val('');
+            $('#searchToId').val('');
+        }
+        function clone(){
+            //alert('Data Clone.');
+            $('.waitingSearchDiv').show();
+            var type = $('#cloneType').val();
+            var fromItem = searchResult['from'];
+            var toItem = searchResult['to'];
+            console.log(searchResult);
+            if(fromItem==null||toItem==null) {
+                alert('Error occur, please search again.');
+	            return;
+            }
+            if(fromItem.Id==null||fromItem.Id==''||toItem.Id==null||toItem.Id==''){
+                alert('Error occur, please search again.');
+	            return;
+            }
+            console.log(fromItem.Id);
+            console.log(toItem.Id);
+            console.log(type);
+            switch(type){
+                case 'item':
+                case 'warehouse':
+                case 'user':
+                    ASI_MFM_CN_POSMCloneSecurity_Ctrl.cloneItem(fromItem.Id,toItem.Id,type,function(result,event){
+                        console.log(result);
+                        if(event && result){
+                            if(result.success!=null && result.success) {
+                                var successCount = result.secList.length;
+                                alert('Security Records (' +successCount+ ') Cloned');
+                                $('.waitingSearchDiv').hide();
+                            } else {
+                                try {
+                                    alert(result.message);
+                                } catch (e) {
+                                    alert('Clone Fail :' + e);
+                                }
+                                $('.waitingSearchDiv').hide();
+                            }
+                        }
+                    }); 
+                    break;
+                default:
+                    alert('under develop');
+                    $('.waitingSearchDiv').hide();
+                    break;
+            }
+        }
+		function search() {
+            searchResult = {};
+            var type = $('#cloneType').val();
+            var fromtext = $('#searchFromId').val();
+            var totext = $('#searchToId').val();
+            var validate = true;
+            if(fromtext==null || fromtext =='') {alert('Please input search from'); validate=false;}
+            else if(totext==null || totext =='') {alert('Please input search to'); validate=false;}
+            else if(fromtext==totext) {alert('Search from is same as search to'); validate=false;}
+            if(!validate) {
+                $("[id$=cloneItemBtn]").removeClass("btn").addClass("hidden");
+                table.dataTable.clear().draw();
+                tableTo.dataTable.clear().draw();
+                return;
+            }
+            $('.waitingSearchDiv').show();
+            switch(type){
+                case 'item': 		
+                    ASI_MFM_CN_POSMCloneSecurity_Ctrl.searchItem(fromtext,totext,function(result,event){
+                        console.log(result);
+                        callback(type,fromtext,totext,result,event);
+                    }); 
+                    break;
+                case 'warehouse':
+                    ASI_MFM_CN_POSMCloneSecurity_Ctrl.searchWarehouse(fromtext,totext,function(result,event){
+                        callback(type,fromtext,totext,result,event);
+                    }); 
+                    break;
+                case 'user':
+                    ASI_MFM_CN_POSMCloneSecurity_Ctrl.searchUser(fromtext,totext,function(result,event){
+                        callback(type,fromtext,totext,result,event);
+                    });
+                    break;
+            }
+        }
+        var callback = function(searchType,fromtext,totext,result,event){
+            searchResult = {};
+            if(event && result){
+                var fromItems = result[fromtext.toLowerCase()];
+                var toItems = result[totext.toLowerCase()];
+                var bSuccess = true;
+                if(fromItems==null||fromItems.length==0) {
+                    alert(searchType+' not found: '+fromtext);
+                    bSuccess = false;
+                }
+                else if(toItems==null||toItems.length==0) {
+                    alert(searchType+' not found: '+totext);
+                    bSuccess = false;
+                }
+                else if(fromItems.length>1) {
+                    alert(searchType+' '+fromtext+' more than 1');
+                    bSuccess = false;
+                }
+                else if(toItems.length>1) {
+                    alert(searchType+' '+totext+' more than 1');
+                    bSuccess = false;
+                }
+                table.dataTable.clear();
+                tableTo.dataTable.clear();
+                if(bSuccess) {
+                    var fromItem = fromItems[0];
+                    var toItem = toItems[0];
+                    searchResult = {'from':fromItem,'to':toItem};
+                    table.dataTable.row.add({from : fromtext, detail : ''+fromItem.Name, editable:true}).draw(false);
+                    tableTo.dataTable.row.add({to : totext, detail : ''+toItem.Name, editable:true}).draw(false);
+                    $("[id$=cloneItemBtn]").addClass("btn").removeClass("hidden");
+                } else {
+                    table.dataTable.draw(false);
+                    tableTo.dataTable.draw(false);
+                    $("[id$=cloneItemBtn]").removeClass("btn").addClass("hidden");
+                }
+
+                $('.waitingSearchDiv').hide();
+            } else {
+                alert('Error on searching :' + searchType);
+            }
+        }
+        </script>
+    </head>
+        
+    <apex:pageMessages />
+    <apex:form id="cloneItem">
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                Clone from 
+                <select id="cloneType" onchange="onSelect()">
+                    <option value="item">Item Group</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="user">User</option>
+                </select>
+                <input id="searchFromId" type="text" name="searchIdText" placeholder=""/>
+                 to <input id="searchToId" type="text" name="searchToText" placeholder=""/>
+                <apex:commandButton id="searchItemBtn" value="Search" onclick="search(); return false;"/>
+                <br/><br/>
+                如果需要复制用户权限，请输入用户邮箱，比如：admin@pernod-ricard.com<br/>
+                如果需要复制仓库权限，请输入仓库编码，比如：398POP30<br/>
+                如果需要复制POSM item group权限，请输入POSM item group编码，比如：XML2GL180088DN<br/>
+            </apex:pageBlockButtons>
+            
+            <div style="height:10px;"></div>
+            <div style="width:100%">
+                <div style="width: 45%; float: left;">
+                    <table id="posmItemTbl" class="display compact" style="width:100%"></table>
+                </div>
+                <div style="width: 10%;"></div>
+                <div style="width: 45%; float: left;">
+                    <table id="posmItemTblTo" class="display compact" style="width:100%"></table>
+                </div>
+            </div>
+            <div style="clear: left;height:10px;"></div>
+            
+            <apex:pageBlockButtons id="footer" location="bottom">
+				<apex:commandButton id="cloneItemBtn" value="Clone" onclick="clone(); return false;"/>
+            </apex:pageBlockButtons>
+        </apex:pageBlock>
+    </apex:form>
+    
+</apex:page>

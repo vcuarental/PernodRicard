@@ -1,0 +1,134 @@
+<aura:component description="EUR_CRM_TargetedAccountsModalCmp" controller="EUR_CRM_QuizToAccAssignAuraController">
+
+    <c:EUR_CRM_lax context="{!this}"/>
+
+    <aura:handler name="init" value="{!this}" action="{!c.onInit}"/>
+
+    <aura:attribute name="columns" type="List" default="[]" required="true" access="global"
+                    description="Stores account's columns to show to users."/>
+
+    <aura:attribute name="assignedAccounts" type="EUR_CRM_Account__c[]" default="[]" required="true" access="global"
+                    description="Stores all accounts that already have a relationship with current Survey."/>
+    <aura:attribute name="isShownDeletionCheckboxes" type="Boolean" default="false" required="true" access="global"
+                    description="isShownDeletionCheckboxes"/>
+    <aura:attribute name="assignedAccountsToDelete" type="EUR_CRM_Account__c[]" default="[]" access="global"
+                    description="Stores all assigned accounts to delete."/>
+    <aura:attribute name="filterSetting" type="Object[]" default="[]" access="global"
+                    description="Filter Setting "/>
+    <aura:attribute name="recordId" type="Id" default="aSk0E0000000001"/>
+
+    <aura:attribute name="targetAccounts" type="EUR_CRM_Account__c[]" default="[]" required="true" access="global"
+                    description="Stores all targetAccounts to show in the table in Modal Window."/>
+    <aura:handler name="change" value="{!v.targetAccounts}" action="{!c.onChangeTargetAccounts}"/>
+
+    <aura:attribute name="targetAccountIds" type="List" default="[]" required="false"
+                    description="Stores all ids of target accounts."/>
+
+    <aura:attribute name="showModal" type="Boolean" default="false" required="true" access="global"
+                    description="Stores a boolean variable to determine to show Modal Window or not."/>
+    <aura:handler name="change" value="{!v.showModal}" action="{!c.onChangeShowModalWindow}"/>
+
+    <aura:method name="setFilterData" action="{!c.setFilterData}" access="PUBLIC">
+        <aura:attribute name="data" type="Object[]" default=""/>
+        <aura:attribute name="recordId" type="Id" default="aSk0E0000000001"/>
+    </aura:method>
+    <aura:method name="getAllAccounts" action="{!c.getAllAccounts}" access="PUBLIC">
+        <aura:attribute name="selectedFilter" type="String" default="parameter 1"/>
+    </aura:method>
+
+    <aura:attribute name="enableAssignedTableInfiniteLoading" type="Boolean" default="false"/>
+    <aura:attribute name="enableCartTableInfiniteLoading" type="Boolean" default="false"/>
+    <aura:attribute name="loadMoreOffset" type="Integer" default="20"/>
+    <aura:attribute name="assignedAccountsInTable" type="EUR_CRM_Account__c[]" default="[]" required="true" access="global"
+                    description="Stores all assigned accounts displayed in a table"/>
+    <aura:attribute name="accountsToAssignInTable" type="EUR_CRM_Account__c[]" default="[]" required="true" access="global"
+                    description="Stores all accounts to assign displayed in a table"/>
+
+    <aura:registerEvent name="ShowHideComponentEvent" type="c:EUR_CRM_ShowHideComponentEvent"/>
+    <aura:registerEvent name="AccountsIsSelectedEvent" type="c:EUR_CRM_AccountsIsSelectedEvent"/>
+    <aura:registerEvent name="CallAddAllAccountHandler" type="c:EUR_CRM_SendString"/>
+    <div>
+        <aura:if isTrue="{!v.showModal}">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true"
+                     aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open slds-modal_large"
+                     style="{! v.showSaveConfirmation || v.showDeleteConfirmation ? 'opacity: 0.3;' : 'opacity: 1;'}">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                                title="Close" onclick="{!c.onClickCancelModalWindow}">
+                            <lightning:icon iconName="utility:close" variant="bare" size="small"/>
+                            <span class="slds-assistive-text">Close</span>
+                        </button>
+                        <h2 id="modal-heading-01"
+                            class="slds-text-heading_medium slds-hyphenate">{! 'Targeted Accounts (' + (v.assignedAccounts.length + v.targetAccounts.length) + ')'}</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                        <div>
+                            <div class="{! empty(v.assignedAccounts) ? 'slds-hide' : 'slds-show'}">
+                                <lightning:card title="{! 'Assigned Accounts (' + v.assignedAccounts.length + ')'}"
+                                                iconName="standard:account">
+                                    <aura:set attribute="actions">
+                                        <lightning:buttonGroup>
+                                            <lightning:button
+                                                    class="{! v.isShownDeletionCheckboxes ? 'slds-show' : 'slds-hide'}"
+                                                    variant="destructive"
+                                                    label="{! 'Delete targeted accounts (' + v.assignedAccountsToDelete.length + ')'}"
+                                                    onclick="{! c.onClickDeleteAssignedAccounts }"
+                                                    disabled="{!empty(v.assignedAccountsToDelete)}"
+                                            />
+                                        </lightning:buttonGroup>
+                                    </aura:set>
+                                    <div style="height: 300px">
+                                    <lightning:datatable columns="{!v.columns}"
+                                                         data="{!v.assignedAccountsInTable}"
+                                                         keyField="Id"
+                                                         aura:id="assignedTable"
+                                                         hideCheckboxColumn="{! !v.isShownDeletionCheckboxes}"
+                                                         onrowselection="{!c.onAssignedAccountsRowSelection}"
+
+                                                         enableInfiniteLoading="{! v.enableAssignedTableInfiniteLoading }"
+                                                         loadMoreOffset="{! v.loadMoreOffset }"
+                                                         onloadmore="{! c.loadMoreAssignedAccounts }"
+                                    /></div>
+                                </lightning:card>
+                            </div>
+
+                            <hr style="margin: 1.5rem 0 0.2rem 0;"
+                                class="{! and(not(empty(v.assignedAccounts)), not(empty(v.targetAccounts))) ? 'slds-show' : 'slds-hide'}"/>
+
+                            <div class="{! empty(v.targetAccounts) ? 'slds-hide' : 'slds-show'}">
+                                <lightning:card
+                                        title="{! 'Accounts to assign (' + (v.targetAccountIds.length == v.targetAccounts.length ? v.targetAccountIds.length : v.targetAccountIds.length + ' of ' + v.targetAccounts.length) + ')'}"
+                                        iconName="standard:account">
+                                    <div style="height: 300px">
+                                    <lightning:datatable columns="{!v.columns}"
+                                                         data="{!v.accountsToAssignInTable}"
+                                                         keyField="Id"
+                                                         aura:id="cartTable"
+                                                         onrowselection="{!c.onTargetAccountsRowSelection}"
+
+                                                         enableInfiniteLoading="{! v.enableCartTableInfiniteLoading }"
+                                                         loadMoreOffset="{! v.loadMoreOffset }"
+                                                         onloadmore="{! c.loadMoreAccountToAssign }"
+                                    /></div>
+                                </lightning:card>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="slds-modal__footer">
+
+                        <button class="slds-button slds-button_neutral" onclick="{!c.onClickCancelModalWindow}">Cancel
+                        </button>
+                        <button class="slds-button slds-button_brand" onclick="{!c.onClickSaveModalWindow}"
+                                disabled="{!empty(v.targetAccountIds)}">Save selected
+                        </button>
+                        <button class="slds-button slds-button_brand" onclick="{!c.onClickSaveAllTargetAccounts}">Save All
+                        </button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+    </div>
+
+</aura:component>

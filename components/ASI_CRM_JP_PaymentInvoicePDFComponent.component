@@ -1,0 +1,1016 @@
+<apex:component controller="ASI_CRM_JP_PaymentInvoicePDFController" access="global" allowDml="true" language="{!approverLanguage}">                                 
+    <apex:attribute name="headerId" type="String" description=" " assignTo="{!currentHeaderId}"/>
+    <apex:attribute name="actionParam"  type="String" description=" " assignTo="{!currentAction}"/>
+    <html>
+        <head>
+            <style>
+            @page{
+                    size: landscape;
+                    margin-top:250px;
+
+                @PageBreak{
+                    page-break-inside:avoid;
+                    page-break:always;
+                }      
+
+                @top-center {
+                    content: element(header);
+                }
+                
+                @top-right {
+                   content: element(headerBy);
+                }
+
+                @bottom-center {
+                    content: "[Print Owner:{!header.Owner.Name}] [Print By: {!$User.Lastname} {!$User.Firstname}] [Record Id: {!header.Name}] - " counter(page) "/" counter(pages);
+                }    
+            }
+           
+            div.header {                
+                padding: 10px;
+                position: running(header);
+            }
+            
+            div.headerBy {                
+                padding: 10px;  
+                position: running(headerBy);
+            }
+
+            .table {
+                /*-fs-table-paginate: paginate;*/
+                page-break-inside: auto;
+                border-spacing: 0;
+            }
+
+            tr{
+                page-break-inside:avoid;
+            }
+
+            body{
+                font-family: Arial Unicode MS;
+                font-size: 7pt;
+            }
+
+            tbody {display:table-row-group;
+            }
+
+            .standardtd{
+                border: solid 1px black;    
+            }
+
+            .approvertd {
+                width:50pt;
+                text-align:center;            
+            }
+
+            .tableHeader {
+                text-align:center;
+            }
+            thead {
+                display: table-header-group;
+                border-top: solid 1px black;
+            }
+            
+            #footer
+            {
+                clear: both;
+                position: relative;
+                z-index: 10;
+                height: 3em;
+                margin-top: 10em;
+                page-break-inside: avoid;
+            }
+            
+            table.print-friendly tr td, table.print-friendly tr th {
+                page-break-inside: avoid;
+            }
+            
+            </style>
+            
+        </head>
+        <body>
+
+
+
+
+
+        <div class="header" id="header">
+
+            <apex:outputPanel layout="block" rendered="{!OR(CONTAINS(header.recordtype.developername, 'ASI_CRM_JP_Cash_Invoice'),header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice_Read_Only', header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice', header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice_Read_Only')}">
+                <div class="headerBy" style="height: 15px; margin-right:8px; float:right; width:29%; margin-top: 10px ; border:1px solid;">
+                    <center>
+                        Printed By {!$User.FirstName} {!$User.LastName} &nbsp; <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!now()}" date_time_format="yyyy/MM/dd hh:mm:ss"></c:ASI_CRM_JP_Formatted_Datetime>
+                    </center>
+                </div>
+            </apex:outputPanel>
+            <br/><br/>
+            <center>
+                <h3 style="width:100%;font-size: 12pt;">-{!IF(OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice_Read_Only'),
+                    $Label.ASI_CRM_JP_FOC_Header,
+                    IF(OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice_Read_Only'),
+                    $Label.ASI_CRM_JP_Cash_Header,
+                    IF(CONTAINS(header.recordtype.developername, 'ASI_CRM_JP_Cash_Invoice'),
+                    $Label.ASI_CRM_JP_CashInvoice_Header,
+                    $Label.ASI_CRM_JP_Rebate_Header
+                    )
+                    )
+                    )
+                    }-</h3>
+            </center>
+
+
+            <!-- DC - 04/01/2016 -->
+            <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice_Read_Only')}">
+                <table style="margin-left:6pt;margin-right:8px;">
+                    <tr>
+                        <td>
+                            <table border="1" cellpadding="3" cellspacing="1" class="print-friendly">
+                                <colgroup>
+                                    <col span="1" style="width: 25%;padding-left:5px;"/>
+                                    <col span="1" style="width: 20%;padding-left:5px;"/>
+                                    <col span="1" style="width: 20%;padding-left:5px;"/>
+                                    <col span="1" style="width: 35%;padding-left:5px;"/>
+                                </colgroup>
+                                <tr>
+                                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.Name.Label}</td>
+                                    <td class="tableHeader" >{!header.name}</td>
+                                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Owner}</td>
+                                    <td class="tableHeader" >{!header.ASI_CRM_Staff_Code__c} {!header.owner.name}</td>
+                                </tr>
+                                <tr>
+                                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_No__c.Label}</td>
+                                    <td class="tableHeader" >{!header.ASI_CRM_Invoice_No__c}</td>
+                                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_Date__c.Label}</td>
+                                    <td class="tableHeader" >
+                                        <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Invoice_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Delivery_Date}</td>
+                                    <td class="tableHeader" >
+                                        <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Payment_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                    </td>
+                                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Delivery_Time__c.Label}</td>
+                                    <td class="tableHeader" ><apex:outputField value="{!header.ASI_CRM_Delivery_Time__c}"/></td>
+                                </tr>
+                                <tr>
+                                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Cash_ShipTo_Code}</td>
+                                    <td class="tableHeader" >{!header.ASI_CRM_Customer_Ship_Pay_To__r.ASI_CRM_CN_CRM_Code__c}</td>
+                                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Cash_ShipTo_Name}</td>
+                                    <td class="tableHeader" >{!header.ASI_CRM_Customer_Ship_Pay_To__r.ASI_CRM_Customer_Name_Kanji__c}</td>
+                                </tr>
+                                <tr>
+                                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_ShipToAddress}</td>
+                                    <td colspan="3">{!header.ASI_CRM_Customer_Ship_Pay_To__r.ASI_CRM_CN_Address__c}</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td valign="top">
+                            <div>
+                                <table border="1" cellpadding="1" cellspacing="1" class="print-friendly">
+                                    <colgroup>
+                                        <col span="1" style="width: 10%;padding-left:5px;"/>
+                                        <col span="1" style="width: 88%;padding-left:5px;"/>
+                                    </colgroup>
+                                    <tr>
+                                        <td class="tableHeader" style = "height:50px">{!$Label.ASI_CRM_JP_Receiver}</td>
+                                        <td style = "height:50px;text-align:left;">{!header.ASI_CRM_Remarks__c}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </apex:outputPanel>
+
+            <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice_Read_Only')}">
+                <div style="clear:both;"></div>
+                <div style = "width:100%;">
+
+                    <div style="float:left;width:400px">
+                        <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 26%;padding-left:5px;"/>
+                                <col span="1" style="width: 24%;padding-left:5px;"/>
+                                <col span="1" style="width: 19%;padding-left:5px;"/>
+                                <col span="1" style="width: 31%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.Name.Label}</td>
+                                <td class="tableHeader" >{!header.Name}</td>
+                                <td class="tableHeader" >{!$Label.ASI_CRM_JP_Owner}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Staff_Code__c} {!header.owner.name}</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_No__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Invoice_No__c}</td>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Tax_Rate__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Tax_Rate__c}%</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_Date__c.Label}</td>
+                                <td class="tableHeader" >
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Invoice_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                                <td class="tableHeader" >{!$Label.ASI_CRM_JP_Payment_Date}</td>
+                                <td class="tableHeader" >
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Payment_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.Name.Label}</td>
+                                <td class="tableHeader" ><apex:outputText escape="false" value="{!PayToName}"/></td>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.ASI_CRM_Account_Number__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Pay_To__r.ASI_CRM_Account_Number__c}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="float:left;margin-left:20px; width:200px">
+                        <table border="1" cellpadding="1" cellspacing="1" width="180px" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 60%;padding-left:5px;"/>
+                                <col span="1" style="width: 40%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Taxable_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Taxable_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Tax_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Tax_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Invoice_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Invoice_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$Label.ASI_CRM_JP_AdjustmentAmount}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Adjustment_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="float:left;margin-left:20px; width:315px">
+                        <table border="1" cellpadding="1" cellspacing="1" height="90px" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 30%;padding-left:5px;"/>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 20%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr height="25px;">
+                                <td class="tableHeader">Sr. Manager</td>
+                                <td class="tableHeader">Sales General Mgr</td>
+                                <td class="tableHeader">Finance Director</td>
+                                <td class="tableHeader"></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" height="45px;"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" height="20px;"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <br/><br/><br/>
+                <div style="clear:both"></div>
+                <div style="margin-top:20px; margin-left:8px; margin-right:8px;">
+                    <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                        <colgroup>
+                            <col span="1" style="width: 20%;padding-left:5px;"/>
+                            <col span="1" style="width: 79%;padding-left:5px;"/>
+                        </colgroup>
+                        <tr>
+                            <td class="tableHeader">{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                            <td stype="text-align:left">{!header.ASI_CRM_Remarks__c}</td>
+                        </tr>
+                    </table>
+                </div>
+            </apex:outputPanel>
+
+            <apex:outputPanel layout="block" rendered="{!CONTAINS(header.recordtype.developername, 'ASI_CRM_JP_Cash_Invoice')}">
+                <div style="clear:both;"></div>
+                <div style = "width:100%;margin-left:8px;margin-right:8px;">
+
+                    <div style="float:left;width:350px;">
+                        <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 26%;padding-left:5px;"/>
+                                <col span="1" style="width: 24%;padding-left:5px;"/>
+                                <col span="1" style="width: 19%;padding-left:5px;"/>
+                                <col span="1" style="width: 31%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.Name.Label}</td>
+                                <td class="tableHeader" >{!header.Name}</td>
+                                <td class="tableHeader" rowspan="2">{!$Label.ASI_CRM_JP_Owner}</td>
+                                <td class="tableHeader" rowspan="2">{!header.ASI_CRM_Staff_Code__c} {!header.owner.name}</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$Label.ASI_CRM_JP_InvoiceFromToMonth}</td>
+                                <td class="tableHeader">
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_From_Month__c}" date_time_format="yyyy/MM"></c:ASI_CRM_JP_Formatted_Datetime>
+                                    ~
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!If(header.ASI_CRM_To_Month__c == null, header.ASI_CRM_From_Month__c, header.ASI_CRM_To_Month__c)}" date_time_format="yyyy/MM"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_No__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Invoice_No__c}</td>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Tax_Rate__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Tax_Rate__c}%</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_Date__c.Label}</td>
+                                <td class="tableHeader" >
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Invoice_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                                <td class="tableHeader" >{!$Label.ASI_CRM_JP_Payment_Date}</td>
+                                <td class="tableHeader" >
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Payment_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.Name.Label}</td>
+                                <td class="tableHeader" ><apex:outputText escape="false" value="{!PayToName}"/></td>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.ASI_CRM_Account_Number__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Pay_To__r.ASI_CRM_Account_Number__c}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="float:left;margin-left:15px; width:300px">
+                        <table border="1" cellpadding="1" cellspacing="1" width="300px" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 40%;padding-left:5px;"/>
+                                <col span="1" style="width: 15%;padding-left:5px;"/>
+                                <col span="1" style="width: 15%;padding-left:5px;"/>
+                                <col span="1" style="width: 15%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td></td>
+                                <td class="tableHeader">Total</td>
+                                <td class="tableHeader">A&amp;P</td>
+                                <td class="tableHeader">Indirect</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Taxable_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Taxable_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_A_P_Cash_Taxable_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Rebate_Taxable_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Tax_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Tax_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_A_P_Cash_Tax_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Rebate_Tax_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Total_Invoice_Amount__c.Label}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Total_Invoice_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_A_P_Cash_Invoice_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Rebate_Invoice_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$Label.ASI_CRM_JP_AdjustmentAmount}</td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Adjustment_Amount__c + header.ASI_CRM_Rebate_Adjustment_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Adjustment_Amount__c}" /></apex:outputText></td>
+                                <td class="tableHeader"> <apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!header.ASI_CRM_Rebate_Adjustment_Amount__c}" /></apex:outputText></td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="float:left;margin-left:15px; width:264px">
+                        <table border="1" cellpadding="1" cellspacing="1" height="90px" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 30%;padding-left:5px;"/>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 20%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr height="25px;">
+                                <td class="tableHeader">Sr. Manager</td>
+                                <td class="tableHeader">Sales General Mgr</td>
+                                <td class="tableHeader">Finance Director</td>
+                                <td class="tableHeader"></td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" height="45px;"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" height="20px;"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                                <td class="tableHeader"> </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <br/><br/><br/>
+                <div style="clear:both"></div>
+                <div style="margin-top:20px;margin-left:8px;margin-right:8px;">
+                    <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                        <colgroup>
+                            <col span="1" style="width: 20%;padding-left:5px;"/>
+                            <col span="1" style="width: 79%;padding-left:5px;"/>
+                        </colgroup>
+                        <tr>
+                            <td class="tableHeader">{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                            <td>{!header.ASI_CRM_Remarks__c}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div style="clear:both;"></div>
+
+
+            </apex:outputPanel>
+
+            <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice', header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice_Read_Only')}">
+                <div style="clear:both;"></div>
+                <div style = "height:45px;">
+
+                    <div style="float:left;position:absolute;margin-left:6pt">
+                        <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                                <col span="1" style="width: 25%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.Name.Label}</td>
+                                <td class="tableHeader" >{!header.Name}</td>
+                                <td class="tableHeader" >{!$Label.ASI_CRM_JP_Payment_Month}</td>
+                                <td class="tableHeader" >
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_Payment_Date__c}" date_time_format="yyyy/MM"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.ASI_CRM_Pay_to_No__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Pay_To__r.ASI_CRM_Pay_to_No__c}</td>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Pay_To__c.fields.ASI_CRM_Pay_to_Name__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Pay_To__r.ASI_CRM_Pay_to_Name__c}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="float:right;">
+                        <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                            <colgroup>
+                                <col span="1" style="width: 28%;padding-left:5px;"/>
+                                <col span="1" style="width: 24%;padding-left:5px;"/>
+                                <col span="1" style="width: 24%;padding-left:5px;"/>
+                                <col span="1" style="width: 24%;padding-left:5px;"/>
+                            </colgroup>
+                            <tr>
+                                <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Tax_Rate__c.Label}</td>
+                                <td class="tableHeader" >{!header.ASI_CRM_Tax_Rate__c}%</td>
+                                <td class="tableHeader"> {!$ObjectType.ASI_CRM_Payment_Invoice__c.fields.ASI_CRM_Invoice_No__c.Label}</td>
+                                <td class="tableHeader"> {!header.ASI_CRM_Invoice_No__c}</td>
+                            </tr>
+                            <tr>
+                                <td class="tableHeader"> {!$Label.ASI_CRM_JP_Owner}</td>
+                                <td class="tableHeader"> {!header.ASI_CRM_Staff_Code__c} {!header.Owner.Name}</td>
+                                <td class="tableHeader"> {!$Label.ASI_CRM_JP_InvoiceFromToMonth}</td>
+                                <td class="tableHeader">
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!header.ASI_CRM_From_Month__c}" date_time_format="yyyy/MM"></c:ASI_CRM_JP_Formatted_Datetime>
+                                    ~
+                                    <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!If(header.ASI_CRM_To_Month__c == null, header.ASI_CRM_From_Month__c, header.ASI_CRM_To_Month__c)}" date_time_format="yyyy/MM"></c:ASI_CRM_JP_Formatted_Datetime>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <br/>
+                <div style="margin-left:6pt;">
+                    <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                        <colgroup>
+                            <col span="1" style="width: 10%;padding-left:5px;"/>
+                            <col span="1" style="width: 90%;padding-left:5px;"/>
+                        </colgroup>
+                        <tr>
+                            <td class="tableHeader">{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                            <td stype="text-align:left">{!header.ASI_CRM_Remarks__c}</td>
+                        </tr>
+                    </table>
+                </div>
+            </apex:outputPanel>
+        </div>
+
+        <div style="clear:both;"></div>
+        <!--////////////////////////////////////////////// *END OF HEADER INFORMATION //////////////////////////////////////// -->
+           
+<!--////////////////////////////////////////////// LINES INFORMATION FOR RECORDTYPE SPTD //////////////////////////////////////// -->
+          
+           <div style="clear:both;"></div>
+           <div style = "width:100%;"> 
+           <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_FOC_Invoice_Read_Only')}"> 
+           
+            <table border="1" cellpadding="1" cellspacing="1" width="100%" style="-fs-table-paginate: paginate; " class="print-friendly">
+                <colgroup>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                </colgroup>
+                <thead>
+                    <tr>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.name.Label}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Name}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_AP_Code__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.ASI_CRM_End_Date__c.Label}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_ItemGroup_Name}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Target_Volume__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Sales_Result__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Condition__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Quantity__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Unit_Cost__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Amount__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remaining_Balance__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                    </tr>
+                </thead>
+                <apex:repeat value="{!Details}" var="detail" >
+                    <tr>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Outlet__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_AP_Code__r.name}</td>
+                        <td class="tableHeader" ><c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_End_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime></td>
+                        <td class="tableHeader" >{!if(detail.ASI_CRM_SKU__r.Name != null,detail.ASI_CRM_SKU__r.ASI_MFM_SKU_Code__c + ' - ' + detail.ASI_CRM_SKU__r.ASI_MFM_SKU_Description__c,detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Item_Group__r.name)}</td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Target_Volume__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Sales_Result__c}" /></apex:outputText></td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Condition__c}</td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Quantity__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Unit_Cost__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Amount__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Remaining_Balance__c}" /></apex:outputText></td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Remarks__c}</td>
+                    </tr>
+                </apex:repeat>
+                <tr>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_TOTAL}</td>
+                    <td class="tableHeader" colspan="5"></td>
+                    <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalTargetVol}" /></apex:outputText></td>
+                    <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalProResult}" /></apex:outputText></td>
+                    <td class="tableHeader"></td>
+                    <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalActualQty}" /></apex:outputText></td>
+                    <td class="tableHeader" ></td>
+                    <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalAmount}" /></apex:outputText></td>
+                    <td class="tableHeader" colspan="2"></td>
+                </tr>
+            </table>
+            
+            
+<!--////////////////////////////////////////////// *END OF LINES INFORMATION FOR RECORDTYPE SPTD//////////////////////////////////////// -->
+<!--////////////////////////////////////////////// SIGNATURE SECTION FOR RECORDTYPE SPTD //////////////////////////////////////// -->
+                      
+              <div>
+              <br/><br/>
+               <table border="1" cellpadding="1" cellspacing="1" width="100%" class="print-friendly">
+                   <tr>
+                        <td class="approvertd" rowspan="{!numOfApprovals}">{!$Label.ASI_CRM_JP_Approval_History}</td>
+                        <td class="approvertd">{!$Label.ASI_CRM_JP_Approval_Date}</td>
+                        <td class="approvertd">{!$Label.ASI_CRM_JP_Approval_Status}</td>
+                        <td class="approvertd">{!$Label.ASI_CRM_JP_Approval_Approver}</td>
+                        <td class="approvertd">{!$Label.ASI_CRM_JP_Approval_Title}</td>
+                        <td class="approvertd">{!$Label.ASI_CRM_JP_Approval_Comments}</td>
+                    </tr>
+                    <apex:repeat value="{!approvalDetails}" var="approvalDetail" >
+                        <tr>
+                            <td class="approvertd">
+                                <c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!approvalDetail.history.CreatedDate}" date_time_format="yy/MM/dd/ HH:mm:ss"></c:ASI_CRM_JP_Formatted_Datetime>
+                            </td>
+                            <td class="approvertd"><apex:outputField value="{!approvalDetail.history.StepStatus}"/></td>
+                            <td class="approvertd">{!approvalDetail.history.Actor.Name}</td>
+                            <td class="approvertd">{!approvalDetail.title}</td>
+                            <td class="approvertd">
+                                {!approvalDetail.history.Comments}&nbsp;
+                                <apex:outputtext rendered="{!!ISBLANK(approvalDetail.additionalComment)}">
+                                    <br/>
+                                    {!approvalDetail.additionalComment}
+                                </apex:outputtext>
+                            </td>
+                        </tr>
+                    </apex:repeat>                       
+               </table>         
+            </div>
+            </apex:outputPanel> 
+                 
+<!--////////////////////////////////////////////// *END OF SIGNATURE SECTION FOR RECORDTYPE SPTD //////////////////////////////////////// -->
+
+<!--////////////////////////////////////////////// LINES INFORMATION FOR RECORDTYPE CASH//////////////////////////////////////// -->
+            
+            <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice', header.recordtype.developername = 'ASI_CRM_JP_SPTD_Cash_Invoice_Read_Only')}">
+            <apex:repeat value="{!cashDetailsGroup}" var="cashGroup" >
+            <p>{!cashGroup.title}</p> 
+            <table border="1" cellpadding="1" cellspacing="1" width="100%" style=" -fs-table-paginate: paginate;  margin-top:0px;" class="print-friendly">
+                <colgroup>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 7%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                    <col span="1" style="width: 6%;padding-left:5px;"/>
+                </colgroup>
+               <thead>
+                <tr>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.name.Label}</td>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_SalesPerson_Name}</td>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Name}</td>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_AP_Code__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.ASI_CRM_End_Date__c.Label}</td>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_ItemGroup_Name}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Target_Volume__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Sales_Result__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Condition__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Quantity__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Unit_Price__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Unit_Cost__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Final_Amount__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remaining_Balance__c.Label}</td>
+                    <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                </tr>
+               </thead>
+                    <apex:repeat value="{!cashGroup.details}" var="detail" >
+                    <tr>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Staff_Code__c} {!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.owner.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Outlet__r.name}</td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_AP_Code__r.name}</td>
+                        <td class="tableHeader" ><c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_End_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime></td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Item_Group__r.name}</td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Target_Volume__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Sales_Result__c}" /></apex:outputText></td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Condition__c}</td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Quantity__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Unit_Price__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Unit_Cost__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Final_Amount__c}" /></apex:outputText></td>
+                        <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Remaining_Balance__c}" /></apex:outputText></td>
+                        <td class="tableHeader" >{!detail.ASI_CRM_Remarks__c}</td>
+                    </tr>
+                    </apex:repeat>
+                <tr>
+                    <td class="tableHeader" >{!$Label.ASI_CRM_JP_TOTAL}</td>
+                    <td class="tableHeader" colspan="6"></td>
+                    <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlSalesTgt }" /></apex:outputText></td>
+                    <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlQty}" /></apex:outputText></td>
+                    <td class="tableHeader"></td>
+                    <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlActualQty}" /></apex:outputText></td>
+                    <td class="tableHeader" colspan="2"></td>
+                    <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlActualAmt}" /></apex:outputText></td>
+                    <td class="tableHeader" colspan="2"></td>
+                </tr>
+            </table>
+            <br/><br/>
+            
+            <apex:outputPanel layout="block" rendered="{!IsFinalPrint}">
+                <div style="position:absolute;margin-left:652px;">
+                  <table border="1" cellpadding="1" cellspacing="1" width="300px" class="print-friendly">
+                        <colgroup>
+                            <col span="1" style="width: 25%;padding-left:5px;"/>
+                            <col span="1" style="width: 25%;padding-left:5px;"/>
+                            <col span="1" style="width: 25%;padding-left:5px;"/>
+                            <col span="1" style="width: 25%;padding-left:5px;"/>
+                        </colgroup>
+                        <tr>
+                            <td class="tableHeader">Applicant</td>
+                            <td class="tableHeader">Supervisor</td>
+                            <td class="tableHeader">Manager</td>
+                            <td class="tableHeader">Regional Mgr</td>
+                        </tr>
+                        <tr>
+                            <td class="tableHeader" height="25pt;"> </td>
+                            <td class="tableHeader"> </td>
+                            <td class="tableHeader"> </td>
+                            <td class="tableHeader"> </td>
+                        </tr>
+                        <tr>
+                            <td class="tableHeader" height="13pt;"> </td>
+                            <td class="tableHeader"> </td>
+                            <td class="tableHeader"> </td>
+                            <td class="tableHeader"> </td>
+                        </tr>         
+                  </table>
+                </div>               
+            </apex:outputPanel>
+            
+            </apex:repeat>
+            </apex:outputPanel>
+<!--///////////////////////////////////////////////////////////Cash Invoice/////////////////////////////////////////////////////////-->
+        <apex:outputPanel layout="block" rendered="{!CONTAINS(header.recordtype.developername, 'ASI_CRM_JP_Cash_Invoice')}">
+               <apex:outputPanel rendered="{!numOfDetails != 0}">
+                   <p>Indirect Rebate Invoice Lines</p>
+                   <table border="1" cellpadding="1" cellspacing="1" width="100%" style="-fs-table-paginate: paginate;" class="print-friendly">
+                       <colgroup>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                           <col span="1" style="width: 8%;padding-left:5px;"/>
+                       </colgroup>
+                       <THEAD >
+                       <tr>
+                           <td style="margin-top: 80px;" class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.name.Label}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Name}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Wholesaler_Name}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Item_Group}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Unit_Cost__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Quantity__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Amount__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Tax_Amount__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Line_Total_Amount__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Rebate_Type__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Invoice_Ref_No__c.Label}</td>
+                       </tr>
+                       </THEAD>
+                       <apex:repeat value="{!Details}" var="detail" >
+                           <tr>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Outlet__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Wholesaler__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Item_Group__c}</td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Unit_Cost__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Quantity__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Amount__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Tax_Amount__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Line_Total_Amount__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputField value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Rebate_Type__c}" /></td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Remarks__c}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Invoice_Ref_No__c}</td>
+                           </tr>
+                       </apex:repeat>
+                       <tr>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_TOTAL}</td>
+                           <td class="tableHeader" colspan="6"></td>
+                           <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalAmount}" /></apex:outputText></td>
+                           <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalTaxAmt}" /></apex:outputText></td>
+                           <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!lineTtlAmt}" /></apex:outputText></td>
+                           <td class="tableHeader" colspan="3"></td>
+                       </tr>
+                   </table>
+                   <br/><br/>
+               </apex:outputPanel>
+               </apex:outputPanel>
+
+
+
+        <apex:outputPanel layout="block" rendered="{!CONTAINS(header.recordtype.developername, 'ASI_CRM_JP_Cash_Invoice')}">
+            <apex:outputPanel rendered="{!numOfCashDetails != 0}"><p>A&amp;P / SPTD Invoice Lines</p></apex:outputPanel>
+               <apex:repeat value="{!cashDetailsGroup}" var="cashGroup" >
+                   <p>{!cashGroup.title}</p>
+                   <table border="1" cellpadding="1" cellspacing="1" width="100%" style=" -fs-table-paginate: paginate;  margin-top:0px;" class="print-friendly">
+                       <colgroup>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 5%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                           <col span="1" style="width: 5%;padding-left:5px;"/>
+                           <col span="1" style="width: 6%;padding-left:5px;"/>
+                       </colgroup>
+                       <thead>
+                       <tr>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.name.Label}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_SalesPerson_Name}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Name}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_AP_Code__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.ASI_CRM_End_Date__c.Label}</td>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_ItemGroup_Name}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Target_Volume__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Sales_Result__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Condition__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Quantity__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Unit_Price__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Unit_Cost__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Final_Amount__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remaining_Balance__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Invoice_Ref_No__c.Label}</td>
+                           <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                       </tr>
+                       </thead>
+                       <apex:repeat value="{!cashGroup.details}" var="detail" >
+                           <tr>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Staff_Code__c} {!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.owner.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Outlet__r.name}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_AP_Code__r.name}</td>
+                               <td class="tableHeader" ><c:ASI_CRM_JP_Formatted_Datetime date_time_value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_End_Date__c}" date_time_format="yyyy/MM/dd"></c:ASI_CRM_JP_Formatted_Datetime></td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Item_Group__r.name}</td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Target_Volume__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Sales_Result__c}" /></apex:outputText></td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Condition__c}</td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Quantity__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Unit_Price__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Unit_Cost__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Final_Amount__c}" /></apex:outputText></td>
+                               <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Remaining_Balance__c}" /></apex:outputText></td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Invoice_Ref_No__c}</td>
+                               <td class="tableHeader" >{!detail.ASI_CRM_Remarks__c}</td>
+                           </tr>
+                       </apex:repeat>
+                       <tr>
+                           <td class="tableHeader" >{!$Label.ASI_CRM_JP_TOTAL}</td>
+                           <td class="tableHeader" colspan="6"></td>
+                           <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlSalesTgt }" /></apex:outputText></td>
+                           <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlQty}" /></apex:outputText></td>
+                           <td class="tableHeader"></td>
+                           <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlActualQty}" /></apex:outputText></td>
+                           <td class="tableHeader" colspan="2"></td>
+                           <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!cashGroup.ttlActualAmt}" /></apex:outputText></td>
+                           <td class="tableHeader" colspan="3"></td>
+                       </tr>
+                   </table>
+                   <br/><br/>
+
+
+
+               </apex:repeat>
+
+               <apex:outputPanel layout="block" rendered="{!IsFinalPrint}">
+                   <div style="position:absolute;margin-left:652px;">
+                       <table border="1" cellpadding="1" cellspacing="1" width="300px" class="print-friendly">
+                           <colgroup>
+                               <col span="1" style="width: 25%;padding-left:5px;"/>
+                               <col span="1" style="width: 25%;padding-left:5px;"/>
+                               <col span="1" style="width: 25%;padding-left:5px;"/>
+                               <col span="1" style="width: 25%;padding-left:5px;"/>
+                           </colgroup>
+                           <tr>
+                               <td class="tableHeader">Applicant</td>
+                               <td class="tableHeader">Supervisor</td>
+                               <td class="tableHeader">Manager</td>
+                               <td class="tableHeader">Regional Mgr</td>
+                           </tr>
+                           <tr>
+                               <td class="tableHeader" height="25pt;"> </td>
+                               <td class="tableHeader"> </td>
+                               <td class="tableHeader"> </td>
+                               <td class="tableHeader"> </td>
+                           </tr>
+                           <tr>
+                               <td class="tableHeader" height="13pt;"> </td>
+                               <td class="tableHeader"> </td>
+                               <td class="tableHeader"> </td>
+                               <td class="tableHeader"> </td>
+                           </tr>
+                       </table>
+                   </div>
+               </apex:outputPanel>
+            </apex:outputPanel>
+
+
+
+ <!--///////////////////////////////////////////////////////////Cash Invoice End////////////////////////////////////////////////////-->
+<!--////////////////////////////////////////////// LINES INFORMATION FOR RECORDTYPE REBATE//////////////////////////////////////// -->
+           
+            <apex:outputPanel layout="block" rendered="{!OR(header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice', header.recordtype.developername = 'ASI_CRM_JP_Indirect_Rebate_Invoice_Read_Only')}">
+            
+                <table border="1" cellpadding="1" cellspacing="1" width="101%" style="-fs-table-paginate: paginate;" class="print-friendly">
+                    <colgroup>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 6%;padding-left:5px;"/>
+                        <col span="1" style="width: 6%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                        <col span="1" style="width: 8%;padding-left:5px;"/>
+                    </colgroup>
+                    <THEAD >
+                    <tr>
+                        <td style="margin-top: 80px;" class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract__c.fields.name.Label}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Name}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Indirect_Rebate_Wholesaler_Name}</td>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_Item_Group}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Unit_Cost__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Quantity__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Actual_Amount__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Tax_Amount__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Line_Total_Amount__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Purchase_Contract_Line_Item__c.fields.ASI_CRM_Rebate_Type__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Remarks__c.Label}</td>
+                        <td class="tableHeader" >{!$ObjectType.ASI_CRM_Payment_Invoice_Line_Item__c.fields.ASI_CRM_Invoice_Ref_No__c.Label}</td>
+                    </tr>
+                    </THEAD>
+                    <apex:repeat value="{!Details}" var="detail" >
+                       <tr>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.name}</td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_BS_Retailer_Ship_To__r.name}</td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Outlet__r.name}</td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Purchase_Contract__r.ASI_CRM_Wholesaler__r.name}</td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Item_Group__c}</td>
+                            <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Unit_Cost__c}" /></apex:outputText></td>
+                            <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Quantity__c}" /></apex:outputText></td>
+                            <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Actual_Amount__c}" /></apex:outputText></td>
+                            <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Tax_Amount__c}" /></apex:outputText></td>
+                            <td class="tableHeader" ><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!detail.ASI_CRM_Line_Total_Amount__c}" /></apex:outputText></td>
+                            <td class="tableHeader" ><apex:outputField value="{!detail.ASI_CRM_Purchase_Contract_Line_Item__r.ASI_CRM_Rebate_Type__c}" /></td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Remarks__c}</td>
+                            <td class="tableHeader" >{!detail.ASI_CRM_Invoice_Ref_No__c}</td>
+                        </tr>
+                    </apex:repeat>
+                    <tr>
+                        <td class="tableHeader" >{!$Label.ASI_CRM_JP_TOTAL}</td>
+                        <td class="tableHeader" colspan="6"></td>
+                        <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalAmount}" /></apex:outputText></td>
+                        <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!totalTaxAmt}" /></apex:outputText></td>
+                        <td class="tableHeader"><apex:outputText value="{0, number,###,###,##0}"><apex:param value="{!lineTtlAmt}" /></apex:outputText></td>
+                        <td class="tableHeader" colspan="3"></td>
+                    </tr>
+                </table>
+<!--////////////////////////////////////////////// *END OF LINES INFORMATION FOR RECORDTYPE REBATE//////////////////////////////////////// -->
+<!--////////////////////////////////////////////// SIGNATURE INFORMATION FOR RECORDTYPE REBATE//////////////////////////////////////// -->
+                <apex:outputPanel layout="block" rendered="{!IsFinalPrint}">
+                    <div id="footer">       
+                        <table border="1" cellpadding="1" cellspacing="1" width="300pt"  class="print-friendly">
+                            <tr>
+                                <td class="approvertd">Applicant</td>
+                                <td class="approvertd">Approver</td>
+                                <td class="approvertd">Sales Admin</td>
+                            </tr>
+                            <tr>
+                                <td height="40pt;"></td> 
+                                <td></td>
+                                <td></td>                          
+                            </tr>
+                            <tr>
+                                <td class="approvertd">&nbsp;</td>
+                                <td class="approvertd">&nbsp;</td>
+                                <td class="approvertd">&nbsp;</td>
+                            </tr>                        
+                       </table>
+                    </div>
+              </apex:outputPanel>
+            </apex:outputPanel>
+            
+            </div>
+<!--////////////////////////////////////////////// *END OF SIGNATURE INFORMATION FOR RECORDTYPE REBATE//////////////////////////////////////// -->
+        </body>  
+    </html> 
+</apex:component>

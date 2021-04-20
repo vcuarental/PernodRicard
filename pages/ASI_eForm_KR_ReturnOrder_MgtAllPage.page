@@ -1,0 +1,1514 @@
+<apex:page standardController="ASI_eForm_Return_Order_Request__c" extensions="ASI_eForm_KR_ReturnOrder_MgtAllCtrl" docType="html-5.0" action="{!init}">
+    
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}" />
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular-datatables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+		
+		<apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datetimepicker, 'datetimepicker-master/jquery.datetimepicker.css')}" />
+		<apex:includeScript value="{!URLFOR($Resource.ASI_JS_Datetimepicker, 'datetimepicker-master/build/jquery.datetimepicker.full.min.js')}" />
+    </head>
+    
+    <style type="text/css">
+        div.hid {
+        display: none;
+        }
+        
+        .ui-autocomplete span.hl_results {
+        background-color: #ffff66;
+        }
+        
+        .ui-autocomplete-loading {
+        background: white url('/img/loading.gif') right center no-repeat;
+        }
+        
+        
+        
+        .ui-autocomplete {
+        height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overflow: auto;
+        padding-right: 20px;
+        left: 0;
+        }
+        
+        *html .ui-autocomplete {
+        height: 200x;
+        }
+        
+        
+        .bs.panel-heading.div-size {
+        border-radius: 10px;
+        }
+        
+        .required {
+        border-left: 3px solid darkred !important;
+        }
+        
+        .ui-helper-hidden-accessible {
+        display: none !important;
+        }
+        
+        .ui-helper-hidden-accessible {
+        position: absolute;
+        left: -999em !important;
+        }
+        
+        input:-moz-read-only {
+        /* For Firefox */
+        background-color: Gainsboro;
+        }
+        
+        input:read-only {
+        background-color: Gainsboro;
+        }
+        
+        
+        #loadingpart {
+        display: block;
+        position: absolute;
+        top: -30;
+        left: 0;
+        z-index: 100; //width: 100vw;
+        height: 100vh;
+        background-color: rgba(192, 192, 192, 0.5);
+        background-image: url("/img/loading.gif");
+        background-repeat: no-repeat;
+        background-position: 5%;
+        }
+        
+        .warning-background {
+        color: #fff;
+        background: #f2dede
+        }
+        
+        
+        .ReturnGoodsCSS {
+        background-color: #b3ecff;
+        text-align: center !important;
+        }
+        
+        .ReplaceGoodsCSS {
+        background-color: #3399ff;
+        text-align: center !important;
+        }
+        
+        .ComplaintCSS {
+        background-color: LawnGreen;
+        text-align: center !important;
+        }
+
+        input[type=number] {
+            width: 100px;
+            text-align: right;
+            padding: 3px 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+    </style>
+    <script type="text/javascript">
+    var app = angular.module('MyApp', ['datatables']);
+    var ItemGroupList = [];
+    var VenueList = [];
+    var CurrentSaveType;
+    
+    $(document).ready(function() {
+        
+    });
+    
+    
+    app.factory('GetMasterData', function($q, $rootScope) {
+        var factory = {};
+        
+        factory.getData = function(ObjectName, SQLStatement, whereClause) {
+            var deferred = $q.defer();
+            RemoteGetMasterData(function(result) {
+                $rootScope.$apply(function() {
+                    deferred.resolve(result);
+                });
+            }, ObjectName, SQLStatement, whereClause);
+            return deferred.promise;
+        }
+        return factory;
+    });
+    
+    function RemoteGetMasterData(callback, ObjectName, SQLStatement, whereClause) {
+        
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_eForm_KR_ReturnOrder_MgtAllCtrl.findList}', ObjectName, SQLStatement, whereClause,
+            callback, {
+                escape: false
+            }
+        );
+    }
+    
+    
+    
+    app.controller('myController', function($scope, GetMasterData, DTOptionsBuilder, DTColumnDefBuilder) {
+        /*
+        $scope.Category =[
+            {
+             'Id': 'Blocking (블로킹)',
+              'Name': "Blocking (블로킹)",
+              'Details': [{
+                 'Id': 'Blocking (블로킹)',
+                 'Name': "Blocking (블로킹)"
+             }]
+           },
+           {
+             'Id': 'Bottle (병)',
+              'Name': "Bottle (병)",
+              'Details':  [{
+                 'Id': 'Bottle appearance (병외관 불량)',
+                 'Name': "Bottle appearance (병외관 불량)"
+             }, {
+                 'Id': 'Broken bottle (파손)',
+                 'Name': "Broken bottle (파손)"
+             }, {
+                 'Id': 'Crack (금)',
+                 'Name': "Crack (금)"
+             }, {
+                 'Id': 'Scratch (병 긁힘)',
+                 'Name': "Scratch (병 긁힘)"
+             }, {
+                 'Id': 'Others (기타)',
+                 'Name': "Others (기타)"
+             }]
+           },
+            {
+             'Id': 'Cap (마개)',
+              'Name': "Cap (마개)",
+              'Details': [{
+                 'Id': 'Capping defect (마개 장착 불량)',
+                 'Name': "Capping defect (마개 장착 불량)"
+             }]
+           }
+           
+           ];
+           
+        console.log($scope.Category);
+        */
+        $scope.Category = GetCategoryFieldDependency();
+        
+        $scope.UOMOption = ["Case", "Bottle", "Set"];
+        $scope.ChannelReturnOption = JSON.parse('{!ChannelReturnOptionJSON}');
+        $scope.ChannelReplaceOption = JSON.parse('{!ChannelReplaceOptionJSON}');
+        $scope.deleteList = [];
+        $scope.ResultData = GetResultData();
+        $scope.dtOptions = DTOptionsBuilder.newOptions().withDisplayLength(20).withOption('bLengthChange', false).withDOM('C<"clear">lrtip').withOption('preDrawCallback', function(settings) {}).withOption('drawCallback', function(settings) {
+            InitalizeAutoComplete('ItemGroupClassReturn', ItemGroupList);
+            InitalizeAutoComplete('ItemGroupClassReplace', ItemGroupList);
+            InitalizeAutoCompleteVenue('VenueName', VenueList);
+			InitalizeDateTimePicker();
+            
+            if (document.getElementById("NewLineBtn").disabled) {
+                document.getElementById("NewLineBtn").disabled = false;
+                changepage();
+            }
+        });
+        
+        $scope.dtColumnDefs = [
+            DTColumnDefBuilder.newColumnDef(0).notSortable(),
+            DTColumnDefBuilder.newColumnDef(1).notSortable(),
+            DTColumnDefBuilder.newColumnDef(2).notSortable(),
+            DTColumnDefBuilder.newColumnDef(3).notSortable(),
+            DTColumnDefBuilder.newColumnDef(4).notSortable(),
+            DTColumnDefBuilder.newColumnDef(5).notSortable(),
+            DTColumnDefBuilder.newColumnDef(6).notSortable(),
+            DTColumnDefBuilder.newColumnDef(7).notSortable(),
+            DTColumnDefBuilder.newColumnDef(8).notSortable(),
+            DTColumnDefBuilder.newColumnDef(9).notSortable(),
+            DTColumnDefBuilder.newColumnDef(10).notSortable()
+        ];
+        $scope.dtInstance = {};
+        
+        $scope.AddNewLine = function() {
+            document.getElementById('loadingpart').style.display = '';
+            document.getElementById("NewLineBtn").disabled = true;
+            var tempID = $scope.ResultData.length + 1;
+            
+            $scope.ResultData.push({
+                Id: 'New_' + tempID
+            });
+        };
+        
+        $scope.goToLastPage = function() {
+            $scope.dtInstance.DataTable.page('last').draw(false);
+            clearalert();
+        };
+        
+        $scope.UpdateItemGroupNameReturn = function(InputLineId,InputSKUCode ) {
+            console.log('**UpdateItemGroupNameReturn**'+InputSKUCode);
+            for(var i=0;i< $scope.ResultData.length;i++){
+                if($scope.ResultData[i].Id==InputLineId){
+                    console.log(' OK! ');
+                    $scope.ResultData[i].ReturnItemGroupName= InputSKUCode;
+                }
+            }
+        }
+        
+        $scope.UpdateItemGroupNameReplace = function(InputLineId,InputSKUCode ) {
+            console.log('**UpdateItemGroupNameReplace**'+InputSKUCode);
+            for(var i=0;i< $scope.ResultData.length;i++){
+                if($scope.ResultData[i].Id==InputLineId){
+                    console.log(' OK! ');
+                    $scope.ResultData[i].ReplaceItemGroupName= InputSKUCode;
+                }
+            }
+        }
+        
+        
+        $scope.deleteFun = function(lineId) {
+            if (lineId.slice(0, 4) != 'New_') {
+                $scope.deleteList.push(lineId);
+            }
+            var ListOrder, PID = lineId;
+            
+            for (var i = 0; i < $scope.ResultData.length; i++) {
+                if ($scope.ResultData[i].Id == PID) {
+                    ListOrder = i;
+                }
+            }
+            if (!isNaN(ListOrder)) {
+                $scope.ResultData.splice(ListOrder, 1);
+            }
+        };
+        
+        
+        $scope.SaveFun = function(SaveType) {
+            
+            CurrentSaveType = SaveType;
+            document.getElementById('loadingpart').style.display = '';
+            SystemInfo('alert-info', 'InfoMeg', '<i class="fa fa-refresh fa-spin"></i>', 'Working in progress now. Please wait . Thank you....');
+            
+            var headerId = '{!ReturnOrderRequest.Id}';
+            var RTID = '{!RecordTypeID}';
+            var pllist = [],
+                Checking = {
+                    IsPass: true,
+                    ErrorMesg: 'Error, Can not Save! Please check following error message:<br/>'
+                };
+            for (var i = 0; i < $scope.ResultData.length; i++) {
+                $scope.ResultData[i] = DataChecking($scope.ResultData[i], i + 1);
+                if ($scope.ResultData[i].Failed) {
+                    Checking.IsPass = false;
+                    Checking.ErrorMesg += $scope.ResultData[i].Message ;
+                }
+                var TempLine = new ASI_eForm_Return_Order_Request_Line_Item__c($scope.ResultData[i], headerId, RTID);
+                pllist.push(TempLine);
+            }
+            
+            
+            if (Checking.IsPass) {
+                console.log(pllist);
+                InterfaceDB(JSON.stringify(pllist), $scope.deleteList);
+            } else {
+                SystemInfo('alert-danger', 'InfoMeg', '<i class="fa fa-times" aria-hidden="true"></i>', Checking.ErrorMesg);
+                document.getElementById('loadingpart').style.display = 'none';
+            }
+            
+        };
+        
+        /*
+            $scope.getTotal = function(FieldName) {
+                var total = 0;
+                for (var i = 0; i < $scope.ResultData.length; i++) {
+                    var LineAmount = $scope.ResultData[i][FieldName];
+                    if (typeof LineAmount !== 'undefined') {
+                        total += LineAmount;
+                    }
+                    //console.log('LineAmount : '+LineAmount);
+                }
+                return total;
+            }
+            */
+            
+            
+            $scope.getAmountTotal = function(InputQuantity,InputUnitPrice) {
+                var total = 0;
+                if(InputQuantity && InputUnitPrice){
+                    total = InputQuantity*InputUnitPrice ;
+                }
+                var returnValue = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                return returnValue;
+            }
+            
+            
+            $scope.getReturnTotal  = function(){
+                var total = 0;
+                for (var i = 0; i < $scope.ResultData.length; i++) {
+                    if($scope.ResultData[i].ASI_eForm_Quantity_Return__c && $scope.ResultData[i].ASI_eForm_Unit_Price_Return__c){
+                        total =total + $scope.ResultData[i].ASI_eForm_Quantity_Return__c * $scope.ResultData[i].ASI_eForm_Unit_Price_Return__c ;
+                    }
+                }
+                var returnValue = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                return returnValue;
+            }
+            
+            $scope.getReplaceTotal = function(){
+                var total = 0;
+                for (var i = 0; i < $scope.ResultData.length; i++) {
+                    if($scope.ResultData[i].ASI_eForm_Quantity_Replace__c && $scope.ResultData[i]. ASI_eForm_Unit_Price_Replace__c){
+                        total =total + $scope.ResultData[i].ASI_eForm_Quantity_Replace__c * $scope.ResultData[i]. ASI_eForm_Unit_Price_Replace__c ;
+                    }
+                }
+                var returnValue = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                return returnValue;
+                
+            }
+            
+            GetMasterData.getData('ASI_KOR_Item_Group__c', ' Id,Name,ASI_KOR_Name_Kor__c,ASI_KOR_Active__c ', ' WHERE ASI_KOR_Active__c = true   ').then(function(result) {
+                ItemGroupList = [];
+                
+                for (var i = 0; i < result.length; i++) { //console.log(result[i]);
+                    var TempObject = {
+                        label: htmlEncode(result[i]["Name"]),
+                        value: htmlEncode(result[i]["Id"]),
+                        Obj: result[i]
+                    };
+                    ItemGroupList.push(TempObject);
+                }
+                console.log(' GetMasterData ItemGroupList Done');
+                InitalizeAutoComplete('ItemGroupClassReturn', ItemGroupList);
+                InitalizeAutoComplete('ItemGroupClassReplace', ItemGroupList);
+                
+            });
+            
+			GetMasterData.getData('ASI_CRM_AccountsAdditionalField__c', ' Id,Name,ASI_CRM_MY_CustomerCode__c ', ' WHERE recordtype.developername = \'ASI_CRM_KR_Venue\' and ASI_CRM_CN_Inactive_Flag__c = false ').then(function(result) {
+				VenueList = [];
+				//console.log(result);
+				for (var i = 0; i < result.length; i++) { //console.log(result[i]);
+					var TempObject = {
+						label: htmlEncode(result[i]["Name"] + " (" + result[i]["ASI_CRM_MY_CustomerCode__c"] + ")"),
+						value: htmlEncode(result[i]["Id"]),
+						Obj: result[i]
+					};
+					VenueList.push(TempObject);
+				}
+				console.log(' GetMasterData VenueList Done');
+                InitalizeAutoCompleteVenue('VenueName', VenueList);
+				
+			});
+			
+			InitalizeDateTimePicker();
+        });
+    /*
+    function InitalizeDateTimePicker(){
+		$('.ProductionTime').datetimepicker({
+			format: 'Y-m-d h:i:s',
+			//lang: 'kr'
+		});
+	}
+	*/
+    function InitalizeDateTimePicker(){
+		$('.ProductionTime').datetimepicker({
+			datepicker: false,
+			format: 'H:i',
+			//lang: 'kr'
+		});
+		$('.ProductionDate').datetimepicker({
+			timepicker: false,
+			format: 'Y-m-d',
+			//lang: 'kr'
+		});
+	}
+    
+    
+    function InterfaceDB(UpsertLines, deleteLines) {
+        
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_eForm_KR_ReturnOrder_MgtAllCtrl.UpdateLineItem}', UpsertLines, deleteLines, showResult, {
+                escape: true
+            }
+        );
+    }
+    
+    
+    function showResult(result, event) {
+        if (event.status) {
+            if (result) {
+                console.log(result);
+                clearalert();
+                
+                if (result.substring(0, 12) === 'Save Success') {
+                    console.log(result);
+                    if (CurrentSaveType == 'QuickSave') {
+                        location.reload();
+                    } else {
+                        BackHeader();
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    
+    function DataChecking(InputObject, SequenceNum) {
+        InputObject.Message = '';
+        InputObject.Failed = false;
+        console.log('************');
+        
+
+        
+        var R42Checking = ('{!IsR42}' == 'true');
+        if (!InputObject.ASI_eForm_Item_Group_Return__c) {
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please select Return Item Group.<br/>';
+        }
+        
+        if (!InputObject.ASI_eForm_Quantity_Return__c) {
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Return Quantity.<br/>';
+        }else if(typeof InputObject.ASI_eForm_Quantity_Return__c!='number'){
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Number for Return Quantity.<br/>';
+        }/*else if(InputObject.ASI_eForm_Quantity_Return__c>0){
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input negative integer for Return Quantity.<br/>';
+        }*/
+        
+        
+        if (!InputObject.ASI_eForm_Unit_Price_Return__c) {
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Return Unit Price.<br/>';
+        }else if(typeof InputObject.ASI_eForm_Unit_Price_Return__c!='number'){
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Number for Return Unit Price.<br/>';
+        }/*else if(InputObject.ASI_eForm_Unit_Price_Return__c>0){
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input negative integer for Return Unit Price.<br/>';
+        }*/
+
+        if (!InputObject.ASI_eForm_Channel_Return__c) {
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Return Channel.<br/>';
+        }
+
+        if (InputObject.ASI_eForm_Item_Group_Replace__c && !InputObject.ASI_eForm_Channel_Replace__c) {
+            InputObject.Failed = true;
+            InputObject.Message += 'Line ' + SequenceNum + ': Please Input Replace Channel.<br/>';
+        }
+
+        if(R42Checking){
+            if (!InputObject.ASI_eForm_Complaint_Category__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Complaint Category.<br/>';
+            }
+            
+             if (!InputObject.ASI_eForm_Complaint_Details__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Complaint Details.<br/>';
+            }
+            /*
+            if (!InputObject.ASI_eForm_Lot_Number__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Lot Number.<br/>';
+            }
+            
+            if (!InputObject.ASI_eForm_Production_Time__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Production Time.<br/>';
+            }
+            
+            if (!InputObject.ASI_eForm_Venue__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Venue.<br/>';
+            }
+            
+            if (!InputObject.ASI_eForm_Remarks__c) {
+                InputObject.Failed = true;
+                InputObject.Message += 'Line ' + SequenceNum + ': Please Input Remarks.<br/>';
+            }
+			*/
+        }
+        
+        return InputObject;
+    }
+    
+    
+    function InitalizeAutoComplete(className, dataList) {
+        
+        $("."+className).autocomplete({
+            source: dataList,
+            response: function(event, ui) {
+                if (ui.content.length === 0) {
+                    console.log("No result found");
+                }
+            },
+            minLength: 0,
+            scroll: true,
+            change: function(event, ui) {
+                if (!ui.item && typeof ui.item !== 'undefined') {
+                    console.log('remove  ' + this.value);
+                    this.value = '';
+                    $(this).next().next().children().val('');
+                    $(this).next().next().children().trigger('input');
+                }
+            },
+            select: function(event, ui) { //console.log('change ! '+ui.item.label);
+                var ele = $($(this)[0].outerHTML);
+                
+                $(this).parent().next().html(ui.item.Name);
+                var Line_Id= $(this).attr('html-data-id');   // console.log('html-data-id : '+ $(this).attr('html-data-id'));
+                
+                var scope = angular.element(document.getElementById("MainWrap")).scope();
+                scope.$apply(function () {
+                    if(className == "ItemGroupClassReturn") scope.UpdateItemGroupNameReturn(Line_Id,ui.item.Obj.ASI_KOR_Name_Kor__c);
+                    else scope.UpdateItemGroupNameReplace(Line_Id,ui.item.Obj.ASI_KOR_Name_Kor__c);
+                });
+                
+                $(this).val(ui.item.label);
+                $(this).trigger('input');
+                $(this).next().next().children().val(ui.item.value);
+                $(this).next().next().children().trigger('input');
+                event.preventDefault();
+            },
+            focus: function(event, ui) {
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            }
+            
+        }).focus(function() {
+            $(this).autocomplete("search", "");
+        });
+        
+        
+    }
+    
+    function InitalizeAutoCompleteVenue(className, dataList) {
+        
+        $("."+className).autocomplete({
+            //source: dataList,
+			source: function( request, response ){
+				var vList = [];
+				for(var i = 0; i < VenueList.length; i++){
+					var vName = VenueList[i];
+					if(vName.label.indexOf(request.term) !== -1) vList.push(vName);
+				}
+				response(vList);
+			},
+            response: function(event, ui) {
+                if (ui.content.length === 0) {
+                    console.log("No result found");
+                }
+            },
+            minLength: 0,
+            scroll: true,
+            change: function(event, ui) {
+                if (!ui.item && typeof ui.item !== 'undefined') {
+                    console.log('remove  ' + this.value);
+                    this.value = '';
+                    $(this).next().next().children().val('');
+                    $(this).next().next().children().trigger('input');
+                }
+            },
+            select: function(event, ui) { //console.log('change ! '+ui.item.label);
+                var ele = $($(this)[0].outerHTML);
+                
+                $(this).val(ui.item.label);
+                $(this).trigger('input');
+                $(this).next().next().children().val(ui.item.value);
+                $(this).next().next().children().trigger('input');
+                event.preventDefault();
+            },
+            focus: function(event, ui) {
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            }
+            
+        })/*.focus(function() {
+            $(this).autocomplete("search", "");
+        });*/
+        
+        
+    }
+    
+    
+    
+    function SystemInfo(divtype, divid, icondiv, message) {
+        var inhtml = '<div class="alert ' + divtype + '  fade in ">' + icondiv + '  ' + message + '</div>';
+        $('#' + divid).html(inhtml);
+    }
+    
+    
+    
+    function changepage() {
+        setTimeout(function() {
+            NewLineAdded();
+        }, 10);
+    }
+    
+    function NewLineAdded() {
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+        scope.$apply(function() {
+            scope.goToLastPage();
+        });
+    }
+    
+    function GetCategoryFieldDependency(){
+        var PickListValue = jQuery.parseJSON('{!JSENCODE(ComplaintCategoryPickListJSON)}');
+        var ReturnData =[];
+        var tempList=[];
+        for (var key in PickListValue) {
+            var tempObj ={Id:key,Name:key};
+            tempObj.Details=[];
+            for(var i=0;i<PickListValue[key].length;i++){
+                
+                tempObj.Details.push({Id:PickListValue[key][i],Name:PickListValue[key][i]});
+            }
+            tempList.push(tempObj);
+        }
+        
+        for(var j=tempList.length-1;j>=0;j--){
+            ReturnData.push(tempList[j]);
+        }
+        return ReturnData;
+    }
+    
+    
+    function GetResultData() {
+        var ReturnData = jQuery.parseJSON('{!JSENCODE(DetailLineJSON)}');
+        for (var i = 0; i < ReturnData.length; i++) {
+            if (typeof ReturnData[i].ASI_eForm_Item_Group_Replace__r != 'undefined') {//ASI_KOR_Name_Kor__c
+                ReturnData[i].ReplaceItemGroup = ReturnData[i].ASI_eForm_Item_Group_Replace__r.Name;
+				ReturnData[i].ReplaceItemGroupName = ReturnData[i].ASI_eForm_Item_Group_Replace__r.ASI_KOR_Name_Kor__c;
+            }
+            if (typeof ReturnData[i].ASI_eForm_Item_Group_Return__r != 'undefined') {
+                ReturnData[i].ReturnItemGroup = ReturnData[i].ASI_eForm_Item_Group_Return__r.Name;
+				ReturnData[i].ReturnItemGroupName = ReturnData[i].ASI_eForm_Item_Group_Return__r.ASI_KOR_Name_Kor__c;
+            }
+            if (typeof ReturnData[i].ASI_eForm_Venue__r != 'undefined') {
+                ReturnData[i].VenueName = ReturnData[i].ASI_eForm_Venue__r.Name;
+            }
+            if (typeof ReturnData[i].ASI_eForm_Production_Time__c != 'undefined' && ReturnData[i].ASI_eForm_Production_Time__c != null) {
+				console.log('time');
+				console.log(ReturnData[i].ASI_eForm_Production_Time__c);
+				var dTime = new Date(ReturnData[i].ASI_eForm_Production_Time__c);
+				dTime.setHours(dTime.getHours()+9);
+				ReturnData[i].ASI_eForm_Production_Time__c = dTime.toISOString().substring(11,16);
+            }
+            if (typeof ReturnData[i].ASI_eForm_Production_Date__c != 'undefined' && ReturnData[i].ASI_eForm_Production_Date__c != null) {
+				console.log('date');
+				console.log(ReturnData[i].ASI_eForm_Production_Date__c);
+				/*
+				var dTime = new Date(ReturnData[i].ASI_eForm_Production_Time__c);
+				dTime.setHours(dTime.getHours()+9);
+				ReturnData[i].ASI_eForm_Production_Time__c = dTime.toISOString();
+				*/
+            }
+            ReturnData[i].Number = i;
+        }
+        return ReturnData;
+    }
+    
+    function clearalert() {
+        $('#InfoMeg').html('');
+        document.getElementById('loadingpart').style.display = 'none';
+    }
+    
+    
+    function htmlEncode(input) {
+        var e = document.createElement('div');
+        e.innerHTML = input;
+        return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+    }
+    
+    
+    
+    
+    function stopRKey(evt) {
+        var evt = (evt) ? evt : ((event) ? event : null);
+        var node = (evt.target) ? evt.target : ((evt.srcElement) ? evt.srcElement : null);
+        if ((evt.keyCode == 13) && (node.type == "text")) {
+            return false;
+        }
+    }
+    
+    document.onkeypress = stopRKey;
+    
+    window.onload = function() {
+        $('input[type=text]').blur();
+        $('input[type=text]').on('keydown', function(e) {
+            if (e.which == 13) {
+                e.preventDefault();
+            }
+        });
+    };
+    
+    
+    function ASI_eForm_Return_Order_Request_Line_Item__c(InputObject, headerId, RTID) {
+        console.log(InputObject.ASI_eForm_Complaint_Details__c);
+        console.log(InputObject.ASI_eForm_Complaint_Category__c);
+        
+        if (InputObject.Id.slice(0, 4) != 'New_') {
+            this.Id = InputObject.Id;
+        } else {
+            this.ASI_eForm_Return_Order_Request__c = headerId;
+        }
+        
+        //this.RecordTypeId=RTID;
+        
+        this.ASI_eForm_Amount_Replace__c = 0;//InputObject.ASI_eForm_Amount_Replace__c;
+        this.ASI_eForm_Amount_Return__c = 0;// InputObject.ASI_eForm_Amount_Return__c;
+        
+        this.ASI_eForm_Item_Group_Replace__c = InputObject.ASI_eForm_Item_Group_Replace__c;
+        this.ASI_eForm_Item_Group_Return__c = InputObject.ASI_eForm_Item_Group_Return__c;
+        this.ASI_eForm_Quantity_Replace__c = InputObject.ASI_eForm_Quantity_Replace__c;
+        this.ASI_eForm_Quantity_Return__c = InputObject.ASI_eForm_Quantity_Return__c;
+        this.ASI_eForm_UOM_Replace__c = InputObject.ASI_eForm_UOM_Replace__c;
+        this.ASI_eForm_UOM_Return__c = InputObject.ASI_eForm_UOM_Return__c;
+        this.ASI_eForm_Unit_Price_Replace__c=InputObject.ASI_eForm_Unit_Price_Replace__c;
+        this.ASI_eForm_Unit_Price_Return__c=InputObject.ASI_eForm_Unit_Price_Return__c;
+        
+        this.ASI_eForm_Complaint_Details__c =InputObject.ASI_eForm_Complaint_Details__c;
+        this.ASI_eForm_Complaint_Category__c =InputObject.ASI_eForm_Complaint_Category__c;
+        this.ASI_eForm_Lot_Number__c =InputObject.ASI_eForm_Lot_Number__c;
+		if (InputObject.ASI_eForm_Production_Date__c != undefined && InputObject.ASI_eForm_Production_Date__c != '') this.ASI_eForm_Production_Date__c =InputObject.ASI_eForm_Production_Date__c;
+		if (InputObject.ASI_eForm_Production_Time__c != undefined && InputObject.ASI_eForm_Production_Time__c != '') this.ASI_eForm_Production_Time__c = '2018-01-01T' + InputObject.ASI_eForm_Production_Time__c + ':00+0900';
+        this.ASI_eForm_Venue__c =InputObject.ASI_eForm_Venue__c;
+        
+        this.ASI_eForm_Remarks__c =InputObject.ASI_eForm_Remarks__c;
+        
+        if(this.ASI_eForm_Unit_Price_Replace__c && this.ASI_eForm_Quantity_Replace__c ){
+            this.ASI_eForm_Amount_Replace__c = this.ASI_eForm_Unit_Price_Replace__c *  this.ASI_eForm_Quantity_Replace__c ;
+        }
+        
+        if(this.ASI_eForm_Unit_Price_Return__c && this.ASI_eForm_Quantity_Return__c ){
+            this.ASI_eForm_Amount_Return__c = this.ASI_eForm_Unit_Price_Return__c *  this.ASI_eForm_Quantity_Return__c ;
+        }
+        this.ASI_eForm_Channel_Return__c =InputObject.ASI_eForm_Channel_Return__c;
+        this.ASI_eForm_Channel_Replace__c =InputObject.ASI_eForm_Channel_Replace__c;
+
+    }
+    
+    function returnNegativeInteger(e){
+        var value = $(e).val();
+        value = Math.round(value);
+        $(e).val(Math.abs(value));
+    }
+    
+    
+    function truncateLastDigit(e, sign){
+        var value = $(e).val();
+        
+        var strValue = (Math.round(value)).toString();
+        console.log(strValue);
+        
+        if(strValue.length==0){
+            strValue=0
+        }else{
+            strValue= strValue.substring(0,strValue.length-1)+'0';
+        }
+        
+        $(e).val(Math.abs(Number(strValue))*sign);
+        //$(e).val(Number(strValue));
+        
+    }
+    
+    </script>
+    
+    <apex:form id="KR_Header" styleclass="objectFormCls">
+        <apex:actionfunction name="BackHeader" action="{!BackHeader}" />
+        <div id="HeaderForm" class="bs container-fluid">
+            <div class="bs row">
+                <div class="col-md-12">
+                    <apex:outputPanel id="LinePanel">
+                        <div id="loadingpart" style="display:none;width: 100vw;"></div>
+                        <div class="panel panel-primary">
+                            <div class="panel-heading">
+                                <h3 class="bs panel-title">Return Order Requests Line Items Manage All Page </h3>
+                            </div>
+                            <div class="bs panel-body">
+                                <div id="InfoMeg"></div>
+                                <div ng-app="MyApp">
+                                    <div id="MainWrap" ng-controller="myController">
+                                        
+                                        &nbsp;
+                                        <span>
+                                            <button  id="NewLineBtn" type="button"   style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}" 
+                                                    ng-click="AddNewLine();"  
+                                                    ng-disabled="NewLineDisabled"
+                                                    class="btn btn-primary btn-sm searchbtn" >
+                                                <span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add New Line
+                                            </button>
+                                            
+                                        </span>
+                                        &nbsp;
+                                        <span>
+                                            <button  type="button" ng-click="SaveFun('Save');" 
+                                                    style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}" 
+                                                    class="btn btn-success btn-sm searchbtn"  >
+                                                <span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Save All
+                                            </button>
+                                            &nbsp;
+                                            
+                                        </span>
+                                        
+                                        <apex:commandButton styleClass="bs btn btn-default btn-sm " style="font-weight: bold" value="Cancel" action="{!cancel}" html-data-loading-text="Loading..." html-formnovalidate="formnovalidate" />
+                                        
+                                        <!--
+                                        <table style="padding-top: 1em;" id="dt_LineItems" datatable="ng" dt-options="dtOptions" dt-column-defs="dtColumnDefs" dt-instance="dtInstance" class="table table-hover">
+                                            
+                                            <thead>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >Action </th>
+                                                    <th colspan="6" class="ReturnGoodsCSS">Return Goods </th>
+                                                    <th colspan="7" class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >
+                                                        Replace Goods 
+                                                    </th>
+                                                     <th colspan="7" class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Complaint </th>
+                                                </tr>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  >Action</th>
+                                                    <th class="ReturnGoodsCSS">Item Group</th>
+                                                    <th class="ReturnGoodsCSS">Item Group Name</th>
+                                                    <th class="ReturnGoodsCSS">Quantity</th>
+                                                    <th class="ReturnGoodsCSS">UOM</th>
+                                                    <th class="ReturnGoodsCSS">Unit Price</th>
+                                                    <th class="ReturnGoodsCSS">Amount</th>
+                                                    <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Category</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Details</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Lot Number</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Production Date</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Production Time</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Venue</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Remark</th>
+                                                    
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Item Group</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Item Group Name</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Quantity</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >UOM</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Unit Price</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}" >Amount</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}" >Remark</th>
+                                                    
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr ng-repeat="Items in ResultData" data-ng-style="Items.Failed && {'background':'#f2dede'}">
+                                                    <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >
+                                                        <button type="button" ng-click="deleteFun(Items.Id);" class="bs btn btn-default btn-round pull-left btn-xs" style="border: none;background-color: transparent;"> 
+                                                            <span  class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 18px;" aria-hidden="true"></span>
+                                                        </button>
+                                                    </td>
+                                                    
+                                                    <td id="ReturnItemGroup_manageAll_{{Items.Id}}_input" style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}" >
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               name="ReturnItemGroup" class="ItemGroupClassReturn" ng-value="Items.ReturnItemGroup" ng-model="Items.ReturnItemGroup" html-data-id="{{Items.Id}}"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red; "   />
+                                                        <div class="hid">
+                                                            <input type="text" name="SKUId" ng-value="Items.ASI_eForm_Item_Group_Return__c" ng-model="Items.ASI_eForm_Item_Group_Return__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ReturnItemGroup}} 
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {{Items.ReturnItemGroupName}}
+                                                    </td>
+                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="returnNegativeInteger(this);"
+                                                               style="text-align: right;  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Quantity_Return__c" ng-model="Items.ASI_eForm_Quantity_Return__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Quantity_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                                ng-model="Items.ASI_eForm_UOM_Return__c"
+                                                                ng-value="Items.ASI_eForm_UOM_Return__c" ng-options="x for x in UOMOption"> </select>
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_UOM_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="truncateLastDigit(this, -1);"
+                                                               style="text-align: right;  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Unit_Price_Return__c" ng-model="Items.ASI_eForm_Unit_Price_Return__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Unit_Price_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        {{ getAmountTotal(Items.ASI_eForm_Quantity_Return__c,Items.ASI_eForm_Unit_Price_Return__c) }}
+                                                    </td>
+                                                    
+                                                    
+                                                    
+                                                    
+                                                    
+                                                    <td id="ReplaceItemGroup_manageAll_{{Items.Id}}_input"
+                                                        style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} "  >
+                                                        <input   type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               name="ReplaceItemGroup" style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc;" class="ItemGroupClassReplace"
+                                                               ng-value="Items.ReplaceItemGroup" ng-model="Items.ReplaceItemGroup" html-data-id="{{Items.Id}}" />
+                                                        <div class="hid">
+                                                            <input type="text" name="SKUId" ng-value="Items.ASI_eForm_Item_Group_Replace__c" ng-model="Items.ASI_eForm_Item_Group_Replace__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ReplaceItemGroup}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(IsR42, 'display:none;', '')} ">
+                                                        {{Items.ReplaceItemGroupName}}
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}" 
+                                                               style=" text-align: right; padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "
+                                                               ng-value="Items.ASI_eForm_Quantity_Replace__c" ng-model="Items.ASI_eForm_Quantity_Replace__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Quantity_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <select style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "
+                                                                ng-model="Items.ASI_eForm_UOM_Replace__c" ng-value="Items.ASI_eForm_UOM_Replace__c"
+                                                                ng-options="x for x in UOMOption"> </select>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_UOM_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="truncateLastDigit(this, 1);"
+                                                               style=" text-align: right; padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "
+                                                               ng-value="Items.ASI_eForm_Unit_Price_Replace__c" ng-model="Items.ASI_eForm_Unit_Price_Replace__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Unit_Price_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                       
+                                                        {{ getAmountTotal(Items.ASI_eForm_Quantity_Replace__c,Items.ASI_eForm_Unit_Price_Replace__c) }}
+                                                        
+                                                    </td>
+                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+                                                        <select  ng-model="Items.ASI_eForm_Complaint_Category__c" ng-value="Items.ASI_eForm_Complaint_Category__c"
+                                                        style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                        ng-options="Category.Id as Category.Name for Category in Category ">
+                                                            
+                                                        </select>
+                                                         <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Complaint_Category__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+                                                        <select id="Details" 
+                                                        style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc;border-left: 3px solid red; "
+                                                        ng-model="Items.ASI_eForm_Complaint_Details__c" ng-value="Items.ASI_eForm_Complaint_Details__c"
+                                                        ng-disabled="!Items.ASI_eForm_Complaint_Category__c"
+                                                        ng-options="Details.Id as Details.Name for Details in ((Category | filter:{'Id':Items.ASI_eForm_Complaint_Category__c})[0].Details) ">
+                                                            
+                                                        </select>
+                                                         <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Complaint_Details__c}} 
+                                                        </span>
+                                                    </td>                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Lot_Number__c" ng-model="Items.ASI_eForm_Lot_Number__c" maxlength="30"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Lot_Number__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Production_Date__c" ng-model="Items.ASI_eForm_Production_Date__c" class="ProductionDate"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Production_Date__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Production_Time__c" ng-model="Items.ASI_eForm_Production_Time__c" class="ProductionTime"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Production_Time__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.VenueName" ng-model="Items.VenueName" class="VenueName"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        <div class="hid">
+                                                            <input type="text" name="VenueId" ng-value="Items.ASI_eForm_Venue__c" ng-model="Items.ASI_eForm_Venue__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.VenueName}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} " >
+                                                      
+                                                        <textarea  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', 'border-radius: 4px; padding: 3px 6px;')} "
+                                                                  cols="20" rows="2" ng-model="Items.ASI_eForm_Remarks__c"  ng-value="Items.ASI_eForm_Remarks__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Remarks__c}} 
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <td style="font-weight: bold;">Total:</td>
+                                                <td></td>
+                                                <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  ></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td style="text-align: right;">{{ getReturnTotal() }}</td>
+                                                <td style="{!IF(IsR42, 'display:none;', '')} " colspan="5"  ></td>
+                                                <td style="text-align: right;{!IF(IsR42, 'display:none;', '')} ">{{ getReplaceTotal() }}</td>
+                                                <td style="{!IF(IsR42, '', 'display:none;')} " colspan="6"   ></td>
+                                                <td></td>
+                                            </tfoot>
+                                        </table>
+										-->
+										
+										<apex:outputPanel rendered="{!!IsR42}">
+                                        <table style="padding-top: 1em;" id="dt_LineItems" datatable="ng" dt-options="dtOptions" dt-column-defs="dtColumnDefs" dt-instance="dtInstance" class="table table-hover">
+                                            
+                                            <thead>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >Action </th>
+                                                    <th colspan="7" class="ReturnGoodsCSS">Return Goods </th>
+                                                    <th colspan="8" class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >
+                                                        Replace Goods 
+                                                    </th>
+                                                </tr>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  >Action</th>
+                                                    <th class="ReturnGoodsCSS">Item Group</th>
+                                                    <th class="ReturnGoodsCSS">Item Group Name</th>
+                                                    <th class="ReturnGoodsCSS">Quantity</th>
+                                                    <th class="ReturnGoodsCSS">UOM</th>
+                                                    <th class="ReturnGoodsCSS">Channel</th>
+                                                    <th class="ReturnGoodsCSS">Unit Price</th>
+                                                    <th class="ReturnGoodsCSS">Amount</th>
+                                                    
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Item Group</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Item Group Name</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Quantity</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >UOM</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}">Channel</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}"  >Unit Price</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}" >Amount</th>
+                                                    <th class="ReplaceGoodsCSS" style="{!IF(IsR42, 'display:none', '')}" >Remark</th>
+                                                    
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr ng-repeat="Items in ResultData" data-ng-style="Items.Failed && {'background':'#f2dede'}">
+                                                    <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >
+                                                        <button type="button" ng-click="deleteFun(Items.Id);" class="bs btn btn-default btn-round pull-left btn-xs" style="border: none;background-color: transparent;"> 
+                                                            <span  class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 18px;" aria-hidden="true"></span>
+                                                        </button>
+                                                    </td>
+                                                    
+                                                    <td id="ReturnItemGroup_manageAll_{{Items.Id}}_input" style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}" >
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               name="ReturnItemGroup" class="ItemGroupClassReturn" ng-value="Items.ReturnItemGroup" ng-model="Items.ReturnItemGroup" html-data-id="{{Items.Id}}"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red; "   />
+                                                        <div class="hid">
+                                                            <input type="text" name="SKUId" ng-value="Items.ASI_eForm_Item_Group_Return__c" ng-model="Items.ASI_eForm_Item_Group_Return__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ReturnItemGroup}} 
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {{Items.ReturnItemGroupName}}
+                                                    </td>
+                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="returnNegativeInteger(this);"
+                                                               style="border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Quantity_Return__c" ng-model="Items.ASI_eForm_Quantity_Return__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Quantity_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                                ng-model="Items.ASI_eForm_UOM_Return__c"
+                                                                ng-value="Items.ASI_eForm_UOM_Return__c" ng-options="x for x in UOMOption"> </select>
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_UOM_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                                ng-model="Items.ASI_eForm_Channel_Return__c"
+                                                                ng-value="Items.ASI_eForm_Channel_Return__c" ng-options="obj.value as obj.label for obj in ChannelReturnOption"> </select>
+
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Channel_Return__c}}
+                                                        </span>
+                                                    </td>
+
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="truncateLastDigit(this, -1);"
+                                                               style="border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Unit_Price_Return__c" ng-model="Items.ASI_eForm_Unit_Price_Return__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Unit_Price_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        {{ getAmountTotal(Items.ASI_eForm_Quantity_Return__c,Items.ASI_eForm_Unit_Price_Return__c) }}
+                                                    </td>
+                                                    
+                                                    
+                                                    
+                                                    
+                                                    
+                                                    <td id="ReplaceItemGroup_manageAll_{{Items.Id}}_input"
+                                                        style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} "  >
+                                                        <input   type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               name="ReplaceItemGroup" style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc;" class="ItemGroupClassReplace"
+                                                               ng-value="Items.ReplaceItemGroup" ng-model="Items.ReplaceItemGroup" html-data-id="{{Items.Id}}" />
+                                                        <div class="hid">
+                                                            <input type="text" name="SKUId" ng-value="Items.ASI_eForm_Item_Group_Replace__c" ng-model="Items.ASI_eForm_Item_Group_Replace__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ReplaceItemGroup}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(IsR42, 'display:none;', '')} ">
+                                                        {{Items.ReplaceItemGroupName}}
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}" 
+                                                               ng-value="Items.ASI_eForm_Quantity_Replace__c" ng-model="Items.ASI_eForm_Quantity_Replace__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Quantity_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <select style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "
+                                                                ng-model="Items.ASI_eForm_UOM_Replace__c" ng-value="Items.ASI_eForm_UOM_Replace__c"
+                                                                ng-options="x for x in UOMOption"> </select>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_UOM_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} "  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc;"
+                                                                ng-model="Items.ASI_eForm_Channel_Replace__c"
+                                                                ng-value="Items.ASI_eForm_Channel_Replace__c" ng-options="obj.value as obj.label for obj in ChannelReplaceOption"> </select>
+
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Channel_Return__c}}
+                                                        </span>
+                                                    </td>
+
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="truncateLastDigit(this, 1);"
+                                                               ng-value="Items.ASI_eForm_Unit_Price_Replace__c" ng-model="Items.ASI_eForm_Unit_Price_Replace__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Unit_Price_Replace__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, 'display:none;', '')} " >
+                                                       
+                                                        {{ getAmountTotal(Items.ASI_eForm_Quantity_Replace__c,Items.ASI_eForm_Unit_Price_Replace__c) }}
+                                                        
+                                                    </td>
+                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} " >
+                                                      
+                                                        <textarea  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', 'border-radius: 4px; padding: 3px 6px;')} "
+                                                                  cols="20" rows="2" ng-model="Items.ASI_eForm_Remarks__c"  ng-value="Items.ASI_eForm_Remarks__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Remarks__c}} 
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <td style="font-weight: bold;">Total:</td>
+                                                <td></td>
+                                                <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  ></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td style="text-align: right;">{{ getReturnTotal() }}</td>
+                                                <td style="{!IF(IsR42, 'display:none;', '')} " colspan="6"  ></td>
+                                                <td style="text-align: right;{!IF(IsR42, 'display:none;', '')} ">{{ getReplaceTotal() }}</td>
+                                                <td></td>
+                                            </tfoot>
+                                        </table>
+										</apex:outputPanel>
+										
+										
+										<apex:outputPanel rendered="{!IsR42}">
+                                        <table style="padding-top: 1em;" id="dt_LineItems" datatable="ng" dt-options="dtOptions" dt-column-defs="dtColumnDefs" dt-instance="dtInstance" class="table table-hover">
+                                            
+                                            <thead>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >Action </th>
+                                                    <th colspan="7" class="ReturnGoodsCSS">Return Goods </th>
+                                                     <th colspan="7" class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Complaint </th>
+                                                </tr>
+                                                <tr>
+                                                    <th style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  >Action</th>
+                                                    <th class="ReturnGoodsCSS">Item Group</th>
+                                                    <th class="ReturnGoodsCSS">Item Group Name</th>
+                                                    <th class="ReturnGoodsCSS">Quantity</th>
+                                                    <th class="ReturnGoodsCSS">UOM</th>
+                                                    <th class="ReturnGoodsCSS">Channel</th>
+                                                    <th class="ReturnGoodsCSS">Unit Price</th>
+                                                    <th class="ReturnGoodsCSS">Amount</th>
+                                                    <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Category</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Details</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Lot Number</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Production Date</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Production Time</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Venue</th>
+                                                     <th class="ComplaintCSS" style="{!IF(IsR42, '', 'display:none')}" >Remark</th>
+                                                    
+                                                    
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr ng-repeat="Items in ResultData" data-ng-style="Items.Failed && {'background':'#f2dede'}">
+                                                    <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"   >
+                                                        <button type="button" ng-click="deleteFun(Items.Id);" class="bs btn btn-default btn-round pull-left btn-xs" style="border: none;background-color: transparent;"> 
+                                                            <span  class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 18px;" aria-hidden="true"></span>
+                                                        </button>
+                                                    </td>
+                                                    
+                                                    <td id="ReturnItemGroup_manageAll_{{Items.Id}}_input" style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}" >
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               name="ReturnItemGroup" class="ItemGroupClassReturn" ng-value="Items.ReturnItemGroup" ng-model="Items.ReturnItemGroup" html-data-id="{{Items.Id}}"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red; "   />
+                                                        <div class="hid">
+                                                            <input type="text" name="SKUId" ng-value="Items.ASI_eForm_Item_Group_Return__c" ng-model="Items.ASI_eForm_Item_Group_Return__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ReturnItemGroup}} 
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {{Items.ReturnItemGroupName}}
+                                                    </td>
+                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="returnNegativeInteger(this);"
+                                                               style="text-align: right;  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Quantity_Return__c" ng-model="Items.ASI_eForm_Quantity_Return__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Quantity_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                                ng-model="Items.ASI_eForm_UOM_Return__c"
+                                                                ng-value="Items.ASI_eForm_UOM_Return__c" ng-options="x for x in UOMOption"> </select>
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_UOM_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <select style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')} padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                                ng-model="Items.ASI_eForm_Channel_Return__c"
+                                                                ng-value="Items.ASI_eForm_Channel_Return__c" ng-options="obj.value as obj.label for obj in ChannelReturnOption"> </select>
+
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Channel_Return__c}}
+                                                        </span>
+                                                    </td>
+
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        <input type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'number')}"  
+                                                               onchange="truncateLastDigit(this, -1);"
+                                                               style="text-align: right;  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                               ng-value="Items.ASI_eForm_Unit_Price_Return__c" ng-model="Items.ASI_eForm_Unit_Price_Return__c" />
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Unit_Price_Return__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')}"  >
+                                                        {{ getAmountTotal(Items.ASI_eForm_Quantity_Return__c,Items.ASI_eForm_Unit_Price_Return__c) }}
+                                                    </td>
+                                                    
+                                                    
+                                                    
+                                                                                                        
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+                                                        <select  ng-model="Items.ASI_eForm_Complaint_Category__c" ng-value="Items.ASI_eForm_Complaint_Category__c"
+                                                        style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; border-left: 3px solid red;"
+                                                        ng-options="Category.Id as Category.Name for Category in Category ">
+                                                            
+                                                        </select>
+                                                         <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Complaint_Category__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+                                                        <select id="Details" 
+                                                        style=" {!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none; ', '')}  padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc;border-left: 3px solid red; "
+                                                        ng-model="Items.ASI_eForm_Complaint_Details__c" ng-value="Items.ASI_eForm_Complaint_Details__c"
+                                                        ng-disabled="!Items.ASI_eForm_Complaint_Category__c"
+                                                        ng-options="Details.Id as Details.Name for Details in ((Category | filter:{'Id':Items.ASI_eForm_Complaint_Category__c})[0].Details) ">
+                                                            
+                                                        </select>
+                                                         <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Complaint_Details__c}} 
+                                                        </span>
+                                                    </td>                                                    
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Lot_Number__c" ng-model="Items.ASI_eForm_Lot_Number__c" maxlength="30"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Lot_Number__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Production_Date__c" ng-model="Items.ASI_eForm_Production_Date__c" class="ProductionDate"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Production_Date__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.ASI_eForm_Production_Time__c" ng-model="Items.ASI_eForm_Production_Time__c" class="ProductionTime"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Production_Time__c}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} {!IF(IsR42, '', 'display:none;')} " >
+													
+                                                        <input  type="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'hidden', 'text')}" 
+                                                               ng-value="Items.VenueName" ng-model="Items.VenueName" class="VenueName"
+                                                               style=" padding: 3px 6px;border-radius: 4px;  border: 1px solid #ccc; "   />
+                                                        <div class="hid">
+                                                            <input type="text" name="VenueId" ng-value="Items.ASI_eForm_Venue__c" ng-model="Items.ASI_eForm_Venue__c" />
+                                                        </div>
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.VenueName}} 
+                                                        </span>
+                                                    </td>
+                                                    
+                                                    <td style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'text-align: center;', ' ')} " >
+                                                      
+                                                        <textarea  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', 'border-radius: 4px; padding: 3px 6px;')} "
+                                                                  cols="20" rows="2" ng-model="Items.ASI_eForm_Remarks__c"  ng-value="Items.ASI_eForm_Remarks__c" />
+                                                        
+                                                        <span style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', '', 'display:none')}">
+                                                            {{Items.ASI_eForm_Remarks__c}} 
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <td style="font-weight: bold;">Total:</td>
+                                                <td></td>
+                                                <td  style="{!IF(ReturnOrderRequest.RecordType.DeveloperName=='ASI_eForm_KR_Return_Order_RO', 'display:none', '')}"  ></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td style="text-align: right;">{{ getReturnTotal() }}</td>
+                                                <td style="{!IF(IsR42, '', 'display:none;')} " colspan="6"   ></td>
+                                                <td></td>
+                                            </tfoot>
+                                        </table>
+										</apex:outputPanel>
+                                        
+                                        
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            
+                            
+                            
+                        </div>
+                    </apex:outputPanel>
+                </div>
+            </div>
+        </div>
+    </apex:form>
+    
+    
+    
+    
+    
+</apex:page>

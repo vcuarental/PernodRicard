@@ -1,0 +1,431 @@
+<!--
+ - Created by bsavcı on 8/27/2020.
+ -->
+
+<aura:component description="EUR_TR_DataPager" implements="lightning:isUrlAddressable,flexipage:availableForAllPageTypes" access="global"
+                controller="EUR_TR_DataPagerController">
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+
+    <aura:attribute name="loadingEnabled" type="Boolean" access="public" default="true"/>
+
+    <aura:attribute name="objectName" type="String" access="public"/>
+    <aura:handler name="change" value="{!v.objectName}" action="{!c.reloadData}"/>
+    <aura:attribute name="filter" type="String" access="public"/>
+    <aura:attribute name="filterable" type="Boolean" default="true" access="public"/>
+    <aura:handler name="change" value="{!v.filter}" action="{!c.reloadData}"/>
+
+    <!-- attributes -->
+    <aura:attribute name="data" type="Object" access="public"/>
+    <aura:attribute name="columns" type="List" access="public"/>
+    <aura:handler name="change" value="{!v.columns}" action="{!c.columnsChanged}"/>
+    <aura:attribute name="internalColumns" type="List"/>
+    <aura:attribute name="loading" type="Boolean" default="false"/>
+    <aura:attribute name="fieldModalLoading" type="Boolean" default="false"/>
+    <aura:attribute name="errors" type="Object" default="[]" access="public"/>
+    <aura:attribute name="draftValues" type="Object" default="[]"/>
+    <aura:attribute name="filterObject" type="Object"/>
+    <aura:attribute name="pages" type="List"/>
+    <aura:attribute name="prePages" type="List"/>
+    <aura:attribute name="currentPage" type="Integer" default="1"/>
+    <aura:attribute name="totalDataCount" type="Integer" default="0"/>
+    <aura:attribute name="displayingDataCount" type="Integer" default="0"/>
+    <aura:attribute name="disabled" type="Boolean" default="false" access="public"/>
+    <aura:attribute name="hideCheckboxColumn" type="Boolean" default="true" access="public"/>
+    <aura:attribute name="selectedRows" type="List" access="public" default="[]"/>
+    <aura:attribute name="fieldsObject" type="Object"/>
+    <aura:attribute name="fieldModalOpen" type="Boolean" default="false"/>
+    <aura:attribute name="filteredFields" type="List" default="[]"/>
+    <aura:attribute name="selectedFields" type="List" default="[]"/>
+    <aura:attribute name="dataQuery" type="String" default="" access="public"/>
+    <aura:attribute name="enableSingleSelect" type="Boolean" default="false"/>
+    <aura:attribute name="oldSelectedRow" type="Object"/>
+
+    <aura:attribute name="lookupModalOpen" type="Boolean" default="false"/>
+    <aura:attribute name="selectedLookups" type="List" default="[]"/>
+
+    <aura:method name="reloadData" action="{!c.reloadData}">
+    </aura:method>
+
+    <aura:method name="getSelectedRows" action="{!c.getSelectedRows}">
+    </aura:method>
+
+    <aura:method name="getDataQuery" action="{!c.getDataQuery}">
+    </aura:method>
+
+    <aura:method name="getTotalDataCount" action="{!c.getTotalDataCount}">
+    </aura:method>
+
+    <aura:registerEvent name="onsave" type="c:EUR_TR_DataPagerEvent"/>
+    <aura:registerEvent name="onrowaction" type="c:EUR_TR_DataPagerEvent"/>
+
+    <aura:attribute name="textOperations" type="List" default="[
+    {'label': 'Eşit', 'value': '='},
+    {'label': 'Farklı', 'value': '!='},
+    {'label': 'Benzer', 'value': 'like'}
+    ]"/>
+
+    <aura:attribute name="picklistOperations" type="List" default="[
+    {'label': 'Eşit', 'value': '='},
+    {'label': 'Farklı', 'value': '!='},
+    {'label': 'İçeren', 'value': 'IN'}
+    ]"/>
+
+    <aura:attribute name="booleanOperations" type="List" default="[
+    {'label': 'Eşit', 'value': '='},
+    {'label': 'Farklı', 'value': '!='}
+    ]"/>
+
+    <aura:attribute name="booleanValues" type="List" default="[
+    {'label': 'Evet/Var', 'value': 'true'},
+    {'label': 'Hayır/Yok', 'value': 'false'}
+    ]"/>
+
+    <aura:attribute name="numberOperations" type="List" default="[
+    {'label': 'Eşit', 'value': '='},
+    {'label': 'Farklı', 'value': '!='},
+    {'label': 'Büyük', 'value': '>'},
+    {'label': 'Büyük eşit', 'value': '>='},
+    {'label': 'Küçük', 'value': '&lt;'},
+    {'label': 'Küçük eşit', 'value': '&lt;='},
+    ]"/>
+
+
+    <div style="padding-left: 0px" class="">
+        <aura:if isTrue="{!v.loading}">
+            <lightning:spinner aura:id="spinner" variant="brand" size="large" alternativeText="Yükleniyor..."/>
+        </aura:if>
+        <lightning:layout class="" multipleRows="true">
+            <lightning:layoutItem size="12" largeDeviceSize="12" smallDeviceSize="12">
+                <div class="action-bar">
+                    <ul>
+                        <aura:if isTrue="{!v.filterable}">
+                            <li>
+                                <div onkeyup="{! c.doSearch }" class="search-box">
+                                    <lightning:input placeholder="Ara..." value="{!v.filterObject.searchTerm}"
+                                                     disabled="{!v.disabled}"
+                                                     type="search"/>
+                                </div>
+                            </li>
+                        </aura:if>
+                        <li>
+                            <lightning:buttonIcon iconName="utility:refresh" onclick="{!c.reloadData}"
+                                                  disabled="{!v.disabled}"
+                                                  alternativeText="Yeniden yükle"/>
+                        </li>
+                        <li>
+                            <lightning:buttonMenu iconName="utility:justify_text" alternativeText="Sayfa Boyut"
+                                                  menuAlignment="right" onselect="{!c.handlePageSizeChange}"
+                                                  disabled="{!v.disabled}"
+                                                  class="slds-button_last">
+                                <lightning:menuItem label="5  Kayit Göster" value="5"/>
+                                <lightning:menuItem label="10  Kayit Göster" value="10"/>
+                                <lightning:menuItem label="25  Kayit Göster" value="25"/>
+                                <lightning:menuItem label="50  Kayit Göster" value="50"/>
+                                <lightning:menuItem label="100  Kayit Göster" value="100"/>
+                                <lightning:menuItem label="200  Kayit Göster" value="200"/>
+                                <lightning:menuItem label="500  Kayit Göster" value="500"/>
+                                <lightning:menuItem label="1000  Kayit Göster" value="1000"/>
+                                <lightning:menuItem label="2000  Kayit Göster" value="2000"/>
+                            </lightning:buttonMenu>
+                        </li>
+                        <li>
+                            <lightning:buttonIcon iconName="utility:list" onclick="{!c.toggleFieldPanel}"
+                                                  disabled="{!v.disabled}"
+                                                  alternativeText="Gösterilecek Alanları Seç"/>
+                        </li>
+                        <aura:if isTrue="{!v.filterable}">
+                            <li>
+                                <lightning:buttonIconStateful onclick="{! c.toggleFilterModal }"
+                                                              disabled="{!v.disabled}"
+                                                              iconName="utility:filterList" alternativeText="Filter"
+                                                              selected="{!v.filterObject.filterModalOpen}"/>
+                            </li>
+                        </aura:if>
+                    </ul>
+                </div>
+            </lightning:layoutItem>
+            <lightning:layoutItem class="" size="12" largeDeviceSize="12" smallDeviceSize="12">
+                <div style="position: relative;min-height: 250px" class="slds-border_top">
+                    <lightning:datatable columns="{! v.internalColumns }"
+                                         data="{! v.data }" keyField="Id"
+                                         hideCheckboxColumn="{!v.hideCheckboxColumn}"
+                                         errors="{! v.errors }" draftValues="{! v.draftValues }"
+                                         onsave="{! c.handleSaveInternal }"
+                                         onrowaction="{!c.handleRowAction}"
+                                         onrowselection="{!c.handleRowSelection}"
+                                         isLoading="{!v.loading}"
+                                         aura:id="dataPagerTable"
+                    />
+                    <!--paginator-->
+                    <div>
+                        <div class="slds-align_absolute-center" style="position: relative;padding-bottom: 1rem;">
+                            <aura:if
+                                    isTrue="{! and(not(empty(v.displayingDataCount)), not(empty(v.totalDataCount))) }">
+                                <div style="position: absolute;left: .5rem;font-size: .8125rem;top: .5rem;"
+                                     class="slds-text-title_caps">Kayıt Sayısı: {!v.displayingDataCount}
+                                    / {!v.totalDataCount}</div>
+                            </aura:if>
+
+                            <ul class="pagination">
+                                <aura:if isTrue="{!v.pages.length > 1}">
+                                    <aura:iteration items="{!v.pages}" var="i" indexVar="index">
+                                        <li><a class="{!v.currentPage == i.Index ? 'active': ''}" id="{!index}"
+                                               onclick="{!c.gotoPage}">{!i.Index}</a></li>
+                                    </aura:iteration>
+                                </aura:if>
+                            </ul>
+                        </div>
+                    </div>
+                    <!--/paginator-->
+
+                    <!--filterModal-->
+                    <aura:if isTrue="{!v.filterObject.filterModalOpen}">
+                        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open" aria-labelledby="modal-heading-01"
+                                 aria-modal="true"
+                                 aria-describedby="modal-content-id-1">
+                            <div class="slds-modal__container">
+                                <header class="slds-modal__header" style="padding-bottom: 8px;">
+                                    <lightning:buttonIcon iconName="utility:close"
+                                                          onclick="{! c.toggleFilterModal }"
+                                                          alternativeText="close"
+                                                          variant="bare-inverse"
+                                                          class="slds-modal__close" size="large"/>
+                                    <lightning:button iconName="utility:refresh" onclick="{!c.reloadData}" label="Yenile"
+                                                      class="slds-float_right"/>
+                                    <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Filtreler</h2>
+                                </header>
+                                <div class="slds-modal__content" id="modal-content-id-1">
+                                    <div class="slds-scrollable_y" style="min-height: 510px">
+                                        <lightning:layout multipleRows="true" class="slds-is-relative">
+                                            <aura:if isTrue="{!v.loading}">
+                                                <lightning:spinner aura:id="spinner" variant="brand" size="medium" alternativeText="Yükleniyor..."/>
+                                            </aura:if>
+                                            <!--list-selected-filter-items-->
+                                            <aura:iteration items="{!v.filterObject.appliedFilters}" var="i" indexVar="index">
+                                                <lightning:layoutItem class="filter-line" size="12" largeDeviceSize="12"
+                                                                      smallDeviceSize="12" padding="around-small">
+                                                    <div class="filter-item">
+                                                        <span>{!i.fieldLabel} </span>
+                                                        <span style="margin-left:20px">{!i.operatorLabel}</span>
+                                                        <br/>
+                                                        <span><b>{!i.valueLabel}</b></span>
+                                                        <lightning:buttonIcon name="{!index}" onclick="{!c.removeFilterItem}"
+                                                                              iconName="utility:close" variant="container"
+                                                                              alternativeText="Kapat"/>
+                                                    </div>
+                                                </lightning:layoutItem>
+                                            </aura:iteration>
+                                            <!--/list-selected-filter-items-->
+
+                                            <aura:iteration items="{!v.filterObject.childFilterObjects}" var="childFilterObject" indexVar="index">
+                                                <!--filter-line-->
+                                                <lightning:layoutItem class="filter-line" size="12" padding="around-small">
+
+                                                    <lightning:layout verticalAlign="stretch" horizontalAlign="spread" multipleRows="true">
+
+                                                        <!--select-filter-->
+                                                        <lightning:layoutItem size="{!if(equals(childFilterObject.type,'REFERENCE'), '12', '8')}"
+                                                                              class="slds-p-around--x-small"
+                                                                              padding="horizontal-small">
+                                                            <lightning:combobox options="{! childFilterObject.fields }"
+                                                                                value="{!childFilterObject.field}"
+                                                                                onchange="{! c.handleFilterFieldChanged }"
+                                                                                name="{!'level-'+(index+1)}"
+                                                                                variant="label-hidden"/>
+                                                        </lightning:layoutItem>
+                                                        <aura:if isTrue="{!notequals(childFilterObject.type,'REFERENCE')}">
+                                                            <lightning:layoutItem size="4"
+                                                                                  class="slds-p-around--x-small"
+                                                                                  padding="horizontal-small">
+                                                                <lightning:combobox options="{! childFilterObject.operations }"
+                                                                                    value="{!childFilterObject.operator}"
+                                                                                    variant="label-hidden"/>
+                                                            </lightning:layoutItem>
+                                                        </aura:if>
+
+                                                        <!--/select-filter-->
+
+                                                        <!--filter-input-->
+                                                        <lightning:layoutItem size="12"
+                                                                              class="slds-p-around--x-small"
+                                                                              padding="horizontal-small">
+                                                            <aura:if
+                                                                    isTrue="{!childFilterObject.type == 'text' ||
+                                                                    childFilterObject.type == 'url' || childFilterObject.type == 'STRING'}">
+                                                                <lightning:input type="text" class="filter-input"
+                                                                                 variant="label-hidden"
+                                                                                 value="{!childFilterObject.value}"/>
+                                                            </aura:if>
+                                                            <aura:if
+                                                                    isTrue="{!or(childFilterObject.type == 'number',
+                                                                    or(childFilterObject.type == 'DOUBLE',childFilterObject.type == 'CURRENCY'))}">
+                                                                <lightning:input type="number" class="filter-input"
+                                                                                 variant="label-hidden"
+                                                                                 value="{!childFilterObject.value}"/>
+                                                            </aura:if>
+                                                            <aura:if
+                                                                    isTrue="{!or(childFilterObject.type == 'boolean',childFilterObject.type == 'BOOLEAN')}">
+                                                                <lightning:combobox class="filter-input"
+                                                                                    options="{!v.booleanValues }"
+                                                                                    value="{!childFilterObject.value}"
+                                                                                    variant="label-hidden"/>
+                                                            </aura:if>
+                                                            <aura:if
+                                                                    isTrue="{!childFilterObject.type == 'DATE'}">
+                                                                <lightning:input type="date" class="filter-input"
+                                                                                 variant="label-hidden"
+                                                                                 value="{!childFilterObject.value}"/>
+                                                            </aura:if>
+                                                            <aura:if
+                                                                    isTrue="{!childFilterObject.type == 'DATETIME'}">
+                                                                <lightning:input type="datetime-local" class="filter-input"
+                                                                                 variant="label-hidden"
+                                                                                 value="{!childFilterObject.value}"/>
+                                                            </aura:if>
+                                                            <aura:if
+                                                                    isTrue="{!childFilterObject.type == 'PICKLIST'}">
+                                                                <lightning:dualListbox aura:id="filterValues"
+                                                                                       name="filterValues"
+                                                                                       label="Seçiniz"
+                                                                                       sourceLabel="Seçenekler"
+                                                                                       selectedLabel="Seçilenler"
+                                                                                       value="{!childFilterObject.value}"
+                                                                                       options="{!childFilterObject.options}"
+                                                                                       size="10"
+                                                                                       max="15"/>
+                                                            </aura:if>
+                                                        </lightning:layoutItem>
+                                                        <!--/filter-input-->
+
+                                                    </lightning:layout>
+
+                                                </lightning:layoutItem>
+                                                <!--/filter-line-->
+                                            </aura:iteration>
+
+                                        </lightning:layout>
+                                    </div>
+                                </div>
+                                <footer class="slds-modal__footer">
+                                    <lightning:buttonGroup class="slds-float_left">
+                                        <lightning:button label="Filtre Ekle"
+                                                          title="Filtre Ekle"
+                                                          onclick="{!c.applyFilter}"/>
+                                        <lightning:button label="Hepsini Kaldır"
+                                                          title="Hepsini Kaldır"
+                                                          onclick="{!c.removeAllFilters}"/>
+                                    </lightning:buttonGroup>
+                                </footer>
+                            </div>
+                        </section>
+                        <div class="slds-backdrop slds-backdrop_open"></div>
+                    </aura:if>
+                    <!--/filterModal-->
+
+                    <!--fieldModal-->
+                    <aura:if isTrue="{!v.fieldModalOpen}">
+                        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open" aria-labelledby="modal-heading-02"
+                                 aria-modal="true"
+                                 aria-describedby="modal-content-id-2">
+                            <div class="slds-modal__container">
+                                <header class="slds-modal__header">
+                                    <lightning:buttonIcon iconName="utility:close"
+                                                          onclick="{!c.toggleFieldPanel }"
+                                                          alternativeText="close"
+                                                          variant="bare-inverse"
+                                                          class="slds-modal__close" size="large"/>
+                                    <h2 id="modal-heading-02" class="slds-modal__title slds-hyphenate">Gösterilecek Alanlar</h2>
+                                </header>
+                                <div class="slds-modal__content" id="modal-content-id-2">
+                                    <div class="slds-scrollable_y">
+                                        <lightning:layout multipleRows="true" class="slds-is-relative">
+                                            <aura:if isTrue="{!or(v.fieldModalLoading,v.loading)}">
+                                                <lightning:spinner aura:id="spinner" variant="brand" size="medium" alternativeText="Yükleniyor..."/>
+                                            </aura:if>
+                                            <lightning:layoutItem size="12" largeDeviceSize="12"
+                                                                  smallDeviceSize="12" padding="around-small">
+                                                <lightning:input type="text" name="searchKey" label="Ara" aura:id="searchKey"
+                                                                 onchange="{!c.searchKeyChange}" placeholder="Kelime Giriniz"/>
+                                            </lightning:layoutItem>
+                                            <lightning:layoutItem size="12" largeDeviceSize="12"
+                                                                  smallDeviceSize="12" padding="around-small">
+                                                <lightning:dualListbox name="multipleOptions"
+                                                                       label=""
+                                                                       aura:id="fieldDualListBox"
+                                                                       sourceLabel="Tüm Alanlar"
+                                                                       selectedLabel="Seçilen Alanlar"
+                                                                       options="{!v.filteredFields}"
+                                                                       value="{!v.selectedFields}"
+                                                                       onchange="{!c.handleSelectedFieldsChange }"
+                                                                       size="5"
+                                                                       max="15"/>
+                                            </lightning:layoutItem>
+                                        </lightning:layout>
+                                    </div>
+                                </div>
+                                <footer class="slds-modal__footer">
+                                </footer>
+                            </div>
+                        </section>
+                        <div class="slds-backdrop slds-backdrop_open"></div>
+                    </aura:if>
+                    <!--/fieldModal-->
+
+                    <!--lookupModal-->
+                    <aura:if isTrue="{!v.lookupModalOpen}">
+                        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open" aria-labelledby="modal-heading-03"
+                                 aria-modal="true"
+                                 aria-describedby="modal-content-id-3">
+                            <div class="slds-modal__container">
+                                <header class="slds-modal__header">
+                                    <lightning:buttonIcon iconName="utility:close"
+                                                          onclick="{! c.toggleLookupModal }"
+                                                          alternativeText="close"
+                                                          variant="bare-inverse"
+                                                          class="slds-modal__close" size="large"/>
+                                    <h2 id="modal-heading-03" class="slds-modal__title slds-hyphenate">Gösterilecek İlişkli Alanlar</h2>
+                                </header>
+                                <div class="slds-modal__content" id="modal-content-id-3">
+                                    <div class="slds-scrollable_y" style="min-height: 510px">
+                                        <lightning:layout multipleRows="true" class="slds-is-relative">
+                                            <aura:if isTrue="{!v.loading}">
+                                                <lightning:spinner aura:id="spinner" variant="brand" size="medium" alternativeText="Yükleniyor..."/>
+                                            </aura:if>
+                                            <lightning:layoutItem size="12" largeDeviceSize="12"
+                                                                  smallDeviceSize="12" padding="around-small">
+                                                <aura:iteration items="{!v.selectedLookups}" var="lookupField" indexVar="index">
+                                                    <lightning:layoutItem size="12"
+                                                                          class="slds-p-around--x-small"
+                                                                          padding="horizontal-small">
+                                                        <lightning:combobox options="{!lookupField.fields }"
+                                                                            value="{!lookupField.field}"
+                                                                            label="{!lookupField.label}"/>
+                                                    </lightning:layoutItem>
+                                                </aura:iteration>
+                                            </lightning:layoutItem>
+                                        </lightning:layout>
+                                    </div>
+                                </div>
+                                <footer class="slds-modal__footer">
+                                    <lightning:buttonGroup class="slds-float_left">
+                                        <lightning:button label="İlişkili Alan Ekle"
+                                                          title="İlişkili Alan Ekle"
+                                                          onclick="{!c.addLookupField}"/>
+
+                                    </lightning:buttonGroup>
+                                </footer>
+                            </div>
+                        </section>
+                        <div class="slds-backdrop slds-backdrop_open"></div>
+                    </aura:if>
+                    <!--/lookupModal-->
+                </div>
+
+
+            </lightning:layoutItem>
+        </lightning:layout>
+    </div>
+
+    <c:EUR_TR_CommonUtility aura:id="utility"/>
+</aura:component>

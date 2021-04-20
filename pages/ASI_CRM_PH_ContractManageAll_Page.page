@@ -1,0 +1,2058 @@
+<!--
+/***************************************************************************************************************************
+ * Name:        ASI_CRM_PH_ContractManageAll_Page
+ * Description: PH contract manage all page
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2018-08-24       Kaiden/Mikesh (LAPUTA)  Created/Updated
+ ****************************************************************************************************************************/
+ -->
+<apex:page standardController="ASI_TH_CRM_Contract__c" extensions="ASI_CRM_PH_ContractManageAll_Ctrl">
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}"/>
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}"/>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.4/angular.min.js"></script>
+
+    <!-- Style -->
+    <style>
+        .link-button {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .inputField_short {
+            width: 50px !important;
+        }
+
+        .inputField_medium {
+            width: 100px !important;
+        }
+
+        .inputField_long {
+            width: 300px !important;
+        }
+
+        .alignCenter {
+            text-align: center;
+        }
+
+        .savingRecord .fullScreenLoading {
+            display: block;
+        }
+
+        .fullScreenLoading {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: rgba(255, 255, 255, .8) url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}') 50% 50% no-repeat;
+        }
+
+        .error {
+            border: 2px solid red;
+        }
+
+        .redBackground {
+            /*background-color: #f4978b;*/
+            background-color: #FFC7CE;
+        }
+
+        .yellowBackground {
+            /*background-color: #fffb87;*/
+            background-color: #FFEB9C;
+        }
+
+        .greenBackground {
+            /*background-color: #b4ff96;*/
+            background-color: #C6EFCE;
+        }
+
+        th, td {
+            padding: 5px;
+            /* padding-top: 5px;
+            padding-bottom: 5px;
+            padding-right: 10px;
+            padding-left: 10px; */
+        }
+        table.dataTable th, table.dataTable td {
+            word-wrap: break-word;
+        }
+
+        /*Datatable Styling */
+        table.dataTable td {
+            /* height: 30px; */
+        }
+
+        table.dataTable th {
+            white-space: inherit;
+        }
+
+        table.dataTable thead tr {
+            background-color: #cce6ff;
+        }
+
+        table.dataTable tbody tr {
+            background-color: #e6f3ff;
+        }
+
+        table.dataTable tbody tr:nth-child(even) {
+            background-color: white;
+        }
+
+        table.dataTable td {
+            border-bottom: 2px solid #e0e0d1;
+        }
+
+        /*
+        table.dataTable td input.form-control {
+            width: 100% !important;
+        }
+
+        table.dataTable tr th {
+            text-align: center;
+        }
+        */
+    </style>
+
+    <!-- JavaScript -->
+
+    <script type="text/javascript" id="dataHelpers">
+
+        const SKU_DATATABLE_ID = '#skuDataTable';
+        const SUPPORT_DATATABLE_ID = '#supportDataTable';
+        const FOC_DATATABLE_ID = '#focDataTable';
+        const MONTHLY_SKU_DATATABLE_ID = '#skuMonthlyDataTable';
+
+        function preventNegativeNumber() {
+            $(".integerField").keydown(function (e) {
+                if (!((e.which > 95 && e.which < 106)
+                        || (e.which > 47 && e.which < 58)
+                        || e.which == 8 || e.which == 46)) {
+                    return false;
+                }
+            });
+            $(".decimalField").keydown(function (e) {
+                if (!((e.which > 95 && e.which < 106)
+                        || (e.which > 47 && e.which < 58)
+                        || e.which == 8 || e.which == 46 || e.which == 110 || e.which == 190)) {
+                    return false;
+                }
+            });
+        }
+
+        const DataHelper = function () {
+            let skuList = JSON.parse(`{!JSENCODE(SKUListJson)}`);
+            let skuMap = JSON.parse(`{!JSENCODE(SKUMapJson)}`);
+            let contract = JSON.parse(`{!JSENCODE(contractJson)}`);
+            let contractTargets = JSON.parse(`{!JSENCODE(contractTargetListJson)}`);
+            let contractMonthlyTargets = JSON.parse(`{!JSENCODE(contractTargetMonthlyListJson)}`);
+            let purchaseIncentiveSchemes = JSON.parse(`{!JSENCODE(purchaseIncentiveSchemeListJson)}`);
+            let contractFundSchemes = JSON.parse(`{!JSENCODE(contractFundSchemeListJson)}`);
+            let actualOfftake = JSON.parse(`{!JSENCODE(actualOfftakeJson)}`);
+            console.log('actualOfftake', actualOfftake);
+            if (!actualOfftake.ASI_CRM_Original_Quantity__c) {
+                actualOfftake.ASI_CRM_Original_Quantity__c = 0;
+            }
+
+            const readOnlyMode = '{!isReadOnly}' === 'true';
+
+            const getSkuList = () => skuList;
+            const getSkuMap = () => skuMap;
+            const getContract = () => contract;
+            const getContractTargets = () => contractTargets;
+            const getContractMonthlyTargets = () => contractMonthlyTargets;
+            const getPurchaseIncentiveSchemes = () => purchaseIncentiveSchemes;
+            const getContractFundSchemes = () => contractFundSchemes;
+            const getActualOfftake = () => actualOfftake;
+            const isReadOnlyMode = () => readOnlyMode;
+
+            const setSkuList = (nSkuList) => skuList = nSkuList;
+            const setContractTargets = (ncontractTargets) => contractTargets = ncontractTargets;
+            const setContractMonthlyTargets = (ncontractMonthlyTargets) => contractMonthlyTargets = ncontractMonthlyTargets;
+            const setContract = (ncontract) => contract = ncontract;
+            const setContractFundSchemes = (ncontractFundSchemes) => contractFundSchemes = ncontractFundSchemes;
+            const setPurchaseIncentiveSchemes = (npurchaseIncentiveSchemes) => purchaseIncentiveSchemes = npurchaseIncentiveSchemes;
+
+            return {
+                getSkuList: getSkuList,
+                getSkuMap: getSkuMap,
+                getContract: getContract,
+                getContractTargets: getContractTargets,
+                getContractMonthlyTargets: getContractMonthlyTargets,
+                getPurchaseIncentiveSchemes: getPurchaseIncentiveSchemes,
+                getContractFundSchemes: getContractFundSchemes,
+                getActualOfftake: getActualOfftake,
+                isReadOnlyMode: isReadOnlyMode,
+                setSkuList: setSkuList,
+                setContractTargets: setContractTargets,
+                setContractMonthlyTargets: setContractMonthlyTargets,
+                setContract: setContract,
+                setContractFundSchemes: setContractFundSchemes,
+                setPurchaseIncentiveSchemes: setPurchaseIncentiveSchemes
+            }
+        }();
+
+        const UtilHelper = function () {
+
+            const getFloatValue = (value) => {
+                let valueToParse = value ? value : 0;
+                return parseFloat(valueToParse);
+            };
+
+            const showValidationError = (errorMessage) => {
+                $('.saveErrorPanel').css('display', 'block');
+                $('.errorMessage').html(errorMessage);
+                $('body').removeClass('savingRecord');
+            };
+
+            const showError = (exceptionListJson) => {
+                $('.saveErrorPanel').css('display', 'block');
+
+                let errorMessage = '';
+                let exceptionList = jQuery.parseJSON(exceptionListJson);
+                for (let errorIndex = 0; errorIndex < exceptionList.length; errorIndex++) {
+                    let exceptionObj = exceptionList[errorIndex];
+                    errorMessage += exceptionObj['errorMessage'] + '<br />';
+                }
+
+                $('.errorMessage').html(errorMessage);
+            };
+
+            const hideLoading = () => {
+                $('body').removeClass('savingRecord');
+            };
+
+            const getDateString = (value) => {
+
+                if (!value) return '';
+
+                if (typeof value.getMonth !== 'function') return value;
+
+                return value.toISOString().slice(0,10);//.replace(/-/g,'');
+            };
+
+            return {
+                getFloatValue: getFloatValue,
+                showValidationError: showValidationError,
+                showError: showError,
+                hideLoading: hideLoading,
+                getDateString: getDateString
+            };
+        }();
+
+        const ContractMonthlyTargetService = function () {
+
+            const getContractMonthlyTargetUpsertList = (contractMonthlyTargets) => {
+                
+                const contractMonthlyTargetUpsertList = [];
+                const skuMap = DataHelper.getSkuMap();
+                for (let counter = 0; counter < contractMonthlyTargets.length; counter++) {
+
+                    const contractMonthlyTarget = contractMonthlyTargets[counter];
+                    if (contractMonthlyTarget.Id.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                        delete contractMonthlyTarget['id'];
+                    }
+                    
+                    let skuCode = contractMonthlyTarget.ASI_CRM_SKUCode__c;
+                    if (contractMonthlyTarget['monthlyTarget']) {
+                        for (let key in contractMonthlyTarget['monthlyTarget']) {
+                            let c = contractMonthlyTarget['monthlyTarget'][key];
+                            console.log('c', c);
+                            let skuId = skuMap[contractMonthlyTarget.ASI_CRM_SKU__c] ? skuMap[contractMonthlyTarget.ASI_CRM_SKU__c].Id : null;
+                            let ctm = {
+                                ASI_CRM_Monthly_Target_Bottle__c: c['target'],
+                                ASI_CRM_Month__c: c['month'],
+                                // 'ASI_CRM_SG_SKU__c': skuCode,
+                                ASI_CRM_SG_SKU__c: skuId,
+                                // 'ASI_CRM_SG_Contract_Target__c': contractMonthlyTarget.Id,
+                                //Missing Id is causing the record to be created on every save
+                                Id: c['id']
+                            };
+                            if(ctm.Id && ctm.Id.startsWith(MONTHLY_TARGET_PREFIX)) {
+                                delete ctm['Id'];
+                            }
+                            contractMonthlyTargetUpsertList.push(ctm);
+                        }
+                    }
+                }
+                console.log('contractMonthlyTargetUpsertList', contractMonthlyTargetUpsertList);
+                return contractMonthlyTargetUpsertList;
+            };
+
+            const splitTargetBottleValueToMonthlyTarget = (skuTableData, targetBottles) => {
+                const sort = (a, b) => parseInt(a.replace('M', '')) - parseInt(b.replace('M', ''));
+
+                let monthIndexes = Object.keys(skuTableData.monthlyTarget).sort(sort);
+                let endingMonthIndex = monthIndexes[monthIndexes.length - 1];
+                let targetBottlesPerMonth = Math.floor(targetBottles / monthIndexes.length);
+                let remainder = targetBottles % monthIndexes.length;
+
+                monthIndexes.forEach(monthIndex => {
+                    skuTableData.monthlyTarget[monthIndex].target = targetBottlesPerMonth;
+                });
+
+                skuTableData.monthlyTarget[endingMonthIndex].target = skuTableData.monthlyTarget[endingMonthIndex].target + remainder;
+            };
+
+            return {
+                getContractMonthlyTargetUpsertList: getContractMonthlyTargetUpsertList,
+                splitTargetBottleValueToMonthlyTarget: splitTargetBottleValueToMonthlyTarget
+            };
+        }();
+
+        const SupportService = function () {
+
+            const SUPPORT_TYPE = {
+                CONTRACT_FUND: 'CONTRACT_FUND',
+                MARKETING_SUPPORT_FUND: 'MARKETING_SUPPORT_FUND',
+                ACTIVATION_FUND: 'ACTIVATION_FUND',
+                MERCHANDISE: 'MERCHANDISE',
+                PURCHASE_INCENTIVE: 'PURCHASE_INCENTIVE',
+                BOTTLE_REBATE: 'BOTTLE_REBATE',
+                STAFF_INCENTIVE: 'STAFF_INCENTIVE'
+            };
+
+            const getSupportDataTableData = (contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake) => {
+                return [
+                    {
+                        'Support_Type': 'ASI_CRM_Contract_Fund_Amount__c',
+                        'Support_Type_Name': 'Contract Fund',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.CONTRACT_FUND, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Contract_Fund_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.CONTRACT_FUND, contract),
+                        'isReadOnly': false,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.CONTRACT_FUND, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.CONTRACT_FUND, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Marketing_Support_Fund_Amount__c',
+                        'Support_Type_Name': 'Marketing Support Fund (FOC)',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.MARKETING_SUPPORT_FUND, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Marketing_Support_Fund_APSegment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.MARKETING_SUPPORT_FUND, contract),
+                        'isReadOnly': false,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.MARKETING_SUPPORT_FUND, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.MARKETING_SUPPORT_FUND, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Activation_Fund_Amount__c',
+                        'Support_Type_Name': 'Activation Fund',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.ACTIVATION_FUND, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Activation_Fund_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.ACTIVATION_FUND, contract),
+                        'isReadOnly': false,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.ACTIVATION_FUND, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.ACTIVATION_FUND, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Merchandise_Amount__c',
+                        'Support_Type_Name': 'Merchandise',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.MERCHANDISE, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Merchandise_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.MERCHANDISE, contract),
+                        'isReadOnly': false,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.MERCHANDISE, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.MERCHANDISE, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Purchase_Incentive_Amount__c',
+                        'Support_Type_Name': 'Purchase Incentive',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.PURCHASE_INCENTIVE, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Purchase_Incentive_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.PURCHASE_INCENTIVE, contract),
+                        'isReadOnly': false,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.PURCHASE_INCENTIVE, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.PURCHASE_INCENTIVE, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Bottle_Rebate_Amount__c',
+                        'Support_Type_Name': 'Bottle Rebate',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.BOTTLE_REBATE, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Bottle_Rebate_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.BOTTLE_REBATE, contract),
+                        'isReadOnly': true,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.BOTTLE_REBATE, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.BOTTLE_REBATE, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    },
+                    {
+                        'Support_Type': 'ASI_CRM_Staff_Incentive_Amount__c',
+                        'Support_Type_Name': 'Staff Incentive',
+                        'Support_Amount': getSupportAmount(SUPPORT_TYPE.STAFF_INCENTIVE, contract),
+                        'Support_AP_Segment_API': 'ASI_CRM_Staff_Incentive_A_P_Segment__c',
+                        'Support_AP_Segment': getAPSegment(SUPPORT_TYPE.STAFF_INCENTIVE, contract),
+                        'isReadOnly': true,
+                        'Payment_Amount': getPaymentAmount(SUPPORT_TYPE.STAFF_INCENTIVE, contract),
+                        'Entitled_Amount': getEntitledAmount(SUPPORT_TYPE.STAFF_INCENTIVE, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake),
+                        'Remaining_Entitled_Amount': 0
+                    }
+                ];
+            };
+
+            //Private
+            const getSupportAmount = (supportType, contract) => {
+                if (!isValidSupportType(supportType)) return;
+
+                switch (supportType) {
+                    case SUPPORT_TYPE.CONTRACT_FUND:
+                        return getNumericValue(contract.ASI_CRM_Contract_Fund_Amount__c);
+                    case SUPPORT_TYPE.MARKETING_SUPPORT_FUND:
+                        return getMarketingSupportFundSupportAmount(contract);
+                    case SUPPORT_TYPE.ACTIVATION_FUND:
+                        return getActivationFundSupportAmount(contract);
+                    case SUPPORT_TYPE.MERCHANDISE:
+                        return getMerchandiseSupportAmount(contract);
+                    case SUPPORT_TYPE.PURCHASE_INCENTIVE:
+                        return getNumericValue(contract.ASI_CRM_Purchase_Incentive_Amount__c);
+                    case SUPPORT_TYPE.BOTTLE_REBATE:
+                        return getNumericValue(contract.ASI_CRM_Bottle_Rebate_Amount__c);
+                    case SUPPORT_TYPE.STAFF_INCENTIVE:
+                        return getNumericValue(contract.ASI_CRM_Staff_Incentive_Amount__c);
+                    default: return;
+                }
+            };
+
+            const getAPSegment = (supportType, contract) => {
+                if (!isValidSupportType(supportType)) return;
+
+                switch (supportType) {
+                    case SUPPORT_TYPE.CONTRACT_FUND:
+                        return getStringValue(contract.ASI_CRM_Contract_Fund_A_P_Segment__c);
+                    case SUPPORT_TYPE.MARKETING_SUPPORT_FUND:
+                        return getStringValue(contract.ASI_CRM_Marketing_Support_Fund_APSegment__c);
+                    case SUPPORT_TYPE.ACTIVATION_FUND:
+                        return getStringValue(contract.ASI_CRM_Activation_Fund_A_P_Segment__c);
+                    case SUPPORT_TYPE.MERCHANDISE:
+                        return getStringValue(contract.ASI_CRM_Merchandise_A_P_Segment__c);
+                    case SUPPORT_TYPE.PURCHASE_INCENTIVE:
+                        return getStringValue(contract.ASI_CRM_Purchase_Incentive_A_P_Segment__c);
+                    case SUPPORT_TYPE.BOTTLE_REBATE:
+                        return getStringValue(contract.ASI_CRM_Bottle_Rebate_A_P_Segment__c);
+                    case SUPPORT_TYPE.STAFF_INCENTIVE:
+                        return getStringValue(contract.ASI_CRM_Staff_Incentive_A_P_Segment__c);
+                    default: return;
+                }
+            };
+
+            const getPaymentAmount = (supportType, contract) => {
+                if (!isValidSupportType(supportType)) return;
+
+                switch (supportType) {
+                    case SUPPORT_TYPE.CONTRACT_FUND:
+                        return getNumericValue(contract.ASI_CRM_Paid_Contract_Fund_Amount__c);
+                    case SUPPORT_TYPE.MARKETING_SUPPORT_FUND:
+                        return getNumericValue(contract.ASI_CRM_Paid_Marketing_Support_Fund_Amt__c);
+                    case SUPPORT_TYPE.ACTIVATION_FUND:
+                        return getNumericValue(contract.ASI_CRM_Paid_Activation_Fund_Amount__c);
+                    case SUPPORT_TYPE.MERCHANDISE:
+                        return getNumericValue(contract.ASI_CRM_Paid_Merchandise_Amount__c);
+                    case SUPPORT_TYPE.PURCHASE_INCENTIVE:
+                        return getNumericValue(contract.ASI_CRM_Paid_Purchase_Incentive_Amt__c);
+                    case SUPPORT_TYPE.BOTTLE_REBATE:
+                        return getNumericValue(contract.ASI_CRM_Paid_Bottle_Rebate_Amount__c);
+                    case SUPPORT_TYPE.STAFF_INCENTIVE:
+                        return getNumericValue(contract.ASI_CRM_Paid_Staff_Incentive_Amount__c);
+                    default: return;
+                }
+            };
+
+            const getEntitledAmount = (supportType, contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake) => {
+                if (!isValidSupportType(supportType)) return;
+
+                switch (supportType) {
+                    case SUPPORT_TYPE.CONTRACT_FUND:
+                        return getContractFundEntitledAmount(contractFundSchemes);
+                    case SUPPORT_TYPE.MARKETING_SUPPORT_FUND:
+                        return getMarketingSupportFundEntitledAmount(contract);
+                    case SUPPORT_TYPE.ACTIVATION_FUND:
+                        return getActivationFundEntitledAmount(contract);
+                    case SUPPORT_TYPE.MERCHANDISE:
+                        return getMerchandiseEntitledAmount(contract);
+                    case SUPPORT_TYPE.PURCHASE_INCENTIVE:
+                        return getPurchaseIncentiveEntitledAmount(purchaseIncentiveSchemes);
+                    case SUPPORT_TYPE.BOTTLE_REBATE:
+                        return getBottleRebateEntitledAmount(actualOfftake, contractTargets);
+                    case SUPPORT_TYPE.STAFF_INCENTIVE:
+                        return getStaffIncentiveEntitledAmount(actualOfftake, contractTargets);
+                    default: return;
+                }
+            };
+
+            const isValidSupportType = (supportType) => Object.keys(SUPPORT_TYPE).indexOf(supportType) >= 0;
+
+            const getNumericValue = (value) => value != null ? value : 0;
+
+            const getStringValue = (value) => value != null ? value : '';
+
+            const getPurchaseIncentiveSchemeKey = (scheme) => {
+                // return scheme.ASI_CRM_Target_Start_Date__c + '_' + scheme.ASI_CRM_Target_End_Date__c;
+                return UtilHelper.getDateString(scheme.ASI_CRM_Target_Start_Date__c) + '_' + UtilHelper.getDateString(scheme.ASI_CRM_Target_End_Date__c);
+            };
+
+            const getContractFundEntitledAmount = (contractFundSchemes) => {
+                const reduce = (accumulator, currentValue) => {
+                    accumulator.ASI_CRM_Sponsorship__c += currentValue.ASI_CRM_Sponsorship__c;
+                    return accumulator;
+                };
+
+                let total = contractFundSchemes
+                        .filter(scheme => scheme.ASI_CRM_Issuable__c === true)
+                        .reduce(reduce, {ASI_CRM_Sponsorship__c: 0});
+
+                return total.ASI_CRM_Sponsorship__c;
+            };
+
+            const getMarketingSupportFundSupportAmount = (contract) => {
+                return getNumericValue(contract.ASI_CRM_Marketing_Support_Fund_Amount__c);
+            };
+
+            const getMarketingSupportFundEntitledAmount = (contract) => getMarketingSupportFundSupportAmount(contract);
+
+            const getActivationFundSupportAmount = (contract) => {
+                return getNumericValue(contract.ASI_CRM_Activation_Fund_Amount__c);
+            };
+
+            const getActivationFundEntitledAmount = (contract) => getActivationFundSupportAmount(contract);
+
+            const getMerchandiseSupportAmount = (contract) => {
+                return getNumericValue(contract.ASI_CRM_Merchandise_Amount__c);
+            };
+
+            const getMerchandiseEntitledAmount = (contract) => getMerchandiseSupportAmount(contract);
+
+            const getPurchaseIncentiveEntitledAmount = (purchaseIncentiveSchemes) => {
+                const schemeHeaders = {};
+
+                purchaseIncentiveSchemes
+                        .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c === true)
+                        .forEach(scheme => {
+                            let key = getPurchaseIncentiveSchemeKey(scheme);
+                            schemeHeaders[key] = scheme;
+                        });
+
+                let total = 0;
+                purchaseIncentiveSchemes
+                        .filter(scheme => scheme.ASI_CRM_Sys_Parent_Record__c !== true && scheme.ASI_CRM_Issuable__c === true)
+                        .forEach(scheme => {
+                            let key = getPurchaseIncentiveSchemeKey(scheme);
+                            console.log(key);
+                            let sponsorship = schemeHeaders[key] ? schemeHeaders[key].ASI_CRM_Sponsorship__c : 0;
+                            // total += schemeHeaders[key].ASI_CRM_Sponsorship__c * (scheme.ASI_CRM_Incentive_to_issue__c / 100)
+                            total += sponsorship * (scheme.ASI_CRM_Incentive_to_issue__c / 100)
+                        });
+
+                return total;
+            };
+
+            const getBottleRebateEntitledAmount = (actualOfftake, contractTargets) => {
+                let total = 0;
+                contractTargets.forEach(target => {
+                    //total += target.ASI_CRM_Bottle_Rebate__c * actualOfftake.ASI_CRM_Original_Quantity__c;
+                    total += (target.ASI_CRM_Till_Date_Sales_Bottle__c != null ? target.ASI_CRM_Till_Date_Sales_Bottle__c : 0) * 
+							(target.ASI_CRM_Bottle_Rebate__c != null ? target.ASI_CRM_Bottle_Rebate__c : 0);
+                });
+
+                return total;
+            };
+
+            const getStaffIncentiveEntitledAmount = (actualOfftake, contractTargets) => {
+                let total = 0;
+                contractTargets.forEach(target => {
+                    //total += target.ASI_CRM_Staff_Incentive__c * actualOfftake.ASI_CRM_Original_Quantity__c
+                    total += (target.ASI_CRM_Till_Date_Sales_Bottle__c != null ? target.ASI_CRM_Till_Date_Sales_Bottle__c : 0) * 
+							(target.ASI_CRM_Staff_Incentive__c != null ? target.ASI_CRM_Staff_Incentive__c : 0);
+                });
+
+                return total;
+            };
+
+            return {
+                getSupportDataTableData: getSupportDataTableData
+            }
+        }();
+
+        const ActionService = function () {
+
+            const addSkuRow = () => {
+                let newRow = {};
+                newRow['Id'] = NEW_CONTRACT_TARGET_PREFIX + SKU_INDEX;
+                newRow['ASI_CRM_Contract__c'] = CONTRACT_ID;
+                newRow['monthlyTarget'] = setDefaultMonthlyTarget();
+
+                SKU_INDEX++;
+
+                $(SKU_DATATABLE_ID).DataTable().row.add(newRow).draw();
+                $(MONTHLY_SKU_DATATABLE_ID).DataTable().row.add(newRow).draw();
+                $(FOC_DATATABLE_ID).DataTable().row.add(newRow).draw();
+
+                calculateTotal();
+                initAutoComplete();
+            };
+
+            const deleteSkuRow = (row) => {
+                const rowId = row.id;
+
+                if (!rowId.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                    // It's an existing record in database that needs deletion
+                    deleteContractTargetIdList.push(rowId);
+                }
+
+                $(SKU_DATATABLE_ID).DataTable().row(row).remove().draw();
+                $(MONTHLY_SKU_DATATABLE_ID).DataTable().row(row).remove().draw();
+                $(FOC_DATATABLE_ID).DataTable().row(row).remove().draw();
+
+                calculateTotal();
+            };
+
+            return {
+                addSkuRow: addSkuRow,
+                deleteSkuRow: deleteSkuRow
+            }
+        }();
+
+    </script>
+
+    <script>
+
+        $(document).ready(function () {
+            DataTableHelper.initialize(
+                    DataHelper.getContract(),
+                    DataHelper.getContractTargets(),
+                    DataHelper.getContractMonthlyTargets(),
+                    DataHelper.getContractFundSchemes(),
+                    DataHelper.getPurchaseIncentiveSchemes(),
+                    DataHelper.getActualOfftake()
+            );
+
+            $('#ManageContractContainer').on('click', '#addSkuRowButton', () => ActionService.addSkuRow());
+            $('#ManageContractContainer').on('click', '.deleteSkuRowButton', (event) => {
+                ActionService.deleteSkuRow($(event.currentTarget).parent().parent()[0]);
+            });
+            
+            preventNegativeNumber();
+        });
+
+    </script>
+
+    <script type="text/javascript" id="angularComponentDataValidator">
+
+        const Validator = function () {
+
+            const validatePurchaseIncentiveSchemeItems = () => {
+
+                let hasItems = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validateSchemeHeaderItemCount();
+
+                if (!hasItems) {
+                    UtilHelper.showValidationError('Please input Purchase Incentive Scheme detail for section with Incentive Amount > 0');
+                }
+
+                let isValid = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validateSchemeHeaderWithoutIncentiveItemCount();
+
+                if (!isValid) {
+                    UtilHelper.showValidationError('Please input Purchase Incentive Scheme detail for section with Incentive Amount > 0');
+                }
+
+                if (!hasItems || !isValid) return false;
+
+                let hasOverlappingPurchaseIncentiveSchemeHeaderDates = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validatePurchaseIncentiveSchemeHeaderDates();
+                if (!hasOverlappingPurchaseIncentiveSchemeHeaderDates) {
+                    UtilHelper.showValidationError('Incentive header dates are overlapping');
+                    return false;
+                }
+
+                let hasMissingFieldsForPurchaseIncentiveSchemeHeader = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validatePurchaseIncentiveSchemeHeaderMissingFields();
+                if (!hasMissingFieldsForPurchaseIncentiveSchemeHeader) {
+                    UtilHelper.showValidationError('Incentive amount for Purchase Incentive Scheme header is missing');
+                    return false;
+                }
+
+                let hasMissingFieldsForPurchaseIncentiveScheme = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validatePurchaseIncentiveSchemeMissingFields();
+                if (!hasMissingFieldsForPurchaseIncentiveScheme) {
+                    UtilHelper.showValidationError('Target Purchase amount/Incentive % to Issue is missing for Purchase Incentive Scheme are missing');
+                    return false;
+                }
+
+                let isValidIncentiveToIssueValue = angular
+                    .element(document.getElementById('ManageContractAppMainController'))
+                    .scope()
+                    .$ctrl.validateIncentiveToIssueValues();
+                if (!isValidIncentiveToIssueValue) {
+                    UtilHelper.showValidationError('Incentive % to Issue must be within range of 0 - 100 ');
+                    return false;
+                }
+
+                return true;
+            };
+            return {
+                validatePurchaseIncentiveSchemeItems: validatePurchaseIncentiveSchemeItems
+            }
+        }();
+
+    </script>
+    <script type="text/javascript">
+        /****************
+         Define Variable
+         ****************/
+        const ACTION_LABEL = 'Action';
+        const NEW_CONTRACT_TARGET_PREFIX = 'Contract_Target_';
+        const NEW_CONTRACT_FUND_SCHEME_PREFIX = 'Contract_Fund_Scheme_';
+        const NEW_PURCHASE_INCENTIVE_SCHEME_PREFIX = 'Purchase_Incentive_Scheme_';
+        const MONTHLY_TARGET_PREFIX = 'Monthly_Target_';
+        const CONTRACT_READONLY_RT = 'ASI_CRM_PH_Contract_Read_Only';
+
+        const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy": true,
+            "bStateSave": true,
+            "bSearch": false,
+            "bFilter": false,
+            "aLengthMenu": [200],
+            "iDisplayLength": 200,
+            "bSort": false,
+            "bPaginate": false,
+            "bScrollCollapse": true,
+            "bJQueryUI": false
+        };
+
+        const READ_ONLY = '{!isReadOnly}' == 'true';
+        const CONTRACT_ID = '{!contractId}';
+        const CUSTOMER_TYPE = '{!customerType}';
+        const CONTRACT_FUND_TYPE = '{!contractFundType}';
+
+        //Auto Complete Value
+        const SKU_LIST = jQuery.parseJSON('{!JSENCODE(SKUListJson)}');
+
+        const SKU_MAP = jQuery.parseJSON('{!JSENCODE(SKUMapJson)}');
+
+        const CONTRACT = jQuery.parseJSON('{!JSENCODE(contractJson)}');
+
+        const DUTY = CONTRACT.ASI_CRM_Contract_Duty_Type__c;
+        const CONTRACT_START_DATE = new Date(CONTRACT.ASI_TH_CRM_Start_Date__c);
+        const CONTRACT_END_DATE = new Date(CONTRACT.ASI_TH_CRM_End_Date__c);
+
+        const SUPPORT_TYPE_PICKLIST_VALUES = {
+            "Contract Fund": "ASI_CRM_Contract_Fund_Amount__c",
+            "Marketing Support Fund (FOC)": "ASI_CRM_Marketing_Support_Fund_Amount__c",
+            "Activation Fund": "ASI_CRM_Activation_Fund_Amount__c",
+            "Merchandise": "ASI_CRM_Merchandise_Amount__c",
+            "Purchase Incentive": "ASI_CRM_Purchase_Incentive_Amount__c",
+        };
+
+        const CONTRACT_FUND_AP_SEGMENT = {
+            'Duty Paid':['AP2130 - Customer - Customer Development & Trade, A&P - Other trade A&P',
+                        'AP2310 - Customer - Other growth'],
+            'Duty Free':['']
+        };
+
+        const MARKETING_SP_FUND_AP_SEGMENT = {
+            'Duty Paid':['AP1420 - Consumer - Activation - On-trade activation',
+                        'AP1430 - Consumer - Activation - Off-trade activation'],
+            'Duty Free':['']
+        };
+
+        const OTHER_AP_SEGMENT = {
+            'Activation Fund': {
+                'Duty Paid': ['AP2130 - Customer - Customer Development & Trade, A&P - Other trade A&P'],
+                'Duty Free': ['']
+            },
+            'Merchandise': {
+                'Duty Paid': ['AP2110 - Customer - Customer Development & Trade, A&P - Merchandising costs'],
+                'Duty Free': ['AP2110 - Customer - Customer Development & Trade, A&P - Merchandising costs']
+            },
+            'Purchase Incentive': {
+                'Duty Paid': ['AP2310 - Customer - Other growth'],
+                'Duty Free': ['']
+            },
+            'Bottle Rebate': {
+                'Duty Paid': ['AP2310 - Customer - Other growth'],
+                'Duty Free': ['']
+            },
+            'Staff Incentive': {
+                'Duty Paid': ['AP2310 - Customer - Other growth'],
+                'Duty Free': ['']
+            }
+        };
+
+        let SKU_INDEX = 1;
+        let SUPPORT_INDEX = 1;
+        let CONTRACT_FUND_SCHEME_INDEX = 1;
+        let PURCHASE_INCENTIVE_SCHEME_INDEX = 1;
+
+        let SUB_BRAND_INDEX = 0;
+
+        const deleteContractTargetIdList = [];
+        const deleteContractFundSchemeIdList = [];
+        const deletePurchaseIncentiveSchemeIdList = [];
+
+        /*****************
+         Datatable Field Config
+         *****************/
+
+        /****************
+         Init Function
+         ****************/
+        $(document).ready(
+            function () {
+                if (READ_ONLY) {
+                    $(".tab-content").css("overflow", "auto");
+                    $(".addRow").css("display", "none");
+                    $(".pageActionBtns").css("display", "none");
+                }
+                if (CONTRACT.RecordType.DeveloperName == CONTRACT_READONLY_RT) {
+                    $(".addRowROhide").css("display", "none");
+                }
+                //setSKUTable(jQuery.parseJSON('{!JSENCODE(contractTargetListJson)}'));
+                //setSKUMonthlyTargetTable(jQuery.parseJSON('{!JSENCODE(contractTargetListJson)}'), jQuery.parseJSON('{!JSENCODE(contractTargetMonthlyListJson)}'));
+                //setFocTable(jQuery.parseJSON('{!JSENCODE(contractTargetListJson)}'), jQuery.parseJSON('{!JSENCODE(contractTargetMonthlyListJson)}'));
+                //setSupportTable(jQuery.parseJSON('{!JSENCODE(contractJson)}'));
+                //setContractFundSchemeTable(jQuery.parseJSON('{!JSENCODE(contractFundSchemeListJson)}'));
+                //setPurchaseIncentiveSchemeTable(jQuery.parseJSON('{!JSENCODE(purchaseIncentiveSchemeListJson)}'));
+                initAutoComplete();
+            });
+
+
+
+        function updateSkuDataTableValue(row, fieldName, newValue) {
+            let skuDataTableRowData = $(SKU_DATATABLE_ID).DataTable().row(row).data();
+            skuDataTableRowData[fieldName] = newValue;
+
+            let monthlySkuDataTableRowData = $(MONTHLY_SKU_DATATABLE_ID).DataTable().row(row).data();
+            monthlySkuDataTableRowData[fieldName] = newValue;
+
+            $(SKU_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+            calculateTotal();
+
+            if ('ASI_CRM_Target_Total_Bottle__c' === fieldName) {
+                ContractMonthlyTargetService.splitTargetBottleValueToMonthlyTarget(skuDataTableRowData, newValue);
+                $(MONTHLY_SKU_DATATABLE_ID).DataTable().row(row).data(monthlySkuDataTableRowData).invalidate();
+            }
+        }
+
+
+
+        function updateFOCTableValue(row, fieldName, newValue) {
+            let focData = $(FOC_DATATABLE_ID).DataTable().row(row).data();
+            focData[fieldName] = newValue;
+            $(FOC_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+        }
+
+        function updateFocDataTableValue(row, fieldName, value) {
+            // let focDataTable = $(FOC_DATATABLE_ID).DataTable();
+            // let focDataTableRowData = focDataTable.row(row).data();D
+            // focDataTableRowData[fieldName] = value;
+            // focDataTable.rows().invalidate('data').draw(false);
+
+            let focData = $(FOC_DATATABLE_ID).DataTable().row(row).data();
+            focData[fieldName] = value;
+            $(FOC_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+        }
+
+        function updateMonthlySkuDataTableValue(row, fieldName, newValue) {
+            let SKUData = $(MONTHLY_SKU_DATATABLE_ID).DataTable().row(row).data();
+            // console.log(SKUData);
+            if (SKUData["monthlyTarget"]) {
+
+            } else {
+                let map_ct_default = setDefaultMonthlyTarget();
+                /*
+                for(var i = 0 ; i < parseInt(CONTRACT.ASI_CRM_Contract_Period_Months__c) ; i++){
+                    map_ct_default["M"+(i+1)] = {
+                        "id" : MONTHLY_TARGET_PREFIX,
+                        "target" : 0,
+                        "month" : i+1
+                    }
+                }
+                */
+                SKUData["monthlyTarget"] = map_ct_default;
+            }
+
+            SKUData["monthlyTarget"][fieldName]["target"] = parseInt(newValue);
+            //$(SKU_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+            //calculateTotal();
+        }
+
+        function setDefaultMonthlyTarget() {
+            let map_ct_default = {};
+            let i = 0;
+            let tempDate = new Date(CONTRACT_START_DATE.getFullYear(), CONTRACT_START_DATE.getMonth(), 1);
+            while (tempDate < CONTRACT_END_DATE) {
+                map_ct_default["M" + (i + 1)] = {
+                    "id": MONTHLY_TARGET_PREFIX,
+                    "target": 0,
+                    "month": i + 1
+                };
+                i++;
+                tempDate = new Date(tempDate.setMonth(tempDate.getMonth() + 1));
+            }
+            return map_ct_default;
+        }
+
+        function calculateTotal() {
+            $(SKU_DATATABLE_ID).DataTable().row('#skuTotal').remove();
+            let contractTargetList = $(SKU_DATATABLE_ID).DataTable().rows().data();
+
+            let targetTotalBottle = 0;
+            let totalBottleRebate = 0;
+            let totalStaffIncentive = 0;
+            //let allocationPercent = 0;
+            for (let i = 0; i < contractTargetList.length; i++) {
+                let contractTarget = contractTargetList[i];//jQuery.extend({}, contractTargetList[i]);
+                let currentTargetTotalBottle = UtilHelper.getFloatValue(contractTarget.ASI_CRM_Target_Total_Bottle__c);
+
+                targetTotalBottle += currentTargetTotalBottle;
+                totalBottleRebate += UtilHelper.getFloatValue(contractTarget.ASI_CRM_Bottle_Rebate__c) * currentTargetTotalBottle;
+                totalStaffIncentive += UtilHelper.getFloatValue(contractTarget.ASI_CRM_Staff_Incentive__c) * currentTargetTotalBottle;
+                //allocationPercent += UtilHelper.getFloatValue(contractTarget.ASI_CRM_SKU_Allocation_Percent__c);
+            }
+
+            //Create new contract target record
+            let newContractTarget = {};
+            newContractTarget['Id'] = 'skuTotal';
+            newContractTarget['ASI_CRM_Target_Total_Bottle__c'] = targetTotalBottle;
+            newContractTarget['totalBottleRebate'] = totalBottleRebate;
+            newContractTarget['totalStaffIncentive'] = totalStaffIncentive;
+            //newContractTarget['allocationPercent'] = allocationPercent;
+
+            $(SKU_DATATABLE_ID).DataTable().row.add(newContractTarget).draw();
+            $(SKU_DATATABLE_ID).DataTable().page('last').draw('page');
+
+            initAutoComplete();
+            preventNegativeNumber();
+            
+        }
+
+        function updateSupportTableValue(row, fieldName, newValue) {
+            var supportData = $(SUPPORT_DATATABLE_ID).DataTable().row(row).data();
+            supportData[fieldName] = newValue;
+            $(SUPPORT_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+        }
+
+        function updateContractFundSchemeTableValue(row, fieldName, newValue) {
+            var contractFundSchemeData = $("#contractFundSchemeDataTable").DataTable().row(row).data();
+            contractFundSchemeData[fieldName] = newValue;
+            $('#contractFundSchemeDataTable').DataTable().rows().invalidate('data').draw(false);
+        }
+
+        function updatePurchaseIncentiveSchemeTableValue(row, fieldName, newValue) {
+            var purchaseIncentiveSchemeData = $("#purchaseIncentiveSchemeDataTable").DataTable().row(row).data();
+            purchaseIncentiveSchemeData[fieldName] = newValue;
+            $('#purchaseIncentiveSchemeDataTable').DataTable().rows().invalidate('data').draw(false);
+        }
+
+        function addSKURow() {
+            let newRow = {};
+            newRow['Id'] = NEW_CONTRACT_TARGET_PREFIX + SKU_INDEX;
+            newRow['ASI_CRM_Contract__c'] = CONTRACT_ID;
+            newRow['monthlyTarget'] = setDefaultMonthlyTarget();
+
+            SKU_INDEX++;
+
+            $(SKU_DATATABLE_ID).DataTable().row.add(newRow).draw();
+            $(MONTHLY_SKU_DATATABLE_ID).DataTable().row.add(newRow).draw();
+            $(FOC_DATATABLE_ID).DataTable().row.add(newRow).draw();
+
+            calculateTotal();
+            initAutoComplete();
+            preventNegativeNumber();
+        }
+
+        function deleteSKURow(row) {
+            const rowId = row.id;
+
+            if (!rowId.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                // It's an existing record in database that needs deletion
+                deleteContractTargetIdList.push(rowId);
+            }
+
+            //Remove the row and redraw it
+            $(SKU_DATATABLE_ID).DataTable().row(row).remove().draw();
+            $(MONTHLY_SKU_DATATABLE_ID).DataTable().row(row).remove().draw();
+            $(FOC_DATATABLE_ID).DataTable().row(row).remove().draw();
+
+            calculateTotal();
+        }
+
+        function initAutoComplete() {
+            $(".ASI_CRM_SKU__c").each(function (index) {
+                $(this).autocomplete({
+                    source: SKU_LIST,
+                    minLength: 3,
+                    response: function (event, ui) {
+                        if (ui.content.length === 0) {
+                            // console.log("No result found");
+                        }
+                    },
+                    change: function (event, ui) {
+                        if (!ui.item && typeof ui.item !== 'undefined') {
+                            // console.log('remove  ' + this.value);
+
+                            // on de-selecting SKU, empty Sub-Brand display
+                            $(this).parent().next().text('');
+                            this.value = '';
+                        }
+                    },
+                    select: function (event, ui) {
+                        // console.log('change ! ' + ui.item.label);
+
+                        $(this).val(ui.item.label);
+                        event.preventDefault();
+
+                        // on selecting SKU, change Sub-Brand display
+                        const sku = SKU_MAP[ui.item.label];
+                        // console.log(sku);
+                        const skuCode = sku ? sku.ASI_MFM_SKU_Code__c : null;
+                        const subBrand = sku ? sku.ASI_MFM_Sub_brand__r : null;
+                        const subBrandName = subBrand ? subBrand.Name : null;
+
+                        ASI_CRM_SKU__r = {
+                            "Name": ui.item.label,
+                            "ASI_MFM_SKU_Code__c": skuCode,
+                            "ASI_MFM_Sub_brand__r": {"Name": subBrandName}
+                        };
+
+                        let rowId = $(this.parentNode.parentNode).attr('id');
+                        var SKUData = $(SKU_DATATABLE_ID).DataTable().row($('#' + rowId)).data();
+
+                        SKUData['ASI_CRM_SKU__c'] = ui.item.label;
+                        SKUData['ASI_CRM_SKU__r'] = ASI_CRM_SKU__r;
+                        SKUData['ASI_CRM_SKUCode__c'] = skuCode;
+                        $(SKU_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+
+                        var SKUData = $(MONTHLY_SKU_DATATABLE_ID).DataTable().row($('#' + rowId)).data();
+
+                        SKUData['ASI_CRM_SKU__c'] = ui.item.label;
+                        SKUData['ASI_CRM_SKU__r'] = ASI_CRM_SKU__r;
+                        SKUData['ASI_CRM_SKUCode__c'] = skuCode;
+                        $(MONTHLY_SKU_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+
+                        let skuFocData = $(FOC_DATATABLE_ID).DataTable().row($('#' + rowId)).data();
+                        skuFocData['ASI_CRM_SKU__c'] = ui.item.label;
+                        skuFocData['ASI_CRM_SKU__r'] = ASI_CRM_SKU__r;
+                        skuFocData['ASI_CRM_SKUCode__c'] = skuCode;
+                        $(FOC_DATATABLE_ID).DataTable().rows().invalidate('data').draw(false);
+                        //$(this).parent().next().text(subBrandName || "");
+                        initAutoComplete();
+                        preventNegativeNumber();
+
+                    }
+                });
+            });
+        }
+
+        function saveRecord(isQuickSave) {
+
+            let purchaseIncentiveSchemes = angular.element(document.getElementById('ManageContractAppMainController')).scope().$ctrl.getPurchaseIncentiveSchemes();
+            let deletePurchaseIncentiveSchemeIds = angular.element(document.getElementById('ManageContractAppMainController')).scope().$ctrl.getDeletePurchaseIncentiveSchemeIds();
+
+            let contractFundSchemes = angular.element(document.getElementById('ManageContractAppMainController')).scope().$ctrl.getContractFundSchemes();
+            let deleteContractFundSchemeIds = angular.element(document.getElementById('ManageContractAppMainController')).scope().$ctrl.getDeleteContractFundSchemeIds();
+
+            if (!Validator.validatePurchaseIncentiveSchemeItems()) {
+                return;
+            }
+
+            // Check if all required fields are filled in
+            if (checkMissingRequiredFields()) {
+                return null;
+            }
+
+            //Show loading gif
+            $("body").addClass("savingRecord");
+
+            //Hide the error message
+            $('.saveErrorPanel').css("display", "none");
+            $('.infoPanel').css("display", "none");
+
+            const upsertContractTargetList = [];
+            let contractTargetList = $(SKU_DATATABLE_ID).DataTable().rows().data();
+            let focContractTargetList = $(FOC_DATATABLE_ID).DataTable().rows().data();
+
+            var totalAllocationPerecent = 0;
+
+            for (let i = 0; i < contractTargetList.data().length; i++) {
+
+                if (contractTargetList[i].Id == "skuTotal") {
+                    continue;
+                }
+
+                const contractTargetRow = jQuery.extend({}, contractTargetList[i]);
+                contractTargetRow.ASI_CRM_FOC__c = focContractTargetList[i] ? focContractTargetList[i].ASI_CRM_FOC__c : null;
+
+                if (contractTargetRow.Id.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                    delete contractTargetRow['Id'];
+                }
+                if (contractTargetRow["monthlyTarget"]) {
+                    delete contractTargetRow["monthlyTarget"];
+                }
+                upsertContractTargetList.push(contractTargetRow);
+            }
+
+            if (checkDuplicateVal(upsertContractTargetList, "ASI_CRM_SKUCode__c")) {
+                UtilHelper.showValidationError("SKUs in a single contract cannot be duplicated");
+                return null;
+            }
+
+            // console.log("skuDataTable", upsertContractTargetList);
+
+            // const upsertContractTargetMonthlyList = [];
+            let contractTargetMonthlyList = $(MONTHLY_SKU_DATATABLE_ID).DataTable().rows().data();
+
+            var msg = checkMonthlyTargetError(contractTargetMonthlyList);
+            if (msg != '') {
+                UtilHelper.showValidationError(msg);
+                return null;
+            }
+            const upsertContractTargetMonthlyList = ContractMonthlyTargetService.getContractMonthlyTargetUpsertList(contractTargetMonthlyList);
+            console.log('upsertContractTargetMonthlyList', upsertContractTargetMonthlyList);
+            // for (let i = 0; i < contractTargetMonthlyList.data().length; i++) {
+            //
+            //     const contractTargetRow = jQuery.extend({}, contractTargetMonthlyList[i]);
+            //
+            //     if (contractTargetRow.Id.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+            //         delete contractTargetRow["Id"];
+            //     }
+            //     var skuName = contractTargetRow.ASI_CRM_SKU__r.Name;
+            //
+            //     var skuCode = contractTargetRow.ASI_CRM_SKUCode__c;
+            //     if (contractTargetRow["monthlyTarget"]) {
+            //         for (var key in contractTargetRow["monthlyTarget"]) {
+            //             var c = contractTargetRow["monthlyTarget"][key];
+            //             var ctm = {
+            //                 "ASI_CRM_Monthly_Target_Bottle__c": c["target"],
+            //                 "ASI_CRM_Month__c": c["month"],
+            //                 "ASI_CRM_SG_Contract_Target__c": skuCode,
+            //                 "Id": c["id"] //Missing Id is causing the record to be created on every save
+            //             };
+            //             upsertContractTargetMonthlyList.push(ctm);
+            //         }
+            //     }
+            // }
+            const upsertSupportMap = {};
+            let supportList = $(SUPPORT_DATATABLE_ID).DataTable().rows().data();
+
+            for (let i = 0; i < supportList.data().length; i++) {
+                const supportRow = supportList[i];
+                upsertSupportMap[supportRow["Support_Type"]] = supportRow["Support_Amount"];
+                upsertSupportMap[supportRow["Support_AP_Segment_API"]] = supportRow["Support_AP_Segment"];
+            }
+
+            // console.log("supportDataTable", upsertSupportMap);
+
+            const upsertContractFundSchemeList = [];
+            let contractFundSchemeList = $("#contractFundSchemeDataTable").DataTable().rows().data();
+
+            for (let i = 0; i < contractFundSchemeList.data().length; i++) {
+                const contractFundSchemeRow = jQuery.extend({}, contractFundSchemeList[i]);
+
+                if (contractFundSchemeRow.Id.startsWith(NEW_CONTRACT_FUND_SCHEME_PREFIX)) {
+                    delete contractFundSchemeRow["Id"];
+                }
+                upsertContractFundSchemeList.push(contractFundSchemeRow);
+            }
+
+            if (checkFundAmountError(upsertSupportMap["ASI_CRM_Contract_Fund_Amount__c"], contractFundSchemes)) {
+                UtilHelper.showValidationError("Total fund amount ($) in Contract Fund Scheme must be equal to the amount of Contract Fund support");
+                return null;
+            }
+
+            // console.log("contractFundSchemeDataTable", upsertContractFundSchemeList);
+
+            const upsertPurchaseIncentiveSchemeList = [];
+            let purchaseIncentiveSchemeList = $("#purchaseIncentiveSchemeDataTable").DataTable().rows().data();
+
+            for (let i = 0; i < purchaseIncentiveSchemeList.data().length; i++) {
+                const purchaseIncentiveSchemeRow = jQuery.extend({}, purchaseIncentiveSchemeList[i]);
+
+                if (purchaseIncentiveSchemeRow.Id.startsWith(NEW_PURCHASE_INCENTIVE_SCHEME_PREFIX)) {
+                    delete purchaseIncentiveSchemeRow["Id"];
+                }
+                upsertPurchaseIncentiveSchemeList.push(purchaseIncentiveSchemeRow);
+            }
+
+            if (checkFundAmountError(upsertSupportMap["ASI_CRM_Purchase_Incentive_Amount__c"], purchaseIncentiveSchemes)) {
+                UtilHelper.showValidationError("Total amount($) in Purchase Incentive Scheme must be equal to the amount of Purchase Incentive support");
+                return null;
+            }
+
+            saveRecordApex(isQuickSave,
+                JSON.stringify(upsertContractTargetList), JSON.stringify(deleteContractTargetIdList),
+                JSON.stringify(upsertSupportMap),
+                JSON.stringify(contractFundSchemes), JSON.stringify(deleteContractFundSchemeIds),
+                JSON.stringify(purchaseIncentiveSchemes), JSON.stringify(deletePurchaseIncentiveSchemeIds)
+                , JSON.stringify(upsertContractTargetMonthlyList));
+        }
+
+        function checkMissingRequiredFields() {
+            let isMissing = false;
+            let errorStack = [];    // For printing the detailed missing fields at last
+
+            // Tables to iterate through to find missing required fields
+            const tables = [
+                {id: SKU_DATATABLE_ID, name: "SKU"},
+                {id: SUPPORT_DATATABLE_ID, name: "Support"},
+                {id: "#contractFundSchemeDataTable", name: "Contract Fund Scheme"},
+                {id: "#purchaseIncentiveSchemeDataTable", name: "Purchase Incentive Scheme"}
+            ];
+
+            let missingFields = {};
+
+            // Loop through tables to identify missing fields
+            tables.forEach(table => {
+                $(table.id).find('input').each(function () {
+                    if (!$(this).prop('required')) {
+                        // Field is not required
+                    } else {
+                        // Field is required
+                        if ($(this).prop('value') === '' || $(this).prop('value') === null) {
+                            // Field is missing, add to missingFields Obj of Arrays
+                            //const missingField = $(this).prop('class').split(' ')[0];
+                            const missingField = $(this).prop('title');
+
+                            // Add missing field to an array of the map, create an array if not already exist
+                            if (missingFields[table.name]) {
+                                missingFields[table.name].push(missingField);
+                            } else {
+                                missingFields[table.name] = [missingField];
+                            }
+                        }
+                    }
+                });
+            });
+
+            // Construct the error message (If any)
+            let errMsg = 'Missing required fields: <br/>';
+            tables.forEach(table => {
+                if (missingFields[table.name]) {
+                    isMissing = true;
+                    errMsg += table.name + " Tab --- " + missingFields[table.name].join(",  ") + "<br/>";
+                }
+            });
+
+            // Change field names to human-readable formats
+            if (isMissing) {
+                const regex = /ASI_CRM_|__c|_/gi;
+                UtilHelper.showValidationError(errMsg.replace(regex, ' '));
+            }
+
+            return isMissing;
+        }
+
+        function checkDuplicateVal(arrOfObj, fieldName) {
+            const dupeCheck = {};
+            let hasDuplicate = false;
+
+            for (let i = 0; i < arrOfObj.length; i++) {
+                const item = arrOfObj[i];
+
+                if (dupeCheck[item[fieldName]]) {
+                    hasDuplicate = true;
+                    break;
+                }
+                dupeCheck[item[fieldName]] = true;
+            }
+
+            return hasDuplicate;
+        }
+
+        function checkMonthlyTargetError(schemeList) {
+            let msg = '';
+            for (let i = 0; i < schemeList.length; i++) {
+                const contractTargetRow = jQuery.extend({}, schemeList[i]);
+                let skuName = contractTargetRow.ASI_CRM_SKU__r.Name;
+                let hasError = false;
+                let totalTargetBottle = contractTargetRow.ASI_CRM_Target_Total_Bottle__c;
+
+                if (contractTargetRow['monthlyTarget']) {
+                    let totalMonthlyBottle = 0;
+                    for (let key in contractTargetRow['monthlyTarget']) {
+                        totalMonthlyBottle += parseInt(contractTargetRow['monthlyTarget'][key]['target']);
+                    }
+                    if (totalTargetBottle != totalMonthlyBottle) hasError = true;
+                } else {
+                    hasError = true;
+                }
+
+                if (hasError) {
+                    msg += 'Monthly and Total Target Bottle does not match - SKU: ' + skuName + '<br/>';
+                }
+            }
+
+            return msg;
+        }
+
+        function checkFundAmountError(totalAmount, schemeList) {
+            let hasError = false;
+            let total = 0;
+            schemeList.forEach(item => {
+                total += parseFloat(item["ASI_CRM_Sponsorship__c"]);
+            });
+            if (total !== parseFloat(totalAmount)) {
+                hasError = true;
+            }
+            return hasError;
+        }
+
+        function saveRecordComplete(contractTargetListJson, contractJson, contractFundSchemeListJson, purchaseIncentiveSchemeListJson, contractTargetMonthlyListJson, hasError, exceptionListJson) {
+            UtilHelper.hideLoading();
+
+            if (hasError) {
+                UtilHelper.showError(exceptionListJson);
+                return;
+            }
+
+            DataHelper.setContract(JSON.parse(contractJson));
+            DataHelper.setContractTargets(JSON.parse(contractTargetListJson));
+            DataHelper.setContractMonthlyTargets(JSON.parse(contractTargetMonthlyListJson));
+            DataHelper.setContractFundSchemes(JSON.parse(contractFundSchemeListJson));
+            DataHelper.setPurchaseIncentiveSchemes(JSON.parse(purchaseIncentiveSchemeListJson));
+
+            angular
+                .element(document.getElementById('ManageContractAppMainController'))
+                .scope()
+                .$ctrl.refreshData();
+
+            // setSupportTable(jQuery.parseJSON(contractJson));
+            // setSKUMonthlyTargetTable(jQuery.parseJSON(contractTargetListJson), jQuery.parseJSON(contractTargetMonthlyListJson));
+            // setSKUTable(jQuery.parseJSON(contractTargetListJson));
+            // setContractFundSchemeTable(jQuery.parseJSON(contractFundSchemeListJson));
+            // setPurchaseIncentiveSchemeTable(jQuery.parseJSON(purchaseIncentiveSchemeListJson));
+
+            DataTableHelper.initialize(
+                    DataHelper.getContract(),
+                    DataHelper.getContractTargets(),
+                    DataHelper.getContractMonthlyTargets(),
+                    DataHelper.getContractFundSchemes(),
+                    DataHelper.getPurchaseIncentiveSchemes(),
+                    DataHelper.getActualOfftake()
+            );
+
+            //Clear the delete id list
+            // deleteContractTargetIdList = [];
+            // deleteContractFundSchemeIdList = [];
+            // deletePurchaseIncentiveSchemeIdList = [];
+            deleteContractTargetIdList.length = 0;
+            deleteContractFundSchemeIdList.length = 0;
+            deletePurchaseIncentiveSchemeIdList.length = 0;
+
+            //Reset the prefix index
+            SKU_INDEX = 1;
+            CONTRACT_FUND_SCHEME_INDEX = 1;
+            PURCHASE_INCENTIVE_SCHEME_INDEX = 1;
+        }
+    </script>
+
+    <script>
+        const DataTableHelper = function () {
+
+            //FOC Table
+            const approvedColumnRenderer = (data, type, full) => {
+                if (full.Id === 'skuTotal') return '';
+
+                return createElementString('input', {
+                    type: 'checkbox',
+                    disabled: true,
+                    checked: full.ASI_CRM_Approved__c
+                });
+            };
+
+            const focColumnRenderer = (data, type, full) => {
+                if (full.Id === 'skuTotal') {
+                    return '<b>' + full.ASI_CRM_FOC__c.toLocaleString('en-US', {minimumFractionDigits: 0}) + '</b>';
+                }
+
+                const fieldAPIName = 'ASI_CRM_FOC__c';
+                data = full[fieldAPIName] ? full[fieldAPIName] : '';
+
+                if (READ_ONLY || full.ASI_CRM_Approved__c) {
+                    return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 0});
+                }
+
+                return createElementString('input', {
+                    class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right', 'integerField'],
+                    type: 'number',
+                    value: data,
+                    min: 0,
+                    onchange: getFocUpdateCallbackFunction(fieldAPIName),
+                    required: true,
+                    title: 'FOC'
+                });
+            };
+
+            const subBrandColumnRenderer = (data, type, full) => {
+                if (full.Id === "skuTotal") return null;
+
+                if (full.ASI_CRM_SKU__r && full.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r) {
+                    data = full.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.Name;
+                } else {
+                    data = "";
+                }
+
+                return data;
+            };
+
+            const skuReadOnlyColumnRenderer = (data, type, full) => {
+                if (full.Id === "skuTotal") return '<b>Total</b>';
+
+                if (full.ASI_CRM_SKU__r && full.ASI_CRM_SKU__r.Name) {
+                    data = full.ASI_CRM_SKU__r.Name;
+                } else {
+                    data = "";
+                }
+                return data;
+            };
+
+
+            //SKU Table
+            const actionColumnRenderer = (data, type, full) => {
+                if (READ_ONLY || full.ASI_CRM_Approved__c) return (data ? data : '');
+                if (full.Id == "skuTotal") return '';
+                // return "<button onClick='deleteSKURow(this.parentNode.parentNode)'>Delete</button>";
+                return '<button class="deleteSkuRowButton" >Delete</button>';
+            };
+
+            const skuColumnRenderer = (data, type, full) => {
+                if (full.Id === "skuTotal") return '<b>Total</b>';
+
+                const fieldAPIName = 'ASI_CRM_SKU__c';
+                if (full.ASI_CRM_SKU__r && full.ASI_CRM_SKU__r.Name) {
+                    data = full.ASI_CRM_SKU__r.Name;
+                } else {
+                    data = "";
+                }
+
+                if (READ_ONLY || full.ASI_CRM_Approved__c) return data;
+
+                const input = createElementString("input", {
+                    class: [fieldAPIName, 'form-control', 'inputField_long'],
+                    type: 'text',
+                    value: data,
+                    required: true,
+                    title: "SKU"
+                });
+                return input;
+            };
+
+            const targetColumnRenderer = (data, type, full) => {
+                if (full.Id == "skuTotal") return '<b>' + full.ASI_CRM_Target_Total_Bottle__c.toLocaleString('en-US', {minimumFractionDigits: 0}) + '</b>';
+
+                const fieldAPIName = 'ASI_CRM_Target_Total_Bottle__c';
+
+                if (full[fieldAPIName]) {
+                    data = full[fieldAPIName];
+                } else {
+                    data = "";
+                }
+
+                if (READ_ONLY || full.ASI_CRM_Approved__c) return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 0});
+
+                return createElementString("input", {
+                    class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right', 'integerField'],
+                    type: 'number',
+                    value: data,
+                    min: 0,
+                    onchange: getSkuDatatableUpdateCallbackFunction(fieldAPIName),
+                    required: true,
+                    title: "Target (Bottles)"
+                });
+            };
+
+            const bottleRebateColumnRenderer = (data, type, full) => {
+                if (full.Id == "skuTotal") return null;
+
+                const fieldAPIName = 'ASI_CRM_Bottle_Rebate__c';
+
+                if (full[fieldAPIName]) {
+                    data = full[fieldAPIName];
+                } else {
+                    data = "";
+                }
+
+                if (READ_ONLY || full.ASI_CRM_Approved__c) return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                const input = createElementString("input", {
+                    class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right'],
+                    type: 'number',
+                    value: data,
+                    min: 0,
+                    onchange: getSkuDatatableUpdateCallbackFunction(fieldAPIName),
+                });
+                return input;
+            };
+
+            const totalBottleRebateRenderer = (data, type, full) => {
+                if (full.Id == "skuTotal") return '<b>' + full.totalBottleRebate.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</b>';
+
+                const hasData = full.ASI_CRM_Target_Total_Bottle__c && full.ASI_CRM_Bottle_Rebate__c;
+                if (hasData) {
+                    data = full.ASI_CRM_Target_Total_Bottle__c * full.ASI_CRM_Bottle_Rebate__c;
+                    return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                }
+                return "";
+            };
+
+            const staffIncentiveRenderer = (data, type, full) => {
+                if (full.Id == "skuTotal") return null;
+
+                const fieldAPIName = 'ASI_CRM_Staff_Incentive__c';
+
+                if (full[fieldAPIName]) {
+                    data = full[fieldAPIName];
+                } else {
+                    data = "";
+                }
+
+                if (READ_ONLY || full.ASI_CRM_Approved__c) return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                const input = createElementString("input", {
+                    class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right'],
+                    type: 'number',
+                    value: data,
+                    min: 0,
+                    onchange: getSkuDatatableUpdateCallbackFunction(fieldAPIName),
+                });
+                return input;
+            };
+
+            const totalStaffColumnRenderer = (data, type, full) => {
+                if (full.Id == "skuTotal") return '<b>' + full.totalStaffIncentive.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</b>';
+
+                const hasData = full.ASI_CRM_Target_Total_Bottle__c && full.ASI_CRM_Staff_Incentive__c;
+                if (hasData) {
+                    data = full.ASI_CRM_Target_Total_Bottle__c * full.ASI_CRM_Staff_Incentive__c;
+                    return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                }
+                return "";
+            };
+
+            const allocationColumnRenderer = (data, type, full) => {
+                //if (full.Id == "skuTotal") return '<b>' + full.allocationPercent.toLocaleString('en-US', {minimumFractionDigits: 0}) + '</b>';
+
+                const fieldAPIName = 'ASI_CRM_SKU_Allocation_Percent__c';
+
+                if (full[fieldAPIName]) {
+                    data = full[fieldAPIName];
+                } else {
+                    data = "";
+                }
+
+                if (READ_ONLY) return data;
+
+                return createElementString("input", {
+                    class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right'],
+                    type: 'number',
+                    value: data,
+                    min: 0,
+                    onchange: getSkuDatatableUpdateCallbackFunction(fieldAPIName),
+                    required: true,
+                    title: "Payment Allocation %"
+                });
+            };
+
+            const blankActionColumnRenderer = (data, type, full) => {
+                if (READ_ONLY) {
+                    return data;
+                }
+                return '';
+            };
+
+
+            //Support Table
+            const supportTypeColumnRenderer = function (data, type, full) {
+                return full.Support_Type_Name;
+            };
+
+            const supportAmountColumnRenderer = function (data, type, full) {
+                const fieldAPIName = 'Support_Amount';
+
+                data = full.Support_Amount;
+                if (READ_ONLY || CONTRACT.RecordType.DeveloperName == CONTRACT_READONLY_RT || full.isReadOnly) {
+                    return !data ? 0 : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                }
+
+                const input = createElementString("input", {
+                    class: [fieldAPIName, 'inputField_x_long', 'form-control', 'text-right'],
+                    type: 'number',
+                    value: full.Support_Amount,
+                    min: 0,
+                    onchange: "updateSupportTableValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)",
+                    required: true,
+                    title: "Support Amount ($)"
+                });
+                return input;
+            };
+
+            const supportAPColumnRenderer = function (data, type, full) {
+                const fieldAPIName = 'Support_AP_Segment';
+
+                data = full.Support_AP_Segment;
+
+                switch(full.Support_Type_Name) {
+                    case 'Contract Fund':
+                        if(DUTY == 'Duty Paid'){
+                            if(CONTRACT_FUND_TYPE == 'Date') return CONTRACT_FUND_AP_SEGMENT[DUTY][0];
+                            else if(CONTRACT_FUND_TYPE == 'Bottle' || CONTRACT_FUND_TYPE == 'Value') return CONTRACT_FUND_AP_SEGMENT[DUTY][1];
+                            else return null;
+                        }
+                        return null;
+                        break;
+                    case 'Marketing Support Fund (FOC)':
+                        if(DUTY == 'Duty Paid'){
+                            if(CUSTOMER_TYPE == 'On-trade') return MARKETING_SP_FUND_AP_SEGMENT[DUTY][0];
+                            else if(CUSTOMER_TYPE == 'Off-trade') return MARKETING_SP_FUND_AP_SEGMENT[DUTY][1];
+                            else return null;
+                        }
+                        return null;
+                        break;
+                    default:
+                        return OTHER_AP_SEGMENT[full.Support_Type_Name][DUTY][0];
+                }
+            };
+
+            const paymentAmountColumnRenderer = function (data, type, full) {
+                data = full.Payment_Amount;
+                return !data ? 0 : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+            };
+
+            const remainingBalanceColumnRenderer = function (data, type, full) {
+                data = full.Support_Amount - full.Payment_Amount;
+                return !data ? 0 : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+            };
+
+            const entitledAmountColumnRenderer = function (data, type, full) {
+                data = full.Entitled_Amount;
+                return !data ? 0 : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+            };
+
+            const remainingEntitledAmountColumnRenderer = function (data, type, full) {
+                data = full.Entitled_Amount - full.Payment_Amount;
+                return !data ? 0 : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+            };
+
+            const getColumnConfig = function (title, renderer, data, defaultContent, className, columnWidth) {
+                const columnConfig = {};
+                columnConfig.title = title;
+                columnConfig.render = renderer;
+                columnConfig.data = data;
+                columnConfig.defaultContent = defaultContent;
+                
+                if (columnWidth) columnConfig.width = columnWidth;
+
+                if (className) columnConfig.className = className;
+
+                return columnConfig;
+            };
+
+            const SKU_DATATABLE_COLUMN_CONFIG = {};
+            SKU_DATATABLE_COLUMN_CONFIG['ACTION'] = getColumnConfig(ACTION_LABEL, actionColumnRenderer, '', '', '');
+            SKU_DATATABLE_COLUMN_CONFIG['SKU'] = getColumnConfig('SKU', skuColumnRenderer, '', '', '', '');
+            SKU_DATATABLE_COLUMN_CONFIG['SKU Read-only'] = getColumnConfig('SKU', skuReadOnlyColumnRenderer, '', '', '');
+            SKU_DATATABLE_COLUMN_CONFIG['Sub-Brand'] = getColumnConfig('Sub-Brand', subBrandColumnRenderer, '', '', '');
+            SKU_DATATABLE_COLUMN_CONFIG['Target'] = getColumnConfig('Target (Bottles)', targetColumnRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Bottle Rebate'] = getColumnConfig('Bottle Rebate<br/>(Amt/Bottle)', bottleRebateColumnRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Total Bottle Rebate'] = getColumnConfig('Total Bottle<br/>Rebate (Amt)', totalBottleRebateRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Staff Incentive'] = getColumnConfig('Staff Incentive<br/>(Amt/Bottle)', staffIncentiveRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Total Staff Incentive'] = getColumnConfig('Total Staff<br/>Incentive (Amt)', totalStaffColumnRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Allocation'] = getColumnConfig('Payment<br/>Allocation %', allocationColumnRenderer, '', '', 'text-right');
+            SKU_DATATABLE_COLUMN_CONFIG['Approved'] = getColumnConfig('Approved', approvedColumnRenderer, '', '', '');
+
+            const FOC_DATATABLE_COLUMN_CONFIG = {};
+            FOC_DATATABLE_COLUMN_CONFIG['SKU Read-only'] = getColumnConfig('SKU', skuReadOnlyColumnRenderer);
+            FOC_DATATABLE_COLUMN_CONFIG['Sub-Brand'] = getColumnConfig('Sub-Brand', subBrandColumnRenderer, null);
+            FOC_DATATABLE_COLUMN_CONFIG['FOC'] = getColumnConfig('FOC', focColumnRenderer, '', '', 'text-right');
+            FOC_DATATABLE_COLUMN_CONFIG['Approved'] = getColumnConfig('Approved', approvedColumnRenderer);
+
+            const SUPPORT_DATATABLE_COLUMN_CONFIG = {};
+            SUPPORT_DATATABLE_COLUMN_CONFIG['ACTION'] = getColumnConfig(ACTION_LABEL, blankActionColumnRenderer);
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Support Type'] = getColumnConfig('Support Type', supportTypeColumnRenderer);
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Support Amount'] = getColumnConfig('Support Amount', supportAmountColumnRenderer, '', '', 'text-right');
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Support A&P'] = getColumnConfig('A&P Segment', supportAPColumnRenderer);
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Payment Amount'] = getColumnConfig('Payment/FOC Amount', paymentAmountColumnRenderer, '', '', 'text-right');
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Remaining Balance'] = getColumnConfig('Remaining Balance (Amt)', remainingBalanceColumnRenderer, '', '', 'text-right');
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Entitled Amount'] = getColumnConfig('Entitled Amount', entitledAmountColumnRenderer, '', '', 'text-right');
+            SUPPORT_DATATABLE_COLUMN_CONFIG['Remaining Entitled Amount'] = getColumnConfig('Remaining Entitled Amount', remainingEntitledAmountColumnRenderer, '', '', 'text-right');
+
+            function getSkuDatatableUpdateCallbackFunction(fieldAPIName) {
+                return `updateSkuDataTableValue(this.parentNode.parentNode, "${fieldAPIName}", this.value)`;
+            }
+
+            function getFocUpdateCallbackFunction(fieldAPIName) {
+                return `updateFocDataTableValue(this.parentNode.parentNode, "${fieldAPIName}", this.value)`;
+            }
+
+            function getSkuMonthlyDataTableUpdateCallbackFunction(fieldAPIName) {
+                return `updateMonthlySkuDataTableValue(this.parentNode.parentNode, "${fieldAPIName}", this.value)`;
+            }
+
+            function createElementString(type, attributes) {
+                let element = '<' + type;
+                for (const key in attributes) {
+                    if (key === 'class') {
+                        element += " class='" + attributes[key].join(" ") + "'";
+                    } else if (key === 'checked') {
+                        element += attributes[key] ? " checked" : "";
+                    } else {
+                        element += " " + key + "='" + attributes[key] + "'";
+                    }
+                }
+                element += ' />';
+                return element;
+            }
+
+            //Public Methods
+            const getDefaultDatatableProperties = () => {
+                return {
+                    'bDestroy': true,
+                    'bStateSave': true,
+                    'bSearch': false,
+                    'bFilter': false,
+                    'aLengthMenu': [200],
+                    'iDisplayLength': 200,
+                    'bSort': false,
+                    'bPaginate': false,
+                    'bScrollCollapse': true,
+                    'bJQueryUI': false,
+                    'autoWidth': false
+                };
+            };
+
+            const getSkuDataTableColumnConfig = (columnName) => {
+                if (Object.keys(SKU_DATATABLE_COLUMN_CONFIG).indexOf(columnName) < 0) {
+                    console.error('Invalid column name, config not found for column name: ' + columnName);
+                    return;
+                }
+
+                return SKU_DATATABLE_COLUMN_CONFIG[columnName]
+            };
+
+            const getFocDataTableColumnConfig = (columnName) => {
+                if (Object.keys(FOC_DATATABLE_COLUMN_CONFIG).indexOf(columnName) < 0) {
+                    console.error('Invalid column name, config not found for column name: ' + columnName);
+                    return;
+                }
+
+                return FOC_DATATABLE_COLUMN_CONFIG[columnName]
+            };
+
+            const getSupportDataTableColumnConfig = (columnName) => {
+                if (Object.keys(SUPPORT_DATATABLE_COLUMN_CONFIG).indexOf(columnName) < 0) {
+                    console.error('Invalid column name, config not found for column name: ' + columnName);
+                    return;
+                }
+
+                return SUPPORT_DATATABLE_COLUMN_CONFIG[columnName]
+            };
+
+            const buildMonthlyTargetColumn = (i, tempDate) => {
+                let monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                let title = monthNames[tempDate.getMonth()] + ' ' + tempDate.getFullYear();
+                return {
+                    title: title,
+                    data: '',
+                    defaultContent: '0',
+                    className: 'text-right',
+                    render: (data, type, full) => {
+                        const fieldAPIName = 'M' + (i + 1);
+
+                        if (full['monthlyTarget'] && full['monthlyTarget'][fieldAPIName]) {
+                            data = full['monthlyTarget'][fieldAPIName]['target'];
+                        } else {
+                            data = '0';
+                        }
+
+                        if (READ_ONLY || full.ASI_CRM_Approved__c) return !data ? '0' : data.toLocaleString('en-US', {minimumFractionDigits: 0});
+
+                        return createElementString('input', {
+                            class: [fieldAPIName, 'inputField_medium', 'form-control', 'text-right', 'integerField'],
+                            type: 'number',
+                            value: data,
+                            onchange: getSkuMonthlyDataTableUpdateCallbackFunction(fieldAPIName),
+                            //required: true,
+                            //title: 'Amount ($)'
+                        });
+                    }
+                }
+            };
+
+            function initializeSkuDataTable(contractTargetList) {
+                const columns = [];
+                if (!READ_ONLY) {
+                    columns.push(getSkuDataTableColumnConfig('ACTION'));
+                }
+                if (CONTRACT.RecordType.DeveloperName === CONTRACT_READONLY_RT) {
+                    columns.push(getSkuDataTableColumnConfig('Approved'));
+                }
+                columns.push(getSkuDataTableColumnConfig('SKU'));
+                columns.push(getSkuDataTableColumnConfig('Sub-Brand'));
+                columns.push(getSkuDataTableColumnConfig('Target'));
+                columns.push(getSkuDataTableColumnConfig('Bottle Rebate'));
+                columns.push(getSkuDataTableColumnConfig('Total Bottle Rebate'));
+                columns.push(getSkuDataTableColumnConfig('Staff Incentive'));
+                columns.push(getSkuDataTableColumnConfig('Total Staff Incentive'));
+
+                const dataTableProperties = getDefaultDatatableProperties();
+                dataTableProperties['aaData'] = contractTargetList;
+                dataTableProperties['rowId'] = 'Id';
+                dataTableProperties['aoColumns'] = columns;
+
+                $(SKU_DATATABLE_ID).DataTable(dataTableProperties);
+
+                calculateTotal();
+            }
+
+            function initializeSkuMonthlyTargetDataTable(contractTargetList, contractTargetMonthlyList) {
+                const contractTargetDataList = [];
+                const getSKUMonthlyTargetTableItem = (monthlyContractTarget) => {
+                    return {
+                        target: monthlyContractTarget.ASI_CRM_Monthly_Target_Bottle__c,
+                        id: monthlyContractTarget.Id,
+                        month: monthlyContractTarget.ASI_CRM_Month__c
+                    };
+                };
+
+                for (let i = 0; i < contractTargetList.length; i++) {
+                    let ct = contractTargetList[i];
+                    let ctId = ct.Id;
+                    ct['monthlyTarget'] = setDefaultMonthlyTarget();
+                    for (let j = 0; j < contractTargetMonthlyList.length; j++) {
+                        let ctm = contractTargetMonthlyList[j];
+                        if (ctId == ctm.ASI_CRM_SG_Contract_Target__c && ctm.ASI_CRM_Month__c) {
+                            ct['monthlyTarget']['M' + ctm.ASI_CRM_Month__c] = getSKUMonthlyTargetTableItem(ctm);
+                        }
+                    }
+                    contractTargetDataList.push(ct);
+                }
+
+                const columns = [];
+                if (CONTRACT.RecordType.DeveloperName === CONTRACT_READONLY_RT) {
+                    columns.push(getFocDataTableColumnConfig('Approved'));
+                }
+                columns.push(getFocDataTableColumnConfig('SKU Read-only'));
+                columns.push(getFocDataTableColumnConfig('Sub-Brand'));
+
+                let i = 0;
+                let tempDate = new Date(CONTRACT_START_DATE.getFullYear(), CONTRACT_START_DATE.getMonth(), 1);
+                while (tempDate < CONTRACT_END_DATE) {
+                    columns.push(buildMonthlyTargetColumn(i, tempDate));
+                    i++;
+                    tempDate = new Date(tempDate.setMonth(tempDate.getMonth() + 1));
+                }
+
+                const dataTableProperties = getDefaultDatatableProperties();
+                dataTableProperties['aaData'] = contractTargetDataList;
+                dataTableProperties['rowId'] = 'Id';
+                dataTableProperties['aoColumns'] = columns;
+
+                $(MONTHLY_SKU_DATATABLE_ID).dataTable(dataTableProperties);
+            }
+
+            function initializeFocDataTable(contract, contractTargetList) {
+                const contractTargetDataList = [];
+                for (let i = 0; i < contractTargetList.length; i++) {
+                    let contractTarget = contractTargetList[i];
+                    contractTargetDataList.push(contractTarget);
+                }
+
+                const columns = [];
+                if (CONTRACT_READONLY_RT === contract.RecordType.DeveloperName) {
+                    columns.push(getFocDataTableColumnConfig('Approved'));
+                }
+                columns.push(getFocDataTableColumnConfig('SKU Read-only'));
+                columns.push(getFocDataTableColumnConfig('Sub-Brand'));
+                columns.push(getFocDataTableColumnConfig('FOC'));
+
+                const dataTableProperties = getDefaultDatatableProperties();
+                dataTableProperties['aaData'] = contractTargetDataList;
+                dataTableProperties['rowId'] = 'Id';
+                dataTableProperties['aoColumns'] = columns;
+
+                $(FOC_DATATABLE_ID).dataTable(dataTableProperties);
+            }
+
+            function initializeSupportTable(contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake) {
+
+                const columns = [];
+                columns.push(getSupportDataTableColumnConfig('Support Type'));
+                columns.push(getSupportDataTableColumnConfig('Support Amount'));
+                columns.push(getSupportDataTableColumnConfig('Support A&P'));
+                columns.push(getSupportDataTableColumnConfig('Payment Amount'));
+                columns.push(getSupportDataTableColumnConfig('Entitled Amount'));
+                columns.push(getSupportDataTableColumnConfig('Remaining Entitled Amount'));
+                columns.push(getSupportDataTableColumnConfig('Remaining Balance'));
+
+                const dataTableProperties = getDefaultDatatableProperties();
+                dataTableProperties['rowId'] = 'Id';
+                dataTableProperties['aoColumns'] = columns;
+                dataTableProperties['aaData'] = SupportService.getSupportDataTableData(contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake);
+
+                $(SUPPORT_DATATABLE_ID).dataTable(dataTableProperties);
+            }
+
+            const initialize = (contract, contractTargets, getContractMonthlyTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake) => {
+                initializeSkuDataTable(contractTargets);
+                initializeFocDataTable(contract, contractTargets);
+                initializeSkuMonthlyTargetDataTable(contractTargets, getContractMonthlyTargets);
+                initializeSupportTable(contract, contractTargets, contractFundSchemes, purchaseIncentiveSchemes, actualOfftake);
+            };
+
+            return {
+                initialize: initialize
+            }
+        }();
+        
+        function goToPnL(){
+            window.open('apex/ASI_CRM_PH_PnLReport_Page?contractId='+CONTRACT_ID);
+        }
+    </script>
+    <script id="toBeRemoved">
+
+    </script>
+    <body>
+    <div class="fullScreenLoading"></div>
+    <apex:include pageName="ASI_CRM_PH_ContractManageAllApp" />
+
+    <!-- Error Message Dialog -->
+    <div class="saveErrorPanel alert alert-danger" style="display: none;">
+        <strong>Error</strong>
+        <br/>
+        <p class="errorMessage"></p>
+    </div>
+
+    <div class="infoPanel alert alert-info" style="display: none;">
+        <strong>Info</strong>
+        <br/>
+        <p class="infoMessage"></p>
+    </div>
+
+    <!-- Define Action Function -->
+    <apex:form >
+        <apex:actionFunction name="saveRecordApex" action="{!saveRecord}" reRender="pageMsg"
+                             onComplete="saveRecordComplete('{!JSENCODE(contractTargetListJson)}', '{!JSENCODE(contractJson)}', '{!JSENCODE(contractFundSchemeListJson)}', '{!JSENCODE(purchaseIncentiveSchemeListJson)}', '{!JSENCODE(contractTargetMonthlyListJson)}', {!hasError}, '{!JSENCODE(exceptionListJson)}')">
+            <apex:param name="IS_QUICK_SAVE" value=""/>
+            <apex:param name="updateContractTargetListJson" value=""/>
+            <apex:param name="deleteContractTargetListJson" value=""/>
+            <apex:param name="updateSupportMapJson" value=""/>
+            <apex:param name="updateContractFundSchemeListJson" value=""/>
+            <apex:param name="deleteContractFundSchemeListJson" value=""/>
+            <apex:param name="updatePurchaseIncentiveSchemeListJson" value=""/>
+            <apex:param name="deletePurchaseIncentiveSchemeListJson" value=""/>
+            <apex:param name="updateContractTargetMonthlyListJson" value=""/>
+        </apex:actionFunction>
+        <apex:actionFunction name="cancel" action="{!cancel}"/>
+    </apex:form>
+
+    <!-- Body -->
+    <apex:pageBlock id="detail_pageBlock">
+        <apex:pageblockButtons >
+            <div class="pageActionBtns">
+                <input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="Save"/>
+                <input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="Quick Save"/>
+                <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel"/>
+                <input type="button" class="btn pnlBtn" onclick="goToPnL()" value="P&L Report"/>
+            </div>
+        </apex:pageblockButtons>
+        <!-- Nav bar -->
+
+        <div id="ManageContractContainer" ng-app="manageContract" class="row">
+            <div id="ManageContractAppMainController" ng-controller="ManageContractController as $ctrl"
+                 class="container-fluid">
+                <div class="panel with-nav-tabs panel-primary">
+                    <!-- Nav bar header -->
+                    <div class="panel-heading">
+                        <ul class="nav nav-tabs">
+                            <li class="active"><a href="#skuDiv" data-toggle="tab">Volume Target</a></li>
+                            <li><a href="#monthlyTargetDiv" data-toggle="tab">Monthly Target</a></li>
+                            <li><a href="#focDiv" data-toggle="tab">FOC</a></li>
+                            <li><a href="#supportDiv" data-toggle="tab">Support</a></li>
+                            <li><a href="#contractFundSchemeDiv" data-toggle="tab">Contract Fund Scheme</a></li>
+                            <li><a href="#purchaseIncentiveSchemeDiv" data-toggle="tab">Purchase Incentive Scheme</a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Nav bar body -->
+                    <div class="panel-body">
+                        <div class="tab-content">
+                            <!-- SKU Data Table -->
+                            <div class="tab-pane fade in active" id="skuDiv">
+                                <div>
+                                    <input id="addSkuRowButton" type="button" class="btn addRow" value="Add Row"/>
+                                    <br/>
+                                    <!--<table id="skuDataTable" width="100%" class="display hover compact" style="table-layout: fixed;"/>-->
+                                    <table id="skuDataTable" width="100%" class="display hover compact"/>
+                                </div>
+                            </div>
+                            <!-- Monthly Target Data Table -->
+                            <div class="tab-pane fade in" id="monthlyTargetDiv">
+                                <div>
+                                    <br/>
+                                    <table id="skuMonthlyDataTable" width="100%"/>
+                                </div>
+                            </div>
+                            <!--FOC Data Table-->
+                            <div class="tab-pane fade in" id="focDiv">
+                                <div>
+                                    <br/>
+                                    <table id="focDataTable" width="100%"/>
+                                </div>
+                            </div>
+                            <!-- Support Data Table -->
+                            <div class="tab-pane fade in" id="supportDiv">
+                                <div>
+                                    <br/>
+                                    <table id="supportDataTable" width="100%"/>
+                                </div>
+                            </div>
+                            <!-- Contract Fund Scheme Data Table -->
+                            <div class="tab-pane fade in" id="contractFundSchemeDiv">
+                                <manage-contract-fund-scheme contract-fund-schemes="$ctrl.contractFundSchemes"
+                                                             delete-contract-fund-scheme-ids="$ctrl.deleteContractFundSchemeIds"></manage-contract-fund-scheme>
+                            </div>
+                            <!-- Purchase Incentive Scheme Data Table -->
+                            <div class="tab-pane fade in" id="purchaseIncentiveSchemeDiv">
+                                <manage-contract-purchase-incentive-scheme contract="$ctrl.contract"
+                                                                           purchase-incentive-schemes="$ctrl.purchaseIncentiveSchemes"
+                                                                           delete-purchase-incentive-scheme-ids="$ctrl.deletePurchaseIncentiveSchemeIds">
+                                </manage-contract-purchase-incentive-scheme>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </apex:pageBlock>
+    </body>
+</apex:page>

@@ -1,0 +1,642 @@
+<aura:component controller="EUR_ISP_SpendActivityController">
+	<aura:attribute name="isLocked" type="Boolean" access="public"/>
+	<aura:attribute name="isActivityLocked" type="Boolean" access="public"/>
+
+	<aura:attribute name="Spend" type="EUR_ISP_Spend__c"  access="public"/>
+	<aura:attribute name="SpendActivity" type="EUR_ISP_Spend_Activity__c" access="public"/>
+	<aura:attribute name="SpendActivityType" type="EUR_ISP_Spend_Activity_Type__c" access="public"/>
+	<aura:attribute name="UserPermissions" type="Map" access="public"/>
+
+	<aura:attribute name="selectionData" type="Map" default="{}" access="public"/>
+	<aura:attribute name="isUpdated" type="Boolean" default="false" access="public"/>
+	<aura:attribute name="isSaving" type="Boolean" default="false" access="public"/>
+	<aura:attribute name="isValidForClose" type="Boolean" default="true" access="public"/>
+	<aura:attribute name="hasError" type="Boolean" default="false" access="public"/>
+	<aura:attribute name="errorMsgs" type="List" default="[]" access="public"/>
+
+	<aura:attribute name="statusReload" type="Boolean" default="false" access="public"/>
+	<aura:attribute name="tmpAmount" type="Double" default="0" access="public"/>
+
+	<aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+	<aura:handler name="change" value="{!v.SpendActivity}" action="{!c.clearErrs}" />
+	<aura:handler name="updateEvent" event="c:EUR_ISP_InlineFieldEditUpdateEvent" action="{!c.handleUpdateEvent}"/>
+	<aura:handler name="confirmationOkEvent" event="c:EUR_ISP_ConfirmationWindowOkEvent" action="{!c.confirmedSaveAction}"/>
+	<aura:handler name="confirmationOkEvent" event="c:EUR_ISP_ConfirmationWindowOkEvent" action="{!c.closeActivity}"/>
+	<aura:handler event="c:EUR_ISP_SpendActivityItemAddedEvent" action="{!c.handleUpdateEvent}"/>
+
+	<aura:registerEvent name="validationEvent" type="c:EUR_ISP_SpendActivityDetailsValidateEvent"/>
+	<aura:registerEvent name="showLoading" type="c:EUR_ISP_ShowSpinerEvent"/>
+	<aura:registerEvent name="hideLoading" type="c:EUR_ISP_HideSpinerEvent"/>
+
+	<aura:method name="showError" action="{!c.showError}" access="public">
+		<aura:attribute name="clearSpendActivity" type="Boolean"/>
+		<aura:attribute name="hasError" type="Boolean"/>
+		<aura:attribute name="errorMsgs" type="List"/>
+	</aura:method>
+	<aura:method name="saveSpendActivity" action="{!c.saveSpendActivity}" access="public">
+		<aura:attribute name="calculatedAmount" type="Decimal"/>
+	</aura:method>
+	<aura:method name="resetActivity" action="{!c.initActivity}" access="public"/>
+
+	<div>
+		<c:EUR_ISP_ConfirmationWindow aura:id="confirmation"/>
+
+		<aura:if isTrue="{!not(v.isSaving)}">
+
+			<div class="slds-grid slds-grid--align-space">
+				<c:EUR_ISP_NotificationMsg isVisible="{!v.hasError}" messages="{!v.errorMsgs}"/>
+			</div>
+
+			<aura:if isTrue="{!v.SpendActivity}">
+				<div class="slds-grid slds-grid--align-space slds-m-top--xx-small">
+					<aura:if isTrue="{!and(v.SpendActivity.Id, v.SpendActivity.__isUpdated)}">
+						<div class="slds-col slds-size--1-of-1">
+							<div class="slds-notify slds-notify--alert slds-theme--inverse-text slds-theme--alert-texture slds-theme--warning" role="alert">
+								<c:EUR_ISP_SVG xlinkHref="/resource/EUR_ISP_SLDS/assets/icons/utility-sprite/svg/symbols.svg#warning" class="slds-icon icon-text-email slds-icon--x-small slds-m-right--x-small"/>
+								<span>{!$Label.c.EUR_ISP_UNSAVED}</span>
+							</div>
+						</div>
+					</aura:if>
+				</div>
+
+				<aura:if isTrue="{!and(v.SpendActivity.RecordType.Name == 'SFA Contract', v.UserPermissions.PROJECT_NAME == 'DE_SFA_PROJECT')}">
+					<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.Name.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<span class="slds-text-body--regular">{!v.SpendActivity.Name ? v.SpendActivity.Name : 'New Record'}</span>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Spend__c.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<span class="slds-text-body--regular">{!v.SpendActivity.EUR_ISP_Spend__r.Name}</span>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.label}</span>
+									<span class="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.helpText ? 'help--marker': 'slds-hide'}">
+										<div class="slds-popover slds-popover--tooltip slds-nubbin--bottom slds-hide" role="tooltip">
+											<div class="slds-popover__body">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.helpText}</div>
+										</div>
+									</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Total_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+						<div class="slds-col slds-size--1-of-3">
+							<aura:if isTrue="{!v.UserPermissions.PROJECT_NAME != 'DE_SFA_PROJECT'}">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Spend_Activity_Type__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<span class="slds-text-body--regular">{!v.SpendActivity.EUR_ISP_Spend_Activity_Type_Name__c}</span>
+									</div>
+								</div>
+							</aura:if>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Start_Date__c.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Start_Date__c.isUpdateable)}">
+										<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_Start_Date__c}" title="Activity Start Date" type="date" pk="EUR_ISP_Activity_Start_Date__c"/>
+
+										<aura:set attribute="else">
+											<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Activity_Start_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+										</aura:set>
+									</aura:if>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Matched__c.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Matched__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label required">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.isUpdateable)}">
+										<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Payment_Terms__c}" title="Payment Terms" type="select" pk="EUR_ISP_Payment_Terms__c" source="{!v.selectionData.EUR_ISP_Payment_Terms__c}"/>
+
+										<aura:set attribute="else">
+											<span class="slds-text-body--regular">
+												<c:EUR_ISP_PicklistView value="{!v.SpendActivity.EUR_ISP_Payment_Terms__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.picklistValuesMap}"/>
+											</span>
+										</aura:set>
+									</aura:if>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_End_Date__c.label}</span>
+								</div>
+								<div class="slds-size--1-of-2">
+									<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_End_Date__c.isUpdateable)}">
+										<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_End_Date__c}" title="Activity End Date" type="date" pk="EUR_ISP_Activity_End_Date__c"/>
+
+										<aura:set attribute="else">
+											<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Activity_End_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+										</aura:set>
+									</aura:if>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Amount__c.label}</span>
+								</div>
+								<aura:if isTrue="{!v.SpendActivity.EUR_ISP_Spend_Activity_Type_Name_English__c == 'Pouring Refund'}">
+									<div class="slds-size--1-of-2">
+										<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+									</div>
+
+									<aura:set attribute="else">
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Amount__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" title="Activity Amount" type="number" pk="EUR_ISP_Activity_Amount__c" IsoCode="{!v.SpendActivity.CurrencyIsoCode}"/>
+
+												<aura:set attribute="else">
+													<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+												</aura:set>
+											</aura:if>
+										</div>
+									</aura:set>
+								</aura:if>
+							</div>
+						</div>
+					</div>
+
+					<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+						<div class="slds-col slds-size--2-of-3">
+							<div class="slds-grid">
+								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-4">
+									<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Description__c.label}</span>
+								</div>
+								<div class="slds-size--3-of-4">
+									<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Description__c.isUpdateable)}">
+										<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Description__c}" title="Description" type="textarea" pk="EUR_ISP_Description__c"/>
+
+										<aura:set attribute="else">
+											<ui:outputTextArea value="{!v.SpendActivity.EUR_ISP_Description__c}" class="slds-text-body--regular"/>
+										</aura:set>
+									</aura:if>
+								</div>
+							</div>
+						</div>
+						<div class="slds-col slds-size--1-of-3">&nbsp;</div>
+					</div>
+
+					<aura:set attribute="else">
+						<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.Name.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<span class="slds-text-body--regular">{!v.SpendActivity.Name ? v.SpendActivity.Name : 'New Record'}</span>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Spend__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<span class="slds-text-body--regular">{!v.SpendActivity.EUR_ISP_Spend__r.Name}</span>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<aura:if isTrue="{!v.SpendActivityType.EUR_ISP_Display_Vendor__c}">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Vendor__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Vendor__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Vendor__r}" title="Vendor" type="lookup" lookupPluralLabel="Vendors" pk="EUR_ISP_Vendor__r" lookupObjectApiName="EUR_ISP_Vendor__c" lookupIconXlinkHref="/resource/EUR_ISP_SLDS/assets/icons/standard-sprite/svg/symbols.svg#account" lookupIconClass="slds-icon-standard-account" dependentValue="{!v.Spend.EUR_ISP_Account__r}"/>
+
+												<aura:set attribute="else">
+													<span class="slds-text-body--regular">{!v.SpendActivity.EUR_ISP_Vendor__r.EUR_ISP_Vendor_Name__c}</span>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+								</aura:if>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.label}</span>
+										<span class="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.helpText ? 'help--marker': 'slds-hide'}">
+											<div class="slds-popover slds-popover--tooltip slds-nubbin--bottom slds-hide" role="tooltip">
+												<div class="slds-popover__body">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Total_Activity_Amount__c.helpText}</div>
+											</div>
+										</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Total_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Spend_Activity_Type__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<span class="slds-text-body--regular">{!v.SpendActivity.EUR_ISP_Spend_Activity_Type_Name__c}</span>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<aura:if isTrue="{!v.Spend.RecordType.Name != 'Commercial Plan' || v.Spend.EUR_ISP_Funding_Based__c == 'Other'}">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Start_Date__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Start_Date__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_Start_Date__c}" title="Activity Start Date" type="date" pk="EUR_ISP_Activity_Start_Date__c"/>
+
+												<aura:set attribute="else">
+													<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Activity_Start_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+									<aura:set attribute="else">
+										<div class="slds-grid">
+											<!-- <aura:if isTrue="{!v.Spend.EUR_ISP_Funding_Based__c == 'Sales Out' || !v.Spend.EUR_ISP_Funding_Based__c == 'Sales In'}"> -->
+												<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+													<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_In_Start_Date__c.label}</span>
+												</div>
+												<div class="slds-size--1-of-2">
+													<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_In_Start_Date__c.isUpdateable)}">
+														<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Sales_In_Start_Date__c}" title="Sales in Start Date" type="date" pk="EUR_ISP_Sales_In_Start_Date__c"/>
+
+														<aura:set attribute="else">
+															<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Sales_In_Start_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+														</aura:set>
+													</aura:if>
+												</div>
+											<!-- </aura:if> -->
+										</div>
+									</aura:set>
+								</aura:if>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label required">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Status__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Status__c.isUpdateable)}">
+											<div>
+												<aura:if isTrue="{!not(v.statusReload)}">
+													<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Status__c}" title="Status" type="select" pk="EUR_ISP_Status__c" source="{!v.selectionData.EUR_ISP_Status__c}"/>
+												</aura:if>
+											</div>
+
+											<aura:set attribute="else">
+												<span class="slds-text-body--regular">
+													<c:EUR_ISP_PicklistView value="{!v.SpendActivity.EUR_ISP_Status__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Status__c.picklistValuesMap}"/>
+												</span>
+											</aura:set>
+										</aura:if>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Matched__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Matched__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label required">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.isUpdateable)}">
+											<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Payment_Terms__c}" title="Payment Terms" type="select" pk="EUR_ISP_Payment_Terms__c" source="{!v.selectionData.EUR_ISP_Payment_Terms__c}"/>
+
+											<aura:set attribute="else">
+												<span class="slds-text-body--regular">
+													<c:EUR_ISP_PicklistView value="{!v.SpendActivity.EUR_ISP_Payment_Terms__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Payment_Terms__c.picklistValuesMap}"/>
+												</span>
+											</aura:set>
+										</aura:if>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<aura:if isTrue="{!v.Spend.RecordType.Name != 'Commercial Plan' || v.Spend.EUR_ISP_Funding_Based__c == 'Other'}">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_End_Date__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_End_Date__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_End_Date__c}" title="Activity End Date" type="date" pk="EUR_ISP_Activity_End_Date__c"/>
+
+												<aura:set attribute="else">
+													<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Activity_End_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+
+									<aura:set attribute="else">
+										<div class="slds-grid">
+											<!-- <aura:if isTrue="{!v.Spend.EUR_ISP_Funding_Based__c == 'Sales Out' || !v.Spend.EUR_ISP_Funding_Based__c == 'Sales In'}"> -->
+												<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+													<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_In_End_Date__c.label}</span>
+												</div>
+												<div class="slds-size--1-of-2">
+													<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_In_End_Date__c.isUpdateable)}">
+														<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Sales_In_End_Date__c}" title="Sales in End Date" type="date" pk="EUR_ISP_Sales_In_End_Date__c"/>
+
+														<aura:set attribute="else">
+															<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Sales_In_End_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+														</aura:set>
+													</aura:if>
+												</div>
+											<!-- </aura:if> -->
+										</div>
+									</aura:set>
+								</aura:if>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label required">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Approval_Status__c.label}</span>
+									</div>
+									<div class="slds-size--1-of-2">
+										<span class="slds-text-body--regular">
+											<c:EUR_ISP_PicklistView value="{!v.SpendActivity.EUR_ISP_Approval_Status__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Approval_Status__c.picklistValuesMap}"/>
+										</span>
+									</div>
+								</div>
+							</div>
+							<div class="slds-col slds-size--1-of-4">
+								<aura:if isTrue="{!and(v.SpendActivity.Id, v.UserPermissions.PROJECT_NAME != 'DE_SFA_PROJECT')}">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label required">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Settlement_Method__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Settlement_Method__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Settlement_Method__c}" title="Settlement Method" type="select" pk="EUR_ISP_Settlement_Method__c" source="{!v.selectionData.EUR_ISP_Settlement_Method__c}"/>
+
+												<aura:set attribute="else">
+													<span class="slds-text-body--regular">
+														<c:EUR_ISP_PicklistView value="{!v.SpendActivity.EUR_ISP_Settlement_Method__c}" values="{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Settlement_Method__c.picklistValuesMap}"/>
+													</span>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+								</aura:if>
+							</div>
+						</div>
+
+						<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+							<div class="slds-col slds-size--1-of-4">&nbsp;</div>
+							
+							<div class="slds-col slds-size--1-of-4">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Amount__c.label}</span>
+									</div>
+									<aura:if isTrue="{!and(v.UserPermissions.PROJECT_NAME == 'DE_SFA_PROJECT', v.SpendActivity.EUR_ISP_Spend_Activity_Type_Name_English__c == 'Pouring Refund')}">
+										<div class="slds-size--1-of-2">
+											<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+										</div>
+
+										<aura:set attribute="else">
+											<div class="slds-size--1-of-2">
+												<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Activity_Amount__c.isUpdateable)}">
+													<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" title="Activity Amount" type="number" pk="EUR_ISP_Activity_Amount__c" IsoCode="{!v.SpendActivity.CurrencyIsoCode}"/>
+
+													<aura:set attribute="else">
+														<ui:outputCurrency currencyCode="{!v.SpendActivity.CurrencyIsoCode}" value="{!v.SpendActivity.EUR_ISP_Activity_Amount__c}" format="{!v.SpendActivity.CurrencyIsoCode + ' #,##0.00;' + v.SpendActivity.CurrencyIsoCode + ' -#,##0.00'}" class="slds-text-body--regular"/>
+													</aura:set>
+												</aura:if>
+											</div>
+										</aura:set>
+									</aura:if>
+								</div>
+							</div>
+							<aura:if isTrue="{!and(v.Spend.RecordType.Name == 'Commercial Plan', v.Spend.EUR_ISP_Funding_Based__c == 'Sales Out')}">
+								<div class="slds-col slds-size--1-of-4">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_Out_Start_Date__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_Out_Start_Date__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Sales_Out_Start_Date__c}" title="Sales out Start Date" type="date" pk="EUR_ISP_Sales_Out_Start_Date__c"/>
+
+												<aura:set attribute="else">
+													<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Sales_Out_Start_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+								</div>
+								<div class="slds-col slds-size--1-of-4">
+									<div class="slds-grid">
+										<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+											<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_Out_End_Date__c.label}</span>
+										</div>
+										<div class="slds-size--1-of-2">
+											<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Sales_Out_End_Date__c.isUpdateable)}">
+												<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Sales_Out_End_Date__c}" title="Sales out End Date" type="date" pk="EUR_ISP_Sales_Out_End_Date__c"/>
+
+												<aura:set attribute="else">
+													<ui:outputDate value="{!v.SpendActivity.EUR_ISP_Sales_Out_End_Date__c}" class="slds-text-body--regular" format="dd/MM/yyyy"/>
+												</aura:set>
+											</aura:if>
+										</div>
+									</div>
+								</div>
+								<aura:set attribute="else">
+									<div class="slds-col slds-size--1-of-4">
+										<div class="slds-grid">
+											<aura:if isTrue="{!v.SpendActivityType.EUR_ISP_Display_Visible_Flag__c}">
+				 								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+													<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Visible__c.label}</span>
+												</div>
+												<div class="slds-size--1-of-2">
+													<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Visible__c.isUpdateable)}">
+														<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Visible__c}" change="{!c.handleUpdateEvent}"/>
+
+														<aura:set attribute="else">
+															<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Visible__c}" change="{!c.handleUpdateEvent}" disabled="true"/>
+														</aura:set>
+													</aura:if>
+												</div>
+											</aura:if>
+										</div>
+									</div>
+									<div class="slds-col slds-size--1-of-4">
+										<div class="slds-grid">
+											<aura:if isTrue="{!v.SpendActivityType.EUR_ISP_Display_Conditional_Flag__c}">
+												<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+													<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Conditional__c.label}</span>
+												</div>
+												<div class="slds-size--1-of-2">
+													<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Conditional__c.isUpdateable)}">
+														<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Conditional__c}" change="{!c.handleUpdateEvent}"/>
+
+														<aura:set attribute="else">
+															<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Conditional__c}" change="{!c.handleUpdateEvent}" disabled="true"/>
+														</aura:set>
+													</aura:if>
+												</div>
+											</aura:if>
+										</div>
+									</div>
+								</aura:set>
+							</aura:if>
+						</div>
+
+						<div class="slds-grid slds-grid--align-space slds-m-top-x--small">
+							<div class="slds-col slds-size--1-of-2">
+								<div class="slds-grid">
+									<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-4">
+										<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Description__c.label}</span>
+									</div>
+									<div class="slds-size--3-of-4">
+										<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Description__c.isUpdateable)}">
+											<c:EUR_ISP_InlineFieldEdit sObjectApiName="EUR_ISP_Spend_Activity__c" sObjectId="{!v.SpendActivity.Id}" value="{!v.SpendActivity.EUR_ISP_Description__c}" title="Description" type="textarea" pk="EUR_ISP_Description__c"/>
+
+											<aura:set attribute="else">
+												<ui:outputTextArea value="{!v.SpendActivity.EUR_ISP_Description__c}" class="slds-text-body--regular"/>
+											</aura:set>
+										</aura:if>
+									</div>
+								</div>
+							</div>
+							<aura:if isTrue="{!and(v.Spend.RecordType.Name == 'Commercial Plan', v.Spend.EUR_ISP_Funding_Based__c == 'Sales Out')}">
+								<div class="slds-col slds-size--1-of-4">
+									<div class="slds-grid">
+										<aura:if isTrue="{!v.SpendActivityType.EUR_ISP_Display_Visible_Flag__c}">
+			 								<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+												<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Visible__c.label}</span>
+											</div>
+											<div class="slds-size--1-of-2">
+												<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Visible__c.isUpdateable)}">
+													<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Visible__c}" change="{!c.handleUpdateEvent}"/>
+
+													<aura:set attribute="else">
+														<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Visible__c}" change="{!c.handleUpdateEvent}" disabled="true"/>
+													</aura:set>
+												</aura:if>
+											</div>
+										</aura:if>
+									</div>
+								</div>
+								<div class="slds-col slds-size--1-of-4">
+									<div class="slds-grid">
+										<aura:if isTrue="{!v.SpendActivityType.EUR_ISP_Display_Conditional_Flag__c}">
+											<div class="slds-text-align--right slds-m-right--x-small slds-size--1-of-2">
+												<span class="slds-text-heading--label">{!v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Conditional__c.label}</span>
+											</div>
+											<div class="slds-size--1-of-2">
+												<aura:if isTrue="{!and(and(not(v.isActivityLocked), not(v.isLocked)), v.UserPermissions.EUR_ISP_Spend_Activity__c.fields.EUR_ISP_Conditional__c.isUpdateable)}">
+													<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Conditional__c}" change="{!c.handleUpdateEvent}"/>
+
+													<aura:set attribute="else">
+														<ui:inputCheckbox class="slds-text-body--regular" value="{!v.SpendActivity.EUR_ISP_Conditional__c}" change="{!c.handleUpdateEvent}" disabled="true"/>
+													</aura:set>
+												</aura:if>
+											</div>
+										</aura:if>
+									</div>
+								</div>
+								<aura:set attribute="else">
+									<div class="slds-col slds-size--1-of-4">&nbsp;</div>
+									<div class="slds-col slds-size--1-of-4">&nbsp;</div>
+								</aura:set>
+							</aura:if>
+						</div>
+					</aura:set>
+				</aura:if>
+
+				<fieldset class="slds-form--compound slds-m-top-x--small">
+					<div class="form-element__group">
+						<div class="slds-form-element__row slds-clearfix">
+							<div class="slds-x-small-buttons--horizontal slds-float--right">
+								<aura:if isTrue="{!and(v.SpendActivity.Id, v.UserPermissions.PROJECT_NAME != 'DE_SFA_PROJECT')}">
+									<a class="slds-button slds-button--neutral slds-button--small" target="_blank" href="{!'/apex/EUR_ISP_DAMView?ActivityId='+ v.SpendActivity.Id}">Linked Assets</a>
+									<a class="slds-button slds-button--neutral slds-button--small" target="_blank" href="{!'/apex/EUR_ISP_DAMSearch?ActivityId='+ v.SpendActivity.Id}">Add Assets</a>
+									<a class="slds-button slds-button--neutral slds-button--small" target="_blank" href="https://absolut-brandcloud.pernod-ricard.com/projects/view/stages/item254300">New Digital Assets</a>
+								</aura:if>
+								<aura:if isTrue="{!and(v.UserPermissions.EUR_ISP_Spend_Activity__c.theObject.isUpdateable, v.SpendActivity.__isUpdated)}">
+									<input type="button" class="slds-button slds-button--neutral slds-button--brand slds-button--small" onclick="{!c.triggerValidationEvent}" value="{!$Label.c.EUR_ISP_SAVE_TEXT}"/>
+									<input type="button" data-item-id="" class="slds-button slds-button--destructive slds-button--small" value="{!$Label.c.EUR_ISP_CLOSE_TEXT}" disabled="true"/>
+								</aura:if>
+								<aura:if isTrue="{!and(v.SpendActivity.Id, and(v.UserPermissions.EUR_ISP_Spend_Activity__c.theObject.isUpdateable, not(v.SpendActivity.__isUpdated)))}">
+									<input type="button" data-item-id="" class="slds-button slds-button--destructive slds-button--small" value="{!$Label.c.EUR_ISP_CLOSE_TEXT}" onclick="{!c.confirmOnCloseActivity}" disabled="{!not(v.isValidForClose)}"/>
+								</aura:if>
+							</div>
+						</div>
+					</div>
+				</fieldset>
+			</aura:if>
+
+			<aura:set attribute="else">
+				<c:EUR_ISP_Spiner />
+			</aura:set>
+		</aura:if>
+	</div>
+</aura:component>

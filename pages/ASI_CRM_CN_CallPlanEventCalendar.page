@@ -1,0 +1,181 @@
+<apex:page controller="ASI_CRM_CN_CallPlanEventCalendar" standardStylesheets="false" showHeader="false" sidebar="false" cache="false" >
+<head>
+<meta http-equiv="Content-type" content="text/html; charset=utf-8"/>
+<!--
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>   
+-->
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+<script src="/resource/1384483690000/ASI_MFM_dhtmlxschedulerJS" type="text/javascript" charset="utf-8"></script>
+<script src="/resource/1384669286000/ASI_MFM_dhtmlxscheduler_tooltipJS" type="text/javascript" charset="utf-8"></script>
+<link rel="stylesheet" href="/resource/1384664718000/ASI_MFM_dhtmlxschedulerCSS" type="text/css" media="screen" title="no title" charset="utf-8"/>
+
+
+<style type="text/css" media="screen">
+    html, body{
+        margin:0px;
+        padding:0px;
+        height:100%;
+        overflow:hidden;
+    }
+
+    .callplan{
+        background-color:#0033CC !important; 
+        color:white !important;
+        white-space:nowrap;
+    }
+    
+    .event{
+        background-color:purple !important; 
+        color:white !important;
+        white-space:nowrap;
+    }   
+    
+    :lang(zh-Hant)  {font-family: PMingLiU,MingLiU, serif;}
+:lang(zh-Hans)  {font-family: SimSum-18030,SimHei, serif;}
+
+</style>
+
+
+<script type="text/javascript" charset="utf-8">
+    function init() {
+        //scheduler.config.xml_date="%Y-%m-%d %H:%i";
+        scheduler.config.xml_date="%m/%d/%Y %H:%i";
+        scheduler.config.full_day = true;
+        scheduler.config.dblclick_create = false;
+        scheduler.config.show_loading = true;
+        scheduler.config.drag_create = false;
+        scheduler.config.drag_resize = false;
+        scheduler.config.drag_move = false;
+        scheduler.config.time_step = 30;        
+        scheduler.config.update_render = true;
+        scheduler.config.mark_now = false;
+        scheduler.config.start_on_monday = false;
+        scheduler.config.hour_scale_px = 0;
+        scheduler.config.first_hour = 0;
+        scheduler.config.last_hour = 0;
+        scheduler.init('scheduler_here', new Date(),"month");
+               
+        //scheduler.templates.tooltip_date_format=scheduler.date.date_to_str("%m/%d/%Y %H:%i");
+        scheduler.templates.tooltip_text = function(start,end,event){                   
+            //return "<b><a onclick=redirect_parent(\""+event.detail+"\") style=color:blue;cursor:pointer><u>"+event.detailTitle+"</u></a></b><br/><b>Event :</b> "+event.text+"<br/>"+event.contact+"<br/><b>Start Date :</b> "+scheduler.templates.tooltip_date_format(start)+"<br/><b>End Date :</b> "+scheduler.templates.tooltip_date_format(end);
+            return event.details;        
+        };    
+        
+        scheduler.templates.event_class=function(start, end, event){                
+            if(event.css == "callplan") // if event has subject property then special class should be assigned
+            {
+               return "callplan";
+            }else if(event.css == "event") // if event has subject property then special class should be assigned
+            {
+               return "event";
+            }
+        }      
+        
+        scheduler.attachEvent("onClick", function (id, e){
+            //... some code here ...
+            var event = this.getEvent(id);
+                        
+            /*var startDate = [event.start_date.getMonth()+1, event.start_date.getDate(), event.start_date.getFullYear()].join('/');
+            var endDate = [event.end_date.getMonth()+1, event.end_date.getDate(), event.end_date.getFullYear()].join('/');*/
+                        
+            //window.open("/00OM0000000SztF?pv0=" + startDate + "&pv1=" + startDate );
+            //window.open("/" + event.outletId );
+            //sforce.one.navigateToURL("/" + event.outletId);
+            
+            if( (typeof sforce != 'undefined') && (sforce != null) ) {
+                // Salesforce1 navigation
+                sforce.one.navigateToURL("/" + event.outletId);
+            }
+            else {
+                window.open("/" + event.outletId );
+            }
+        });
+             
+        $(".dhx_cal_prev_button, .dhx_cal_next_button, .dhx_cal_today_button, .dhx_cal_tab").click(function(){                       
+                            getEventData('', '', '', '', '', '', '');                                                                                                              
+        });
+                          
+        scheduler.locale.labels.section_location="Location";                        
+        getEventData('', '', '', '', '', '', '');
+    }
+    
+    function htmlDecode(value){
+        if(value){
+            return $('<div />').html(value).text();
+        }else{
+            return '';
+        }   
+    }
+
+    function getEventData(brandID, subBrandID, channelID, divisionID, eventTypeID, regionID, userID){
+        var selectedUser = "All";
+        
+        if (userID != "")  
+            selectedUser = document.getElementById(userID).options[document.getElementById(userID).selectedIndex].text;
+        //alert(selectedUser);
+        var convert = scheduler.date.date_to_str("%Y-%m");
+        var selectedDate = convert(scheduler.getState().date)+"-01";
+        //alert(selectedDate);
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_CRM_CN_CallPlanEventCalendar.getEventData}', 
+             selectedUser, selectedDate, 
+             function(result, event){                       
+
+                scheduler.clearAll();
+                 
+                try { 
+                    var formatted_json_event = JSON.parse(htmlDecode(result));  
+                    scheduler.parse(formatted_json_event.Event.wholelist, "json");
+                }
+                catch(err) {
+                    //alert(err.message + '\r\n' + result);
+                }
+             }
+        );
+    } 
+</script>
+
+</head>
+    
+<body onload="init();">
+    
+    <div id="scheduler_here" class="dhx_cal_container dhx_scheduler_week" style='width:100%; height:100%;'>
+        
+        <div class="dhx_cal_navline">
+            
+            <div class="dhx_cal_prev_button" style="text-align: center">Prev</div>
+            <div class="dhx_cal_next_button" style="text-align: center">Next</div>
+            <div class="dhx_cal_today_button"></div>
+            <div class="dhx_cal_date"></div>
+            
+            
+            <div class="dhx_cal_tab" name="day_tab" style="right:204px;"></div>
+            <div class="dhx_cal_tab" name="week_tab" style="right:140px;"></div>            
+            <div class="dhx_cal_tab" name="month_tab"></div>
+            <div style="margin-top:40px;margin-left:15px;">
+                <apex:form >
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td>
+                                User :
+                            </td>
+                            <td>
+                                <apex:selectList id="selectUser" value="{!users}" multiselect="false" size="1" 
+                                onChange="getEventData('','','','','','','{!$Component.selectUser}');">
+                                    <apex:selectOptions value="{!UserItems}"/>
+                                </apex:selectList>  
+                            </td>
+                            
+                        </tr>
+                                    
+                    </table>
+                </apex:form>
+            </div>
+        </div>
+        <div class="dhx_cal_header" style="margin-top:25px;"></div>
+        
+        <div class="dhx_cal_data" style="margin-top:25px;"></div>       
+    </div>
+</body>
+</apex:page>

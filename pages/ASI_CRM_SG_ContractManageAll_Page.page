@@ -1,0 +1,2239 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_SG_ContractManageAll_Page
+ * Description: New manage all page for new contract from 01/01/2018
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 10/11/2017       Hugo Cheung             Created
+ * 27/11/2017       Wilken Lee              [WL 1.0] Apply validation to prevent change in Sales Case or delete target in simulation
+ * 2018-01-02       Vincent Lam             [VL 1.0] Open back rebate for edit
+ * 2018-01-26       Vincent Lam             [VL 2.0] New criteria to enable back rebates
+ * 2018-01-31       Vincent Lam             [VL 3.0] Add summary row
+ * 2018-02-02       Vincent Lam             [VL 4.0] New price column for debit note generation
+ * 2018-03-20       Wilken Lee              [WL 5.0] P4.2 Generate remaining Back Rebate achivement upon completion
+ * 2018-03-27       Vincent Lam             [VL 5.0] ICM117657570 : use new field to display RTM wholesaler margin
+ * 2019-07-02       Wilson Chow             add 'isEditContractOutlets' flag to allow edit contract outlets when status is 'Contract Approved'
+ * 2019-07-03       Wilson Chow             add case on read only to display plain text if isEditContractOutlets = true
+-->
+<apex:page standardController="ASI_TH_CRM_Contract__c" extensions="ASI_CRM_SG_ContractManageAll_Ctrl" showHeader="{!showHeader}">
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+    <!-- Style -->
+    <style>
+        .link-button {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .inputField_short {
+            width: 50px;
+        }
+
+        .inputField_medium {
+            width: 75px;
+        }
+
+        .inputField_long {
+            width: 250px;
+        }
+        
+        .alignCenter {
+            text-align: center;
+        }
+
+        .savingRecord .fullScreenLoading {
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        .error {
+            border: 2px solid red;
+        }
+
+        .redBackground {
+            /*background-color: #f4978b;*/
+            background-color: #FFC7CE;
+        }
+
+        .yellowBackground {
+            /*background-color: #fffb87;*/
+            background-color: #FFEB9C;
+        }
+
+        .greenBackground {
+            /*background-color: #b4ff96;*/
+            background-color: #C6EFCE;
+        }
+
+        th, td {
+            padding-top    : 5px;
+            padding-bottom : 5px;
+            padding-right  : 10px;
+            padding-left   : 10px;
+        }
+
+        <!-- Datatable Styling -->
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+    </style>
+
+    <!-- JavaScript -->
+    <script type="text/javascript">
+        /****************
+        Define Variable
+        ****************/
+        const ACTION_LABEL                = 'Action';
+        const NEW_CONTRACT_TARGET_PREFIX  = 'Contract_Target_';
+        const NEW_PAYMENT_SCHEDULE_PREFIX = 'Payment_Schedule_';
+        const NEW_CONTRACT_OUTLET_PREFIX  = 'Contract_Outlet_';
+
+        const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy"        : true,
+            "bStateSave"      : true,
+            "bSearch"         : false,
+            "bFilter"         : false,
+            "aLengthMenu"     : [200],
+            "iDisplayLength"  : 200,
+            "bSort"           : false,
+            "bPaginate"       : true,
+            "bScrollCollapse" : true,
+            "bJQueryUI"       : false
+        };
+
+        const CONTRACT_TARGET_RECORD_TYPE_ID  = '{!contractTargetRecordTypeId}';
+        const PAYMENT_SCHEDULE_RECORD_TYPE_ID = '{!paymentSponsorshipRecordTypeId}';
+        const CONTRACT_OUTLET_RECORD_TYPE_ID  = '{!contractOutletRecordTypeId}';
+        const CONTRACT_TARGET_RECORD_TYPE_ID_SIMULATION  = '{!contractTargetSimulationRecordTypeId}';
+        const PAYMENT_SCHEDULE_RECORD_TYPE_ID_SIMULATION = '{!paymentSponsorshipSimulationRecordTypeId}';
+        const CONTRACT_OUTLET_RECORD_TYPE_ID_SIMULATION  = '{!contractOutletSimulationRecordTypeId}';
+
+        const READ_ONLY = '{!isReadOnly}' == 'true';
+        const IS_DRAFT_CONTRACT = '{!isDraftContract}' == 'true';
+        /*[WL 5.0] BEGIN*/
+        const IS_COMPLETE_CONTRACT = '{!isCompleteContract}' == 'true';
+        /*[WL 5.0] END*/
+
+        const CONTRACT_ID             = '{!contract.Id}';
+        const CONTRACT_TYPE            = '{!contract.ASI_CRM_Type__c}';
+        const CONTRACT_TYPE_PARTNER    = 'Partner';
+        const CONTRACT_TYPE_KEYACCOUNT = 'Key Account';
+
+        var NEW_CONTRACT_TARGET_INDEX  = 1;
+        var NEW_PAYMENT_SCHEDULE_INDEX = 1;
+        var NEW_CONTRACT_OUTLET_INDEX  = 1;
+
+        var deleteContractTargetIdList   = [];
+        var deletePaymentScheduleIdList = [];
+        var deleteContractOutletIdList   = [];
+
+        var addedSKUIdList  = [];
+        var addedOutletMap  = {};
+        
+        var IS_ALREADY_SIMULATED = '{!isAlreadySimulated}' == 'true';
+        var IS_SIMULATION = '{!isSimulation}' == 'true';
+        var IS_SIMULATING_CONTRACT = '{!isSimulatingContract}' == 'true';
+        var IS_APPROVED_CONTRACT = '{!isApprovedContract}' == 'true';
+
+        // 20190702 Wilson Chow
+        var IS_EDIT_CONTRACT_OUTLETS = '{!isEditContractOutlets}' == 'true';
+        // 20190702 Wilson Chow
+
+        /*****************
+        Datatable Field Config
+        *****************/
+        const FIELD_CONFIG_MAPPING = {
+            "ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        /*[WL 1.0] BEGIN*/
+                                                                        if (full.ASI_CRM_Block_Delete__c == true){
+                                                                            return null;
+                                                                        }
+                                                                        else {
+                                                                            return "<a class='link-button' onClick='deleteContractTargetRow(this.parentNode.parentNode)'>Delete</a>";  
+                                                                        }
+                                                                        /*[WL 1.0] END*/                                                                        
+                                                                  }
+                                                },
+
+            "SKU"                             : {"title"          : "SKU",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>Total:</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_SKU__c';
+                                                                        var fieldStr = ""; 
+                                                                        if(full.ASI_CRM_SKU__c) {
+                                                                            fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_SKU__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_SKU__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                                        return fieldStr;
+                                                                    }
+                                                },
+
+            "ROI"                             : {"title"          : "ROI%",
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ROI';
+                                                                        var roi = 0;
+                                                                        if(full.ASI_CRM_SG_Return_on_Investment__c && full.ASI_CRM_SG_Net_Sales__c) {
+                                                                            if (full.ASI_CRM_SG_Net_Sales__c == 0) {
+                                                                                roi = 0;
+                                                                            } else 
+                                                                            if (full.ASI_CRM_SG_Net_Sales__c < 0 && full.ASI_CRM_SG_Return_on_Investment__c < 0){
+                                                                                roi = full.ASI_CRM_SG_Return_on_Investment__c
+                                                                                    / full.ASI_CRM_SG_Net_Sales__c
+                                                                                    * -100;
+                                                                            } else {
+                                                                                roi = full.ASI_CRM_SG_Return_on_Investment__c
+                                                                                    / full.ASI_CRM_SG_Net_Sales__c
+                                                                                    * 100;
+                                                                            }
+                                                                            
+                                                                            roi = roi.toFixed(2);
+                                                                        }
+                                                                        return "<span class='" + fieldAPIName + "'>" + roi + "%" + "</span>";
+                                                                    }
+                                                },
+
+            "Sequence No"                     : {"title"          : "Seq. No.",
+                                                 "data"           : "ASI_CRM_Sequence_No__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_Sequence_No__c';
+                                                                        if(!data) {
+                                                                            data = "";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+
+                                                                        return "<input class='" + fieldAPIName + " inputField_short text-right' type='text' value='" + data + "' onChange='updateContractTargetValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+
+            "Minimum Sales Case"              : {"title"          : "Minimum<br/>Sales (Cases)",
+                                                 "data"           : "ASI_CRM_Minimum_Sales_Cases__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Minimum_Sales_Cases__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        return data;
+                                                                    }
+                                                },
+
+            "Sales In Case"                   : {"title"          : "Sales (Cases)",
+                                                 "data"           : "ASI_CRM_TargetCase__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_TargetCase__c';
+                                                                        if(!data) {
+                                                                            data = "0";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+
+                                                                        /*[WL 1.0] BEGIN*/
+                                                                        if (full.ASI_CRM_Block_Delete__c == true){
+                                                                            return data;
+                                                                        }
+                                                                        else {
+                                                                            return "<input class='" + fieldAPIName + " inputField_medium text-right' type='text' value='" + data + "' onChange='updateContractTargetValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                        }
+                                                                        /*[WL 1.0] END*/                                                                
+                                                                    }
+                                                },
+
+            "Sales In 9L"                     : {"title"          : "Sales (9L)",
+                                                 "data"           : "ASI_CRM_SG_Target_Sales_9L_Cases__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_SG_Target_Sales_9L_Cases__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Duty"                            : {"title"          : "Duty (S$)",
+                                                 "data"           : "ASI_CRM_Total_Duty__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Total_Duty__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "FOB"                             : {"title"          : "FOB (S$)",
+                                                 "data"           : "ASI_CRM_Total_FOB__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Total_FOB__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Handling Cost"                   : {"title"          : "Handling Cost (S$)",
+                                                 "data"           : "ASI_CRM_Total_Handling_Cost__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Total_Handling_Cost__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Total COGS"                      : {"title"          : "Total COGS (S$)",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "Total_COGS text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        var amount = 0;
+                                                                        if(full.ASI_CRM_Total_Duty__c) amount += full.ASI_CRM_Total_Duty__c;
+                                                                        if(full.ASI_CRM_Total_FOB__c) amount += full.ASI_CRM_Total_FOB__c;
+                                                                        if(full.ASI_CRM_Total_Handling_Cost__c) amount += full.ASI_CRM_Total_Handling_Cost__c;
+
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+amount.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        return amount.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "WS to Ontrade price"             : {"title"          : "WS - OT<br/>(S$/Bottle)",
+                                                 "data"           : "ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Wholesaler Margin"               : {"title"          : "Wholesaler<br/>Margin<br/>(S$/Bottle)",
+                                                /* [VL 5.0] BEGIN */
+                                                /*
+                                                 "data"           : "ASI_CRM_SG_Wholesaler_Margin__c",
+                                                 */
+                                                 "data"           : "ASI_CRM_Wholesaler_Margin_RTM__c",
+                                                /* [VL 5.0] END */
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Entitle Back Rebates"            : {"title"          : "Entitle<br/>Back<br/>Rebates",
+                                                 "data"           : "ASI_CRM_Entitle_Back_Rebates__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_Entitle_Back_Rebates__c';
+                                                                        /* [VL 2.0] BEGIN */
+                                                                        /*
+                                                                        var inPresetList = full.ASI_CRM_SKU__r.ASI_CRM_Preset__c;
+                                                                        */
+                                                                        var inPresetList = full.ASI_CRM_SKU__r.ASI_CRM_Allow_Back_Rebates__c;
+                                                                        /* [VL 2.0] BEGIN */
+                                                                        /*[WL 1.0] BEGIN*/
+                                                                        //var isDisabled = (CONTRACT_TYPE != CONTRACT_TYPE_PARTNER && CONTRACT_TYPE != CONTRACT_TYPE_KEYACCOUNT) || !inPresetList || full.ASI_CRM_TargetCase__c < full.ASI_CRM_Minimum_Sales_Cases__c
+                                                                        var isDisabled = (CONTRACT_TYPE != CONTRACT_TYPE_PARTNER && CONTRACT_TYPE != CONTRACT_TYPE_KEYACCOUNT) 
+                                                                                        || !inPresetList 
+                                                                                        || (full.ASI_CRM_Block_Delete__c && full.ASI_CRM_Entitle_Back_Rebates_Original__c);
+                                                                        /*[WL 1.0] END*/
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data ? '&#10004' : '';
+                                                                        
+                                                                        //console.log('SKU Name: ' + full.ASI_CRM_SKU__r.Name + ' isDisabled: ' + isDisabled + ' ASI_CRM_TargetCase__c:' + full.ASI_CRM_TargetCase__c + ' ASI_CRM_Minimum_Sales_Cases__c: ' + full.ASI_CRM_Minimum_Sales_Cases__c + ' CONTRACT_TYPE: ' + CONTRACT_TYPE);
+                                                                        return `<input class="${fieldAPIName} inputField_medium" type="checkbox" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.checked)" ${isDisabled ? 'disabled' : ''} ${data ? 'checked' : ''}/>`;                                                                                                                                     
+                                                                    }
+                                                },
+
+            "Back Rebates"                    : {"title"          : "Back<br/>Rebates<br/>(S$/Bottle)",
+                                                 "data"           : "ASI_CRM_Bottle_Incentive__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        /* [VL 1.0] BEGIN */
+                                                                        /*
+                                                                        return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                        */
+                                                                        var fieldAPIName = 'ASI_CRM_Bottle_Incentive__c';
+                                                                        if(!data) {
+                                                                            data = "0";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+
+                                                                        if (full.ASI_CRM_Block_Delete__c == true && full.ASI_CRM_Entitle_Back_Rebates_Original__c){
+                                                                            return data;
+                                                                        }
+                                                                        
+                                                                        if (!full.ASI_CRM_Entitle_Back_Rebates__c){
+                                                                            return data;
+                                                                        }
+                                                                        
+                                                                        if(full.ASI_CRM_Entitle_Back_Rebates__c){
+                                                                            return "<input class='" + fieldAPIName + " inputField_medium text-right' type='text' value='" + data + "' onChange='updateContractTargetValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                        }   
+                                                                        /* [VL 1.0] END */      
+                                                                    }
+                                                },
+
+            "Back Rebates Total"              : {"title"          : "Back<br/>Rebates<br/>Total (S$)",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+full.backRebatesTotal.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var amount = (full.ASI_CRM_Bottle_Incentive__c ? full.ASI_CRM_Bottle_Incentive__c : 0)
+                                                                                   * (full.ASI_CRM_TargetCase__c ? full.ASI_CRM_TargetCase__c : 0) 
+                                                                                   * (full.ASI_CRM_PackagingSize__c ? full.ASI_CRM_PackagingSize__c : 0);
+
+                                                                        return amount.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Net Price"                       : {"title"          : "Net Price<br/>(S$/Bottle)",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var amount = (full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c ? full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c : 0)
+                                                                                /* [VL 5.0] BEGIN */
+                                                                                /*
+                                                                                   - (full.ASI_CRM_SG_Wholesaler_Margin__c ? full.ASI_CRM_SG_Wholesaler_Margin__c : 0)
+                                                                                */
+                                                                                   - (full.ASI_CRM_Wholesaler_Margin_RTM__c ? full.ASI_CRM_Wholesaler_Margin_RTM__c : 0)
+                                                                                /* [VL 5.0] END */
+                                                                                   - (full.ASI_CRM_Bottle_Incentive__c ? full.ASI_CRM_Bottle_Incentive__c : 0);
+                                                                        return amount.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Cash"                            : {"title"          : "Cash (S$)",
+                                                 "data"           : "ASI_CRM_SG_Cash__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data = '', type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_SG_Cash__c';
+                                                                        var inPresetList = full.ASI_CRM_SKU__r.ASI_CRM_Preset__c;
+                                                                        var isDisabled = !inPresetList;
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                                                                        if(CONTRACT_TYPE == CONTRACT_TYPE_KEYACCOUNT) 
+                                                                            //return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)" ${isDisabled ? 'disabled' : ''}/>`;
+                                                                            return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)"/>`;
+                                                                        else 
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Net Net Price"                  : {"title"          : "Net Net<br/>Price<br />(S$/Bottle)",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var amount = (full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c ? full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c : 0)
+                                                                                /* [VL 5.0] BEGIN */
+                                                                                /*
+                                                                                   - (full.ASI_CRM_SG_Wholesaler_Margin__c ? full.ASI_CRM_SG_Wholesaler_Margin__c : 0)
+                                                                                */
+                                                                                   - (full.ASI_CRM_Wholesaler_Margin_RTM__c ? full.ASI_CRM_Wholesaler_Margin_RTM__c : 0)
+                                                                                /* [VL 5.0] END */
+                                                                                   - (full.ASI_CRM_Bottle_Incentive__c ? full.ASI_CRM_Bottle_Incentive__c : 0);
+
+                                                                        var cashPerBottle = (full.ASI_CRM_SG_Cash__c ? full.ASI_CRM_SG_Cash__c : 0) 
+                                                                                          / (full.ASI_CRM_TargetCase__c ? full.ASI_CRM_TargetCase__c : 0) 
+                                                                                          / (full.ASI_CRM_PackagingSize__c ? full.ASI_CRM_PackagingSize__c : 0);
+
+                                                                        amount -= cashPerBottle;
+                                                                        return amount.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Adhoc Promotion"                 : {"title"          : "A&P Fund<br />(S$)",
+                                                 "data"           : "ASI_CRM_SG_Ad_hoc_Promotions__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data = '', type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_SG_Ad_hoc_Promotions__c';
+                                                                        var inPresetList = full.ASI_CRM_SKU__r.ASI_CRM_Preset__c;
+                                                                        var isDisabled = !inPresetList;
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                                                                        if((CONTRACT_TYPE == CONTRACT_TYPE_PARTNER || CONTRACT_TYPE == CONTRACT_TYPE_KEYACCOUNT))
+                                                                            //return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)" ${isDisabled ? 'disabled' : ''}/>`;
+                                                                            return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)"/>`;
+                                                                        else 
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "Adhoc Promotion Cases"           : {"title"          : "A&P Fund<br />(Cases)",
+                                                 "data"           : "ASI_CRM_SG_Anniversary_Free_Bottles__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data = '', type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return "<b>"+data.toLocaleString('en-US', {minimumFractionDigits: 2})+"</b>";
+                                                                        /* [VL 3.0] END */
+                                                                        var fieldAPIName = 'ASI_CRM_SG_Anniversary_Free_Bottles__c';
+                                                                        var inPresetList = full.ASI_CRM_SKU__r.ASI_CRM_Preset__c;
+                                                                        var isDisabled = !inPresetList;
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                                                                        if((CONTRACT_TYPE == CONTRACT_TYPE_PARTNER || CONTRACT_TYPE == CONTRACT_TYPE_KEYACCOUNT))
+                                                                            //return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)" ${isDisabled ? 'disabled' : ''}/>`;
+                                                                            return `<input class="${fieldAPIName} inputField_medium text-right" type="text" value="${data}" onChange="updateContractTargetValue(this.parentNode.parentNode, '${fieldAPIName}', this.value)"/>`;
+                                                                        else 
+                                                                           return data.toLocaleString('en-US', {minimumFractionDigits: 2}); 
+                                                                    }
+                                                },
+
+            "Net Net Price after AP"          : {"title"          : "Net Net<br/>Price<br />after A&P<br />(S$/Bottle)",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        /* [VL 3.0] BEGIN */
+                                                                        if (full.Id == "skuTotal") return null;
+                                                                        /* [VL 3.0] END */
+                                                                        var targetCase    = full.ASI_CRM_TargetCase__c ? full.ASI_CRM_TargetCase__c : 0;
+                                                                        var packagingSize = full.ASI_CRM_PackagingSize__c ? full.ASI_CRM_PackagingSize__c : 0
+
+                                                                        var amount = (full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c ? full.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c : 0)
+                                                                                /* [VL 5.0] BEGIN */
+                                                                                /*
+                                                                                   - (full.ASI_CRM_SG_Wholesaler_Margin__c ? full.ASI_CRM_SG_Wholesaler_Margin__c : 0)
+                                                                                */
+                                                                                   - (full.ASI_CRM_Wholesaler_Margin_RTM__c ? full.ASI_CRM_Wholesaler_Margin_RTM__c : 0)
+                                                                                /* [VL 5.0] END */
+                                                                                   - (full.ASI_CRM_Bottle_Incentive__c ? full.ASI_CRM_Bottle_Incentive__c : 0)
+
+                                                                        var cashPerBottle = (full.ASI_CRM_SG_Cash__c ? full.ASI_CRM_SG_Cash__c : 0) 
+                                                                                          / targetCase 
+                                                                                          / packagingSize;
+
+                                                                        var promotionPerBottle = (full.ASI_CRM_SG_Ad_hoc_Promotions__c ? full.ASI_CRM_SG_Ad_hoc_Promotions__c : 0)
+                                                                                               / targetCase
+                                                                                               / packagingSize;
+
+                                                                        var adhocPromotionPerBottle = (full.ASI_CRM_SG_Anniversary_Free_Bottles__c ? full.ASI_CRM_SG_Anniversary_Free_Bottles__c : 0)
+                                                                                                    * (full.ASI_CRM_SG_IGC_Cost_Per_case__c ? full.ASI_CRM_SG_IGC_Cost_Per_case__c : 0)
+                                                                                                    / targetCase
+                                                                                                    / packagingSize;
+
+                                                                        amount = amount - cashPerBottle - promotionPerBottle - adhocPromotionPerBottle;
+                                                                        return amount.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+
+            "25"                              : {"title"          : "25%",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "alignCenter",
+                                                 "render"         : function(data, type, full) {
+                                                                        var issuedPercent = full.ASI_CRM_Back_Rebates_Issued_Percent__c;
+                                                                        var arhievedPercent = full.ASI_CRM_Till_Date_Sales_Percent_Bottle__c;
+
+                                                                        var className = 'redBackground';
+                                                                        if(issuedPercent >= 25) className = 'greenBackground';
+                                                                        else if(arhievedPercent >= 25) className = 'yellowBackground';
+
+                                                                        if(full.ASI_CRM_Entitle_Back_Rebates__c)
+                                                                            return "<div class='" + className + " inputField_medium alignCenter skuPercentAchievement' style='height:100%;width:100%'>&#10004;</div>";
+                                                                        else 
+                                                                            return '';
+                                                                    }
+                                                },
+
+            "50"                              : {"title"          : "50%",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "alignCenter",
+                                                 "render"         : function(data, type, full) {
+                                                                        var issuedPercent = full.ASI_CRM_Back_Rebates_Issued_Percent__c;
+                                                                        var arhievedPercent = full.ASI_CRM_Till_Date_Sales_Percent_Bottle__c;
+
+                                                                        var className = 'redBackground';
+                                                                        if(issuedPercent >= 50) className = 'greenBackground';
+                                                                        else if(arhievedPercent >= 50) className = 'yellowBackground';
+
+                                                                        if(full.ASI_CRM_Entitle_Back_Rebates__c)
+                                                                            return "<div class='" + className + " inputField_medium alignCenter skuPercentAchievement' style='height:100%;width:100%'>&#10004;</div>";
+                                                                        else 
+                                                                            return '';
+                                                                    }
+                                                },
+
+            "75"                              : {"title"          : "75%",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "alignCenter",
+                                                 "render"         : function(data, type, full) {
+                                                                        var issuedPercent = full.ASI_CRM_Back_Rebates_Issued_Percent__c;
+                                                                        var arhievedPercent = full.ASI_CRM_Till_Date_Sales_Percent_Bottle__c;
+
+                                                                        var className = 'redBackground';
+                                                                        if(issuedPercent >= 75) className = 'greenBackground';
+                                                                        else if(arhievedPercent >= 75) className = 'yellowBackground';
+
+                                                                        if(full.ASI_CRM_Entitle_Back_Rebates__c)
+                                                                            return "<div class='" + className + " inputField_medium alignCenter skuPercentAchievement' style='height:100%;width:100%'>&#10004;</div>";
+                                                                        else 
+                                                                            return '';
+                                                                    }
+                                                },
+
+            "100"                              : {"title"          : "100%",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "className"      : "alignCenter",
+                                                 "render"         : function(data, type, full) {
+                                                                        var issuedPercent = full.ASI_CRM_Back_Rebates_Issued_Percent__c;
+                                                                        var arhievedPercent = full.ASI_CRM_Till_Date_Sales_Percent_Bottle__c;
+
+                                                                        var className = 'redBackground';
+                                                                        if(issuedPercent >= 100) className = 'greenBackground';
+                                                                        else if(arhievedPercent >= 100) className = 'yellowBackground';
+
+                                                                        if(full.ASI_CRM_Entitle_Back_Rebates__c)
+                                                                            return "<div class='" + className + " inputField_medium alignCenter skuPercentAchievement' style='height:100%;width:100%'>&#10004;</div>";
+                                                                        else 
+                                                                            return '';
+                                                                    }
+                                                },
+
+            "Achieved"                        : {"title"          : "Achieved",
+                                                 "data"           : "ASI_CRM_Till_Date_Sales_Percent_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        return data.toLocaleString('en-US', {minimumFractionDigits: 2}) + '%';
+                                                                    }
+                                                },
+
+            "Issued"                          : {"title"          : "Issued",
+                                                 "data"           : "ASI_CRM_Back_Rebates_Issued_Percent__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        return data.toLocaleString('en-US', {minimumFractionDigits: 2}) + '%';
+                                                                    }
+                                                },
+
+            "System Remarks"                  : {"title"          : "System Remarks",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        return full.ASI_CRM_Entitle_Back_Rebates__c ? '' : 'No back rebates';
+                                                                    }
+                                                },
+        };
+
+        const PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING = {
+            "ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        if (IS_SIMULATION && full.ASI_CRM_Payment_Issued__c)
+                                                                            return "";
+                                                                        
+                                                                        return "<a class='link-button' onClick='deletePaymentScheduleRow(this.parentNode.parentNode)'>Delete</a>";  
+                                                                  }
+                                                },
+
+            "Cash Sponsorship"                : {"title"          : "Cash Sponsorship<br />(S$)",
+                                                 "data"           : "ASI_CRM_Sponsorship__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Sponsorship__c';
+                                                                        if(!data) {
+                                                                            data = "";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2}); 
+                                                                            
+                                                                        if (IS_SIMULATION && full.ASI_CRM_Payment_Issued__c)
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                                                                        return "<input class='" + fieldAPIName + " text-right' type='text' value='" + data + "' onChange='updatePaymentValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+
+            "Achieved Percent"                : {"title"          : "% of Achieved<br />Sales Target",
+                                                 "data"           : "ASI_CRM_Percentof_achieved_Sales_Target__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Percentof_achieved_Sales_Target__c';
+                                                                        if(!data) {
+                                                                            data = "";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+                                                                            
+                                                                        if (IS_SIMULATION && full.ASI_CRM_Payment_Issued__c)
+                                                                            return data.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                                                                        return "<input class='" + fieldAPIName + " text-right' type='text' value='" + data + "' onChange='updatePaymentValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+                                                
+            "Schedule Date"                   : {"title"          : "Schedule Date",
+                                                 "data"           : "ASI_CRM_Schedule_Date__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Schedule_Date__c';
+                                                                        if(!data) {
+                                                                            data = "";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+                                                                            
+                                                                        if (IS_SIMULATION && full.ASI_CRM_Payment_Issued__c)
+                                                                            return data;
+                                                                            
+                                                                        return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updatePaymentValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+
+            "Remarks"                         : {"title"          : "Remarks",
+                                                 "data"           : "ASI_CRM_Remarks__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Remarks__c';
+                                                                        if(!data) {
+                                                                            data = "";
+                                                                        }
+
+                                                                        // 20190703 Wilson Chow
+                                                                        // if(READ_ONLY == true)
+                                                                        if(READ_ONLY == true
+                                                                            || (IS_EDIT_CONTRACT_OUTLETS != null
+                                                                                && IS_EDIT_CONTRACT_OUTLETS != undefined
+                                                                                && IS_EDIT_CONTRACT_OUTLETS))
+                                                                        // 20190703 Wilson Chow
+                                                                            return data;
+                                                                            
+                                                                        if (IS_SIMULATION && full.ASI_CRM_Payment_Issued__c)
+                                                                            return data;
+
+                                                                        return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updatePaymentValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                }, 
+
+            "Achieved"                        : {"title"          : "Achieved",
+                                                 "data"           : "ASI_CRM_Achieved__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Achieved__c';
+                                                                        if(!data) {
+                                                                            data = false;
+                                                                        }
+                                                                        
+                                                                        return data ? '&#10004' : '';
+                                                                        
+                                                                        /*
+                                                                        if(data)
+                                                                            return "<input class='" + fieldAPIName + "' type='checkbox' checked disabled />";
+                                                                        else 
+                                                                            return "<input class='" + fieldAPIName + "' type='checkbox' disabled />";
+                                                                        */
+                                                                    }
+                                                },
+
+            "Payment Request"                 : {"title"          : "Payment<br />Request",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        if(IS_DRAFT_CONTRACT == true)
+                                                                            return '';
+
+                                                                        if(READ_ONLY && IS_APPROVED_CONTRACT && full.ASI_CRM_Achieved__c && !full.ASI_CRM_Payment_Issued__c)
+                                                                            return "<input type='button' class='btn showInReadOnly' value='Create' onClick='createPayment(this.parentNode.parentNode);'>";
+                                                                        else
+                                                                            return "<input type='button' class='btn showInReadOnly' value='Create' onClick='createPayment(this.parentNode.parentNode);' disabled//>";
+                                                                    }
+                                                },
+
+            "Created"                         : {"title"          : "Created",
+                                                 "data"           : "ASI_CRM_Payment_Issued__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_Payment_Issued__c';
+                                                                        if(!data) {
+                                                                            data = false;
+                                                                        }
+                                                                        return data ? '&#10004' : '';
+                                                                        
+                                                                        /*
+                                                                        if(data)
+                                                                            return "<input class='" + fieldAPIName + "' type='checkbox' checked disabled />";
+                                                                        else 
+                                                                            return "<input class='" + fieldAPIName + "' type='checkbox' disabled />";
+                                                                        */
+                                                                    }
+                                                },
+        };
+
+        const CONTRACT_OUTLET_FIELD_CONFIG_MAPPING = {
+            "ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        return "<a class='link-button' onClick='deleteContractOutletRow(this.parentNode.parentNode)'>Delete</a>";  
+                                                                  }
+                                                },
+            "Outlet"                          : {"title"          : "Outlet",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'ASI_CRM_SG_Customer__c';
+                                                                        var fieldStr = ""; 
+                                                                        if(full.ASI_CRM_SG_Customer__c) {
+                                                                            fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_SG_Customer__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_SG_Customer__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                                        return fieldStr;
+                                                                    }
+                                                }
+        };
+
+        const SKU_FIELD_CONFIG_MAPPING = {
+            "ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        return "<a class='link-button' onClick='addContractTarget(this.parentNode.parentNode)'>Add</a>";  
+                                                                  }
+                                                },
+            "SKU"                             : {"title"          : "SKU",
+                                                 "data"           : "sku.Name",
+                                                 "defaultContent" : ""
+                                                },
+            "Sub-Brand"                       : {"title"          : "Sub-Brand",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldStr = ""; 
+                                                                        if(full.sku.ASI_MFM_Sub_brand__c) {
+                                                                            fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.sku.ASI_MFM_Sub_brand__c + "' class='link-button'>" + full.sku.ASI_MFM_Sub_brand__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                                        return fieldStr;
+                                                                    }
+                                                }
+        };
+        
+        const OUTLET_FIELD_CONFIG_MAPPING = {
+            "ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        return "<a class='link-button' onClick='addContractOutlet(this.parentNode.parentNode)'>Add</a>";  
+                                                                  }
+                                                },
+            "Outlet"                          : {"title"          : "Outlet",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                                        var fieldAPIName = 'Id';
+                                                                        var fieldStr = ""; 
+                                                                        if(full.Id) {
+                                                                            fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.Id + "' class='link-button'>" + full.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                                        return fieldStr;
+                                                                    }
+                                                }
+        };
+
+        /****************
+        Init Function
+        ****************/
+        $(document).ready(
+            function() {
+                setTable(jQuery.parseJSON('{!JSENCODE(contractTargetListJson)}'));
+                setPaymentScheduleTable(jQuery.parseJSON('{!JSENCODE(cashPaymentScheduleListJson)}'));
+                setContractOutletTable(jQuery.parseJSON('{!JSENCODE(contractContractOutletListJson)}'));
+                setSKUSearchTable(null);
+                setOutletSearchTable(jQuery.parseJSON('{!JSENCODE(childOutletListJson)}'));
+                
+                if(IS_SIMULATION) {
+                    $('.saveBtn').hide();
+                    $('.quickSaveBtn').hide();
+                    $('.showInReadOnly').hide();
+                } else {
+                    $('.reviseContractBtn').hide();
+                    $('.deleteSimulationBtn').hide();
+                    $('.calculateROIBtn').hide();
+                    $('.saveSimulationBtn').hide();
+                    $('.quickSaveSimulationBtn').hide();
+
+                    // 20190703 Wilson Chow
+                     // if(READ_ONLY == true) {
+                       if(READ_ONLY == true
+                        || (IS_EDIT_CONTRACT_OUTLETS != null
+                            && IS_EDIT_CONTRACT_OUTLETS != undefined
+                            && IS_EDIT_CONTRACT_OUTLETS)) {
+                    // 20190703 Wilson Chow
+                        $('.addSKUDiv').hide();
+                        // 20190703 Wilson Chow
+                        /*
+                        $('.addOutletDiv').hide();
+                        $('.btn').hide();
+                        $('.showInReadOnly').show();
+                        */
+                        if(READ_ONLY == true) {
+                            $('.addOutletDiv').hide();
+                            $('.btn').hide();
+                            $('.showInReadOnly').show();
+                        }
+                        if(IS_EDIT_CONTRACT_OUTLETS != null
+                            && IS_EDIT_CONTRACT_OUTLETS != undefined
+                            && IS_EDIT_CONTRACT_OUTLETS) {
+                            $('.showInReadOnly').hide();
+                            $('.addNewCashSponsorship').hide();
+
+                            // show outlet tab if 'Edit Contract Outlets' button is clicked
+                            $('.nav-tabs a[href="#contractOutletDiv"]').tab('show');
+                        }
+                        // 20190703 Wilson Chow
+                    }
+
+                    if(IS_DRAFT_CONTRACT == true) {
+                        $('#backRebatesPaymentBtn').hide();
+                    }
+                    
+                    /*[WL 5.0] BEGIN*/
+                    
+                    if (IS_COMPLETE_CONTRACT){                                              
+                        $('#backRebatesPaymentRemainBtn').show();
+                    }
+                    else {
+                        $('#backRebatesPaymentRemainBtn').hide();
+                    }
+                    
+                    /*[WL 5.0] END*/
+                }
+                initDatepicker();
+                stylingTable();
+            }
+        );
+
+        function setTable(contractTargetList) {
+            //Get Existing SKU from contract target
+            addedSKUIdList = [];
+            for(var index in contractTargetList) {
+                addedSKUIdList.push(contractTargetList[index].ASI_CRM_SKU__c);
+            }
+
+            var skuTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            skuTableProperties["aaData"] = contractTargetList;
+            skuTableProperties["rowId"]  = "Id";
+            
+            var skuColumns = [];
+            console.log()
+            // 20190702 Wilson Chow
+//            if(READ_ONLY == false) skuColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            if(READ_ONLY == false
+                && (IS_EDIT_CONTRACT_OUTLETS == null
+                    || IS_EDIT_CONTRACT_OUTLETS == undefined
+                    || !IS_EDIT_CONTRACT_OUTLETS))
+                skuColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            // 20190702 Wilson Chow
+            skuColumns.push(FIELD_CONFIG_MAPPING["SKU"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["ROI"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Sequence No"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Minimum Sales Case"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Sales In Case"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Sales In 9L"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Duty"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["FOB"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Handling Cost"]);
+            skuColumns.push(FIELD_CONFIG_MAPPING["Total COGS"]);
+
+            skuTableProperties["aoColumns"] = skuColumns;
+            
+            $("#skuDataTable").dataTable(skuTableProperties);
+            
+            var incentiveTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            incentiveTableProperties["aaData"] = contractTargetList;
+            incentiveTableProperties["rowId"]  = "Id";
+
+            var incentiveColumns = [];
+            // 20190702 Wilson Chow
+//            if(READ_ONLY == false) incentiveColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            if(READ_ONLY == false
+                && (IS_EDIT_CONTRACT_OUTLETS == null
+                    || IS_EDIT_CONTRACT_OUTLETS == undefined
+                    || !IS_EDIT_CONTRACT_OUTLETS))
+                incentiveColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            // 20190702 Wilson Chow
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["SKU"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["ROI"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["WS to Ontrade price"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Wholesaler Margin"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Entitle Back Rebates"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Back Rebates"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Back Rebates Total"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Net Price"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Cash"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Net Net Price"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Adhoc Promotion"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Adhoc Promotion Cases"]);
+            incentiveColumns.push(FIELD_CONFIG_MAPPING["Net Net Price after AP"]);
+
+            incentiveTableProperties["aoColumns"]  = incentiveColumns;
+            $("#incentiveDataTable").dataTable(incentiveTableProperties);
+
+            var backRebatesPaymentTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            backRebatesPaymentTableProperties["aaData"] = contractTargetList;
+            backRebatesPaymentTableProperties["rowId"]  = "Id";
+
+            var backRebatesPaymentColumns = [];
+            // 20190702 Wilson Chow
+//            if(READ_ONLY == false) backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            if(READ_ONLY == false
+                && (IS_EDIT_CONTRACT_OUTLETS == null
+                    || IS_EDIT_CONTRACT_OUTLETS == undefined
+                    || !IS_EDIT_CONTRACT_OUTLETS))
+                backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["ACTION"]);
+            // 20190702 Wilson Chow
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["SKU"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["25"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["50"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["75"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["100"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["Achieved"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["Issued"]);
+            backRebatesPaymentColumns.push(FIELD_CONFIG_MAPPING["System Remarks"]);
+
+            backRebatesPaymentTableProperties["aoColumns"]  = backRebatesPaymentColumns;
+            $("#backRebatesPaymentDataTable").dataTable(backRebatesPaymentTableProperties);
+            
+            /* [VL 3.0] BEGIN */
+            calculateTotal();
+            /* [VL 3.0] END */
+        }
+
+        function setPaymentScheduleTable(paymentCashSponsorshipList) {
+            var paymentCashSponsorshipTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            paymentCashSponsorshipTableProperties["aaData"] = paymentCashSponsorshipList;
+            paymentCashSponsorshipTableProperties["rowId"]  = "Id";
+            
+            var paymentCashSponsorshipColumns = [];
+            // 20190702 Wilson Chow
+//            if(READ_ONLY == false) paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["ACTION"]);
+            if(READ_ONLY == false
+                && (IS_EDIT_CONTRACT_OUTLETS == null
+                    || IS_EDIT_CONTRACT_OUTLETS == undefined
+                    || !IS_EDIT_CONTRACT_OUTLETS))
+                paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["ACTION"]);
+            // 20190702 Wilson Chow
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Cash Sponsorship"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Achieved Percent"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Schedule Date"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Remarks"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Achieved"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Payment Request"]);
+            paymentCashSponsorshipColumns.push(PAYMENT_SCHEDULE_FIELD_CONFIG_MAPPING["Created"]);
+            paymentCashSponsorshipTableProperties["aoColumns"] = paymentCashSponsorshipColumns;
+            
+            $("#paymentCashSponsorshipDataTable").dataTable(paymentCashSponsorshipTableProperties);
+        }
+
+        function setSKUSearchTable(skuPriceWrapperList) {
+            var skuSearchTableProperties       = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            skuSearchTableProperties["aaData"] = skuPriceWrapperList;
+            skuSearchTableProperties["rowId"]  = "sku.Id";
+            
+            var skuSearchColumns = [];
+            skuSearchColumns.push(SKU_FIELD_CONFIG_MAPPING["ACTION"]);
+            skuSearchColumns.push(SKU_FIELD_CONFIG_MAPPING["SKU"]);
+            skuSearchColumns.push(SKU_FIELD_CONFIG_MAPPING["Sub-Brand"]);
+            skuSearchTableProperties["aoColumns"] = skuSearchColumns;
+            
+            $(".addSKUTable").dataTable(skuSearchTableProperties);
+        }
+
+        function setContractOutletTable(contractOutletList) {
+            addedOutletMap = {};
+            if (contractOutletList.length > 0) {
+                for(var index = 0 ; index < contractOutletList.length ; index++) {
+                    //for(var index in contractOutletList) {
+                    addedOutletMap[contractOutletList[index].ASI_CRM_SG_Customer__c] = {'Id'   : contractOutletList[index].ASI_CRM_SG_Customer__c, 
+                                                                                        'Name' : contractOutletList[index].ASI_CRM_SG_Customer__r.Name};
+                    
+                }
+            }
+
+            var contractOutletTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            contractOutletTableProperties["aaData"] = contractOutletList;
+            contractOutletTableProperties["rowId"]  = "Id";
+            
+            var contractOutletColumns = [];
+            if(READ_ONLY == false) contractOutletColumns.push(CONTRACT_OUTLET_FIELD_CONFIG_MAPPING["ACTION"]);
+            contractOutletColumns.push(CONTRACT_OUTLET_FIELD_CONFIG_MAPPING["Outlet"]);
+            contractOutletTableProperties["aoColumns"] = contractOutletColumns;
+            
+            $("#contractOutletDataTable").dataTable(contractOutletTableProperties);
+        }
+
+        function setOutletSearchTable(childOutletList) {
+            var outletSearchTableProperties       = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            outletSearchTableProperties["aaData"] = childOutletList;
+            outletSearchTableProperties["rowId"]  = "Id";
+            
+            var outletSearchColumns = [];
+            outletSearchColumns.push(OUTLET_FIELD_CONFIG_MAPPING["ACTION"]);
+            outletSearchColumns.push(OUTLET_FIELD_CONFIG_MAPPING["Outlet"]);
+            outletSearchTableProperties["aoColumns"] = outletSearchColumns;
+            
+            $(".addOutletTable").dataTable(outletSearchTableProperties);
+        }
+
+        function initDatepicker() {
+            $('.ASI_CRM_Schedule_Date__c').each(function(index) {
+                $(this).datepicker({
+                    dateFormat: "yy-mm-dd"
+                });
+            });
+        }
+        
+        /****************
+        Table Event Function
+        ****************/       
+        /* [VL 3.0] BEGIN */
+        function calculateTotal() {
+            $("#skuDataTable").DataTable().row("#skuTotal").remove();
+            $("#incentiveDataTable").DataTable().row("#skuTotal").remove();
+            var contractTargetList = $("#skuDataTable").DataTable().rows().data();
+            
+            var ASI_CRM_TargetCase__c = 0;
+            var ASI_CRM_SG_Target_Sales_9L_Cases__c = 0;
+            var ASI_CRM_Total_Duty__c = 0;
+            var ASI_CRM_Total_FOB__c = 0;
+            var ASI_CRM_Total_Handling_Cost__c = 0;
+            var ASI_CRM_SG_Cash__c = 0;
+            var ASI_CRM_SG_Ad_hoc_Promotions__c = 0;
+            var ASI_CRM_SG_Anniversary_Free_Bottles__c = 0;
+            var backRebatesTotal = 0;
+            for(var i = 0 ; i < contractTargetList.data().length ; i++) {
+                var contractTarget = jQuery.extend({}, contractTargetList[i]);
+                ASI_CRM_TargetCase__c += parseFloat(contractTarget.ASI_CRM_TargetCase__c ? contractTarget.ASI_CRM_TargetCase__c : 0);
+                ASI_CRM_SG_Target_Sales_9L_Cases__c += parseFloat(contractTarget.ASI_CRM_SG_Target_Sales_9L_Cases__c ? contractTarget.ASI_CRM_SG_Target_Sales_9L_Cases__c : 0);
+                ASI_CRM_Total_Duty__c += parseFloat(contractTarget.ASI_CRM_Total_Duty__c ? contractTarget.ASI_CRM_Total_Duty__c : 0);
+                ASI_CRM_Total_FOB__c += parseFloat(contractTarget.ASI_CRM_Total_FOB__c ? contractTarget.ASI_CRM_Total_FOB__c : 0);
+                ASI_CRM_Total_Handling_Cost__c += parseFloat(contractTarget.ASI_CRM_Total_Handling_Cost__c ? contractTarget.ASI_CRM_Total_Handling_Cost__c : 0);
+                ASI_CRM_SG_Cash__c += parseFloat(contractTarget.ASI_CRM_SG_Cash__c ? contractTarget.ASI_CRM_SG_Cash__c : 0);
+                ASI_CRM_SG_Ad_hoc_Promotions__c += parseFloat(contractTarget.ASI_CRM_SG_Ad_hoc_Promotions__c ? contractTarget.ASI_CRM_SG_Ad_hoc_Promotions__c : 0);
+                ASI_CRM_SG_Anniversary_Free_Bottles__c += parseFloat(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c ? contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c : 0);
+                backRebatesTotal += parseFloat(contractTarget.ASI_CRM_Bottle_Incentive__c ? contractTarget.ASI_CRM_Bottle_Incentive__c : 0)
+                                    * parseFloat(contractTarget.ASI_CRM_TargetCase__c ? contractTarget.ASI_CRM_TargetCase__c : 0) 
+                                    * parseFloat(contractTarget.ASI_CRM_PackagingSize__c ? contractTarget.ASI_CRM_PackagingSize__c : 0);
+            }
+            
+			//INC0066579 20190424 Wilken: Round target case to 2 dp
+			ASI_CRM_TargetCase__c = Math.round(ASI_CRM_TargetCase__c * 100)/100;
+			
+            //Create new contract target record
+            var newContractTarget = {};
+            newContractTarget["Id"]                                          = "skuTotal";
+            newContractTarget["ASI_CRM_TargetCase__c"]                       = ASI_CRM_TargetCase__c;
+            newContractTarget["ASI_CRM_SG_Target_Sales_9L_Cases__c"]         = ASI_CRM_SG_Target_Sales_9L_Cases__c;
+            newContractTarget["ASI_CRM_Total_Duty__c"]                       = ASI_CRM_Total_Duty__c;
+            newContractTarget["ASI_CRM_Total_FOB__c"]                        = ASI_CRM_Total_FOB__c;
+            newContractTarget["ASI_CRM_Total_Handling_Cost__c"]              = ASI_CRM_Total_Handling_Cost__c;
+            newContractTarget["ASI_CRM_SG_Cash__c"]                          = ASI_CRM_SG_Cash__c;
+            newContractTarget["ASI_CRM_SG_Ad_hoc_Promotions__c"]             = ASI_CRM_SG_Ad_hoc_Promotions__c;
+            newContractTarget["ASI_CRM_SG_Anniversary_Free_Bottles__c"]      = ASI_CRM_SG_Anniversary_Free_Bottles__c;
+            newContractTarget["backRebatesTotal"]                            = backRebatesTotal;
+            newContractTarget["ASI_CRM_Contract__c"]                         = CONTRACT_ID;
+            newContractTarget["RecordTypeId"]                                = IS_SIMULATION ? CONTRACT_TARGET_RECORD_TYPE_ID_SIMULATION : CONTRACT_TARGET_RECORD_TYPE_ID;
+            newContractTarget["ASI_CRM_SKU__c"]                              = "Test";
+            newContractTarget["ASI_CRM_SKU__r"]                              = {
+                                                                                "Name" : "Test", 
+                                                                                "ASI_CRM_Preset__c" : true ,
+                                                                                "ASI_CRM_Allow_Back_Rebates__c" : true
+                                                                                };
+            /*
+            newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"]      = skuHistoricCostWS 
+                                                                             ? skuHistoricCostWS.ASI_CRM_Price__c 
+                                                                             : sku.ASI_CRM_SG_Selling_Price_Per_Btl_PRS_WS__c;
+
+            newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] = skuHistoricCostWSOnTrade 
+                                                                             ? skuHistoricCostWSOnTrade.ASI_CRM_Price__c 
+                                                                             : sku.ASI_CRM_SG_Selling_Price_Per_Btl_WS_On__c;
+
+            newContractTarget["ASI_CRM_SG_IGC_Cost_Per_case__c"]             = skuHistoricCostIGC 
+                                                                             ? skuHistoricCostIGC.ASI_CRM_Cost__c 
+                                                                             : sku.ASI_CRM_SG_IGC_Cost_Per_case__c;
+
+            newContractTarget["ASI_CRM_Duty_Per_Bottle__c"]                  = skuHistoricCostDuty 
+                                                                             ? skuHistoricCostDuty.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_FOB_Per_Bottle__c"]                   = skuHistoricCostFob 
+                                                                             ? skuHistoricCostFob.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_Handling_Cost_Per_Bottle__c"]         = skuHistoricCostHandlingCost 
+                                                                             ? skuHistoricCostHandlingCost.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_SG_IGC_Cost_Per_9Lc__c"]              = skuHistoricCostIGC 
+                                                                             ? skuHistoricCostIGC.ASI_CRM_SG_IGC_Cost_Per_9Lc__c 
+                                                                             : sku.ASI_CRM_SG_IGC_Cost_Per_9Lc__c;
+
+            newContractTarget["ASI_CRM_SG_Btls_Per_Case__c"]                 = sku.ASI_HK_CRM_Packaging_Size__c;
+            newContractTarget["ASI_CRM_SG_Size_cl__c"]                       = sku.ASI_HK_CRM_Std_Bottle_Size__c;
+
+            newContractTarget['ASI_CRM_Incentive_Price_Per_Bottle__c']       = skuIncentivePrice 
+                                                                             ? skuIncentivePrice.ASI_CRM_Price__c
+                                                                             : 0;
+
+            newContractTarget['ASI_CRM_TargetCase__c']                       = sku.ASI_CRM_Minimum_Sales_Cases__c == null ? 0 : sku.ASI_CRM_Minimum_Sales_Cases__c;
+            newContractTarget['ASI_CRM_SG_Wholesaler_Margin__c']             = newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] 
+                                                                             - newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"];
+
+            newContractTarget['ASI_CRM_Minimum_Sales_Cases__c']              = sku.ASI_CRM_Minimum_Sales_Cases__c == null ? 0 : sku.ASI_CRM_Minimum_Sales_Cases__c;
+            newContractTarget['ASI_CRM_PackagingSize__c']                    = sku.ASI_HK_CRM_Packaging_Size__c;
+            */
+            //Add new contract target record to data table and redraw
+            $("#skuDataTable").DataTable().row.add(newContractTarget).draw();
+            $("#incentiveDataTable").DataTable().row.add(newContractTarget).draw();
+            
+            $("#skuDataTable").DataTable().page('last').draw('page');
+            $("#incentiveDataTable").DataTable().page('last').draw('page');
+            
+        }
+        /* [VL 3.0] END */
+        
+        function addContractTarget(row) {
+            var skuPriceWrapper = $(".addSKUTable").DataTable().row(row).data();
+            var sku = skuPriceWrapper.sku;
+            
+            var skuHistoricCostWS           = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_RTM_Wholesaler_Price_Per_Bottle'];
+            var skuHistoricCostWSOnTrade    = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_Open_Outlet_Price_Per_Bottle'];
+            var skuHistoricCostIGC          = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_IGC'];
+            var skuHistoricCostDuty         = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_CRM_Duty_Per_Bottle'];
+            var skuHistoricCostFob          = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_CRM_FOB_Per_Bottle'];
+            var skuHistoricCostHandlingCost = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_CRM_Handling_Cost_Per_Bottle'];
+            var skuIncentivePrice           = skuPriceWrapper.skuPriceRecordTypeMap['ASI_CRM_SG_CRM_Incentive_Price_Per_Bottle'];
+            
+            //Create new contract target record
+            var newContractTarget = {};
+            newContractTarget["Id"]                                          = NEW_CONTRACT_TARGET_PREFIX + NEW_CONTRACT_TARGET_INDEX;
+            newContractTarget["ASI_CRM_Contract__c"]                         = CONTRACT_ID;
+            newContractTarget["RecordTypeId"]                                = IS_SIMULATION ? CONTRACT_TARGET_RECORD_TYPE_ID_SIMULATION : CONTRACT_TARGET_RECORD_TYPE_ID;
+            newContractTarget["ASI_CRM_SKU__c"]                              = sku.Id;
+            newContractTarget["ASI_CRM_SKU__r"]                              = {
+                                                                                "Name" : sku.Name, 
+                                                                                "ASI_CRM_Preset__c" : sku.ASI_CRM_Preset__c 
+                                                                                /* [VL 2.0] BEGIN */
+                                                                                , "ASI_CRM_Allow_Back_Rebates__c" : sku.ASI_CRM_Allow_Back_Rebates__c
+                                                                                /* [VL 2.0] END */
+                                                                                };
+            newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"]      = skuHistoricCostWS 
+                                                                             ? skuHistoricCostWS.ASI_CRM_Price__c 
+                                                                             : sku.ASI_CRM_SG_Selling_Price_Per_Btl_PRS_WS__c;
+
+            newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] = skuHistoricCostWSOnTrade 
+                                                                             ? skuHistoricCostWSOnTrade.ASI_CRM_Price__c 
+                                                                             : sku.ASI_CRM_SG_Selling_Price_Per_Btl_WS_On__c;
+            /* [VL 4.0] BEGIN */
+            newContractTarget["ASI_CRM_RTM_Price_Per_Bottle_PRS_WS__c"]      = newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"];
+            newContractTarget["ASI_CRM_RTM_Price_Per_Bottle_WS_OT__c"]       = newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"];
+            /* [VL 4.0] END */
+
+            newContractTarget["ASI_CRM_SG_IGC_Cost_Per_case__c"]             = skuHistoricCostIGC 
+                                                                             ? skuHistoricCostIGC.ASI_CRM_Cost__c 
+                                                                             : sku.ASI_CRM_SG_IGC_Cost_Per_case__c;
+
+            newContractTarget["ASI_CRM_Duty_Per_Bottle__c"]                  = skuHistoricCostDuty 
+                                                                             ? skuHistoricCostDuty.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_FOB_Per_Bottle__c"]                   = skuHistoricCostFob 
+                                                                             ? skuHistoricCostFob.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_Handling_Cost_Per_Bottle__c"]         = skuHistoricCostHandlingCost 
+                                                                             ? skuHistoricCostHandlingCost.ASI_CRM_Cost__c 
+                                                                             : 0;
+
+            newContractTarget["ASI_CRM_SG_IGC_Cost_Per_9Lc__c"]              = skuHistoricCostIGC 
+                                                                             ? skuHistoricCostIGC.ASI_CRM_SG_IGC_Cost_Per_9Lc__c 
+                                                                             : sku.ASI_CRM_SG_IGC_Cost_Per_9Lc__c;
+
+            newContractTarget["ASI_CRM_SG_Btls_Per_Case__c"]                 = sku.ASI_HK_CRM_Packaging_Size__c;
+            newContractTarget["ASI_CRM_SG_Size_cl__c"]                       = sku.ASI_HK_CRM_Std_Bottle_Size__c;
+
+            newContractTarget['ASI_CRM_Incentive_Price_Per_Bottle__c']       = skuIncentivePrice 
+                                                                             ? skuIncentivePrice.ASI_CRM_Price__c
+                                                                             : 0;
+
+            newContractTarget['ASI_CRM_TargetCase__c']                       = sku.ASI_CRM_Minimum_Sales_Cases__c == null ? 0 : sku.ASI_CRM_Minimum_Sales_Cases__c;
+            
+            /* [VL 5.0] BEGIN */
+            /*
+            newContractTarget['ASI_CRM_SG_Wholesaler_Margin__c']             = newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] 
+                                                                             - newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"];
+            */
+            newContractTarget['ASI_CRM_Wholesaler_Margin_RTM__c']             = newContractTarget["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] 
+                                                                             - newContractTarget["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"];
+            /* [VL 5.0] END */
+
+            newContractTarget['ASI_CRM_Minimum_Sales_Cases__c']              = sku.ASI_CRM_Minimum_Sales_Cases__c == null ? 0 : sku.ASI_CRM_Minimum_Sales_Cases__c;
+            newContractTarget['ASI_CRM_PackagingSize__c']                    = sku.ASI_HK_CRM_Packaging_Size__c;
+            
+            //Add new contract target record to data table and redraw
+            $("#skuDataTable").DataTable().row.add(newContractTarget).draw();
+            $("#incentiveDataTable").DataTable().row.add(newContractTarget).draw();
+            $("#backRebatesPaymentDataTable").DataTable().row.add(newContractTarget).draw();
+            //$("#paymentCashSponsorshipDataTable").DataTable().row.add(newContractTarget).draw();
+            
+            $("#skuDataTable").DataTable().page('last').draw('page');
+            $("#incentiveDataTable").DataTable().page('last').draw('page');
+            $("#backRebatesPaymentDataTable").DataTable().page('last').draw('page');
+            //$("#paymentCashSponsorshipDataTable").DataTable().page('last').draw('page');
+            
+            //Remove sku in search sku table
+            $('.addSKUTable').each(function(index) {
+                $(this).DataTable().row("#" + sku.Id).remove().draw();
+            });
+            
+            //Add index
+            NEW_CONTRACT_TARGET_INDEX++;
+            
+            addedSKUIdList.push(sku.Id);
+            
+            /* [VL 3.0] BEGIN */
+            calculateTotal();
+            /* [VL 3.0] END */
+        }
+
+        function addPaymentCashSponsorship() {
+            //Create new payment cash sponsorship record
+            var newPaymentCashSponsorship = {};
+            newPaymentCashSponsorship["Id"]                  = NEW_PAYMENT_SCHEDULE_PREFIX + NEW_PAYMENT_SCHEDULE_INDEX;
+            newPaymentCashSponsorship["ASI_CRM_Contract__c"] = CONTRACT_ID;
+            newPaymentCashSponsorship["RecordTypeId"]        = IS_SIMULATION ? PAYMENT_SCHEDULE_RECORD_TYPE_ID_SIMULATION : PAYMENT_SCHEDULE_RECORD_TYPE_ID;
+            newPaymentCashSponsorship["ASI_CRM_Type__c"]     = "Cash Sponsorship";
+            
+            //Add new payment cash sponsorship record to data table and redraw
+            $("#paymentCashSponsorshipDataTable").DataTable().row.add(newPaymentCashSponsorship).draw();
+            $("#paymentCashSponsorshipDataTable").DataTable().page('last').draw('page');
+            
+            initDatepicker();
+            
+            //Add index
+            NEW_PAYMENT_SCHEDULE_INDEX ++;
+        }
+
+        function addContractOutlet(row) {
+            var selectedOutlet = $(".addOutletTable").DataTable().row(row).data();
+            
+            //Create new contract outlet record
+            var newContractOutlet = {};
+            newContractOutlet["Id"]                                          = NEW_CONTRACT_OUTLET_PREFIX + NEW_CONTRACT_OUTLET_INDEX;
+            newContractOutlet["ASI_CRM_SG_Contract__c"]                      = CONTRACT_ID;
+            newContractOutlet["RecordTypeId"]                                = IS_SIMULATION ? CONTRACT_OUTLET_RECORD_TYPE_ID_SIMULATION : CONTRACT_OUTLET_RECORD_TYPE_ID;
+            newContractOutlet["ASI_CRM_SG_Customer__c"]                      = selectedOutlet.Id;
+            newContractOutlet["ASI_CRM_SG_Customer__r"]                      = {"Name" : selectedOutlet.Name};
+            
+            //Add new contract outlet record to data table and redraw
+            $("#contractOutletDataTable").DataTable().row.add(newContractOutlet).draw();
+            $("#contractOutletDataTable").DataTable().page('last').draw('page');
+            
+            //Remove outlet in search outlet table
+            $(".addOutletTable").each(function(index) {
+                $(this).DataTable().row("#" + selectedOutlet.Id).remove().draw();
+            });
+            
+            //Add index
+            NEW_CONTRACT_OUTLET_INDEX++;
+
+            addedOutletMap[selectedOutlet.Id] = selectedOutlet;
+        }
+
+        function updateContractTargetValue(row, fieldAPIName, newValue) {
+            //Update all contract target data table
+            //Update one table will auto update all table, coz data is linked to same source
+            var contractTargetData = $("#skuDataTable").DataTable().row(row).data();
+            contractTargetData[fieldAPIName] = newValue;
+            recalculateContractTargetValue(row.id, contractTargetData);
+            $('#skuDataTable').DataTable().rows().invalidate('data').draw(false);
+            $('#incentiveDataTable').DataTable().rows().invalidate('data').draw(false);
+            $('#backRebatesPaymentDataTable').DataTable().rows().invalidate('data').draw(false);
+            stylingTable();
+            /* [VL 3.0] BEGIN */
+            calculateTotal();
+            /* [VL 3.0] END */
+        }
+
+        function updatePaymentValue(row, fieldAPIName, newValue) {
+            var rowId = row.id;
+            var paymentCashSponsorshipData = $("#paymentCashSponsorshipDataTable").DataTable().row(row).data();
+            paymentCashSponsorshipData[fieldAPIName] = newValue;
+            $('#paymentCashSponsorshipDataTable').DataTable().rows().invalidate('data').draw(false);
+            initDatepicker();
+        }
+
+        function deleteContractTargetRow(row) {
+            var rowId = row.id;
+            if(!rowId.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                if (!IS_SIMULATION || IS_ALREADY_SIMULATED) deleteContractTargetIdList.push(rowId);
+            }
+
+            var contractTargetData = $("#skuDataTable").DataTable().row(row).data();
+            var index = addedSKUIdList.indexOf(contractTargetData["ASI_CRM_SKU__c"]);
+            addedSKUIdList.splice(index, 1);
+            
+            $("#skuDataTable").DataTable().row(row).remove().draw();
+            $("#incentiveDataTable").DataTable().row(row).remove().draw();
+            $("#backRebatesPaymentDataTable").DataTable().row(row).remove().draw();
+            
+            /* [VL 3.0] BEGIN */
+            calculateTotal();
+            /* [VL 3.0] END */
+        }
+        
+        function deletePaymentScheduleRow(row) {
+            var rowId = row.id;
+            if(!rowId.startsWith(NEW_PAYMENT_SCHEDULE_PREFIX)) {
+                if (!IS_SIMULATION || IS_ALREADY_SIMULATED) deletePaymentScheduleIdList.push(rowId);
+            }
+            if($("#paymentCashSponsorshipDataTable").DataTable().row("#" + rowId).length > 0) {
+                $("#paymentCashSponsorshipDataTable").DataTable().row(row).remove().draw();
+            }
+            initDatepicker();
+        }
+       
+        function deleteContractOutletRow(row) {
+            var rowId = row.id;
+            if(!rowId.startsWith(NEW_CONTRACT_OUTLET_PREFIX)) {
+                if (!IS_SIMULATION || IS_ALREADY_SIMULATED) deleteContractOutletIdList.push(rowId);
+            } 
+
+            var contractOutletData = $("#contractOutletDataTable").DataTable().row(row).data();
+            $(".addOutletTable").DataTable().row.add(addedOutletMap[contractOutletData.ASI_CRM_SG_Customer__c]).draw();
+            delete addedOutletMap[contractOutletData.ASI_CRM_SG_Customer__c];
+
+
+            if($("#contractOutletDataTable").DataTable().row("#" + rowId).length > 0) {
+                $("#contractOutletDataTable").DataTable().row(row).remove().draw();
+            }
+        }
+
+        /****************
+        Execute Controller Function
+        ****************/
+        function generateBackRebatesPaymentComplete(paymentRequestId, exceptionListJson){
+            $("body").removeClass("savingRecord");
+            if(paymentRequestId){
+                window.open('/' + paymentRequestId, '_parent');
+            } else{
+                showError(exceptionListJson);
+            }
+        }
+        
+        function createPayment(row) {
+            var rowId = row.id;
+            var scheduleId = $("#paymentCashSponsorshipDataTable").DataTable().row(row).data().Id;
+            console.log(scheduleId);
+            
+            $("body").addClass("savingRecord");
+            generatePaymentApex(scheduleId);
+        }
+
+        function searchSKUJS(inputField) {
+            console.log(inputField.val());
+            console.log(addedSKUIdList);
+            if(inputField.val()) {
+                //Show loading gif
+                $("body").addClass("savingRecord");
+                searchSKU(inputField.val(), JSON.stringify(addedSKUIdList));
+            }
+        }
+        
+        function searchSKUComplete(skuPriceWrapperListJson) {
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+            setSKUSearchTable(jQuery.parseJSON(skuPriceWrapperListJson));
+        }
+
+        function calculateROIJS() {
+            //Show loading gif
+            $("body").addClass("savingRecord");
+            
+            var calculateContractTargetList = [];
+            
+            var contractTargetList = $("#skuDataTable").DataTable().rows().data();
+            for(var i = 0 ; i < contractTargetList.data().length ; i++) {
+                /* [VL 3.0] BEGIN */
+                if (contractTargetList[i].Id == "skuTotal") continue;
+                /* [VL 3.0] END */
+                calculateContractTargetList.push(contractTargetList[i]);
+            }
+            
+            calculateROI(JSON.stringify(calculateContractTargetList));
+        }
+        
+        function calculateROIComplete(oldROI, newROI) {
+            //Display the error message and change the problem field to red
+            $('.infoPanel').css("display","block");
+            
+            $('.infoMessage').html('Original ROI% = ' + oldROI + '%, New ROI% = ' + newROI + '%');
+            
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+        }
+
+        function reviseContract() {
+            $("body").addClass("savingRecord");
+            reviseContractApex();
+        }
+
+        function saveRecord(isQuickSave, isConfirmRevise) {
+            //Show loading gif
+            $("body").addClass("savingRecord");
+
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+            $('.infoPanel').css("display","none");
+
+            var upsertContractTargetList  = [];
+            var upsertPaymentScheduleList = [];
+            var upsertContractOutletList  = [];
+            
+            var contractTargetList = $("#skuDataTable").DataTable().rows().data();
+            for(var i = 0 ; i < contractTargetList.data().length ; i++) {
+                /* [VL 3.0] BEGIN */
+                if (contractTargetList[i].Id == "skuTotal") continue;
+                /* [VL 3.0] END */
+                var cloneContractTarget = jQuery.extend({}, contractTargetList[i]);
+                if(cloneContractTarget.Id.startsWith(NEW_CONTRACT_TARGET_PREFIX)) {
+                    delete cloneContractTarget["Id"];
+                }
+                upsertContractTargetList.push(cloneContractTarget);
+            }
+
+            var paymentCashSponsorshipList = $("#paymentCashSponsorshipDataTable").DataTable().rows().data();
+            for(var i = 0 ; i < paymentCashSponsorshipList.data().length ; i++) {
+                var clonePaymentCashSponsorship = jQuery.extend({}, paymentCashSponsorshipList[i]);
+                if(clonePaymentCashSponsorship.Id.startsWith(NEW_PAYMENT_SCHEDULE_PREFIX)) {
+                    delete clonePaymentCashSponsorship["Id"];
+                }
+                upsertPaymentScheduleList.push(clonePaymentCashSponsorship);
+            }
+
+            var contractOutletList = $("#contractOutletDataTable").DataTable().rows().data();
+            for(var i = 0 ; i < contractOutletList.data().length ; i++) {
+                var cloneContractOutlet = jQuery.extend({}, contractOutletList[i]);
+                if(cloneContractOutlet.Id.startsWith(NEW_CONTRACT_OUTLET_PREFIX)) {
+                    delete cloneContractOutlet["Id"];
+                }
+                upsertContractOutletList.push(cloneContractOutlet);
+            }
+
+            upsertContractTargetList = sortBySequenceNo(upsertContractTargetList);
+
+            console.log(upsertContractTargetList);
+            console.log(deleteContractTargetIdList);
+
+            saveRecordApex(isQuickSave, isConfirmRevise, 
+                           JSON.stringify(upsertContractTargetList), JSON.stringify(deleteContractTargetIdList), 
+                           JSON.stringify(upsertPaymentScheduleList), JSON.stringify(deletePaymentScheduleIdList), 
+                           JSON.stringify(upsertContractOutletList), JSON.stringify(deleteContractOutletIdList));
+        }
+
+        function saveRecordComplete(contractTargetListJson, cashPaymentScheduleListJson, contractOutletListJson, childOutletListJson, hasError, exceptionListJson, isConfirmRevise) {
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+
+            if(!hasError) {
+            
+                IS_ALREADY_SIMULATED = '{!isAlreadySimulated}' == 'true';
+                
+                //Clear search sku data table
+                $(".addSKUTable").DataTable().clear();
+
+                setTable(jQuery.parseJSON(contractTargetListJson));
+                setPaymentScheduleTable(jQuery.parseJSON(cashPaymentScheduleListJson));
+                setContractOutletTable(jQuery.parseJSON(contractOutletListJson));
+                setOutletSearchTable(jQuery.parseJSON(childOutletListJson));
+
+                //Reset the prefix index
+                NEW_CONTRACT_TARGET_INDEX = 1;
+                NEW_PAYMENT_SCHEDULE_INDEX = 1;
+                NEW_CONTRACT_OUTLET_INDEX = 1;
+
+                //Clear the delete id list
+                deleteContractTargetIdList  = [];
+                deletePaymentScheduleIdList = [];
+                deleteContractOutletIdList  = [];
+                
+                stylingTable();
+                
+                if (IS_SIMULATION) $("#reviseButton").show();
+                if (isConfirmRevise) beforeReviseContract();
+            } else {
+                showError(exceptionListJson);
+            }
+        }
+        
+        function beforeReviseContract(){
+            $("body").addClass("savingRecord");
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_SG_ContractManageAll_Ctrl.validateAmountExceedRTMContract}',
+                '{!ASI_TH_CRM_Contract__c.Id}',
+                true,
+                function(result, event){
+                    if(result=='OK'){
+                    
+                        reviseContract();
+                        
+                    }
+                    else {
+                        
+                        $("body").removeClass("savingRecord");
+                        $('.saveErrorPanel').css("display","block");
+                        
+                        //Assign the error message to page
+                        $('.errorMessage').html(result);
+                    }
+                }, 
+                {escape: true}
+            );  
+        }
+
+        function generateBackRebatesPayment(){
+            
+            //Show loading gif
+            $("body").addClass("savingRecord");
+
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+            $('.infoPanel').css("display","none");
+            
+            generateBackRebatesPaymentApex();
+        }
+
+        //[WL 5.0] BEGIN
+        function generateBackRebatesRemainPayment(){
+            
+            //Show loading gif
+            $("body").addClass("savingRecord");
+
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+            $('.infoPanel').css("display","none");
+            
+            generateBackRebatesPaymentRemainApex();
+        }
+        //[WL 5.0] END
+        
+        function generatePaymentComplete(paymentId, hasError, exceptionListJson) {
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+
+            if(!hasError) {
+            
+                if (paymentId!='') window.open('/'+paymentId, '_parent'); 
+            } else {
+                showError(exceptionListJson);
+            }
+            
+        }
+
+        /****************
+        Business Logic Function
+        ****************/
+        function recalculateContractTargetValue(rowId, contractTargetData) { 
+            contractTargetData["ASI_CRM_SG_Target_Sales_9L_Cases__c"] = parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                                      * parseFloat(contractTargetData["ASI_CRM_SG_Size_cl__c"] ? contractTargetData["ASI_CRM_SG_Size_cl__c"] : 0)
+                                                                      * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                      / 900;
+
+            contractTargetData["ASI_CRM_SG_Target_Sales_Cases_FOC__c"] = parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0); 
+            
+            var inflationRate     = {!InflationRate};
+            var distributionRate  = {!DistributionRate};
+            var contractEndDate   = new Date('{!contract.ASI_TH_CRM_End_Date__c}');
+            var contractStartDate = new Date('{!contract.ASI_TH_CRM_Start_Date__c}');
+            var contractPeriod    = Math.round((((contractEndDate - contractStartDate)/86400000)/30));
+            
+            contractTargetData["ASI_CRM_Total_Management_Incentives__c"] = parseFloat(contractTargetData["ASI_CRM_SG_Management_Incentives__c"] ? contractTargetData["ASI_CRM_SG_Management_Incentives__c"] : 0)
+                                                                         * contractPeriod;
+            
+            contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] = parseFloat(contractTargetData["ASI_CRM_SG_Sales_Incentive__c"] ? contractTargetData["ASI_CRM_SG_Sales_Incentive__c"] : 0)
+                                                                       * parseFloat(contractTargetData["ASI_CRM_SG_Target_Sales_Cases_FOC__c"] ? contractTargetData["ASI_CRM_SG_Target_Sales_Cases_FOC__c"] : 0)
+                                                                       / parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 1)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_Total_Management_Incentives__c"] ? contractTargetData["ASI_CRM_Total_Management_Incentives__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Others__c"] ? contractTargetData["ASI_CRM_SG_Others__c"] : 0)
+                                                                       +parseFloat (contractTargetData["ASI_CRM_SG_Cont_Sponsor_Target_Incentive__c"] ? contractTargetData["ASI_CRM_SG_Cont_Sponsor_Target_Incentive__c"] : 0);
+            
+            contractTargetData["ASI_CRM_Total_Duty__c"] = (parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                           + parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0))
+                                                        * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                        * parseFloat(contractTargetData["ASI_CRM_Duty_Per_Bottle__c"] ? contractTargetData["ASI_CRM_Duty_Per_Bottle__c"] : 0);
+
+            contractTargetData["ASI_CRM_Total_FOB__c"] = (parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                           + parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0))
+                                                       * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                       * parseFloat(contractTargetData["ASI_CRM_FOB_Per_Bottle__c"] ? contractTargetData["ASI_CRM_FOB_Per_Bottle__c"] : 0);
+            
+            contractTargetData["ASI_CRM_Total_Handling_Cost__c"] = (parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0) 
+                                                                    + parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0))
+                                                                 * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                 * parseFloat(contractTargetData["ASI_CRM_Handling_Cost_Per_Bottle__c"] ? contractTargetData["ASI_CRM_Handling_Cost_Per_Bottle__c"] : 0);
+            
+            contractTargetData["ASI_CRM_SG_Total_Free_Goods_9L_Cases__c"] = parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0)
+                                                                          * parseFloat(contractTargetData["ASI_CRM_SG_Size_cl__c"] ? contractTargetData["ASI_CRM_SG_Size_cl__c"] : 0)
+                                                                          * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                          / 900;
+            
+            if(!contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] || contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] == 0 || 
+               contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] > contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"]) {
+                contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] = 0; 
+            } else {
+                contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] = parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                                                  * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                                  * (parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] : 0)
+                                                                                     - parseFloat(contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] ? contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] : 0));
+            }
+            
+            contractTargetData["ASI_CRM_SG_Wholesaler_Margin_Total__c"] = parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                                        * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                        * parseFloat(contractTargetData["ASI_CRM_SG_Wholesaler_Margin__c"] ? contractTargetData["ASI_CRM_SG_Wholesaler_Margin__c"] : 0);
+            
+            if(!contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] || contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] == 0) {
+                contractTargetData["ASI_CRM_SG_Contract_Margin_per_9Lc__c"] = 0;
+            } else {
+                contractTargetData["ASI_CRM_SG_Contract_Margin_per_9Lc__c"] = ((parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] : 0)
+                                                                                - parseFloat(contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] ? contractTargetData["ASI_CRM_SG_Consumer_Price_Offer__c"] : 0))
+                                                                            + parseFloat(contractTargetData["ASI_CRM_SG_Wholesaler_Margin__c"] ? contractTargetData["ASI_CRM_SG_Wholesaler_Margin__c"] : 0))
+                                                                            * 900
+                                                                            / parseFloat(contractTargetData["ASI_CRM_SG_Size_cl__c"] ? contractTargetData["ASI_CRM_SG_Size_cl__c"] : 0);
+            }
+            
+            contractTargetData["ASI_CRM_SG_Contract_Margin_Total__c"] = parseFloat(contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] ? contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] : 0)
+                                                                      + parseFloat(contractTargetData["ASI_CRM_SG_Wholesaler_Margin_Total__c"] ? contractTargetData["ASI_CRM_SG_Wholesaler_Margin_Total__c"] : 0);
+            
+            if(contractTargetData["ASI_CRM_Entitle_Back_Rebates__c"] 
+               // && (CONTRACT_TYPE == CONTRACT_TYPE_PARTNER || (CONTRACT_TYPE == CONTRACT_TYPE_KEYACCOUNT && parseFloat(contractTargetData["ASI_CRM_TargetCase__c"]) >= parseFloat(contractTargetData["ASI_CRM_Minimum_Sales_Cases__c"]))) 
+            ) {
+                if (!parseFloat(contractTargetData["ASI_CRM_Bottle_Incentive__c"])){
+                    contractTargetData["ASI_CRM_Bottle_Incentive__c"] =  (parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] : 0)
+                                                                        - parseFloat(contractTargetData["ASI_CRM_Incentive_Price_Per_Bottle__c"] ? contractTargetData["ASI_CRM_Incentive_Price_Per_Bottle__c"] : 0));
+                }
+            }
+            else {
+                contractTargetData["ASI_CRM_Bottle_Incentive__c"] = 0;
+                contractTargetData["ASI_CRM_Entitle_Back_Rebates__c"] = false;
+            }
+                
+            contractTargetData["ASI_CRM_Bottle_Incentive_Total__c"] = parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                        * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                        * parseFloat(contractTargetData["ASI_CRM_Bottle_Incentive__c"] ? contractTargetData["ASI_CRM_Bottle_Incentive__c"] : 0);
+
+            contractTargetData["ASI_CRM_SG_Cash_Sponsorship_Total__c"] = parseFloat(contractTargetData["ASI_CRM_SG_Good_in_Kinds__c"] ? contractTargetData["ASI_CRM_SG_Good_in_Kinds__c"] : 0)
+                                                                      + parseFloat(contractTargetData["ASI_CRM_SG_Cash__c"] ? contractTargetData["ASI_CRM_SG_Cash__c"] : 0);
+            
+            contractTargetData["ASI_CRM_SG_Trd_Adv_Promo_Total__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Events__c"] ? contractTargetData["ASI_CRM_SG_Events__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] ? contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] ? contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] ? contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_Advertising_Spot__c"] : 0)) 
+                                                                    + ((parseFloat(contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] : 0)
+                                                                        + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] ? contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] : 0)
+                                                                        + parseFloat(contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] : 0)
+                                                                        + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] ? contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] : 0))
+                                                                       * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                       * parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c"] : 0));
+            
+            contractTargetData["ASI_CRM_SG_Trd_Adv_Promo_TotalPRS__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Events__c"] ? contractTargetData["ASI_CRM_SG_Events__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] ? contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] ? contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] ? contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_Advertising_Spot__c"] : 0))
+                                                                       + ((parseFloat(contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] : 0)
+                                                                           + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] ? contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] : 0)
+                                                                           + parseFloat(contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] : 0)
+                                                                           + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] ? contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] : 0))
+                                                                          * parseFloat(contractTargetData["ASI_CRM_SG_IGC_Cost_Per_case__c"] ? contractTargetData["ASI_CRM_SG_IGC_Cost_Per_case__c"] : 0));
+        
+            contractTargetData["ASI_CRM_SG_Free_Goods__c"] = -(parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0) 
+                                                               * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                               * parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] : 0));
+            
+            contractTargetData["ASI_CRM_SG_Total_Allowances_Discounts__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Free_Goods__c"] ? contractTargetData["ASI_CRM_SG_Free_Goods__c"] : 0)
+                                                                              - parseFloat(contractTargetData["ASI_CRM_SG_Wholesaler_Margin_Total__c"] ? contractTargetData["ASI_CRM_SG_Wholesaler_Margin_Total__c"] : 0)
+                                                                              - parseFloat(contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] ? contractTargetData["ASI_CRM_SG_Compensation_for_WS_Price_Dif__c"] : 0)
+                                                                              - parseFloat(contractTargetData["ASI_CRM_SG_Good_in_Kinds__c"] ? contractTargetData["ASI_CRM_SG_Good_in_Kinds__c"] : 0)
+                                                                              - parseFloat(contractTargetData["ASI_CRM_SG_Cash__c"] ? contractTargetData["ASI_CRM_SG_Cash__c"] : 0) 
+                                                                              - (parseFloat(contractTargetData["ASI_CRM_Bottle_Incentive__c"] ? contractTargetData["ASI_CRM_Bottle_Incentive__c"] : 0)
+                                                                                 * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                                                 * parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)));
+            
+            contractTargetData["ASI_CRM_SG_Gross_Sales__c"] = ((parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0)
+                                                                + parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0))
+                                                               * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0)
+                                                               * parseFloat(contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] ? contractTargetData["ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c"] : 0));
+            
+            contractTargetData["ASI_CRM_SG_Distribution_Cost__c"] = -(parseFloat(contractTargetData["ASI_CRM_SG_Gross_Sales__c"] ? contractTargetData["ASI_CRM_SG_Gross_Sales__c"] : 0)
+                                                                      * parseFloat(distributionRate ? distributionRate: 0) / 100);
+            
+            contractTargetData["ASI_CRM_SG_Net_Sales__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Gross_Sales__c"] ? contractTargetData["ASI_CRM_SG_Gross_Sales__c"] : 0)
+                                                            + parseFloat(contractTargetData["ASI_CRM_SG_Total_Allowances_Discounts__c"] ? contractTargetData["ASI_CRM_SG_Total_Allowances_Discounts__c"] : 0)) 
+            
+            contractTargetData["ASI_CRM_SG_Cost_of_Sales__c"] = -(((parseFloat(contractTargetData["ASI_CRM_FOB_Per_Bottle__c"] ? contractTargetData["ASI_CRM_FOB_Per_Bottle__c"] : 0) 
+                                                                    + parseFloat(contractTargetData["ASI_CRM_Handling_Cost_Per_Bottle__c"] ? contractTargetData["ASI_CRM_Handling_Cost_Per_Bottle__c"] : 0))
+                                                                   * (1 + (parseFloat(inflationRate ? inflationRate : 0) / 100))
+                                                                   + parseFloat(contractTargetData["ASI_CRM_Duty_Per_Bottle__c"] ? contractTargetData["ASI_CRM_Duty_Per_Bottle__c"] : 0))
+                                                                  * (parseFloat(contractTargetData["ASI_CRM_TargetCase__c"] ? contractTargetData["ASI_CRM_TargetCase__c"] : 0)
+                                                                     + parseFloat(contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] ? contractTargetData["ASI_CRM_SG_Total_Free_Goods_Cases__c"] : 0))
+                                                                  * parseFloat(contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] ? contractTargetData["ASI_CRM_SG_Btls_Per_Case__c"] : 0))
+                                                                  + parseFloat(contractTargetData["ASI_CRM_SG_Distribution_Cost__c"] ? contractTargetData["ASI_CRM_SG_Distribution_Cost__c"] : 0);
+            
+            contractTargetData["ASI_CRM_SG_Gross_Margin__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Net_Sales__c"] ? contractTargetData["ASI_CRM_SG_Net_Sales__c"] : 0)
+                                                                + parseFloat(contractTargetData["ASI_CRM_SG_Cost_of_Sales__c"] ? contractTargetData["ASI_CRM_SG_Cost_of_Sales__c"] : 0));
+            
+            contractTargetData["ASI_CRM_SG_Trade_A_P_Total_PRS__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Events__c"] ? contractTargetData["ASI_CRM_SG_Events__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_SG_Signages_Advertising_Spot__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] ? contractTargetData["ASI_CRM_SG_Trade_Incentive_Trips__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] ? contractTargetData["ASI_CRM_SG_Product_Branding_Display__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] ? contractTargetData["ASI_CRM_SG_Ad_hoc_Promotions__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_SG_Ad_hoc_Others_Total__c"] ? contractTargetData["ASI_CRM_SG_Ad_hoc_Others_Total__c"] : 0)
+                                                                       + (parseFloat(contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Events_Free_Bottles__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] ? contractTargetData["ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] ? contractTargetData["ASI_CRM_SG_Anniversary_Free_Bottles__c"] : 0)
+                                                                          + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] ? contractTargetData["ASI_CRM_Advertising_Spot_Free_Bottles__c"] : 0))
+                                                                       * parseFloat(contractTargetData["ASI_CRM_SG_IGC_Cost_Per_case__c"] ? contractTargetData["ASI_CRM_SG_IGC_Cost_Per_case__c"] : 0)
+                                                                       + parseFloat(contractTargetData["ASI_CRM_Advertising_Spot__c"] ? contractTargetData["ASI_CRM_Advertising_Spot__c"] : 0));
+            
+
+            contractTargetData["ASI_CRM_SG_Return_on_Investment__c"] = (parseFloat(contractTargetData["ASI_CRM_SG_Gross_Margin__c"] ? contractTargetData["ASI_CRM_SG_Gross_Margin__c"] : 0)
+                                                                        - parseFloat(contractTargetData["ASI_CRM_SG_Trade_A_P_Total_PRS__c"] ? contractTargetData["ASI_CRM_SG_Trade_A_P_Total_PRS__c"] : 0));
+
+            //update ROI field
+            var roi = 0;
+            if(contractTargetData["ASI_CRM_SG_Return_on_Investment__c"] && contractTargetData["ASI_CRM_SG_Net_Sales__c"]) {
+                if (contractTargetData["ASI_CRM_SG_Net_Sales__c"] == 0){
+                    roi = 0;
+                } else 
+                if (contractTargetData["ASI_CRM_SG_Return_on_Investment__c"] < 0 && contractTargetData["ASI_CRM_SG_Net_Sales__c"] < 0){
+                    roi = contractTargetData["ASI_CRM_SG_Return_on_Investment__c"]
+                        / contractTargetData["ASI_CRM_SG_Net_Sales__c"]
+                        * -100;
+                } else {
+                    roi = contractTargetData["ASI_CRM_SG_Return_on_Investment__c"]
+                        / contractTargetData["ASI_CRM_SG_Net_Sales__c"]
+                        * 100;
+                }
+                
+                roi = roi.toFixed(2);
+            }
+            
+            $("#" + rowId + " .ROI").html(roi + "%");
+        }
+
+        /****************
+        Other Function
+        ****************/
+        //Sort the contract traget by Sequence No
+        function sortBySequenceNo(contractTargetList) {
+            for(var index in contractTargetList) {
+                var contractTarget = contractTargetList[index];
+                if(!contractTarget.ASI_CRM_Sequence_No__c) contractTarget.ASI_CRM_Sequence_No__c = 999;
+                if(!contractTarget.ASI_CRM_TargetCase__c) {
+                    contractTarget.ASI_CRM_TargetCase__c = 0;
+                    contractTarget.ASI_CRM_Sequence_No__c = 9999;
+                }
+            }
+
+            contractTargetList.sort(function(contractTarget1, contractTarget2) {
+                /*
+                if(contractTarget1.ASI_CRM_TargetCase__c >= 1 && contractTarget1.ASI_CRM_Sequence_No__c < contractTarget2.ASI_CRM_Sequence_No__c) return -1;
+                if(contractTarget1.ASI_CRM_TargetCase__c >= 1 && contractTarget1.ASI_CRM_Sequence_No__c > contractTarget2.ASI_CRM_Sequence_No__c) return 1;
+                if(contractTarget1.ASI_CRM_TargetCase__c >= 1 && contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() < contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return -1;
+                if(contractTarget1.ASI_CRM_TargetCase__c >= 1 && contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() > contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return 1;
+                if(contractTarget1.ASI_CRM_TargetCase__c < 1 && contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() < contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return -1;
+                if(contractTarget1.ASI_CRM_TargetCase__c < 1 && contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() > contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return 1;
+                */
+                if(contractTarget1.ASI_CRM_Sequence_No__c < contractTarget2.ASI_CRM_Sequence_No__c) return -1;
+                if(contractTarget1.ASI_CRM_Sequence_No__c > contractTarget2.ASI_CRM_Sequence_No__c) return 1;
+                if(contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() < contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return -1;
+                if(contractTarget1.ASI_CRM_SKU__r.Name.toLowerCase() > contractTarget2.ASI_CRM_SKU__r.Name.toLowerCase()) return 1;
+                return 0;
+            });
+
+            for(var index in contractTargetList) {
+                var contractTarget = contractTargetList[index];
+                contractTarget.ASI_CRM_Sequence_No__c = parseInt(index) + 1;
+            }
+
+            return contractTargetList;
+        }
+
+        //Display error when error occur in save process
+        function showError(exceptionListJson) {
+            //Display the error message
+            $('.saveErrorPanel').css("display","block");
+            
+            var errorMessage = '';
+            
+            var exceptionList = jQuery.parseJSON(exceptionListJson);
+            for(var errorIndex = 0 ; errorIndex < exceptionList.length ; errorIndex++) {
+                var exceptionObj = exceptionList[errorIndex];
+                errorMessage += exceptionObj['errorMessage'] + '<br />';
+            }
+            
+            //Assign the error message to page
+            $('.errorMessage').html(errorMessage);
+        }
+        
+        function stylingTable(){
+            $('.skuPercentAchievement').each(function(){
+                $(this).closest('td').attr('style', 'padding-left: 0px !important;padding-right: 0px !important');
+            })
+        }
+        
+    </script>
+
+    <body style="font-size: x-small !important">
+        <div class="fullScreenLoading"></div>
+
+        <!-- Error Message Dialog -->
+        <div class="saveErrorPanel alert alert-danger" style="display: none;">
+            <strong>Error</strong> 
+            <br />
+            <p class="errorMessage"></p>
+        </div>
+        
+        <div class="infoPanel alert alert-info" style="display: none;">
+            <strong>Info</strong>
+            <br />
+            <p class="infoMessage"></p>
+        </div>
+
+        <!-- Defind Action Function -->
+        <apex:form >
+            <apex:actionFunction name="generateBackRebatesPaymentApex" action="{!generateBackRebatesPayment}" reRender="pageMsg" onComplete="generateBackRebatesPaymentComplete('{!backRebatesPaymentResult}', '{!JSENCODE(exceptionListJson)}')">
+            </apex:actionFunction>
+            <!--[WL 5.0] BEGIN-->
+            
+            <apex:actionFunction name="generateBackRebatesPaymentRemainApex" action="{!generateBackRebatesPaymentRemain}" reRender="pageMsg" onComplete="generateBackRebatesPaymentComplete('{!backRebatesPaymentResult}', '{!JSENCODE(exceptionListJson)}')">
+            </apex:actionFunction>
+            
+            <!--[WL 5.0] END-->
+            <apex:actionFunction name="generatePaymentApex" action="{!requestPayment}" reRender="pageMsg" 
+                         oncomplete="generatePaymentComplete('{!REQUESTEDPAYMENTID_VF}', {!hasError}, '{!JSENCODE(exceptionListJson)}');">
+                <apex:param name="scheduleId" value="" />
+            </apex:actionFunction>
+
+            <apex:actionFunction name="searchSKU" action="{!searchSKU}" reRender="pageMsg" onComplete="searchSKUComplete('{!JSENCODE(skuPriceWrapperListJson)}')">
+                <apex:param name="skuName" value="" />
+                <apex:param name="filterOutSKUIdListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="calculateROI" action="{!calculateROI}" reRender="pageMsg" onComplete="calculateROIComplete('{!oldROI}', '{!newROI}')">
+                <apex:param name="contractTargetListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="saveRecordApex" action="{!saveRecord}" reRender="pageMsg" 
+                                 onComplete="saveRecordComplete('{!JSENCODE(contractTargetListJson)}', '{!JSENCODE(cashPaymentScheduleListJson)}', '{!JSENCODE(contractContractOutletListJson)}', '{!JSENCODE(childOutletListJson)}', {!hasError}, '{!JSENCODE(exceptionListJson)}', {!isConfirmRevise})">
+                <apex:param name="IS_QUICK_SAVE" value="" />
+                <apex:param name="IS_CONFIRM_REVISE" value="" />
+                <apex:param name="updateContractTargetListJson" value="" />
+                <apex:param name="deleteContractTargetListJson" value="" />
+                <apex:param name="updatePaymentScheduleListJson" value="" />
+                <apex:param name="deletePaymentScheduleListJson" value="" />
+                <apex:param name="updateContractOutletListJson" value="" />
+                <apex:param name="deleteContractOutletListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="reviseContractApex" action="{!reviseContract}" />
+            <apex:actionFunction name="deleteSimulation" action="{!deleteSimulation}" />
+            <apex:actionFunction name="cancel" action="{!cancel}"/>
+        </apex:form>
+
+        <!-- Body -->
+        <apex:pageBlock id="detail_pageBlock">
+            <apex:pageblockButtons >
+                <input type="button" class="btn calculateROIBtn" onclick="calculateROIJS()" value="Calculate ROI%"/>
+                <input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="Save" />
+                <input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="Quick Save" />
+                <input type="button" class="btn saveSimulationBtn" onclick="saveRecord(false, false)" value="Save Simulation" />
+                <input type="button" class="btn quickSaveSimulationBtn" onclick="saveRecord(true, false)" value="Quick Save Simulation" />
+                <input type="button" class="btn deleteSimulationBtn" onclick="deleteSimulation()" value="Delete Simulation"/>
+                <input type="button" class="btn reviseContractBtn" onclick="saveRecord(true, true)" value="Confirm Simulation & Revise to Draft" id="reviseButton"/>
+                <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel" />
+            </apex:pageblockButtons>
+            
+            <!-- Nav bar -->
+            <div class="row">
+                <div class="container-fluid">
+                    <div class="panel with-nav-tabs panel-primary">
+                        <!-- Nav bar header -->
+                        <div class="panel-heading">
+                            <ul class="nav nav-tabs">
+                                <li class="active"><a href="#skuDiv" data-toggle="tab">SKU</a></li>
+                                <li><a href="#incentiveDiv" data-toggle="tab">Incentive</a></li>
+                                <li><a href="#backRebatesScheduleDiv" data-toggle="tab">Back Rebates Schedule</a></li>
+                                <li><a href="#paymentScheduleDiv" data-toggle="tab">Cash Sponsorship Schedule</a></li>
+                                <li><a href="#contractOutletDiv" data-toggle="tab">Contract Outlets</a></li>
+                            </ul>
+                        </div>
+    
+                        <!-- Nav bar body -->
+                        <div class="panel-body">
+                            <div class="tab-content">
+                                <!-- SKU Data Table -->
+                                <div class="tab-pane fade in active" id="skuDiv">
+                                    <div>
+                                        <table id="skuDataTable" width="100%"/>
+                                    </div>
+                                    <hr />
+                                    <div class="addSKUDiv">
+                                        <label for="skuDivSearchSKU">SKU</label>
+                                        <input type="text" id="skuDivSearchSKU"/>
+                                        <input type="button" class="btn" value="Search" onClick="searchSKUJS($('#skuDivSearchSKU'))"/>
+                                        <br />
+                                        <br />
+                                        <table class="addSKUTable" width="100%"/>
+                                    </div>
+                                </div>
+                                <!-- Incentive Data Table -->
+                                <div class="tab-pane fade in" id="incentiveDiv">
+                                    <div>
+                                        <table id="incentiveDataTable" width="100%"/>
+                                    </div>
+                                    <hr />
+                                    <div class="addSKUDiv">
+                                        <label for="incentiveDivSearchSKU">SKU</label>
+                                        <input type="text" id="incentiveDivSearchSKU"/>
+                                        <input type="button" class="btn" value="Search" onClick="searchSKUJS($('#incentiveDivSearchSKU'))"/>
+                                        <br />
+                                        <br />
+                                        <table class="addSKUTable" width="100%"/>
+                                    </div>
+                                </div>
+                                <!-- SKU Achievement Data Table -->
+                                <div class="tab-pane fade in" id="backRebatesScheduleDiv">
+                                    <div>
+                                        <input type="button" class="btn showInReadOnly" id="backRebatesPaymentBtn" value="Back Rebates Payment"  onClick="generateBackRebatesPayment();"/>
+                                        <!--[WL 5.0] BEGIN-->
+                                        <input type="button" class="btn showInReadOnly" id="backRebatesPaymentRemainBtn" value="Issue Outstanding Back Rebates"  onClick="generateBackRebatesRemainPayment();"/>
+                                        <!--[WL 5.0] END-->
+                                        <br />
+                                        <br />
+                                        <table id="backRebatesPaymentDataTable" width="100%" />
+                                    </div>
+                                    <hr />
+                                    <div class="addSKUDiv">
+                                        <label for="backRebatesScheduleDivSearchSKU">SKU</label>
+                                        <input type="text" id="backRebatesScheduleDivSearchSKU"/>
+                                        <input type="button" class="btn" value="Search" onClick="searchSKUJS($('#backRebatesScheduleDivSearchSKU'))"/>
+                                        <br />
+                                        <br />
+                                        <table class="addSKUTable" width="100%"/>
+                                    </div>
+                                </div>
+                                <!-- Payment Schedule Data Table -->
+                                <div class="tab-pane fade in" id="paymentScheduleDiv">
+                                    <div>
+                                        <input type="button" class="btn addNewCashSponsorship" value="Add New Cash Sponsorship" onClick="addPaymentCashSponsorship();"/>
+                                        <br />
+                                        <br />
+                                        <table id="paymentCashSponsorshipDataTable" width="100%" />
+                                    </div>
+                                </div>
+                                <!-- Contract Outlet Data Table -->
+                                <div class="tab-pane fade in" id="contractOutletDiv">
+                                    <div>
+                                        <table id="contractOutletDataTable" width="100%"/>
+                                    </div>
+                                    <hr />
+                                    <div class="addOutletDiv">
+                                        <label for="contractOutletDivSearchOutlet">Outlet</label>
+                                        <br />
+                                        <br />
+                                        <table class="addOutletTable" width="100%"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </apex:pageBlock>
+    </body>
+
+</apex:page>

@@ -1,0 +1,423 @@
+<apex:page sidebar="false" controller="ESN_VFC22_AllCheckInMap">
+    <head>        
+        <title>Check-in Map</title>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+        <meta charset="utf-8"/>
+                
+        <script type="text/javascript" src="{!URLFOR($Resource.JQuery_JS)}" />
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.JSPlugins_MarkerClustererPlusJS, '/markerclusterer.js')}" />
+        <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_DateJS)}"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_ScrollBar,'/custom-scrollbar-plugin/jquery.mCustomScrollbar.concat.min.js')}"></script>
+        
+        <link href="{!URLFOR($Resource.JQueryPlugins_ScrollBar,'/custom-scrollbar-plugin/jquery.mCustomScrollbar.css')}" rel="stylesheet" type="text/css" />
+        <link href="{!URLFOR($Resource.CheckIn_Resources,'/CheckinMap.css')}" rel="stylesheet" type="text/css" />
+        
+        <style>
+            .oFormInputTextDefault {
+                color: #999;
+                font-family: arial,helvetica,clean,sans-serif;
+                font-size: 14px;
+                font-style: italic;
+                padding-top: 2px;
+                padding-left: 10px;
+            }
+        </style>
+        <script>
+            var $j = jQuery.noConflict();
+            
+            function $(element) {
+                return document.getElementById(element);
+            }
+            
+            /*
+             *  Handle a placeholder compatible with IE
+             ****/
+            $j(function() {
+                // Execute only when browser is Internet Explorer < v9 //
+               // if($.browser.msie && $.browser.version < 9){
+                    $j('.oFormInputText').off('focus');
+                    $j('.oFormInputText').off('blur');
+                        
+                    $j('.oFormInputText').on('focus', function() {
+                        var $this = $j(this);
+                        if($this.attr('title') == $this.val())
+                        {
+                            $this.removeClass('oFormInputTextDefault');
+                            $this.val('');
+                        }
+                    });
+                    
+                    $j('.oFormInputText').on('blur', function() {
+                        var $this = $j(this);
+                        if($this.val() == '')
+                        {
+                            $this.addClass('oFormInputTextDefault');
+                            $this.val($this.attr('title'));
+                        }
+                    });
+                    
+                    $j('.oFormInputText').each(function() {
+                        var $this = $j(this);
+                        if($this.attr('title') == $this.val() || $this.val() == '')
+                        {
+                            $this.val($this.attr('title'));
+                            $this.addClass('oFormInputTextDefault');
+                        }
+                    });
+
+                    
+
+                    if (!jQuery.support.leadingWhitespace){
+                           $j('.allCheckInApp').css('display','none')
+                        }
+
+               // }
+            });
+            
+            /* Variables Initialisation */
+            var map; 
+            var markerCluster; 
+            var markerInfoWindow = new google.maps.Marker({
+                draggable: false,
+                zIndex: 1000000000,
+                animation: google.maps.Animation.DROP
+            });
+            var infoWindow = new google.maps.InfoWindow();
+            var infoWindowCluster = new google.maps.InfoWindow();    
+            var markers = [];     
+            
+            /* 
+             *  Get the content of popup when click on a person to display her last location 
+             ****/
+            function getContentString(usrName, usrId, locName, locAddress, ciDate, usrPhoto){
+                var cidat = "";
+                var citim = "";
+                
+                if(ciDate != ""){
+                    cidat = new Date(ciDate).toLocaleDateString();
+                    citim = new Date(ciDate).toLocaleTimeString();
+                }
+            
+                var content = '<div id="popupcontent">';
+                
+                // Title of popup //
+                content += '<div class="popup-content-title">';
+                    // Add user Name //
+                    content += '<div style="font-weight: bold; font-size: 14px;" class="popup-content-title-name">'+ usrName +'</div>';
+                    // Add a link to the user profile //
+                    content += '<a target="_parent" href="/'+ usrId +'" style="font-size:10px;" class="popup-content-title-link">View profile</a>';
+                content += '</div>';
+                    
+                // Content of popup //
+                content += '<table><tbody><tr>';
+                    // First column //
+                    content += '<td style="width:50%"><table style="top: 20px; position: absolute; width: 142px;"><tbody>';
+                        // Add date //
+                        content += '<tr><td><div style="font-size: 11px;font-weight: lighter;" class="popup-content-date">'+ cidat +'&nbsp;'+ citim +'</div></td></tr>';
+                        // Line with address and icon //
+                        content += '<tr><td><i>';
+                            // Add pin icon //
+                            content += '<img class="popup-content-img" src="{!URLFOR($Resource.CheckIn_Resources,'img/places_pin_icon.png')}"/>';
+                            // Add Address //
+                            content += '<br/><div class="popup-content-location">'+ locAddress.replace(",","<br/>")+'</div>';
+                        content += '</i></td></tr>';
+                    content += '</tbody></table></td>';
+                    // Second column //
+                    content += '<td style="width:50%"><table><tbody><tr><td class="popup-content-photo">';
+                        // Add user photo //
+                        content += '<img width="150" src="'+ usrPhoto +'"/>';
+                    content += '</td></tr></tbody></table></td>';
+                content += '</tr></tbody></table></div>';
+                return content;
+            }
+            
+            /* Options enabled */            
+            google.maps.visualRefresh = true;   // Enable the visual refresh
+            
+            /*
+             *  Initialize the map 
+             ****/
+            function initialize() {
+                // Define options of the future map //
+                var mapOptions = {
+                    zoom: 2,
+                    center: new google.maps.LatLng(48.867743, 2.29261),
+                    mapTypeId: google.maps.MapTypeId.ROADMAP
+                };
+            
+                // Create the map //
+                map = new google.maps.Map(
+                document.getElementById('map-canvas'),
+                mapOptions
+                );
+            
+                // Initialise variables used in the repeat boucle. //
+                var panel = $('peoplelist');
+                panel.innerHTML = "";   
+                var nameText; var item; var img; var title; var latLng; var fn; var titleDateTR; var itemTable; var itemTableTr; var itemImgTD; var titleTR; var titleDateTABLE;
+            
+                /* Add last check-in of peoples */
+                <apex:repeat value="{!userName_list}" var="usr">
+            
+                    // User info //
+                    nameText = "{!userId2listCheckIn_map[usr].ESN_User__r.Name}";
+                    imgUrl = "{!userId2listCheckIn_map[usr].ESN_User__r.SmallPhotoURL}";
+                    dateUsr = new Date("{!userId2listCheckIn_map[usr].ESN_Date__c}").toLocaleDateString() + " " + new Date("{!userId2listCheckIn_map[usr].ESN_Date__c}").toLocaleTimeString();
+            
+                    // Add people in panel //
+                    item = document.createElement('LI');
+                    item.className = 'people-list-item';
+            
+                    itemTable = document.createElement('TABLE');
+                    itemTable.className = 'people-list-item-table';
+            
+                    itemTableTr = document.createElement('TR');
+            
+                    // Create a TD with Img //  
+                    itemImgTD = document.createElement('TD');
+                    itemImgTD.className = 'people-list-item-img-td';
+            
+                    img = document.createElement('IMG');
+                    img.src = imgUrl;
+                    img.height = "50";
+                    img.className = 'people-list-item-img';
+            
+                    itemTableTr.appendChild(itemImgTD).appendChild(img);
+            
+                    // Create a TR with Name //      
+                    titleTR = document.createElement('TR');
+                        
+                    title = document.createElement('A');
+                    title.href = '#';
+                    title.className = 'people-list-item-title';
+                    title.innerHTML = nameText;
+            
+                    titleTR.appendChild(document.createElement('TD')).appendChild(title);
+            
+                    // Create a TR with date //
+                    titleDateTR = document.createElement('TR');
+            
+                    titleDate = document.createElement('TD');
+                    titleDate.className = 'people-list-item-date';
+                    titleDate.innerHTML = dateUsr;
+            
+                    titleDateTR.appendChild(titleDate);
+                
+                    // Add title and name to a new table //      
+                    titleDateTABLE = document.createElement('TABLE');
+                    titleDateTABLE.appendChild(titleTR);
+                    titleDateTABLE.appendChild(titleDateTR);
+            
+                    // Add table to the item element //  
+                    itemTableTr.appendChild(document.createElement('TD')).appendChild(titleDateTABLE);
+                    itemTable.appendChild(itemTableTr);
+                    item.appendChild(itemTable);
+            
+                    // Add the item element to the panel search // 
+                    panel.appendChild(item);
+            
+                    // Set geolocation of this people //
+                    latLng = new google.maps.LatLng({!userId2listCheckIn_map[usr].ESN_Geolocation__Latitude__s}, {!userId2listCheckIn_map[usr].ESN_Geolocation__Longitude__s});
+            
+                    // Create markers //
+                    var marker{!userId2listCheckIn_map[usr].Id} = new google.maps.Marker({
+                        map: map,
+                        draggable: false,
+                        //    animation: google.maps.Animation.DROP,
+                        position: latLng,
+                        Title: new Date("{!userId2listCheckIn_map[usr].ESN_Date__c}").toLocaleString() +"#{!userId2listCheckIn_map[usr].ESN_User__r.Name}",
+                        shadow: "{!userId2listCheckIn_map[usr].ESN_User__r.SmallPhotoURL}"
+                    });                  
+                    markers.push(marker{!userId2listCheckIn_map[usr].Id});
+                    
+                    // Handle event when click on marker
+                    fn = markerClickFunction(getContentString("{!userId2listCheckIn_map[usr].ESN_User__r.Name}", "{!userId2listCheckIn_map[usr].ESN_User__c}", "{!userId2listCheckIn_map[usr].ESN_LocationName__c}", "{!userId2listCheckIn_map[usr].ESN_Address__c}", "{!userId2listCheckIn_map[usr].ESN_Date__c}", "{!userId2listCheckIn_map[usr].ESN_User__r.FullPhotoURL}"), latLng, marker{!userId2listCheckIn_map[usr].Id});
+                    google.maps.event.addListener(marker{!userId2listCheckIn_map[usr].Id}, 'click', fn);
+                    google.maps.event.addDomListener(title, 'click', fn); 
+                </apex:repeat>
+            
+                /* Create the Marker Clusterer with options */
+                var mcOptions = {gridSize: 40,averageCenter: true,zoomOnClick : false, imagePath: "{!URLFOR($Resource.JSPlugins_MarkerClustererPlusJS, '/img/')}m"};
+                markerCluster = new MarkerClusterer(map, markers,mcOptions);                
+            
+                /* When click a cluster, if several peoples are on same location, open an InfoWindow with list of peoples */
+                google.maps.event.addListener(markerCluster, "click", function (c) { 
+                    // Open an InfoWindow //
+                    if(c.getBounds().getNorthEast().equals(c.getBounds().getSouthWest())) {
+                        var m = c.getMarkers();
+                        var p = [];
+            
+                        // Define content of InfoWindow //
+                        var contentString = '<div id="popupcontentlist"><div style="width:200px;font-weight: bold;font-size: 14px;" class="popupcontentlist-title">Peoples here</div>';
+                        contentString += '<ul class="infowindow-people-list" id="peoplelist">';
+                        
+                        for (var i = 0; i < m.length; i++ ){
+                            p.push(m[i].getTitle()+"#"+m[i].getShadow());
+                        }
+                        p.sort();
+            
+                        for (var i = 0; i < p.length; i++ ) {
+                            var dateNameUrl = p[i].split("#");
+                            contentString += '<li class="infowindow-people-list-item"><table style="top: 0px;position: absolute;"><tr><td><img src="';
+                            contentString += dateNameUrl[2];
+                            contentString += '" height="30" class="infowindow-people-list-item-img"></td><td><table><tr><td><div class="infowindow-people-list-item-title">' ;
+                            contentString += dateNameUrl[1];
+                            contentString += '</div></td></tr><tr><td class="infowindow-people-list-item-date">';
+                            contentString += dateNameUrl[0];
+                            contentString += '</td></tr></table></tr></table></li>';
+                        }
+                        contentString += '</ul></div>';
+            
+                        // Create a new marker //
+                        markerInfoWindow.setMap(null);
+                        infoWindow.setContent(contentString);
+                        infoWindow.setPosition(c.getCenter());
+                        infoWindow.open(map);
+            
+                        /* custom scrollbar fn call */
+                        $j(".infowindow-people-list").mCustomScrollbar({
+                            autoDraggerLength: true,
+                            scrollButtons:{
+                                enable: false
+                            },
+                            theme:"dark-thin"
+                        });
+                    } else {
+                        // Zoom into the cluster.
+                        var mz = markerCluster.getMaxZoom();
+                        var theBounds = c.getBounds();
+                        markerCluster.getMap().fitBounds(theBounds);
+            
+                        // There is a fix for Issue 170 here:
+                        setTimeout(function () {
+                            markerCluster.getMap().fitBounds(theBounds);
+                            // Don't zoom beyond the max zoom level
+                            if (mz !== null && (markerCluster.getMap().getZoom() > mz)) {
+                                markerCluster.getMap().setZoom(mz + 1);
+                            }
+                        }, 100); 
+                    }
+                });
+            
+                /* custom scrollbar fn call */
+                $j('.people-list').mCustomScrollbar({
+                    autoDraggerLength:false,
+                    scrollInertia:350,
+                    scrollButtons:{
+                        enable: false
+                    },
+                    theme:'dark-thick'
+                });
+            
+                /* On click anywhere on map, close InfoWindow and remove Markers */
+                google.maps.event.addListener(map, 'click', function() {
+                    markerInfoWindow.setMap(null);
+                    infoWindow.close(map);
+                });
+            }
+            
+            /*
+             *  toggleBounce : Animations of markers
+             ****/
+            function toggleBounce() {
+                if (marker.getAnimation() != null) {
+                    marker.setAnimation(null);
+                } else {
+                    marker.setAnimation(google.maps.Animation.BOUNCE);
+                }
+            }
+            
+            /* Load the map with defined options */
+            google.maps.event.addDomListener(window, 'load', initialize);
+            
+            /*
+             *  MarkerClickFunction : Handle click event on markers
+             ****/
+            markerClickFunction = function(contentString, latlng, marker) {
+                return function(e) {
+                    e.cancelBubble = true;
+                    e.returnValue = false;
+                    if (e.stopPropagation) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    }
+                    // Center map and zoom on the marker clicked //
+                    markerInfoWindow.setPosition(latlng);
+                    markerInfoWindow.setMap(map);
+                    infoWindow.setContent(contentString);
+                    infoWindow.setPosition(latlng);
+                    infoWindow.open(map, markerInfoWindow);
+            
+                    // Center map and zoom on the marker clicked //
+                    map.setCenter(latlng);
+                    map.setZoom(18); 
+                };
+            };
+            
+            
+            /*
+             *  Filtering list dynamically during editing
+             ****/
+            (function ($) {
+                jQuery.expr[':'].Contains = function(a,i,m){
+                    return (a.textContent || a.innerText || "").toUpperCase().indexOf(m[3].toUpperCase())>=0;
+                };
+            
+                function filterList(header, list) {
+                    /*  var form = $("<form>").attr({"class":"filterform","action":"#"}),
+                    input = $("<input>").attr({"class":"filterinput","type":"text"});
+                    $(form).append(input).appendTo(header);
+                    */
+            
+                    $(header)
+                    .change( function () {
+                        var filter = $(this).val();
+                        if(filter) {
+                            $matches = $(list).find('a:Contains(' + filter + ')').parent();
+                            var $liMatches = $matches.closest('li');
+                            $('li', list).not($liMatches).slideUp();
+                            $liMatches.slideDown();
+                        } else {
+                            $(list).find("li").slideDown();
+                        }
+                        return false;
+                    })
+                    .keyup( function () {
+                        $(this).change();
+                    });
+                }
+            
+                $(function () {
+                    filterList($("#searchpeople"), $("#peoplelist"));
+                });
+                $j('input').blur();
+            }(jQuery));
+        </script>
+    </head>
+    
+    <body>
+<!-- FTR (09/10/2014): IE8 is no more supported -->
+<div class="allCheckInApp">
+        <div id="panel">
+            <form class="filterform" >
+                <input style="width: 1px; height: 1px;border: 0px;float:right;"></input>
+                <input id="searchpeople" type="text" class="people-list-search filterinput oFormInputText" title="Search People..."></input>
+            </form>
+            <ul id="peoplelist" class="people-list"></ul>
+        </div>
+        <div id="map-container">
+            <div id="map-canvas"></div>
+        </div>
+        {!message}
+</div>
+<script>
+</script>
+<!--[if lt IE 9]>
+<div class="error-msg">
+<br/><b>Checks-In Map</b> could not be viewed into your navigator.
+<br/>Please, download Google Chrome or any up-to-date browser to experiment it.
+</div>
+<![endif]-->         
+    </body>
+</apex:page>

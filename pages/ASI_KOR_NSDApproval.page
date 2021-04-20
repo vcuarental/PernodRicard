@@ -1,0 +1,1147 @@
+<!--
+/**********************************************************************************
+* Name : ASI_KOR_NSDApproval
+* Created : Vincent Lam
+*
+* Version History
+* Date             Developer               Comments
+* ---------------  --------------------    --------------------------------------------------------------------------------
+* ??										Created  
+* 2017-05-05		Laputa: Vincent			[VL 1.0] P4.1 layout
+* 2017-08-09		Laputa: Vincent			[VL 2.0] P4.2 report
+**********************************************************************************/
+-->
+<apex:page sidebar="false" standardController="ASI_KOR_NSD_Proposal_Header__c" extensions="ASI_KOR_NSDApprovalController">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_KOR_VFPageResources, 'PR_KOR_Resouce/css/demo_table.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_PreApprovalFormDetailEdit, '/ASI_HK_CRM_PreApprovalFormDetailEdit/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/jquery.dataTables.js')}"/> <apex:includeScript value="{!URLFOR($Resource.ASI_KOR_VFPageResources,'PR_KOR_Resouce/script/FixedColumns.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+    <style>
+        textarea {
+        height: 3em;
+        }
+        input.error-input {
+        border-color: red;
+        }
+        .wrap{  
+        width:100%;
+        }
+        .leftXX{
+        width: 15%;
+        float: left;
+        display:none;
+        position:absolute;
+        left:10px;
+        top: 320px;
+        z-index:999;
+        }
+        .right{
+        float: left;
+        width: 100%;
+        }
+        .unitCostInput{
+        width:65px;
+        text-align: right;
+        }
+        .targetVolume{
+        width:65px;
+        text-align: right;
+        }
+        .dataTables_empty {
+        text-align: center;
+        height:100px !important;
+        }
+        table.display {
+        
+        }
+        th {
+        overflow:hidden;
+        }
+        
+        .gradeA{
+        }
+        
+        .venueStatus {
+        width:80px;
+        text-align: center;
+        }
+        
+        .totalbasicca{
+        width:65px;
+        }
+        .capunitcost{
+        width:65px;
+        }
+        .propUnitCost{
+        
+        }
+        
+        .businessRationale{
+        
+        width: 100px;
+        
+        }
+        
+        .required {
+        border-color: red;
+        }
+        
+        input.btn[name="del"] {
+        display: none;
+        }
+        input.btn[name="clone"] {
+        display: none;
+        }
+        input.btn[name="edit"] {
+        display: none;
+        }
+        input.btn[name="view_proposals"] {
+        display: none;
+        }
+        input.btn[name="share"] {
+        display: none;
+        }
+        input.btn[name="asi_kor_delegate_approver"] {
+        display: none;
+        }
+		
+        table.display tr:nth-child(odd).gradeCA{
+        	background-color: #CEF1FF;
+        }
+        table.display tr:nth-child(even).gradeCA{
+        	background-color: #BEECFE;
+        }
+        table.display tr:nth-child(odd).gradeCB{
+        	background-color: #ddddff;
+        }
+        table.display tr:nth-child(even).gradeCB{
+        	background-color: #EFEFFF;
+        }
+    </style>
+    <script type="text/javascript" charset="utf-8">
+    if (!window.console) console = {log: function() {}};
+    function colorStat(){
+        $("[id$=venueStatus]").each(function(index){
+            var stat = $(this).text();
+            if(stat == 'Within Budget' ||  stat == 'Within Target')
+                $(this).parent().css( "background-color", "green" );
+            else if(stat == 'Exceeded Budget' || stat == 'Exceed Budget' || stat == 'Exceed Target' )
+                $(this).parent().css( "background-color", "red" );
+                else if(stat == 'Too Small' )
+                    $(this).parent().css( "background-color", "yellow" );
+        });
+    }
+    function initializeSummaryTable(){
+        var dtable = $('#summaryTableByRegion').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "100%",
+            "sScrollX": "100%",
+            "bPaginate": true,
+		/* [VL 1.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+		/* [VL 1.0] END */
+            "bSort":false,
+            "sPaginationType": "full_numbers"          
+            
+        } );
+        
+        $(dtable).on('draw',colorStat);
+    }
+    
+    function appendSubtotalFilter(){
+        var oTable = $('#detailsTable').dataTable();
+        var filterText = 'Subtotal';
+        var checkBoxLabel = $("<label>Subtotal Only: </label>");
+        var subCheckBox = $("<input type='checkbox'/>");
+        $(subCheckBox).change(function() {
+            if($(this).is(":checked")) {
+                console.log('checkbox check!');
+                oTable.fnFilter(filterText);
+            }else{
+                console.log('checkbox unchecked');
+                oTable.fnFilter('');
+            }      
+        });
+        
+        $('#detailsTable_filter').prepend(subCheckBox); 
+        $('#detailsTable_filter').prepend(checkBoxLabel);   
+    }
+    function initializeDetailTable(){
+        var dtable = $('#detailsTable').dataTable({
+            "bJQueryUI": false,
+            "sScrollY": "350px",
+            "sScrollX": "100%",
+            "bPaginate": false,
+		/* [VL 1.0] BEGIN */
+		/*
+            "bAutoWidth": true,
+		*/
+            "bAutoWidth": false,
+		/* [VL 1.0] END */
+            "bSort":false              
+            
+        } );
+        if($('#detailsTable').find('td').hasClass('dataTables_empty')){
+            $('#detailsTable').find('tbody tr').empty();
+            $('#detailsTable').find('tbody tr').append('<td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/>');
+        }
+		/* [VL 1.0] BEGIN */
+		/*
+        var o =  new FixedColumns( dtable,{
+            "iLeftColumns": 5,
+            "iLeftWidth": 500,
+            "iRightColumns":4,
+            "iRightWidth":450
+        });
+        $(o.dom.grid.wrapper).width($(o.dom.grid.wrapper).width());
+		*/
+		/* [VL 1.0] END */
+        $(dtable).on('draw', function(){
+            colorStat();
+            $('.approve').each(function(i){
+                loadStatus($(this));
+                console.log('select approve hit');
+            });
+        });
+        $('.approve').each(function(i){
+            loadStatus($(this));
+            console.log('select approve hit');
+        });
+        appendSubtotalFilter();
+    }
+    
+    
+    
+    
+    
+    function approveChange(x){
+        var f = $(x);
+        var v = $(x).val();
+        var b = $(x).parent().find('#approve');
+        console.log('log!! ' + v);
+        if(v=='Yes'){
+            $(x).parent().find('input[id*="approve"]').val('Approved by NSD');
+            var comment = $(x).parent().parent().find('[id*="nsdComment"]');
+            $(x).parent().parent().find('[id*="nsdComment"]').removeClass('required');
+        }
+        else if(v=='No'){
+            $(x).parent().find('input[id*="approve"]').val('Rejected');
+            var comment = $(x).parent().parent().find('[id*="nsdComment"]');
+            if($(comment).val() == null || $(comment).val() == ''){
+                $(comment).addClass('required')
+            }
+        }
+        
+    }
+    
+    
+    function loadStatus(x){
+        var currentValue  = $(x).parent().find('input[id*="approve"]').val();
+        if(currentValue != null && currentValue != ''){
+            if(currentValue == 'Approved by NSD'){
+                $(x).val('Yes');
+            } else if(currentValue == 'Rejected'){
+                $(x).val('No');
+                approveChange(x);
+            }
+        }
+    }
+    
+    function checkRequired(){
+        var flag = true;
+        $('.wrap').find('.required').each(function (i){
+            alert('Comment required');
+            flag = false;
+            $(this).focus();
+            return false;
+        });
+        return flag;
+    }
+    
+    function commentRequired(x){
+        var flag = false;
+        var stat = $('[id*=hiddenNationalTotalvenueStatus]').val();
+        var comment = $('[id*=nationalComment]');
+        var commentVal = $(comment).val();
+        if(stat == 'Exceeded Budget' || stat == 'Exceed Budget' && (commentVal == null || commentVal == '')){
+            console.log('submit button clicked. branch manger comment required. overbudget');
+            alert('Final Comment (NSD)');
+            $(comment).focus();
+            $(comment).addClass('required');
+            flag = false;
+            return flag;
+        }else {
+            flag = true;
+        }
+        
+        flag = checkRequired();
+        console.log(flag);
+        return flag;
+    }
+    
+    function approvalRequired(){
+        var flag = true;
+        $('.approve').each(function(){
+            var temp = $(this).val();
+            if(temp == null || temp == ''){
+                alert('All request(s) should be approved/rejected.');
+                // $(this).focus();
+                flag = false;
+                return flag;
+            }
+            
+        });
+        return flag;
+    }
+    
+    function validate(x){
+        var temp1 = commentRequired(x)
+        var temp2 = approvalRequired();
+        
+        return (temp1 && temp2);
+    }
+    
+    function updateClass(x){
+        if($(x).val() != null && $(x).val()){
+            $(x).removeClass('required');
+        }
+    }
+    $(document).ready( function () {
+        initializeDetailTable();
+		/* [VL 1.0] BEGIN */
+		/*
+        initializeSummaryTable();
+		*/
+		/* [VL 1.0] END */
+        colorStat();
+        
+    });
+	
+	/* [VL 1.0] BEGIN */
+	var tableToExcel = (function() {
+	  var uri = 'data:application/vnd.ms-excel;base64,'
+		, template = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>{worksheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><meta http-equiv="content-type" content="text/plain; charset=UTF-8"/></head><body><table>{table}</table></body></html>'
+		, base64 = function(s) { return window.btoa(unescape(encodeURIComponent(s))) }
+		, format = function(s, c) { return s.replace(/{(\w+)}/g, function(m, p) { return c[p]; }) }
+	  return function(table, name) {
+		if (!table.nodeType) table = document.getElementById(table)
+		var ctx = {worksheet: name || 'Worksheet', table: table.innerHTML}
+		window.location.href = uri + base64(format(template, ctx))
+	  }
+	})()
+	/* [VL 1.0] END */
+	
+    </script>
+    <apex:detail inlineEdit="false"  subject="{!nsdHeader.id}" title="true" relatedList="false"/>
+    <div class="wrap">
+        <div class="leftXX"> 
+        </div>
+        <div class="right">
+            <apex:form >
+                <apex:pageBlock title="NSD" >
+					<!-- [VL 2.0] BEGIN -->
+					<input type="button" onclick="window.open('/{!ExceptionalReport_unitCost}?pv3={!Year}&pv4={!Month}','_blank')" value="Exceptional Report (Unit Cost)" />
+					<br/>
+					<br/>
+					<!-- [VL 2.0] END -->
+                    <center>
+                        <apex:pageMessages />
+                        <apex:commandButton action="{!handleSubmit}" onClick="return validate(this);" rendered="{!renderApprove && canEdit}" value="Finalize" style="width: 60px; margin-left:4px"/>
+                        <br/>
+                        <apex:commandButton action="{!handleSave}" onClick="return checkRequired();" rendered="{!renderApprove && canEdit}" value="Save" style="width: 60px"/>
+                    </center>
+                    <apex:outputPanel id="detailsTableR">
+                        <table cellpadding="0" cellspacing="0" border="0" class="display" id="detailsTable">
+                            <thead>
+                                
+                                <tr>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                    <th>Region Code</th>
+                                    <th>Region Name</th>
+                                    <th>Brand Name</th>
+                                    <th>UOM</th>
+                                    <th>Proposal<br/>Unit Cost</th>
+                                    <th>Proposal<br/>Unit Cost (CA only)</th>                       
+                                    <th>P3M Act. Volume</th>
+                                    <th>P3M Act. Unit cost</th>
+                                    <th>Target<br/>Volume</th>
+                                    <th>Growth %</th>
+                                    <th>Proposal Total <br/> Incetinve Amount</th>
+                                    <th>Proposal Total <br/> CA Amount</th>
+                                    <th>Branch<br/>CA Budget</th> 
+                                    <th style='text-align:center'>Budget Status</th> 
+                                    <th style='text-align:center'>Rationale</th> 
+                                    <th style='text-align:center'>Approve</th> 
+                                    <th style='text-align:center'>Comment</th>
+									-->
+                                    <th style='text-align: left'>Region Code</th>
+                                    <th style='text-align: left'>Region Name</th>
+                                    <th style='text-align: left'>Brand</th>
+                                    <!--<th style='text-align: left'>UOM</th>-->
+                                    <th style='text-align: right'>Target<br/>Volume</th>
+                                    <th style='text-align: right'>Unit Cost</th>                       
+                                    <th style='text-align: right'>Total VI</th>
+                                    <th style='text-align: right'>Last Month<br/>Actual Volume</th>
+                                    <th style='text-align: right'>Last Month<br/>Unit Cost</th>                        
+                                    <th style='text-align: right'>Last Month<br/>Total VI</th>
+                                    <th style='text-align:center'>Target Status</th>
+                                    <th style='text-align:center'>Rationale</th> 
+                                    <th style='text-align:center'>Approve</th> 
+                                    <th style='text-align:center'>Comment</th>
+									<!-- [VL 1.0] END -->
+                                </tr>                  
+                            </thead>
+                            <tfoot>
+                                <tr> 
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th> 
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+									-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <!--<th></th> -->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+									<!-- [VL 1.0] END -->
+                                </tr> 
+                            </tfoot>
+                            <tbody>
+                                <apex:repeat value="{!rsdByRegionCategoryList}" var="rsdByRegionCategoryVar">
+                                    <apex:repeat value="{!rsdByRegionCategoryVar.rsdProposalByBrands}" var="rsdProposalByBrand">
+                                        <tr style='text-align:right;'>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                            
+                                            
+                                            <td style='text-align:left'><apex:outputText value="{!rsdByRegionCategoryVar.regionCode}"/></td>
+                                            <td style='text-align:left'><br/><apex:outputText value="{!rsdByRegionCategoryVar.regionName}"/><br/></td> 
+                                            <td style='text-align:left'><apex:outputText value="{!rsdProposalByBrand.ASI_KOR_Brand__r.name}"/></td> 
+                                            <td style='text-align:left'>
+                                                <br/>
+                                                <apex:outputText value="{!rsdProposalByBrand.ASI_KOR_UOM__c}"/>
+                                                <br/>
+                                            </td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Proposal_Unit_Cost_CA_Only__c}"/>
+                                                </apex:outputText>
+                                            </td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Last_3_month_Actual_Average_Volu__c}"/>
+                                                </apex:outputText>
+                                            </td> 
+                                            <td><apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdProposalByBrand.ASI_KOR_Last_3_month_Actual_Average_UC__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td><apex:outputText value="{!rsdProposalByBrand.ASI_KOR_Target_Volume__c}"/></td>
+                                            <td><apex:outputText value="{!rsdProposalByBrand.ASI_KOR_Growth__c}"/></td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Total_CA_Amount_excl_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_CA_Budget__c}"/>
+                                                </apex:outputText>
+                                            </td>                              
+                                            <td>
+                                                <div style="border: 1px; padding:5px 5px 5px 5px; width: 95px; text-align:center">
+                                                    <apex:outputText value="{!rsdProposalByBrand.ASI_KOR_CA_Budget_Status__c}" id="venueStatus"/>
+                                                </div>
+                                            </td>
+                                            <td> </td>
+                                            <td> </td> <td> </td>
+									-->
+                                            <td style='text-align:left'><apex:outputText value="{!rsdByRegionCategoryVar.regionCode}"/></td>
+                                            <td style='text-align:left'><apex:outputText value="{!rsdByRegionCategoryVar.regionName}"/></td> 
+                                            <td style='text-align:left'><apex:outputText value="{!rsdProposalByBrand.ASI_KOR_Brand__r.name}"/></td> 
+                                            <!--<td style='text-align:left'>
+                                                <apex:outputText value="{!rsdProposalByBrand.ASI_KOR_UOM__c}"/>
+                                            </td> -->
+                                            <td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Target_Volume__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                                </apex:outputText>
+                                            </td>  
+											<td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Actual_Volume_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+                                            </td>
+											<td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Unit_Cost_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+                                            </td>
+											<td style='text-align: right'>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!rsdProposalByBrand.ASI_KOR_Total_VI_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+                                            </td>                    
+                                            <td style='text-align: center'>
+                                                <div style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center">
+                                                    <apex:outputText value="{!rsdProposalByBrand.ASI_KOR_CA_Budget_Status__c}" id="venueStatus"/>
+                                                </div>
+                                            </td>
+                                            <td> </td>
+                                            <td> </td>
+                                            <td> </td>
+									<!-- [VL 1.0] END -->
+                                        </tr>        
+                                    </apex:repeat>  
+                                    <tr class="gradeA" style="font-weight:bold; text-align:right" id='regionSubTotal'>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                        <td style='text-align:left' id='temp'> <br/> Regional Subtotal<br/></td>
+                                        <td style='text-align:left'><br/><apex:outputText value="{!rsdByRegionCategoryVar.regionName}"/><br/></td> 
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>                
+                                        <td></td>                             
+                                        <td></td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByRegionCategoryVar.targetVolume}"/>
+                                            </apex:outputText>                             
+                                        </td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                            </apex:outputText> 
+                                        </td>  
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Total_CA_Amount_excl_Basic__c}"/>
+                                            </apex:outputText> 
+                                        </td>  
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Region_Total_CA_Budget__c}"/>
+                                            </apex:outputText>
+                                        </td>                             
+                                        <td>
+                                            <div  style="border: 1px; padding:5px 5px 5px 5px; width: 95px; text-align:center">
+                                                <apex:outputText id="venueStatus" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Region_Total_Status__c}"/>
+                                            </div>
+                                        </td>                              
+                                        <td style='text-align:center'><apex:inputtextarea disabled="true" style="width: 90px;"  value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Regional_Sales_Director_Comments__c}" /></td>
+                                        <td>
+                                            <select onchange='approveChange(this)' class='approve'>
+                                                <option value=""> </option>
+                                                <option value="Yes">Yes</option>
+                                                <option value="No">No</option>
+                                            </select>
+                                            <apex:inputHidden id="approve" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Status__c}"/> 
+                                        </td>
+                                        <td><apex:inputtextarea style="width: 90px;" onChange="updateClass(this)" id="nsdComment" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Approval_Comments__c}" rows="2" /></td>
+									-->
+                                        <td style='text-align:left' id='temp'> <br/> Regional Subtotal<br/></td>
+                                        <td style='text-align:left'><br/><apex:outputText value="{!rsdByRegionCategoryVar.regionName}"/><br/></td> 
+                                        <td></td>
+                                        <!--<td></td>-->
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.targetVolume}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.TotalUC}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.TotalVI}"/>
+                                            </apex:outputText>
+                                        </td> 
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.TotalActualVolume_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.TotalUC_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByRegionCategoryVar.TotalVI_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>                 
+                                        <td style='text-align: center'>
+                                            <div  style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center">
+                                                <!--<apex:outputText id="venueStatus" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Region_Total_Status__c}"/>-->
+                                                <apex:outputText id="venueStatus" value="{!rsdByRegionCategoryVar.VenueStatus}"/>
+                                            </div>
+                                        </td>                              
+                                        <td style='text-align:center'><apex:inputtextarea disabled="true" style="width: 90px;"  value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Regional_Sales_Director_Comments__c}" /></td>
+                                        <td>
+                                            <select onchange='approveChange(this)' class='approve'>
+                                                <option value=""> </option>
+                                                <option value="Yes">Yes</option>
+                                                <option value="No">No</option>
+                                            </select>
+                                            <apex:inputHidden id="approve" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Status__c}"/> 
+                                        </td>
+                                        <td><apex:inputtextarea style="width: 90px;" onChange="updateClass(this)" id="nsdComment" value="{!rsdByRegionCategoryVar.rsdHeader.ASI_KOR_Approval_Comments__c}" rows="2" /></td>
+									<!-- [VL 1.0] END -->
+                                    </tr>                               
+                                </apex:repeat>
+									<!-- [VL 1.0] BEGIN -->
+                                <tr class="gradeD" style="font-weight:bold">
+                                        <td>NATIONAL SUBTOTAL</td>
+                                        <td></td>
+                                        <td></td>
+                                        <!--<td></td>-->
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_volume}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_UC}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_VI}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_volume_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_UC_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:right'>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!GrandTotal_VI_lastMonth}"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td style='text-align:center'>
+											<div style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center;">
+												<apex:outputText value="{!GrandBudgetStatus}" id="venueStatus"/>
+											</div>
+                                        </td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                </tr>      
+									<!-- [VL 1.0] END -->
+                            </tbody>   
+                        </table>
+                        <center>
+                            <br/>
+                            Final Comment (NSD)<br/>
+                            <apex:inputTextarea onchange="updateClass(this)" id="nationalComment" value="{!nsdHeader.ASI_KOR_National_Sales_Director_Comments__c}"/> 
+                        </center>
+                    </apex:outputPanel>
+                    <br/><br/>
+                </apex:pageBlock>
+            </apex:form>
+            <apex:pageBlock title="National Summary" >
+                <apex:form >
+                    <apex:inputhidden value="{!status}" id="hiddenNationalTotalvenueStatus"/>
+                    <apex:outputPanel id="summaryTable">
+									<!-- [VL 1.0] BEGIN -->
+					<input type="button" onclick="tableToExcel('summaryTableByRegion', 'W3C Example Table')" value="Export to Excel" />
+									<!-- [VL 1.0] END -->
+                        
+                        <table cellpadding="0" cellspacing="0" border="0" class="display"
+                               id="summaryTableByRegion">
+                            <thead>
+                                <tr>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                    <th> </th>
+                                    <th style='text-align:right'>UOM</th>                        
+                                    <th style='text-align:right'>Proposal <br/> Unit Cost</th>
+                                    <th style='text-align:right'>Unit Cost</th> 
+                                    <th style='text-align:right'>P3M Act. Volume</th>                                     
+                                    <th style='text-align:right'>Target Volume <br/> (Base on UOM)</th>
+                                    <th style='text-align:right'>Growth %</th>
+                                    <th style='text-align:right'>Total Incentive <br/>(Proposal) </th>
+                                    <th style='text-align:right'>Total Incentive <br/>(Pending) </th>
+                                    <th style='text-align:right'>Total CA <br/>(excl. Basic)</th>
+                                    <th style='text-align:right'>Total CA <br/>(Pending) </th>
+                                    <th style='text-align:right'>National <br/> Budget</th>
+                                    <th style='text-align:center'>Status</th>
+									-->
+                                    <th style="text-align:left">Month</th>
+                                    <th style="text-align:center" colspan="3">{!Last2Month_year}-{!Last2Month_month}</th>
+                                    <th style="text-align:center" colspan="3">{!Last1Month_year}-{!Last1Month_month}</th>
+                                    <th style="text-align:center" colspan="4">{!ThisMonth_year}-{!ThisMonth_month} (This Month)</th>
+									<!-- [VL 1.0] END -->
+                                </tr>
+									<!-- [VL 1.0] BEGIN -->
+                                <tr >
+                                    <th style="text-align:left">Brand</th>
+                                    <th style="text-align:right">Act Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                    <th style="text-align:right">Act Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                    <th style="text-align:right">Planning<br/>Vol</th>
+                                    <th style="text-align:right">UC</th>
+                                    <th style="text-align:right">Tot VI</th>
+                                    <th style="text-align:center">Target Status</th>
+                                </tr>
+									<!-- [VL 1.0] END -->
+                            </thead>
+                            <tbody> 
+									<!-- [VL 1.0] BEGIN -->
+                                <tr class="gradeA" style="font-weight:bold; text-align:right">
+                                    <td style=" text-align:left">TOTAL</td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_2M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_1M}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_volume_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_uc_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                            <apex:param value="{!GrandTotalByBrand_vi_TM}"/>
+                                        </apex:outputText>
+                                    </td>
+                                    <td>
+										<div style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center; margin: 0 auto;">
+											<apex:outputText value="{!GrandTotalByBrandBudgetStatus}" id="venueStatus"/>
+										</div>
+									</td>
+                                </tr> 
+									<!-- [VL 1.0] END -->
+                                <apex:repeat value="{!nsdByBrandByCategoryList}" var="rsdByBrandByCategoryx">
+									<!-- [VL 1.0] BEGIN -->
+                                    <tr class="gradeCA" style="font-weight:bold; text-align:right">
+                                        <td style="font-weight:bold; text-align:left"><apex:outputText value="{!rsdByBrandByCategoryx.category }"/></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Actual_Volume_2M_Ago}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.UnitCost_2MonthAgo}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Total_VI_2M_Ago}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Actual_Volume_1M_Ago}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.UnitCost_1MonthAgo}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Total_VI_1M_Ago}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Target_Volume}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.UnitCost_thisMonth}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                <apex:param value="{!rsdByBrandByCategoryx.ASI_KOR_Total_Incentive_Amount_Proposal}"/>
+                                            </apex:outputText>                 
+                                        </td>
+                                        <td>
+											<div style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center; margin: 0 auto;">
+												<apex:outputText value="{!rsdByBrandByCategoryx.BudgetStatus}" id="venueStatus"/>
+											</div>
+										</td>
+                                    </tr>
+                                </apex:repeat>
+                                <apex:repeat value="{!nsdByBrandByCategoryList}" var="rsdByBrandByCategoryx">
+									<!-- [VL 1.0] END -->
+                                    <apex:repeat value="{!rsdByBrandByCategoryx.nsdProposalByBrands}" var="nsdProposalByBrandEx">
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                        <tr class="gradeCB" style="text-align:right">
+                                            <td style="text-align:left"><apex:outputText value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Brand__r.name}"/></td> 
+                                            <td>
+                                                <apex:outputText value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_UOM__c}"/> 
+                                            </td> 
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Proposal_Unit_Cost_Basic_CA__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Proposal_Unit_Cost_CA_Only__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Last_3_month_Actual_average_Volu__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td><apex:outputText value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Target_Volume__c}"/></td>
+                                            <td><apex:outputText value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Growth__c}"/></td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_Incentive_Amount_Proposal__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_Incentive_Amount_Pending__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_CA_Amount_excl_Basic__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_CA_Amount_Pending__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td>
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_CA_Budget__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td style=" text-align:center">
+                                                <div style="border: 1px; padding:2px 2px 2px 2px; width: 90px; text-align:center">
+                                                    <apex:outputText id="venueStatus" value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_CA_Budget_Status__c}"/>
+                                                </div>
+                                            </td>
+									-->
+									<apex:outputPanel rendered="{!nsdProposalByBrandEx.Display}">
+                                        <tr class="gradeCB"  style=" text-align:right;" >
+                                            <td style="text-align:left"><apex:outputText value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Brand__r.name}"/></td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_2_Months_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_VI_2_Months_Ago__c/IF(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_2_Months_Ago__c=0,1,nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_2_Months_Ago__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_VI_2_Months_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_VI_1_Month_Ago__c/IF(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_1_Month_Ago__c=0,1,nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Actual_Volume_1_Month_Ago__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_VI_1_Month_Ago__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Target_Volume_Pending__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!ROUND(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_Incentive_Amount_Pending__c/IF(nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Target_Volume_Pending__c=0,1,nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Target_Volume_Pending__c),0)}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:right">
+                                                <apex:outputText value="{0, number, ###,###,###,##0}"> 
+                                                    <apex:param value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_Total_Incentive_Amount_Pending__c}"/>
+                                                </apex:outputText>
+											</td>
+                                            <td style="text-align:center">
+                                                <div style="border: 1px; padding:5px 5px 5px 5px; width: 90px; text-align:center; margin: 0 auto;">
+                                                    <apex:outputField value="{!nsdProposalByBrandEx.NSDByBrandItem.ASI_KOR_CA_Budget_Status__c}" id="venueStatus"/>
+                                                </div>
+                                            </td>
+                                        </tr>
+									</apex:outputPanel>
+									<!-- [VL 1.0] END --> 
+                                    </apex:repeat>
+                                    
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                    <tr class="gradeB" style="font-weight:bold; text-align:right">
+                                        <td style="text-align:left"><apex:outputText value="{!rsdByBrandByCategoryx.category }"/></td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propUnitCost }"/>
+                                            </apex:outputText>
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propUnitCostCA }"/>
+                                            </apex:outputText>
+                                        </td> 
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.last3MonthAveVolume }"/>
+                                            </apex:outputText>
+                                        </td>                  
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.targetVolume}"/>
+                                            </apex:outputText>                       
+                                        </td>
+                                        <td></td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propTotalIncentive}"/>
+                                            </apex:outputText>                       
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propTotalPendingIncentive}"/>
+                                            </apex:outputText>                       
+                                        </td> 
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propTotalCA}"/>
+                                            </apex:outputText>                       
+                                        </td>
+                                        
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.propPendingCA}"/>
+                                            </apex:outputText>                       
+                                        </td>
+                                        <td>
+                                            <apex:outputText value="{0, number, ###,###,###,##0}">
+                                                <apex:param value="{!rsdByBrandByCategoryx.branchBudget}"/>
+                                            </apex:outputText>                       
+                                        </td>
+                                        <td style=" text-align:center"> 
+                                            <div style="border: 1px; padding:2px 2px 2px 2px; width: 90px; text-align:center">
+                                                <apex:outputText value="{!rsdByBrandByCategoryx.status}" id="venueStatus"/>
+                                            </div>
+                                        </td>
+                                    </tr>
+									-->
+									<!-- [VL 1.0] END -->
+                                    
+                                </apex:repeat>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                <tr class="gradeD" style="font-weight:bold; text-align:right">
+                                    <td style="text-align:left">National Total</td>
+                                    <td></td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propUnitCost}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propUnitCostCA}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!last3MonthAveVolume}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!targetVolume}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!growth}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propTotalIncentive}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propTotalPendingIncentive}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propTotalCA}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!propPendingCA}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{0, number, ###,###,###,##0}">
+                                            <apex:param value="{!branchBudget}"/>
+                                        </apex:outputText>                       
+                                    </td>
+                                    <td style=" text-align:center"> 
+                                        <div style="border: 1px; padding:2px 2px 2px 2px; width: 90px; text-align:center">
+                                            <apex:outputText value="{!status}" id="nationalTotalvenueStatus"/>
+                                        </div>
+                                    </td>
+                                </tr>
+									-->
+									<!-- [VL 1.0] END -->
+                                
+                            </tbody>
+                            <tfoot>
+                                <tr>
+									<!-- [VL 1.0] BEGIN -->
+									<!--
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>   
+                                    <th></th>
+                                    <th></th>    
+                                    <th></th>     
+									-->
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+									<!-- [VL 1.0] END -->      
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </apex:outputPanel>
+                    <apex:actionFunction name="handleSummary" rerender="summaryTable" status="idStatus1"/>
+                </apex:form>
+                <br/><br/>
+            </apex:pageBlock>
+        </div>    
+    </div>
+</apex:page>

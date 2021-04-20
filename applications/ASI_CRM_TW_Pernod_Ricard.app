@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <defaultLandingTab>standard-home</defaultLandingTab>
+    <formFactors>Large</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <label>Pernod Ricard ASI TW CRM</label>
+    <tabs>standard-Account</tabs>
+    <tabs>ASI_MFM_Brand__c</tabs>
+    <tabs>ASI_MFM_Sub_brand__c</tabs>
+    <tabs>ASI_CRM_TW_Promotion_Calendar</tabs>
+    <tabs>ASI_HK_CRM_Promotion__c</tabs>
+    <tabs>ASI_HK_CRM_Visitation_Plan__c</tabs>
+    <tabs>standard-report</tabs>
+    <tabs>ASI_CRM_TW_AccMoveApp</tabs>
+    <tabs>ASI_CRM_AccountMovement__c</tabs>
+    <tabs>ASI_CRM_OutletDepletion__c</tabs>
+    <tabs>ASI_CRM_Sales_Movement__c</tabs>
+    <tabs>ASI_CRM_Promotion_Status__c</tabs>
+    <tabs>ASI_CRM_ServicePack__c</tabs>
+    <tabs>ASI_CRM_SegmentationCriteria__c</tabs>
+    <tabs>ASI_CRM_CalculatedSalesVolume__c</tabs>
+    <tabs>ASI_CRM_CalculatedSegmentation__c</tabs>
+    <tabs>ASI_CRM_ConfirmedSalesVolume__c</tabs>
+    <tabs>ASI_HK_CRM_Product_Category__c</tabs>
+    <tabs>ASI_TH_CRM_Sub_category__c</tabs>
+    <tabs>ASI_TH_CRM_Segment__c</tabs>
+    <tabs>ASI_CRM_CN_Channel__c</tabs>
+    <tabs>ASI_MFM_Sub_Channel__c</tabs>
+    <tabs>ASI_CRM_TW_Running_Number__c</tabs>
+    <tabs>ASI_CRM_TW_POSMs_Query_Page</tabs>
+    <tabs>ASI_CRM_Holiday__c</tabs>
+    <tabs>BMCServiceDesk__SRM_FulfillmentInputs__c</tabs>
+    <tabs>ASI_CRM_ServicePackItem__c</tabs>
+    <tabs>ASI_CRM_Terms__c</tabs>
+    <tabs>ASI_CRM_Fix_Approval_Route__c</tabs>
+    <tabs>ASI_CRM_Dynamic_Approval_Route__c</tabs>
+    <tabs>ASI_CRM_TW_Offtake_Upload_Tab</tabs>
+    <tabs>ASI_CRM_TW_PurgeOfftake_Tab</tabs>
+    <tabs>ASI_CRM_TW_OfftakeBALCal_Tab</tabs>
+</CustomApplication>

@@ -1,0 +1,1760 @@
+<apex:page standardController="clm__Application__c" extensions="clm.HelperClass">
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="{!URLFOR($Resource.Settings,'/bower_components/async.js/async.js')}"></script> 
+<!--    <script type="text/javascript" src="{!URLFOR($Resource.jQueryBase64,'jquery.base64.js')}"></script> -->
+    <script src="https://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+
+    <apex:detail subject="{!clm__Application__c}" inlineEdit="true" relatedlist="true"/>
+<!--    <apex:relatedList list="CustomScenarios__r" /> -->
+<!--    <apex:relatedList list="Slides__r" /> -->
+<!--    <apex:relatedList list="Templates__r" /> -->
+    
+    <div id="replaceButton">
+        <apex:relatedList id="attList" list="CombinedAttachments" /> <!-- rendered="{!showNotesAndAttachments}" -->
+    </div>
+    <apex:form >
+        <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+<!--        <script type="text/javascript" src="{!URLFOR($Resource.jQueryBase64,'jquery.base64.js')}"></script> -->
+        <script src="https://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+        
+        <apex:includeScript value="/soap/ajax/34.0/connection.js" />
+        <apex:includeScript value="/soap/ajax/34.0/apex.js" />
+        
+        <style>
+            .ui-dialog {z-index:1}
+        </style> 
+        
+        <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/jquery-ui-1-9-git.css"/>
+        
+        <script>
+            sforce.connection.sessionId = '{!$Api.Session_ID}';
+
+            var app_id = '{!clm__Application__c.id}';
+            var org_id = '{!CASESAFEID($Organization.Id)}';
+            var token_id = '{!CLOUD_TOKEN}';
+            var cloud_url = '{!CLOUD_UPLOADURL}';
+            
+            var sizeLim = 25000000;
+            
+            $(document).ready(function() {
+                $('#file').change(function(event){
+                    console.log('size >>> ' + $("#file")[0].files[0].size);
+                    console.log('filename >> ' + $("#file")[0].files[0].name);
+                });
+            });
+            
+            function attach(){
+            
+                $('#save-status').html('Reading file...');
+                
+                if(undefined === $("#file")[0].files[0]){
+                    window.box.hide();
+                    return;
+                }
+                $('.renewdial-elem').css('display', 'none');
+                $('.renewdial-cube').css('display', 'block');
+                var name = $("#file")[0].files[0].name;
+                var body = $("#file")[0].files[0];
+                
+                var file_cont;
+                
+                var r = new FileReader();
+                r.readAsBinaryString($("#file")[0].files[0]);
+                r.onload = function(){
+                
+                    $('#save-status').html('Saving file to Salesforce.com...');
+                    
+                    var att = new sforce.SObject("Attachment");
+                    att.ParentId = app_id;
+                    att.ContentType = $("#file").prop('files')[0].type;
+                    att.Name = $("#file")[0].files[0].name;
+                    att.body = encode64(r.result);
+                    // Assign all medotery fields for the Attachment record
+                    var result = sforce.connection.create([att], { 
+                        onSuccess: function(){
+                            if(endsWith(att.Name, '.zip')){
+                                sendToAzure();
+                            }else{
+                                var name = $('#file').val(null);
+                                $( "#attachDialog" ).dialog( "close" );
+                                //hideDialog();
+                                try{
+                                    window.box.hide();
+                                    $('#file').remove();
+                                }catch(ex){
+                                    
+                                }
+                                rerenderTable();
+                            }
+                        },
+                        onFailure: function(){
+                            alert('Save failed! Please, try again or contact your administrator');
+                            var name = $('#file').val(null);
+                            $( "#attachDialog" ).dialog( "close" );
+                            //hideDialog();
+                            try{
+                                window.box.hide();
+                                $('#file').remove();
+                            }catch(ex){
+                                
+                            }
+                            rerenderTable();
+                        }
+                    });
+                }
+            }
+            
+            function deleteAttachment(att_id){
+                sforce.connection.deleteIds([att_id]);
+            }
+            
+            function showConfirm(att_id){
+                var del = window.confirm('Proceed deleting?');
+                if (del) {
+                    deleteAttachment(att_id);
+                } else {
+                    return;
+                }
+            }
+            
+            function initDialog(){
+                $("#attachDialog").dialog({
+                    autoOpen: false,
+                    modal: true,
+                    buttons: {
+                        "{!$Label.Attach}": function(){
+                            if(sizeLim <= $("#file")[0].files[0].size){
+                                alert('File size limit is 25MB!');
+                                return;
+                            }
+                            if(null == $("#file")[0].files[0]){
+                                alert('No file selected!');
+                            }else{
+                                //.attr('disabled','disabled');
+                                $("#dialog-container ui-button").attr('disabled','disabled');
+                                $("#uploader").css('display','none');
+                                $("#progress-bar").css('display','block');
+                                attach();
+                                //$( this ).dialog( "close" );
+                            }
+                        },
+                        "{!$Label.MS_Cancel}": function(){
+                            if(null != $('#file').val()){
+                                var name = $('#file').val(null);
+                            }
+                            $( this ).dialog( "close" );
+                        }
+                    }
+                });
+                $('#dialog-container').css('display','block');
+            }
+            
+            function encode64(data){    // Encodes data with MIME base64
+                // 
+                // +   original by: Tyler Akins (http://rumkin.com)
+                // +   improved by: Bayron Guevara
+            
+                var b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+                var o1, o2, o3, h1, h2, h3, h4, bits, i=0, enc='';
+            
+                do { // pack three octets into four hexets
+                    o1 = data.charCodeAt(i++);
+                    o2 = data.charCodeAt(i++);
+                    o3 = data.charCodeAt(i++);
+            
+                    bits = o1<<16 | o2<<8 | o3;
+            
+                    h1 = bits>>18 & 0x3f;
+                    h2 = bits>>12 & 0x3f;
+                    h3 = bits>>6 & 0x3f;
+                    h4 = bits & 0x3f;
+            
+                    // use hexets to index into b64, and append result to encoded string
+                    enc += b64.charAt(h1) + b64.charAt(h2) + b64.charAt(h3) + b64.charAt(h4);
+                } while (i < data.length);
+            
+                switch( data.length % 3 ){
+                    case 1:
+                        enc = enc.slice(0, -2) + '==';
+                    break;
+                    case 2:
+                        enc = enc.slice(0, -1) + '=';
+                    break;
+                }
+            
+                return enc;
+            }
+            
+            $(document).ready(function(){
+                initDialog();
+                var button = '<input class="btn" type="button" onclick="openDialog()/*openAttDial()*/" value="{!$Label.AttachFile}" />';
+                //$("#replaceButton .pbButton").html(button);
+                //window.parent.document.getElementsByClassName('parentPrice').innerHTML
+                
+                var fixAtt = '<input class="btn" type="button" onclick="openReattachDialog()" value="{!$Label.WW_UpdateAttachmentsTitle}" />';
+                
+                //$("#replaceButton .pbButton").html(button + '&nbsp;' + fixAtt);
+                $("#replaceButton .pbButton").html(button);
+                
+                //$('.bDetailBlock > .pbHeader').find('[id*="topButtonRow"]').append(fixAtt);
+                
+                var a = $('input[name="clm__renewslides"]');
+                $.each(a, function(){
+                    $(this).attr('onclick', 'openReattachDialog();');
+                })
+            });
+            
+            function buttonReplace(){
+                var button = '<button onclick="openDialog()/*openAttDial()*/" >{!$Label.AttachFile}</button>';
+                $("#replaceButton .pbButton").html(button);
+            }
+            
+            function openAttDial(){
+                $("#uploader").css('display','block');
+                $("#progress-bar").css('display','none');
+                $( "#attachDialog" ).dialog( "open" );
+            }
+            
+            function sendToAzure(){
+                //$('#save-status').html('Sending file to application server...');
+                //console.log('azure sending');
+                var data = new FormData();
+                
+                var file = $("#file")[0].files[0];
+                
+                data.append("file", file);                
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", '{!CASESAFEID(clm__Application__c.Id)}');
+                data.append("action", 'upload-sources');
+                data.append("att_name", file.name);
+                
+                data.append("empty_id", "end");
+    
+                console.log(data);
+ 
+                
+                var xhr = new XMLHttpRequest();
+            
+                xhr.open("POST", cloud_url, true);
+            
+                xhr.send(data);
+                
+                xhr.onreadystatechange = function() {
+                
+                    if (xhr.status != 200) {
+                        // обработать ошибку
+                        console.error("error");
+                    } else {
+                        console.log("success");
+                        
+                        window.box.hide();
+                        $('#file').remove();
+                        
+                        reloadPageAF();//it's last action - reload page
+                        rerenderTable();
+
+                    }   
+                
+                }
+                
+            }
+            
+            function openDialog(){
+                var html = '';
+                html += '<div id="attachDialog" >';
+                    html += '<div id="uploader" class="renewdial-elem">';
+                        html += '{!$Label.SelectFile}<br /><br />';
+                        html += '<input id="file" type="file" name="file" class="renewdial-elem"/>';
+                    html += '</div>';
+                html += '</div>';
+                html += "<p style='text-align: center'>";
+                    html += '<br>';
+                    html += "<button class='btn renewdial-elem' onclick='attach(); return false;'>OK</button>";
+                    
+                    html += "<button class='btn renewdial-elem' onclick='window.box.hide(); return false;'>{!$Label.clm__eDetCancelButton}</button>";
+                html += '</p>';
+
+                html += "<p class='renewdial-cube' style='text-align: center; display: none'>";
+                html += "<img src='{!$Resource.LoaderIcon}'></p>";
+                
+                html += "<div id='save-status' class='renewdial-cube' style='text-align: center; display: none'/>";
+                            
+            
+                var box = new SimpleDialog("hersh"+Math.random(), true);
+                    parent.box = box;
+                    box.setTitle("{!$Label.clm__SelectFile}");
+                    box.createDialog();
+                    box.setWidth(350);
+                    box.setContentInnerHTML(html);
+                    box.setupDefaultButtons();
+                box.show();
+            }
+            
+            function endsWith(str, suffix) {
+                return str.indexOf(suffix, str.length - suffix.length) !== -1;
+            }
+                    
+        </script>
+        
+        
+        <script>
+            var isSafari = navigator.vendor && navigator.vendor.indexOf('Apple') > -1 &&
+                            navigator.userAgent && !navigator.userAgent.match('CriOS');
+        
+            function boundaryString (){
+                return '--BoundaryString';
+            }
+            
+            function formBoundary (){
+                return '--' + boundaryString() + '\n';
+            }
+            
+            function formBoundaryEnd (){
+                return '--' + boundaryString() + '--';
+            }
+            
+            function parameter(name, val, sources){
+                var result = formBoundary();
+                if(!sources){
+                    result += 'Content-Disposition: form-data; name="' + name + '"';
+                    result += '\n\n'
+                    result += val;
+                }else{
+                    result += 'Content-Disposition: form-data; name="' + name + '"; filename="sources.zip"\n';
+                    result += 'Content-Type: application/x-zip-compressed';
+                    result += '\n\n'
+                    result += val;
+                }
+                return result + '\n';
+            }
+            
+            function showLoader(){
+                $('.reattdial-elem').css('display', 'none');
+                $('.reattdial-cube').css('display', 'block');
+                
+                sendAppOptions();
+
+                let query = `SELECT Name, Id 
+                    FROM Attachment 
+                    WHERE ParentId='${app_id}' 
+                      AND Name like 'sources.zip.%'  
+                    ORDER BY Name ASC`;
+
+                sfQueryAsync(query)
+                .then(response => {
+                    splitted_attachments = response;
+
+                    if (response.records && splitted_attachments.records.length > 0){
+                        console.log('upload sources by parts')
+                        theRenewSlidesByParts();
+                    } else {
+                        console.log('upload sources normally')
+                        theRenewSlides();
+                    }
+                })
+                .catch(err => {
+                    reloadPageAF();
+                });
+                        
+            }
+            
+            function sendSlideOrderToAzure() {
+                
+                sforce.connection.query("Select id, clm__Order__c from clm__Slide__c where clm__ApplicationId__c='{!clm__Application__c.id}' and clm__isActive__c=true",
+                {
+                    onSuccess: function(result){
+                        var rec = result.getArray("records");
+                        console.log('rec >> ',rec);
+                        sforce.apex.execute("clm.SenderClass","sendSlideOrderWebservice",{slideList : rec, app_id : '{!clm__Application__c.id}' } );
+                    },
+                    onFailure: function(err){
+                        console.error(err);
+                    }
+                });
+
+            }
+            
+            function sendAttachments(records, index) {
+    var processing = records[index];
+    $('#send-status').html('Processing file ' + processing.Name);
+    sforce.connection.query("Select Name, Body, BodyLength, Id from Attachment where Id=\'" + processing.Id + "\'",
+    {
+        onSuccess: function(result){
+            var rec = result.getArray("records")[0];
+            $('#send-status').html('Processing file ' + rec.Name);
+            var partNameIndex = 1;
+            function sendPart(file, partNum, partSize){
+                var attBody = rec.Body;
+                //var partSize = rec.BodyLength/2;
+                var part = file.substring(partNum, partNum + partSize);
+                var data = '';
+                data += parameter('cloud_token', '12345');
+                data += parameter('org_id', org_id);
+                data += parameter("app_id", app_id);
+                data += parameter('action', 'upload-sources');
+                data += parameter('base', 'true');
+                data += parameter('scr_delay', delay);
+                data += parameter('att_name', rec.Name + '.part' + partNameIndex);
+                data += parameter('is_part', true);
+                if(rec.BodyLength == (partNum + partSize)){
+                    data += parameter('last_part', 'true');
+                }
+                //console.log('part >> ', part);
+                data += parameter("bodybase", part);
+                
+                data += formBoundaryEnd();
+                partNameIndex++;
+                console.log('data >> ' + data.length);
+                $.ajax({
+                    type: 'POST',
+                    //url: "https://www.ctclm.com/upload.php",
+                    url : cloud_url,
+                    context: document.body,
+                    cache: false,
+                    contentType: 'multipart/form-data; boundary=' + boundaryString(),
+                    processData: false,
+                    crossDomain: true,
+                    data: data,
+                    success: function(data){
+                        partNum += partSize;
+                        if(rec.BodyLength <= partNum){
+                            index++;
+                            if(index == records.length){
+                                //updateTemplates();
+                                window.box.hide();
+                                reloadPageAF();//it's last action - reload page
+                                return;
+                            }else{
+                                sendAttachments(records, index);
+                                return;
+                            }
+                            return;
+                        }else{
+                            sendPart(file, partNum, partSize);
+                        }
+                    }
+                });
+                console.log('file ' + rec.Name + '.part' + partNameIndex + ' sent!');                           
+            }
+
+            console.log('id >> ' + rec.Id);
+            var body = rec.Body;
+            console.log('rec.BodyLength >> ', rec.BodyLength);
+            /*if(20000000 < rec.BodyLength){
+                sendPart(rec.Body, 0, rec.BodyLength/2);
+                return;
+            }*/
+            var data = '';
+            //data += parameter('cloud_token', '12345');
+            data += parameter('cloud_token', token_id);
+            data += parameter('org_id', org_id);
+            data += parameter("app_id", app_id);
+            data += parameter('action', 'upload-sources');
+            data += parameter('base', 'true');
+            data += parameter('scr_delay', delay);
+            data += parameter('att_name', rec.Name);
+            data += parameter("bodybase", body);
+            data += formBoundaryEnd();
+            console.log('data >> ' + data.length);
+
+            $.ajax({
+                type: 'POST',
+                //url: "https://www.ctclm.com/upload.php",
+                url : cloud_url,
+                context: document.body,
+                cache: false,
+                contentType: 'multipart/form-data; boundary=' + boundaryString(),
+                processData: false,
+                crossDomain: true,
+                data: data,
+                success: function(data){
+                    index++;
+                    if(index == records.length){
+                        ///updateTemplates();
+                        window.box.hide();
+                        reloadPageAF();//it's last action - reload page
+                        return;
+                    }else{
+                        sendAttachments(records, index);
+                        return;
+                    }
+                },
+                timeout: 3000000
+            }).error(function(jqXHR, textStatus, errorThrown){
+                console.log('status >> ', textStatus);
+                console.log('errorThrown >> ', errorThrown);
+                window.box.hide();
+                alert('Failed to send ' + rec.Name + '. Please, contact your administrator.');
+            });
+            console.log('file ' + rec.Name + ' sent!');
+        },
+        onFailure: function(err){
+        /// handling bug, when the right file returns in error. will be removed after node-server. maybe=)
+            if(2000 < err.length){
+                var r = new RegExp('(.*<sf:Body>)(.*)(</sf:Body>.*)');
+                var body = err.replace(r, '$2');
+                r = new RegExp('(.*<sf:BodyLength>)(.*)(</sf:BodyLength>.*)');
+                console.log('BodyLength >> ', err.replace(r, '$2'));
+
+                r = new RegExp('(.*<sf:Name>)(.*)(</sf:Name>.*)');
+                var attName = err.replace(r, '$2');
+                /*if(20000000 < rec.BodyLength){
+                    sendPart(rec.Body, 0, rec.BodyLength/2);
+                    return;
+                }*/
+                var data = '';
+                data += parameter('cloud_token', '12345');
+                data += parameter('org_id', org_id);
+                data += parameter("app_id", app_id);
+                data += parameter('action', 'upload-sources');
+                data += parameter('base', 'true');
+                data += parameter('scr_delay', delay);
+                data += parameter('att_name', attName);
+                data += parameter("bodybase", body);
+                data += formBoundaryEnd();
+                console.log('data >> ' + data.length);
+                $.ajax({
+                    type: 'POST',
+                    //url: "https://www.ctclm.com/upload.php",
+                    url : cloud_url,
+                    context: document.body,
+                    cache: false,
+                    contentType: 'multipart/form-data; boundary=' + boundaryString(),
+                    processData: false,
+                    crossDomain: true,
+                    data: data,
+                    success: function(data){
+                        index++;
+                        if(index == records.length){
+                            //updateTemplates();
+                            window.box.hide();
+                            reloadPageAF();//it's last action - reload page
+                            return;
+                        }else{
+                            sendAttachments(records, index);
+                            return;
+                        }
+                    },
+                    timeout: 3000000
+                }).error(function(jqXHR, textStatus, errorThrown){
+                    console.log('status >> ', textStatus);
+                    console.log('errorThrown >> ', errorThrown);
+                    window.box.hide();
+                    alert('Failed to send ' + rec.Name + '. Please, contact your administrator.');
+                });
+                return;
+            }
+            console.log('Error >> ', err);
+            alert('File retrieve failed. Please, contact your administrator.');
+            try{
+                window.box.hide();
+                //$('#file').remove();
+            }catch(ex){
+                
+            }
+            //$( "#attachDialog" ).dialog( "close" );
+            var name = $('#file').val(null);
+            console.log('azure sent');
+            rerenderTable();
+        }
+    });
+}
+
+            
+            function updateTemplates(callback){
+                sendSlideOrderToAzure();
+                $('#send-status').html('Taking screenshots...');
+                sforce.connection.query("Select Id from clm__Template__c where clm__ApplicationId__c=\'" + app_id + "\'",
+                {
+                    onSuccess: function(result){
+                        
+                        var templates = result.getArray("records");
+                    
+                        sforce.connection.update(templates,
+                            {
+                                onSuccess: function(){
+                                
+                                    /*
+                                    if(undefined != window.box){
+                                                                                
+                                        setTimeout(function() {
+                                            window.box.hide();
+                                            reloadPageAF();//it's last action - reload page
+                                        }, 15000);//wait screenshot processing
+                                        
+                                    }
+                                    */
+                                    
+                                    if (typeof(callback) == "function") {
+                                        callback();
+                                    }
+                                },
+                                onFailure: function(err){
+                                    console.log('error >> ', err);
+                                    alert('Taking screenshots failed. Please, contact your administrator.');
+                                    try{
+                                        window.box.hide();
+                                        $('#file').remove();
+                                    }catch(ex){
+                                        
+                                    }
+                                    //$( "#attachDialog" ).dialog( "close" );
+                                    var name = $('#file').val(null);
+                                    console.log('azure sent');
+                                    rerenderTable();
+                                    if (typeof(callback) == "function") {
+                                        callback();
+                                    }
+                                }
+                            });
+                    },
+                    onFailure: function(err){
+                        console.log('error >> ', err);
+                        alert('Taking screenshots failed. Please, contact your administrator.');
+                        try{
+                            window.box.hide();
+                            $('#file').remove();
+                        }catch(ex){
+                            
+                        }
+                        //$( "#attachDialog" ).dialog( "close" );
+                        var name = $('#file').val(null);
+                        console.log('azure sent');
+                        rerenderTable();
+                        if (typeof(callback) == "function") {
+                            callback();
+                        }
+                    }
+                });
+            }
+            var delay;
+            var isUploading = true;
+            var checkCount = 0;
+            
+
+
+
+
+
+
+
+            function formOrderJSON(){
+                let slides = sforce.connection.query(`SELECT id, clm__Branch__c, clm__Order__c, clm__ApplicationId__c, clm__IsActive__c 
+                FROM clm__Slide__c WHERE clm__IsActive__c = TRUE AND clm__ApplicationId__c ='` + app_id + `' 
+                ORDER BY clm__Branch__c ASC NULLS FIRST,  clm__Order__c ASC NULLS FIRST`);
+
+                let order = {
+                    orders: {},
+                    slideMap: {},
+                    branches: {},
+                    orderByBranch:{}
+                }
+
+                for(let slide of slides.records){
+                    order.slideMap[slide.Id] = Number(slide.clm__Branch__c);
+                    if (!order.branches[Number(slide.clm__Branch__c)]) {
+                        order.branches[Number(slide.clm__Branch__c)] = []
+                    }
+
+                    order.branches[Number(slide.clm__Branch__c)].push(slide.Id);
+
+                    if (!order.orderByBranch[Number(slide.clm__Branch__c)]) {
+                        order.orderByBranch[slide.clm__Branch__c] = {}
+                    }
+                    
+                    order.orderByBranch[Number(slide.clm__Branch__c)][Number(slide.clm__Order__c)] = slide.Id;
+
+                    order.orders[Number(slide.clm__Order__c)] = slide.Id; // Number - т.к. некоторые Order могут иметь вид 13.0 и тд
+                }
+
+                console.log(order);
+
+                return JSON.stringify(order);
+            }
+
+            function sendAppOptions() {
+
+                getCLMCustomSetting()
+                .then(clmSettings => {
+                    if (!clmSettings) {
+                        return;
+                    }
+
+                    let options = {
+                        sessionTimeout: Number(clmSettings.clm__SessionTimeout__c) || 0,
+                        isDetailedStatsEnabled : clmSettings.clm__IsRDDetailedStatsEnabled__c || false 
+                    };
+                    
+                    let request = {
+                        cloud_token : token_id,
+                        org_id : org_id,
+                        app_id : app_id,
+                        action : 'update-app-options',
+                        options : options
+                    };
+
+                    return fetch(cloud_url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(request),
+                        mode: 'cors',
+                        keepalive: true
+                    });                    
+                })
+                .then(response => {
+                    if (response) {
+                        console.log(response);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                });               
+            }
+
+
+            function sendOrderJSON(){
+                let order = formOrderJSON();
+
+                
+                let data = new FormData();
+            
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "upload-order-json");
+                data.append("base", "!true");  
+                data.append("order", order); 
+            
+                var xhr = new XMLHttpRequest();         
+                xhr.open("POST", cloud_url, true);           
+                                        
+                xhr.onreadystatechange = function() {                       
+                    if(xhr.readyState == 4) {                       
+                        if (xhr.status != 200) {
+                            // обработать ошибку
+                            console.error("error");   
+                            console.log(xhr);
+                            window.box.hide();
+                        } else {
+                            console.log("success");                                 
+                            reloadPageAF();
+                        }                           
+                    }                       
+                }
+                
+                xhr.send(data);    
+            }
+
+            function getCLMCustomSetting() {
+                let query = `SELECT Id, clm__IsRDDetailedStatsEnabled__c, clm__SessionTimeout__c,
+                        SetupOwnerId 
+                    FROM clm__CLMSettings__c
+                    WHERE SetupOwnerId = '${org_id}'`;
+
+                return sfQueryAsync(query)
+                .then(response => {
+                    if (response.size != 0){
+                        if (response.records instanceof Array) {
+                            return response.records [0];
+                        } else {
+                            return response.records;
+                        }                                           
+                    }
+                    return null;
+                })
+                .catch(err => {
+                    console.log();
+                });
+            }
+
+            function sfQueryAsync(query) {
+                return new Promise(function(resolve, reject) {
+                    sforce.connection.query(query, {
+                        onSuccess: function(result) {
+                            resolve(result);                                                            
+                        },
+                        onFailure: function(err) {
+                            reject(err);
+                        }
+                    });
+                });                
+            }
+
+
+
+
+
+
+            /*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  
+            *  *  *  *  *  *  *  *  *  *  OLD LOGIC *  *  *  *  *  *  *  *  *  *  *  * 
+             *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  */
+
+            function theRenewSlides() {
+                
+            
+                delay = $('#delay-pickList').val();
+                $('#send-status').html('Processing list of attachments...');
+            
+                async.waterfall([
+                    function(callback) {
+                        sforce.connection.query("Select Name, Id from Attachment where ParentId=\'" + app_id + "\' and name like \'sources%.zip\' ", {
+                            onSuccess: function(result) {
+                                callback(null, result);                                                             
+                            },
+                            onFailure: function(err) {
+                                callback(err);
+                            }
+                        });                 
+                    
+                    },
+                    function(attResult, callback) {
+                        var attachs = attResult.getArray("records");
+                        console.log('attachs >> ' + attachs.length);
+                        
+                        var processArr = [];
+                        for (var i = 0; i < attachs.length; i++) {
+                            processArr.push(async.apply(theDoSend, attachs[i]));
+                        }
+                        
+                        processArr.push(startUploadingFunc);
+                        processArr.push(updateTemplates);
+                        processArr.push(function(cb) {
+                            async.during(
+                                function (callback) {
+                                    return callback(null, isUploading);
+                                },
+                                function (callback) {
+                                    checkUploadingFunc();
+                                    setTimeout(callback, 1000);
+                                },
+                                function (err) {                                   
+                                    renewSlides(cb);
+                                }
+                            )
+                        });
+                                    
+                        async.series(
+                            processArr,
+                            callback
+                        );
+                        
+                
+                    }
+                ], function(err, result) {
+                    if (err) {
+                        console.log(err);
+                        window.box.hide();
+                    } else {
+                        console.log(result);
+
+                        sendOrderJSON();
+                    }
+                });            
+            }
+            
+            function theDoSend(attItem, callback) {
+                console.log('attItem', attItem);
+                $('#send-status').html('Processing file ' + attItem.Name);
+                
+                sforce.connection.query("Select Name, Id, Body from Attachment where Id = \'" + attItem.Id + "\' ", {
+                    onSuccess: function(result) {
+                        
+                        function base64ToFile(base64Data, tempfilename, contentType) {
+                          contentType = contentType || '';
+                          var sliceSize = 1024;
+                          var byteCharacters = atob(base64Data);
+                          var bytesLength = byteCharacters.length;
+                          var slicesCount = Math.ceil(bytesLength / sliceSize);
+                          var byteArrays = new Array(slicesCount);
+                    
+                          for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+                            var begin = sliceIndex * sliceSize;
+                            var end = Math.min(begin + sliceSize, bytesLength);
+                    
+                            var bytes = new Array(end - begin);
+                            for (var offset = begin, i = 0 ; offset < end; ++i, ++offset) {
+                              bytes[i] = byteCharacters[offset].charCodeAt(0);
+                            }
+                            byteArrays[sliceIndex] = new Uint8Array(bytes);
+                          }
+                          var file = new File(byteArrays, tempfilename, { type: contentType });
+                          return file;
+                        }
+                        
+                        var attachs = result.getArray("records");                
+                        var name = attachs[0].Name;
+                        var body = attachs[0].Body; 
+                        
+                        var data = new FormData();
+                    
+                        data.append("cloud_token", token_id);
+                        data.append("org_id", org_id);
+                        data.append("app_id", app_id);
+                        data.append("action", "upload-sources");
+                        data.append("base", "!true");
+                        data.append("scr_delay", delay);
+                        data.append("att_name", name);     
+                        
+                        
+                            
+                        var fileValue = base64ToFile(body, name);
+                        
+                        if (isSafari) {
+                            
+                            var blobFileValue = new Blob([fileValue], {
+                                "type":"application/octet-stream", 
+                                "originalFilename":"sources.zip", 
+                                "name":"sources.zip"
+                            });
+                            
+                            data.append("file", blobFileValue);
+                        } else {
+                            data.append("file", fileValue);
+                        }
+                    
+                        var xhr = new XMLHttpRequest();         
+                        xhr.open("POST", cloud_url, true);           
+                                                
+                        xhr.onreadystatechange = function() {                       
+                            if(xhr.readyState == 4) {                       
+                                if (xhr.status != 200) {
+                                    // обработать ошибку
+                                    console.error("error");                                 
+                                    callback("error");
+                                } else {
+                                    console.log("success");                                 
+                                    callback();
+                                }                           
+                            }                       
+                        }
+                        
+                        xhr.send(data);                                     
+                    },
+                    onFailure: function(err) {
+                        if (err) {
+                            callback(err);
+                        }
+                    }
+                });             
+            }
+            
+             
+            var files;
+
+            function startUploadingFunc(cb) {
+                checkCount = 0;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "start-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb(err);
+                        } else {
+                        
+                            cb();                           
+                        }
+                        
+                    }
+                
+                }                                                         
+            }   
+
+            function checkUploadingFunc() {
+                checkCount++;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "check-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            //cb(err);
+                        } else {
+                        
+                            var data = JSON.parse(this.response);
+                            console.log("result", data);
+                            isUploading = data.result != "success";                            
+                        }
+                        
+                        //after 1 minute continue
+                        if (checkCount > 60) {
+                            isUploading = false;
+                        }
+                    }
+                
+                }                                                         
+            }          
+            
+            function renewSlides(cb) {
+                
+                $('#send-status').html('Renew slides...');
+                slideParts = 0;
+                sforce.connection.query("Select Id, clm__Order__c from clm__Slide__c where clm__ApplicationId__c='{!clm__Application__c.id}'", {
+                    onSuccess: function(result){
+                        records = result.getArray("records");
+                        console.log('records >> ' + records.length);
+                        
+                        var slideRanges = [];
+                        var slide_ids = [];
+                        var partNum = 1;
+                        for (var i = 0; i<records.length; i++) {
+                            if (i > 0 && (i+1) % 5 == 0) {
+                                slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                                
+                                slide_ids = [];
+                                slide_ids.push(records[i].Id);
+                                partNum++;
+                            } else {
+                                slide_ids.push(records[i].Id);
+                            }
+                        }
+                        
+                        if (0 != slide_ids.length) {
+                            slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                        }
+                        
+                        if (slideRanges.length > 0) {
+                        slideParts = slideRanges.length;
+                            async.series(
+                                slideRanges,
+                                cb
+                            );
+                        } else {
+                            cb();
+                        }
+
+                    },
+                    onFailure: function(err){
+                        console.log('error >> ', err);
+                        cb();
+                    }
+                });             
+            }
+            
+            function sendRenewRequest(slide_ids, i, cb) {
+            
+                var data = new FormData();
+            
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "renew-slides");
+                data.append("slide_ids", slide_ids);
+                data.append("delay", delay * 1000);//delay multiplied on 1000 because needed milliseconds
+                
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb(err);
+                        } else {
+                            
+                            console.log("success " + i + ' of ' + slideParts);
+                            $('#send-status').html('success '+ i + ' of ' + slideParts);
+                            cb();             
+                        }
+                        
+                    }
+                
+                }
+                
+                
+            }           
+                      
+            
+            function openReattachDialog(){
+                var html = '';
+                html += '<div id="attachDialog" >';
+                    html += '<div id="uploader" class="reattdial-elem">';
+                        html += '{!$Label.RenewDialogMessage}<br /><br />';
+                    html += '</div>';
+                    html += '<div id="delay-div" class="reattdial-elem">';
+                        html += '<label for="delay=pickList">{!$Label.ChooseScreenshotDelay} </label>';
+                        html += '<select id="delay-pickList" size="1">';
+                            html += '<option value="3">3 {!$Label.Seconds}</option>';
+                            html += '<option value="5">5 {!$Label.Seconds}</option>';
+                            html += '<option value="10">10 {!$Label.Seconds}</option>';
+                        html += '</select>';
+                    html += '</div>';
+                html += '</div>';
+                html += "<p style='text-align: center'>";
+                    html += '<br>';
+                    html += "<button class='btn reattdial-elem' onclick='showLoader(); return false;'>OK</button>";
+                    
+                    html += "<button class='btn reattdial-elem' onclick='window.location.reload(); return false;'>{!$Label.clm__eDetCancelButton}</button>";
+                html += '</p>';
+
+                html += "<p class='reattdial-cube' style='text-align: center; display: none'>";
+                html += "<img src='{!$Resource.LoaderIcon}'></p>";
+                
+                html += "<div id='send-status' class='reattdial-cube' style='text-align: center; display: none'/>";
+                            
+            
+                var box = new SimpleDialog("hersh"+Math.random(), true);
+                    //parent.box = box;
+                    box.setTitle("{!$Label.RenewDialogName}");
+                    box.createDialog();
+                    box.setWidth(350);
+                    box.setContentInnerHTML(html);
+                    box.setupDefaultButtons();
+                box.show();
+            }
+            
+            
+            function testAjaxUploadSources() {
+    
+                sforce.connection.query("Select Name, Id, Body from Attachment where ParentId=\'" + app_id + "\' and name like \'sources%.zip\' ",
+                {
+                onSuccess: function(result) {
+                    records = result.getArray("records");
+                    console.log('records >> ' + records.length);
+                    if(0 != records.length){
+                    
+                        process(records[0].Name, records[0].Body);
+                    
+                    }else{
+                        //pass
+                    }
+                },
+                onFailure: function(result) {
+
+                    alert("fail! result >> ", result);
+                    
+                }
+                });
+    
+    
+                function process(name, body) {
+                
+                    var data = new FormData();
+                    
+                    data.append("cloud_token", token_id);
+                    data.append("org_id", org_id);
+                    data.append("app_id", app_id);
+                    data.append("action", "upload-sources");
+                    data.append("base", "!true");
+                    data.append("scr_delay", delay);
+                    data.append("att_name", name);
+            
+                    function base64ToFile(base64Data, tempfilename, contentType) {
+                        contentType = contentType || '';
+                        var sliceSize = 1024;
+                        var byteCharacters = atob(base64Data);
+                        var bytesLength = byteCharacters.length;
+                        var slicesCount = Math.ceil(bytesLength / sliceSize);
+                        var byteArrays = new Array(slicesCount);
+                    
+                        for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+                            var begin = sliceIndex * sliceSize;
+                            var end = Math.min(begin + sliceSize, bytesLength);
+                    
+                            var bytes = new Array(end - begin);
+                            for (var offset = begin, i = 0 ; offset < end; ++i, ++offset) {
+                                bytes[i] = byteCharacters[offset].charCodeAt(0);
+                            }
+                            byteArrays[sliceIndex] = new Uint8Array(bytes);
+                        }
+                        var file = new File(byteArrays, tempfilename, { type: contentType });
+                        return file;
+                    }
+                    
+                    data.append("file", base64ToFile(body, 'sources.zip'));
+                    
+                    var xhr = new XMLHttpRequest();
+                    
+                    xhr.open("POST", cloud_url);
+                    
+                    xhr.send(data);
+                
+                }
+    
+            }
+
+
+
+            /*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  
+            *  *  *  *  *  *  *  *  *  * END OLD LOGIC *  *  *  *  *  *  *  *  *  *  *  * 
+             *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  */
+
+
+
+
+
+            /*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  
+            *  *  *  *  *  *  *  *  *  *  NEW LOGIC *  *  *  *  *  *  *  *  *  *  *  * 
+             *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  */
+
+            function theRenewSlidesByParts() {
+                
+            
+                delay = $('#delay-pickList').val();
+                $('#send-status').html('Processing list of attachments...');
+            
+                async.waterfall([
+                    function(callback) {
+                        sforce.connection.query("Select Name, Id from Attachment where ParentId=\'" + app_id + "\' and name like \'sources.zip.%\'  order by name asc", {
+                            onSuccess: function(result) {
+                                callback(null, result);                                                             
+                            },
+                            onFailure: function(err) {
+                                callback(err);
+                            }
+                        });                 
+                    
+                    },
+                    function(attResult, callback) {
+                        var attachs = attResult.getArray("records");
+                        console.log('attachs >> ' + attachs.length);
+                        
+                        var processArr = [];
+                        for (var i = 0; i < attachs.length; i++) {
+                            let isStart = false;
+                            let isLast = false;
+                            if (i == 0) isStart = true;
+                            if (i == (attachs.length - 1)) isLast = true;
+                            processArr.push(async.apply(theDoSendByParts, attachs[i], isStart, isLast));
+                        } 
+                        
+                        processArr.push(startUploadingFuncByParts);
+                        processArr.push(updateTemplates);
+                        processArr.push(function(cb) {
+                            async.during(
+                                function (callback) {
+                                    return callback(null, isUploading);
+                                },
+                                function (callback) {
+                                    checkUploadingFunc();
+                                    setTimeout(callback, 1000);
+                                },
+                                function (err) {                                   
+                                    renewSlides(cb);
+                                }
+                            )
+                        });
+                                    
+                        async.series(
+                            processArr,
+                            callback
+                        );
+                        
+                
+                    }
+                ], function(err, result) {
+                    if (err) {
+                        console.log(err);
+                        window.box.hide();
+                    } else {
+                        console.log(result);
+
+                        sendOrderJSON();                        
+                    }
+                });            
+            }
+            
+            function theDoSendByParts(attItem, isStart, isLast, callback) {
+                console.log('attItem', attItem);
+                console.log('isStart: ' , isStart)
+                console.log('isLast: ' , isLast)
+                $('#send-status').html('Processing file ' + attItem.Name);
+                
+                sforce.connection.query("Select Name, Id, Body from Attachment where Id = \'" + attItem.Id + "\' ", {
+                    onSuccess: function(result) {
+                        
+                        function base64ToFile(base64Data, tempfilename, contentType) {
+                          contentType = contentType || '';
+                          var sliceSize = 1024;
+                          var byteCharacters = atob(base64Data);
+                          var bytesLength = byteCharacters.length;
+                          var slicesCount = Math.ceil(bytesLength / sliceSize);
+                          var byteArrays = new Array(slicesCount);
+                    
+                          for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+                            var begin = sliceIndex * sliceSize;
+                            var end = Math.min(begin + sliceSize, bytesLength);
+                    
+                            var bytes = new Array(end - begin);
+                            for (var offset = begin, i = 0 ; offset < end; ++i, ++offset) {
+                              bytes[i] = byteCharacters[offset].charCodeAt(0);
+                            }
+                            byteArrays[sliceIndex] = new Uint8Array(bytes);
+                          }
+                          var file = new File(byteArrays, tempfilename, { type: contentType });
+                          return file;
+                        }
+                        
+                        var attachs = result.getArray("records");                
+                        var name = attachs[0].Name;
+                        var body = attachs[0].Body; 
+                        
+                        var data = new FormData();
+                    
+                        data.append("cloud_token", token_id);
+                        data.append("org_id", org_id);
+                        data.append("app_id", app_id);
+                        data.append("action", "upload-sources-part");
+                        data.append("base", "!true");
+                        data.append("scr_delay", delay);
+                        data.append("att_name", name);   
+                        data.append("isStart", isStart);   
+                        data.append("isLast", isLast);     
+                        
+                        
+                            
+                        var fileValue = base64ToFile(body, name);
+                        
+                        if (isSafari) {
+                            
+                            var blobFileValue = new Blob([fileValue], {
+                                "type":"application/octet-stream", 
+                                "originalFilename":"sources.zip", 
+                                "name":"sources.zip"
+                            });
+                            
+                            data.append("file", blobFileValue);
+                        } else {
+                            data.append("file", fileValue);
+                        }
+                    
+                        var xhr = new XMLHttpRequest();         
+                        xhr.open("POST", cloud_url, true);           
+                                                
+                        xhr.onreadystatechange = function() {                       
+                            if(xhr.readyState == 4) {                       
+                                if (xhr.status != 200) {
+                                    // обработать ошибку
+                                    console.error("error");                                 
+                                    callback("error");
+                                } else {
+                                    console.log("success");                                 
+                                    callback();
+                                }                           
+                            }                       
+                        }
+                        
+                        xhr.send(data);                                     
+                    },
+                    onFailure: function(err) {
+                        if (err) {
+                            callback(err);
+                        }
+                    }
+                });             
+            }
+            
+             
+            var files;
+
+            function startUploadingFuncByParts(cb) {
+                checkCount = 0;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "start-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb(err);
+                        } else {
+                        
+                            cb();                           
+                        }
+                        
+                    }
+                
+                }                                                         
+            }   
+
+            function checkUploadingFunc() {
+                checkCount++;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "check-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            //cb(err);
+                        } else {
+                        
+                            var data = JSON.parse(this.response);
+                            console.log("result", data);
+                            isUploading = data.result != "success";                            
+                        }
+                        
+                        //after 1 minute continue
+                        if (checkCount > 60) {
+                            isUploading = false;
+                        }
+                    }
+                
+                }                                                         
+            }          
+            
+            function renewSlides(cb) {
+                
+                $('#send-status').html('Renew slides...');
+                slideParts = 0;
+                sforce.connection.query("Select Id, clm__Order__c from clm__Slide__c where clm__ApplicationId__c='{!clm__Application__c.id}'", {
+                    onSuccess: function(result){
+                        records = result.getArray("records");
+                        console.log('records >> ' + records.length);
+                        
+                        var slideRanges = [];
+                        var slide_ids = [];
+                        var partNum = 1;
+                        for (var i = 0; i<records.length; i++) {
+                            if (i > 0 && (i+1) % 5 == 0) {
+                                slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                                
+                                slide_ids = [];
+                                slide_ids.push(records[i].Id);
+                                partNum++;
+                            } else {
+                                slide_ids.push(records[i].Id);
+                            }
+                        }
+                        
+                        if (0 != slide_ids.length) {
+                            slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                        }
+                        
+                        if (slideRanges.length > 0) {
+                        slideParts = slideRanges.length;
+                            async.series(
+                                slideRanges,
+                                cb
+                            );
+                        } else {
+                            cb();
+                        }
+
+                    },
+                    onFailure: function(err){
+                        console.log('error >> ', err);
+                        cb();
+                    }
+                });             
+            }
+            
+            function sendRenewRequest(slide_ids, i, cb) {
+            
+                var data = new FormData();
+            
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "renew-slides");
+                data.append("slide_ids", slide_ids);
+                data.append("delay", delay * 1000);//delay multiplied on 1000 because needed milliseconds
+                
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) {
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb(err);
+                        } else {
+                            
+                            console.log("success " + i + ' of ' + slideParts);
+                            $('#send-status').html('success '+ i + ' of ' + slideParts);
+                            cb();             
+                        }
+                        
+                    }
+                
+                }
+                
+                
+            }           
+                      
+            
+            function openReattachDialog(){
+                var html = '';
+                html += '<div id="attachDialog" >';
+                    html += '<div id="uploader" class="reattdial-elem">';
+                        html += '{!$Label.RenewDialogMessage}<br /><br />';
+                    html += '</div>';
+                    html += '<div id="delay-div" class="reattdial-elem">';
+                        html += '<label for="delay=pickList">{!$Label.ChooseScreenshotDelay} </label>';
+                        html += '<select id="delay-pickList" size="1">';
+                            html += '<option value="3">3 {!$Label.Seconds}</option>';
+                            html += '<option value="5">5 {!$Label.Seconds}</option>';
+                            html += '<option value="10">10 {!$Label.Seconds}</option>';
+                        html += '</select>';
+                    html += '</div>';
+                html += '</div>';
+                html += "<p style='text-align: center'>";
+                    html += '<br>';
+                    html += "<button class='btn reattdial-elem' onclick='showLoader(); return false;'>OK</button>";
+                    
+                    html += "<button class='btn reattdial-elem' onclick='window.location.reload(); return false;'>{!$Label.clm__eDetCancelButton}</button>";
+                html += '</p>';
+
+                html += "<p class='reattdial-cube' style='text-align: center; display: none'>";
+                html += "<img src='{!$Resource.LoaderIcon}'></p>";
+                
+                html += "<div id='send-status' class='reattdial-cube' style='text-align: center; display: none'/>";
+                            
+            
+                var box = new SimpleDialog("hersh"+Math.random(), true);
+                    //parent.box = box;
+                    box.setTitle("{!$Label.RenewDialogName}");
+                    box.createDialog();
+                    box.setWidth(350);
+                    box.setContentInnerHTML(html);
+                    box.setupDefaultButtons();
+                box.show();
+            }
+            
+            
+            function testAjaxUploadSources() {
+    
+                sforce.connection.query("Select Name, Id, Body from Attachment where ParentId=\'" + app_id + "\' and name like \'sources%.zip\' ",
+                {
+                onSuccess: function(result) {
+                    records = result.getArray("records");
+                    console.log('records >> ' + records.length);
+                    if(0 != records.length){
+                    
+                        process(records[0].Name, records[0].Body);
+                    
+                    }else{
+                        //pass
+                    }
+                },
+                onFailure: function(result) {
+
+                    alert("fail! result >> ", result);
+                    
+                }
+                });
+    
+    
+                function process(name, body) {
+                
+                    var data = new FormData();
+                    
+                    data.append("cloud_token", token_id);
+                    data.append("org_id", org_id);
+                    data.append("app_id", app_id);
+                    data.append("action", "upload-sources");
+                    data.append("base", "!true");
+                    data.append("scr_delay", delay);
+                    data.append("att_name", name);
+            
+                    function base64ToFile(base64Data, tempfilename, contentType) {
+                        contentType = contentType || '';
+                        var sliceSize = 1024;
+                        var byteCharacters = atob(base64Data);
+                        var bytesLength = byteCharacters.length;
+                        var slicesCount = Math.ceil(bytesLength / sliceSize);
+                        var byteArrays = new Array(slicesCount);
+                    
+                        for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+                            var begin = sliceIndex * sliceSize;
+                            var end = Math.min(begin + sliceSize, bytesLength);
+                    
+                            var bytes = new Array(end - begin);
+                            for (var offset = begin, i = 0 ; offset < end; ++i, ++offset) {
+                                bytes[i] = byteCharacters[offset].charCodeAt(0);
+                            }
+                            byteArrays[sliceIndex] = new Uint8Array(bytes);
+                        }
+                        var file = new File(byteArrays, tempfilename, { type: contentType });
+                        return file;
+                    }
+                    
+                    data.append("file", base64ToFile(body, 'sources.zip'));
+                    
+                    var xhr = new XMLHttpRequest();
+                    
+                    xhr.open("POST", cloud_url);
+                    
+                    xhr.send(data);
+                
+                }
+    
+            }
+
+
+
+
+            /*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  
+            *  *  *  *  *  *  *  *  *  *  END NEW LOGIC *  *  *  *  *  *  *  *  *  *  *  * 
+             *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
+            /*
+            //function for get RDLink - it's not included(non working) now
+            function getRDLink(app_id, visit_id, cb) {
+            
+                var cloud_token = '12345';
+                
+                var url = 'https://ctclm.com/present/getRoomId';
+                url += '/' + app_id;
+                url += '/' + visit_id;
+            
+                url += '?cloud_token=' + cloud_token;
+            
+                (function(url) {
+                var myXhr = new XMLHttpRequest();
+            
+                myXhr.open('GET', url, true);
+            
+                myXhr.onreadystatechange = function() {
+                    if(myXhr.readyState == 4) {
+            
+                    if (myXhr.status != 200) {
+                        //console.error("error");
+                        cb("error", null);
+                    } else {
+                        //console.log("success");
+                        //console.log("response >> ", myXhr.response);
+                        cb(null, myXhr.response);
+                    }
+            
+                    }
+                    
+                }
+                
+                myXhr.send();
+                }) (url);
+            
+            }
+            
+            //example use:
+            getRDLink('a0A2400000ImuEXEAZ', 'a002400000CfCfN', function(err, roomId) {
+                if(err) {
+                console.log("getRdLinkError >> ", err);
+                }else{
+                console.log("roomId >> ", roomId);
+                }
+            });
+            
+            */
+            
+        </script>
+        <div id="dialog-container" style="display:none">
+            <div id="attachDialog" >
+                <div id="uploader" >
+                    {!$Label.SelectFile}
+<!--                    <input id="file" type="file" name="file" /> -->
+                </div>
+                <div id="progress-bar" >
+                    <p align='center'><img src='{!$Resource.LoaderIcon}' style='margin:0 5px;'/></p><p align='center'>{!$Label.PleaseWait}</p>
+                </div>
+            </div>
+        </div>
+        
+        <apex:actionFunction name="rerenderTable" rerender="attList" oncomplete="buttonReplace()" />
+        <apex:actionFunction name="reloadPageAF" rerender="attList" oncomplete="location.reload(true);" />
+        
+    </apex:form>
+</apex:page>

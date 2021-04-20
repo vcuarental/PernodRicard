@@ -1,0 +1,483 @@
+<apex:component id="mcau" controller="ASI_MFM_JP_MassCreateAndUpdateController" allowDML="true">
+    <apex:attribute name="pageController" description="The parent page controller" type="ASI_TnE_PageInterface" required="false" assignTo="{!pageController}"/>
+    <apex:attribute name="componentKey" description="The key to identify this component" type="String" required="false" assignTo="{!componentKey}"/>
+    <apex:attribute name="isFastMode" description="Whether use fast mode to improve performance" type="Boolean" default="false" required="false" assignTo="{!isFastModeBool}" />
+    <apex:attribute name="isThinMode" description="Whether is Thin mode with col key in the page layout" type="Boolean" default="false" required="false" assignTo="{!isThinModeBool}" />
+    <apex:attribute name="sObjectType" description="The object to be edited in this page"  type="String" required="true" assignTo="{!sObjTypeStr}" />
+    <apex:attribute name="displayFields" description="The list of fields to display in table. Format: field1, field2__c" type="String" required="false" assignTo="{!displayFieldsStr}"/>
+    <apex:attribute name="defaultFieldValues" description="The list of defaul value fields to display in table. Format: field1=value, field2__c=value" type="String" required="false" assignTo="{!defaultFieldValuesStr}"/>
+    <apex:attribute name="whereStatement" description="The where statement when selecting records from {sObjTypeStr} object" type="String" required="false"  assignTo="{!whereStatm}"/>
+    <apex:attribute name="includeRecordTypes" description="list of record type enabled in the page" type="String" required="false" assignTo="{!includeRecordTypes}" />
+    <apex:attribute name="fieldToURLParam" description="Default field values from url parameters. Format: Field1__c => param1" type="String" required="false" assignTo="{!fieldToURLParamStr}"/>
+    <apex:attribute name="pageBlockTitle" description="The title of pageBlock" type="String" required="false" assignTo="{!pageBlockTitleStr}"/>
+    <apex:attribute name="successLink" description="The link to redirect after successfully saved" type="String" required="true" assignTo="{!successLink}" />
+    <apex:attribute name="cancelLink" description="The link to redirect when clicking cancel" type="String" required="true" assignTo="{!cancelLink}" />
+    <apex:attribute name="mode" description="EDIT, NEW, BOTH" type="String" required="false" default="BOTH" assignTo="{!mode}" />
+    <apex:attribute name="isDefaultEdit" description="Whether the existing records are shown as edit by default" type="Boolean" required="false" default="false" assignTo="{!isDefaultEditVal}" />
+    <apex:attribute name="disableClone" description="Whether disable clone button" type="Boolean" required="false" default="false"/>
+    <apex:attribute name="disableAddNew" description="Whether disable add new button" type="Boolean" required="false" default="false"/>
+    <apex:attribute name="showAllRT" description="Whether show all record types in one page or use drop down list to switch" type="Boolean" default="true" required="false" assignTo="{!showAllRT}"/>
+    <apex:attribute name="rowActionRenderList" description="List of render items when selecting object" type="String" default="emptyPanel" required="false"/>
+    <apex:attribute name="pageBlockActionRenderList" description="List of render items when clicking page block buttons" type="String" default="wholeDataPanel" required="false"/>
+    <apex:attribute name="rowRemoveStatus" description="The status component ID when removing row" type="String" default="headerStatusLoading" required="false"/>
+    <apex:attribute name="pageBlockActionStatus" description="The status component ID for page block buttons" type="String" default="headerStatusLoading" required="false"/>
+    <apex:attribute name="firstRowForNew" description="Whether append the new row before first row" type="Boolean" default="true" required="false" assignTo="{!isUseFirstRowForNew}"/>
+    <apex:attribute name="altSObjectTypeName" description="Alternative name of this sojbect used by custom setting. Use it if object name and record type name is too long" type="String" required="false" assignTo="{!altSObjectTypeName}"/>
+    <apex:attribute name="actionColWidth" description="Action column width string" default="150px" type="String" required="false"/>
+    <apex:attribute name="displayPickList" description="ChangeTheLookupFieldToPickList" type="String" required="false" default="hello,world" assignTo="{!lookupToPicklist}"/>  
+    <apex:attribute name="languageSupported" description="Language Supported" type="String" required="false" assignTo="{!languageSupportedStr}"/>  
+    <apex:attribute name="dateTimeFields" description="DetectDateTimeFieldsForLayoutCorrection" type="String" required="false" default="hello,world" assignTo="{!lookupDateFields}"/>
+
+    <apex:includeScript id="jqueryScript" value="{!$Resource.ASI_HK_CRM_JQuery_130516}"/>
+    <apex:stylesheet id="hpiStyleSheet" value="{!URLFOR($Resource.ASI_HK_CRM_HoverPopupInfo, '/hover-popup-info/css/common.css')}"/>
+    <apex:includeScript id="hpiScript" value="{!URLFOR($Resource.ASI_HK_CRM_HoverPopupInfo, '/hover-popup-info/js/common.js')}"/>   
+    
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+    
+    <apex:inputTextarea value="{!dynamicAttributeFieldsPixels}" id="dynamicAttributeFieldsPixels" styleClass="setDynamicPixels" style="display:none;"/>
+    
+    <style type="text/css">
+        .customErrorMsg {
+            color: #D74C3B;
+        }
+    </style>
+    
+    <script type="text/javascript">
+        var categories = {!categoriesMapString};
+        
+        var screenWidth = screen.width;
+        $(".setDynamicPixels").val(screenWidth);
+        //alert({!dynamicAttributeFieldsPixels});
+        
+        function startSubmitAction() {
+            if (isSubmitting)
+                return false;
+            isSubmitting = true;
+            return true;
+        }
+        
+        function endSubmitAction() {
+            if (!isDelaying) {
+                isDelaying = true;
+                setTimeout(function() {isSubmitting=false;isDelaying=false;onloadApex();}, 200);
+            }
+        }
+    
+        function displayLoadingRow(tableId) {
+            if (startSubmitAction()) {
+                var theTable = document.getElementById(tableId);
+                if (theTable && theTable.tagName == 'TABLE' && theTable.tBodies && theTable.tBodies.length > 0) {
+                    var theTBody = theTable.tBodies[0];
+                    var loadingRow = null;
+                    if ({!isUseFirstRowForNew} == true)
+                        loadingRow = theTBody.insertRow(0);
+                    else
+                        loadingRow = theTBody.insertRow(-1);
+                    loadingRow.innerHTML = '<td colspan="50" style="height:21px;text-align:center;vertical-align:middle;">Loading ...</td>';
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        function removeRow(elementInRow) {
+            if (startSubmitAction()) {
+                var theRow = searchClosestParentByTagName(elementInRow, 'TR');
+                if (theRow) {
+                    theRow.style.display = 'none';
+                    return true;
+                }
+            }
+            return false;
+        }
+    
+        function checkRequiredFieldsAndSave() {
+            removeAllRequiredFieldErrors();
+            var allInputFields = document.getElementsByTagName("input");
+            var allSelectFields = document.getElementsByTagName("select");
+            var allFields = concatTwoElements(allInputFields, allSelectFields);
+            var errorFound = false;
+            for (var index in allFields) {
+                var inputField = allFields[index];
+                if (inputField.className && inputField.className == "required"
+                    && hasEmptyValue(inputField)) {
+                    var parentDiv = inputField.parentNode;
+                    while (parentDiv.tagName != "DIV")
+                        parentDiv = parentDiv.parentNode;
+                    var divChildNodes = parentDiv.childNodes;
+                    for (var childNodeIndex in divChildNodes) {
+                        var childNode = divChildNodes[childNodeIndex];
+                        if (childNode.className && childNode.className == "customErrorMsg") {
+                            errorFound = true;
+                            childNode.innerHTML = "<strong>Error: </strong>You must enter a value"
+                        }
+                    }
+                }
+            }
+            if (errorFound) {
+                return false;
+            } else {
+                return commitAll();
+            }
+        }
+        
+        function changeDependencies(fieldControl,position)
+        {
+            var marker = "showColsRepeat";
+            var index1 = fieldControl.id.indexOf(marker);
+            
+            var idSubstring = fieldControl.id.substring(index1,fieldControl.id.length);
+            var idSplitted = idSubstring.split(':');
+            
+            //console.log('idSplitted ' + idSplitted[1]);
+            if ({!isThinModeBool}){
+                position = 0;
+            }
+            var componentCounter = (idSplitted[1]*1)+position;
+
+            //console.log('componentCounter ' + componentCounter);
+            
+            var midFixToBeReplaced = idSplitted[0]+':'+idSplitted[1];
+            var midFixNewValue = idSplitted[0]+':'+componentCounter;
+            //console.log('midFixToBeReplaced ' + midFixToBeReplaced);
+            //console.log('midFixNewValue ' + midFixNewValue);
+            
+            marker = "showFieldRepeat";
+            var index1 = fieldControl.id.indexOf(marker);
+            
+            var idSubstring = fieldControl.id.substring(index1,fieldControl.id.length);
+            var idSplitted = idSubstring.split(':');
+            
+            //console.log('idSplitted ' + idSplitted[1]);
+            if ({!isThinModeBool}){
+                position = 1
+            }else{
+                position = 0;
+            }
+            var componentCounter = (idSplitted[1]*1)+position;
+
+            //console.log('componentCounter ' + componentCounter);
+            
+            var midFixToBeReplaced2 = idSplitted[0]+':'+idSplitted[1];
+            var midFixNewValue2 = idSplitted[0]+':'+componentCounter;
+            var dependentFieldId = fieldControl.id.replace(midFixToBeReplaced,midFixNewValue).replace(midFixToBeReplaced2,midFixNewValue2).replace('lookupSelect','dependentLookupSelect');
+            
+            //console.log('New dependentFieldId ' + dependentFieldId);
+            
+            var dependentSelect = document.getElementById(dependentFieldId); 
+            var dependentSelectValue = '';
+            
+            if (dependentSelect)
+            {
+                dependentSelectValue = dependentSelect.value;
+            }
+            //console.log('dependentSelectValue ' + dependentSelectValue);
+                      
+            var clearDependentValue = true;
+            var hasDependValue = false;
+            var firstValue = '';          
+            for (var index in categories)
+            {
+                //console.log('category.categoryName ' + categories[index].categoryName + ' fieldControl.value ' + fieldControl.value);
+                if (categories[index].categoryName == fieldControl.value)
+                {
+                    removeOptions(dependentSelect);
+                    for (var innerIndex in categories[index].expenseClassifications)
+                    {
+                     //console.log('category.expenseClassifications Name ' + categories[index].expenseClassifications[innerIndex].name);
+                     var opt = document.createElement('option');
+                     opt.value = categories[index].expenseClassifications[innerIndex].id;
+                     opt.text = categories[index].expenseClassifications[innerIndex].name;
+                     dependentSelect.add(opt); 
+                     //Set default value 
+                     //console.log('Default Name ' + dependentSelectValue );
+                     //console.log('Default Value ' + dependentSelect.value);
+                     
+                     if (firstValue == '')
+                         firstValue  = opt.value; 
+                     if (dependentSelectValue  == '')
+                     {
+                         hasDependValue = false;
+                     }
+                     if (dependentSelectValue == opt.value)
+                     {
+                         hasDependValue = true;
+                     }
+                    }
+                    if (!hasDependValue)
+                        dependentSelectValue  = firstValue;
+                    dependentSelect.value = dependentSelectValue;
+                    dependentSelectValue = '';
+                    clearDependentValue = false;
+                    break;
+                }             
+            }
+            //console.log('clearDependentValue ' + clearDependentValue);
+            if (clearDependentValue)
+            {
+                removeOptions(dependentSelect);
+            }
+        }
+        
+        function removeOptions(selectType) {
+            while(selectType.options.length > 0){                
+                selectType.remove(0);
+            }
+        }    
+        
+        function removeAllRequiredFieldErrors() {
+            var allErrorMsg = getElementsByClassName('customErrorMsg');
+            for (var index in allErrorMsg) {
+                allErrorMsg[index].innerHTML = "";
+            }
+        }
+        
+        function concatTwoElements(ele1, ele2) {
+            result = [];
+            for (var eleIndex in ele1) {
+                result.push(ele1[eleIndex]);
+            }
+            for (var eleIndex in ele2) {
+                result.push(ele2[eleIndex]);
+            }
+            return result;
+        }
+        
+        function hasEmptyValue(field) {
+            if (field.tagName == "INPUT") {
+                return (field.value == null || field.value == "");
+            } else if (field.tagName == "SELECT") {
+                if (field.options) {
+                    var selectValue = field.options[field.selectedIndex].value;
+                    return (selectValue == null || selectValue == "");
+                }
+            }
+        }
+        
+         function renderSelect(e) {
+            e = e || window.event;
+            var select = eTarget(e);
+            if (e.type === 'mousedown') {
+                var origWidth = select.style.width;
+                select.style.width = 'auto';
+                if (origWidth && origWidth.length > 0
+                        && select.className && select.className.indexOf(" defWidth_") < 0)
+                    select.className += " defWidth_" + origWidth;
+            } else if (e.type === 'blur' || e.type === 'change') {
+                if (select.className) {
+                    var idx = select.className.indexOf(" defWidth_");
+                    if (idx >= 0) {
+                        select.style.width = select.className.substring(idx + 10).split(" ")[0];
+                    }
+                }
+            }            
+        }
+        
+        function eTarget(e) { return e.target ? e.target : e.srcElement; }
+        
+        function searchClosestParentByTagName(ele, theTagName) {
+            if (!ele || !theTagName)
+                return null;
+            var result = ele;
+            var theTagNameUpperCase = theTagName.toUpperCase();
+            while (result != null && result.tagName != theTagNameUpperCase) {
+                result = result.parentNode;
+            }
+            return result;
+        }        
+        
+        
+        if (typeof document.getElementsByClassName === 'undefined') {
+            document.getElementsByClassName = function(theClassName) {
+                var result = [];
+                var allEle = document.getElementsByTagName('*');
+                for (var allEleIndex in allEle) {
+                    var theEle = allEle[allEleIndex];
+                    if (theEle.className && theEle.className && (' ' + theEle.className + ' ').replace(/[\n\t]/g, " ").indexOf(' ' + theClassName + ' ') > -1)
+                        result.push(theEle);
+                }
+                return result;
+            }
+        }    
+      
+        
+        var isClicking = false;
+        var isSubmitting = false;
+        var isDelaying = false;
+        
+        function onloadApex()
+        {
+          var Id = "{!$Component.pageBlock.repeatRT.pBlockSection.mcau_mainTable.showColsRepeat.showFieldRepeat.lookupSelect}";
+          //console.log('Id' + Id); 
+          var newId = Id.replace('repeatRT:','repeatRT:0:').replace('showColsRepeat:','showColsRepeat:1:').replace('showFieldRepeat:','showFieldRepeat:0:'); 
+          //console.log('newId ' + newId ); 
+          var i=0;
+          var isValid = true;
+          do 
+          {
+            var componentCounter = 'mcau_mainTable:'+i+':';
+            var componentId  = newId.replace('mcau_mainTable:',componentCounter);
+            //console.log('componentId ' + componentId);     
+            var dependentSelect = document.getElementById(componentId); 
+            if (dependentSelect)
+            {
+             //console.log('componentValue ' + dependentSelect.value); 
+             changeDependencies(dependentSelect,1)
+             i++;
+            } else
+            {
+             isValid = false;
+            }
+          } while (isValid);                    
+        }
+        
+        
+        /*
+        if (window.addEventListener) {  
+           window.addEventListener('load', onload,false);
+        } 
+        else if(window.attachEvent) {  
+           window.attachEvent('onload', onload);
+        }
+        
+        */
+        if (window.addEventListener) {
+            window.addEventListener("load",onloadApex,false);
+        }
+        else {
+            document.body.onload = onloadApex;
+            //window.attachEvent("onload", onload);
+        }       
+        
+        function setFocusOnLoad() {}
+
+    </script>
+    
+            <apex:pageBlock id="pageBlock" title="{!pageBlockTitleStr}">
+            <apex:pageBlockButtons id="buttonArea" location="both">
+                <apex:commandButton id="saveAllBtn" value="Save All" onclick="checkRequiredFieldsAndSave()" reRender="saveAllBtn"/>
+                <apex:commandButton action="{!URLFOR(cancelLink)}" value="Cancel" immediate="true"/> 
+                <apex:repeat id="pbBtnRepeat" value="{!pageBlockActionBtnList}" var="btn">
+                     <input type="button" class="btn" onclick="triggerPBAction('{!btn.id}');return false;" value="{!btn.label}"/>
+                    
+                </apex:repeat>
+            </apex:pageBlockButtons>
+            
+            <apex:actionFunction name="triggerPBAction" action="{!triggerPageBlockAction}" rerender="{!pageBlockActionRenderList}" status="{!pageBlockActionStatus}">
+                <apex:param name="PARAM_PB_BTN_ID" value=""/>
+            </apex:actionFunction>
+            <apex:outputPanel id="headerPanel">
+                <apex:pageMessages />
+                <apex:actionFunction name="refresh" action="{!refresh}" rerender="wholeDataPanel" status="headerStatusLoading"/>
+                <apex:actionFunction name="commitAll" action="{!commitAll}" status="headerStatusLoading"/>
+                <apex:outputPanel id="rtSelect" rendered="{!NOT(showAllRT) && (numOfRecordType > 1)}">
+                    <apex:outputLabel value="Record Type: "/>
+                    <apex:selectList value="{!selectedRecordType}" required="true" multiselect="false" size="1" onchange="refresh()" style="">
+                        <apex:selectOptions value="{!recordTypeOptionList}" />
+                    </apex:selectList>
+                    <br/>
+                </apex:outputPanel>
+                <br/>
+                <apex:actionStatus id="headerStatusLoading" startText="Loading..." startStyle="font-weight:bold;font-size:110%;"/>
+                <br/>
+            </apex:outputPanel>
+            <apex:outputPanel id="wholeDataPanel">
+                <apex:variable var="showNewBtn" value="{!mode != MODE_EDIT && NOT(disableAddNew)}" />
+                <apex:repeat id="repeatRT" value="{!theRecordTypeElementList}" var="RTEle" >
+                    <apex:variable var="rtDevName" value="{!RTEle.myRecordType.DeveloperName}" />
+                    <apex:pageBlockSection id="pBlockSection" title="{!RTEle.myRecordType.Name}" columns="1" collapsible="false" rendered="{!showAllRT || rtDevName == selectedRecordType}" >
+                        <apex:actionStatus id="newRowStatus" onstart="displayLoadingRow('{!$Component.mcau_mainTable}');" />
+                        <apex:outputPanel id="tablePanel" styleClass="tablePanel">
+                            <apex:pageBlockTable id="mcau_mainTable" value="{!RTEle.myDisplayRecordList}" var="tableRow" rules="cols" styleClass="mainDataTable">
+                                <apex:column width="{!actionColWidth}">
+                                    <apex:facet name="header">
+                                        <apex:outputPanel id="addNewPanel" rendered="{!mode != MODE_EDIT && NOT(disableAddNew)}">
+                                            <apex:outputText value="Add New" style="text-decoration:underline;font-weight:normal;cursor:pointer;"/>
+                                            <apex:actionSupport event="onclick" action="{!addNewRow}" reRender="tablePanel" status="newRowStatus" oncomplete="endSubmitAction();">
+                                                <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            </apex:actionSupport>
+                                        </apex:outputPanel>
+                                    </apex:facet>
+                                    <apex:outputPanel id="cloneActionPanel" rendered="{!NOT(disableClone)}">
+                                        <apex:commandLink action="{!cloneRow}" value="Clone" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" status="newRowStatus"
+                                            oncomplete="endSubmitAction()">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="editActionPanel" rendered="{!NOT(tableRow.isEdit)}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!enableForEdit}" value="Edit" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="removeNewActionPanel" rendered="{!tableRow.isNew}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!removeNew}" value="Delete" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" onclick="if (!startSubmitAction()) return false;" status="{!rowRemoveStatus}"
+                                            oncomplete="endSubmitAction();">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel id="deleteOldActionPanel" rendered="{!NOT(tableRow.isNew)}">
+                                        <apex:outputText value=" | " rendered="{!NOT(disableClone)}"/>
+                                        <apex:commandLink action="{!deleteOld}" value="Delete" reRender="tablePanel,{!BLANKVALUE(rowActionRenderList, 'emptyPanel')}" onclick="if (!startSubmitAction()) return false;" status="{!rowRemoveStatus}"
+                                            oncomplete="endSubmitAction();">
+                                            <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                            <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                        </apex:commandLink>
+                                    </apex:outputPanel>
+                                </apex:column>
+                                <apex:repeat id="showColsRepeat" value="{!RTEle.myDisplayColList}" var="displayCol">
+                                    <apex:column headerValue="{!displayCol.colLabel}" width="{!displayCol.colWidth}" style="vertical-align: top;">
+                                        <apex:repeat id="showFieldRepeat" value="{!displayCol.displayFieldList}" var="displayField">
+                                            <apex:variable id="allowEditVar" var="allowEdit" value="{!AND(displayField.readonlyMode != 'a', OR(tableRow.isEdit && displayField.readonlyMode != 'n', tableRow.isNew && displayField.readonlyMode != 'o'))}"/>
+                                            <apex:outputLabel value="{!displayField.label}:" rendered="{!NOT(ISBLANK(displayField.label))}" style="font-weight:bold"/>
+                                            <apex:outputField value="{!tableRow.mySObj[displayField.name]}" rendered="{!NOT(allowEdit)}" style="width: {!displayField.width}"/>
+                                            <apex:actionSupport event="ondblclick" action="{!enableForEdit}" reRender="tablePanel" rendered="{!NOT(allowEdit)}">
+                                                <apex:param name="{!PARAM_RTID}" value="{!rtDevName}"/>
+                                                <apex:param name="{!PARAM_TRID}" value="{!tableRow.id}"/>
+                                            </apex:actionSupport>
+                                            <!-- Due to unknown reason, the following outputPanel cannot use allowEdit as rendered value. Otherwise, it has bug. -->
+                                            
+                                            <apex:outputPanel id="inputFieldPanel2" rendered="{!AND(displayField.dependentField==null||displayField.dependentField==''||ISBLANK(displayField.dependentField), OR(tableRow.isEdit && displayField.readonlyMode != 'n' && displayField.isPickList, tableRow.isNew && displayField.readonlyMode != 'o' && displayField.isPickList))}">
+                                                <div class='{!IF(displayField.isRequired, "requiredInput", "none")}'>
+                                                    <div class='{!IF(displayField.isRequired, "requiredBlock", "none")}'></div>
+                                                 <apex:selectList id="lookupSelect" title="{!displayField.name}" onchange="renderSelect(event);changeDependencies(this,1)" onblur="renderSelect(event)" onmousedown="renderSelect(event)" value="{!tableRow.mySObj[displayField.name]}" size="1" style="width: {!displayField.width}" styleClass="{!IF(displayField.isRequired, 'required', 'none')}{!IF(displayField.skipClone, ' skip-clone', '')}">
+                                                    <apex:selectOptions value="{!allLookPickList[displayField.name].pickList}"  /> 
+                                                 </apex:selectList>                                                  
+                                                    <div class="customErrorMsg"></div>
+                                                </div>                       
+                                            </apex:outputPanel>
+                                            
+                                            <apex:outputPanel id="inputFieldPanel3" rendered="{!AND(displayField.dependentField!=null&&displayField.dependentField!=''&&!ISBLANK(displayField.dependentField),OR(tableRow.isEdit && displayField.readonlyMode != 'n' && displayField.isPickList, tableRow.isNew && displayField.readonlyMode != 'o' && displayField.isPickList))}">
+                                                <div class='{!IF(displayField.isRequired, "requiredInput", "none")}'>                                                
+                                                    <div class='{!IF(displayField.isRequired, "requiredBlock", "none")}'></div>
+                                                 <apex:selectList id="dependentLookupSelect" title="{!displayField.name}" onchange="renderSelect(event);" onblur="renderSelect(event)" onmousedown="renderSelect(event)" value="{!tableRow.mySObj[displayField.name]}" size="1" style="width: {!displayField.width}" styleClass="{!IF(displayField.isRequired, 'required', 'none')}{!IF(displayField.skipClone, ' skip-clone', '')}">
+                                                    <apex:selectOptions value="{!allLookPickList[displayField.name].pickList}"  /> 
+                                                 </apex:selectList> 
+                                                                            
+                                                    <div class="customErrorMsg"></div>
+                                                </div>                       
+                                            </apex:outputPanel>
+                                            
+                                            <apex:outputPanel id="inputFieldPanel" rendered="{!AND(displayField.readonlyMode != 'a' && !displayField.isPickList , OR(tableRow.isEdit && displayField.readonlyMode != 'n', tableRow.isNew && displayField.readonlyMode != 'o'))}">
+                                                <div class='{!IF(displayField.isRequired, "requiredInput", "none")}'>
+                                                    <div class='{!IF(displayField.isRequired, "requiredBlock", "none")}'></div>
+                                                    <apex:inputField value="{!tableRow.mySObj[displayField.name]}" required="false" styleClass="{!IF(displayField.isRequired, "required", "none")}" style="width: {!displayField.width}"/>
+                                                    <div class="customErrorMsg"></div>
+                                                </div>
+                                            </apex:outputPanel>
+                                        </apex:repeat>
+                                    </apex:column>
+                                </apex:repeat>
+                            </apex:pageBlockTable>
+                        </apex:outputPanel>
+                    </apex:pageBlockSection>
+                </apex:repeat>
+            </apex:outputPanel>
+        </apex:pageBlock>
+        <apex:outputPanel id="emptyPanel"></apex:outputPanel>
+        <apex:actionStatus id="dummyStatus"/>
+</apex:component>

@@ -1,0 +1,980 @@
+<apex:page lightningStylesheets="{!lightningEnabled}" standardcontroller="clm__Application__c" tabStyle="ApplicationEditor__tab" extensions="clm.WidgetWizardController" title="{!$Label.clm__ww_applicationeditor}" sidebar="false" id="pMain" >
+
+    <apex:includescript value="{!URLFOR($Resource.clm__CkEditor, 'ckeditor/ckeditor.js')}" />
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.2/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+    <apex:includescript value="/soap/ajax/30.0/connection.js" />
+<!-- tabStyle="ApplicationEditor__tab" -->
+    <script type="text/javascript">
+        var SELECTED_APPLICATION_ID = '{!applicationId}';
+        var was_application_loaded = false;
+
+        jQuery.noConflict();
+        
+        var rewrite_ppt;
+        
+        function makeSortable(){
+            jQuery("[id*=slidetable] tbody").sortable({
+                stop: function(event, ui){
+                    recalculatePositions()
+                },
+                helper: "clone"
+            }).disableSelection();
+        }
+
+        function recalculatePositions(){
+            jQuery("[id*=slidetable] tbody tr").each(function(i){
+                jQuery(this).find("td span").html(i+1);
+                jQuery(this).find("td:nth-child(2) input").val(i+1);
+            });
+        }
+
+        function showPopup2(stitle, sbody, pWidth, pHeight, heightAfterShow, specFunc){
+           var w = window.innerWidth*0.8, h = window.innerHeight*0.8;   //ie9 and most other browsers
+           
+           if (stitle == "{!$Label.clm__ww_newslide}"){
+                w = 650;
+                h = 300;
+            } else {
+                if (w < 800) w = 800;
+                if (h < 600) h = 600;
+            }
+            
+            if (pWidth) w = pWidth;
+            if (pHeight) h = pHeight; 
+
+
+          box = sfdcPage.getDialogById("ctpopupfloat2");
+          if (!box) {
+             box = new FunctionalDialog("ctpopupfloat2", true, stitle);
+             //parent.box = box;
+             //box.createDialog();
+             if (!box.getContentElement()) {
+                box.createDialogElement();
+             }
+             box.hideSummaryElement();
+             /*if('Firefox' == browser || 'firefox' == browser){
+                box.createDialog();
+             }*/
+             sfdcPage.registerDialog(box);
+          }
+        
+          box.setTitle(stitle);
+          box.setWidth(w);
+          box.setMaxHeight(h); 
+          box.setContentInnerHTML(sbody);
+          box.clearButtons();
+          box.show();
+
+          if ({!lightningEnabled} && heightAfterShow !== null && heightAfterShow !== undefined){
+            jQuery(box.dialog).find('.scrollableAreaBottomBorder').css('height',heightAfterShow)
+          }
+
+          if (specFunc !== null && specFunc !== undefined){ 
+            specFunc()
+          }
+        }
+
+        function showPopup(stitle, sbody, pWidth, pHeight, heightAfterShow, specFunc){
+           var w = window.innerWidth*0.8, h = window.innerHeight*0.8;   //ie9 and most other browsers
+            
+           if (stitle == "{!$Label.clm__ww_newslide}"){
+                w = 650;
+                h = 300;
+            } else {
+                if (w < 800) w = 800;
+                if (h < 600) h = 600;
+            }
+            
+            if (pWidth) w = pWidth;
+            if (pHeight) h = pHeight; 
+
+          box = sfdcPage.getDialogById("ctpopupfloat");
+          if (!box) {
+             box = new FunctionalDialog("ctpopupfloat", true, stitle);
+             //parent.box = box;
+             //box.createDialog();
+             if (!box.getContentElement()) {
+             	box.createDialogElement();
+             }
+             box.hideSummaryElement();
+             /*if('Firefox' == browser || 'firefox' == browser){
+                box.createDialog();
+             }*/
+             sfdcPage.registerDialog(box);
+          }
+          console.log('box >> ', box);
+          console.log('sbody >> ', sbody);
+
+          box.setTitle(stitle);
+          box.setWidth(w);
+          box.setMaxHeight(h);
+          box.setContentInnerHTML(sbody); 
+          console.log('box >> ', box); 
+          //box.setupDefaultButtons();
+          box.show();
+
+          if ({!lightningEnabled} && heightAfterShow !== null && heightAfterShow !== undefined){
+            jQuery(box.dialog).find('.scrollableAreaBottomBorder').css('height',heightAfterShow)
+          }
+          if (specFunc !== null && specFunc !== undefined){ 
+            specFunc()
+          }
+        }
+
+        function showDialog(stitle, sbody){
+            if(null != document.getElementById("ctdialog")){
+                return;
+            }
+            box = new SimpleDialog("ctdialog", false); 
+                //parent.box = box; 
+                box.setTitle(stitle); 
+                box.createDialog();
+                box.setWidth(350); 
+                box.setContentInnerHTML("<p align='center'>" + sbody + "</p><p align='center'><img src='{!$Resource.LoaderIcon}' style='margin:0 5px;'/></p><p align='center'>Please Wait...</p>"); 
+                box.show();
+        }
+        function hideDialog(){
+            //parent.window.box.hide();
+            box.hide();
+            if (!{!lightningEnabled}){
+                var d = parent.document.body;
+                var floatbox = parent.document.getElementById("ctdialog");
+                var throwaway = d.removeChild(floatbox);
+            }
+        }   
+        
+        function hidePopup(){
+           //parent.window.box.hide();
+           box.hide();
+           var d = parent.document.body;
+           var floatbox = parent.document.getElementById("ctpopupfloat");
+           var throwaway = d.removeChild(floatbox);
+        }
+
+        function showTemplate(stitle, tid) {
+            a = [];
+            a.push("<iframe src='/apex/clm__TempateCodeField?id=", tid);
+            var aHeight;
+            if ({!lightningEnabled}) {
+                a.push("&lightning=true");
+                aHeight = 350;
+            } 
+            a.push("' id='templateCodeField' width='100%' frameborder='0' height='100%'></iframe>");
+            var specFunc = function(){ 
+                if ({!lightningEnabled}){
+                    jQuery(box.dialog).find('.scrollableAreaBottomBorder').css('margin-bottom','10px')
+                }
+            }
+            showPopup(stitle, a.join(""), null, null, aHeight, specFunc); 
+            return false;
+        }
+        
+        function showApplication() {
+            a = [];
+            a.push("<iframe src='/apex/clm__NewApplication");
+            var aHeight;
+            if ({!lightningEnabled}) {
+                a.push("?lightning=true");
+                aHeight = 350;
+            } 
+            a.push("' id='application' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup("New Application", a.join(""), null, null, aHeight); 
+            return false;
+        }   
+        
+        function showDelWarning(a_id){
+            a = [];
+            a.push("<iframe src='/apex/clm__DeleteWarning?id=", a_id);
+            a.push("' id='delwarning' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup("Delete Application", a.join(""), 420, 10);
+            // onclick="showDialog('','Operation In Progress');" oncomplete="hideDialog();"
+            return false;
+        }     
+        
+        function showPPTUploader(stitle, a_id) {
+            a = [];
+            var aWidth = 550;
+            var aHeight = 275;
+            var org_id = '{!orgId}';
+            var sess = '{!session_id}';
+            var token = '{!token}';
+            a.push("<iframe src='/apex/clm__PPTUploadWindow?app_id=", a_id);
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 400;
+            }
+            a.push("&org_id=", org_id);
+            a.push("&ppt_session_id=", "{!session_id}");
+            a.push("&cloud_token=", token);
+            a.push("' id='pptUploader' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup(stitle, a.join(""),aWidth, aHeight, '205px');
+            return false;
+        }
+        
+        function showGeneration(stitle, a_id) {
+            a = [];
+            a.push("<iframe src='/apex/clm__Generation?id=", a_id);
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 300;
+            }
+            a.push("' id='generation' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup(stitle, a.join(""),'1000', '1000', aHeight);
+            return false;
+        }
+
+        function showPPTProgress(stitle, a_id) {
+            box = null;
+            a = [];
+            a.push("<iframe src='/apex/clm__ProgressUpload?id=", a_id);
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 400;
+            }
+            a.push("' id='pptProgress' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup2(stitle, a.join(""),550, 275);
+
+            //блокируем кнопки 
+            setTimeout(blockButtons,100)
+
+            return false;
+        }
+
+        function blockButtons(){
+            jQuery(box.dialog).find('.zen-btn').attr('disabled',true)
+            jQuery(box.dialog).find('#ctpopupfloat2X').hide()
+        }
+
+        window.closeProgress = function() {
+            console.log('close prog WW'); 
+            sfdcPage.getDialogById('ctpopupfloat2').hide();
+            rerenderSlides();
+        }
+        
+        window.closeProgressErr = function(errlvl, errStr) {
+            showMessage(errlvl, errStr);
+            sfdcPage.getDialogById('ctpopupfloat2').hide();
+        }
+        
+        window.closeFrame = function() {
+            hideDialog();
+        }
+
+        function addWidget(appId, slideId, phId) {
+            if (!appId) return false;
+
+            var aHeight;
+            a = [];
+            a.push("<iframe src='/apex/clm__NewWidget");
+            a.push("?applicationId=", appId);
+            a.push("&placeholderId=", phId);
+            a.push("&slideId=", slideId);
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 400;
+            }
+            a.push("' id='newWidget' width='100%' frameborder='0' height='100%'></iframe>");
+
+            showPopup("{!$Label.clm__ww_newwidget}", a.join(""), null, null, aHeight);
+            return false;
+        }
+
+        function editWidget(wId) {
+            if (!wId) return false;
+            var aHeight; 
+            a = [];
+            a.push("<iframe src='/apex/clm__NewWidget?id=", wId);
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 400;
+            }
+            a.push("' id='editWidget' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup("{!$Label.clm__ww_editwidget}", a.join(""), null, null, aHeight);
+            return false;
+        }
+
+        function addSlide(appId) {
+            a = [];
+            a.push("<iframe src='/apex/clm__NewSlide");
+            a.push("?applicationId=", appId);
+            var aHeight;
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 350;
+            }
+            a.push("' id='newSlide' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup("{!$Label.clm__ww_newslide}", a.join(""), null, null, aHeight);
+            return false;
+        }
+
+        function editSlide(slideId) {
+            if (!slideId) return false;
+
+            a = [];
+            a.push("<iframe src='/apex/clm__NewSlide?id=", slideId);
+            var aHeight;
+            if ({!lightningEnabled}) {
+                a.push('&lightning=true');
+                aHeight = 350;
+            }
+            a.push("' id='newSlide' width='100%' frameborder='0' height='100%'></iframe>");
+            showPopup("{!$Label.clm__ww_editslide}", a.join(""), null, null, aHeight);
+            return false;
+        }
+
+        function handlerWidget(frameid){
+            b = function(){
+                    showDialog('','Operation In Progress');
+                    var iframe = document.getElementById(frameid);
+                    iframe.contentWindow.saveWidget();      
+                      
+                    window.setTimeout(hideDialog,3000);    
+                    window.setTimeout(rerenderWidgets,4000);       
+                    //sfdcPage.getDialogById('ctpopupfloat').hide();
+                    //if (frameid && frameid == 'newWidget') {
+                    
+                    //}
+
+                }
+            setHandler(b);
+        }
+
+        function handlerTemplate(){
+            b = function(){
+                    var iframe = document.getElementById('templateCodeField');
+                    iframe.contentWindow.saveTemplate();
+                    sfdcPage.getDialogById('ctpopupfloat').hide();
+                }
+            setHandler(b);
+        }
+        
+        function handlerApplication(){
+            b = function() {
+                    var iframe = document.getElementById('application');
+                    iframe.contentWindow.saveApplication();
+                    sfdcPage.getDialogById('ctpopupfloat').hide();
+                    window.setTimeout(forAppCreation,1000);
+                }
+            setHandler(b);
+        } 
+        
+        function forAppCreation(){
+            //window.setTimeout(rerenderForm,1000);
+            rerenderForm();
+            //window.setTimeout(showMessage('info', 'Application was succesfully created'),1000);
+        }
+        
+        function handlerDeletion(){
+            b = function() {
+                    console.log('handler deletion');
+                    var iframe = document.getElementById('delwarning');
+                    iframe.contentWindow.deleteApp();
+                    sfdcPage.getDialogById('ctpopupfloat').hide();
+                    showDialog('','Operation In Progress');
+                    window.setTimeout(refresh,1000);
+                }
+            setHandler(b);
+        }
+        function refresh() {
+             window.location.reload(true);
+         }
+
+        function handlerPresentation(appid){
+            if (SELECTED_APPLICATION_ID !== null && SELECTED_APPLICATION_ID !== undefined) {
+                appid = SELECTED_APPLICATION_ID
+            }
+            b = function(it){
+                    var iframe = document.getElementById('pptUploader');
+                    //rewrite_ppt = iframe.contentWindow.getRew();
+                    //console.log('rewrite_ppt >> ' + rewrite_ppt);
+                    //iframe.contentWindow.sendPPT();
+                    iframe.contentWindow.sendPpt();
+                    sfdcPage.getDialogById('ctpopupfloat').hide();
+                    showPPTProgress('{!$Label.clm__ww_upload_btn}', appid); 
+
+                    //try {
+                        //var status = iframe.contentWindow.uploadDone2();
+                        //while (!iframe.contentWindow.uploadDone2()) {
+                        //}
+                        //startUploading();
+                    //}  catch (ex_var) { }                  
+                    
+
+                }
+            setHandler(b);
+        }
+
+
+        function stopProgress(){
+            b = function(){
+                    //var iframe = document.getElementById('pptProgress');
+                    //iframe.contentWindow.stopProgress();
+                    sfdcPage.getDialogById('ctpopupfloat2').hide();                                  
+                }
+        }             
+
+        function handlerSlide(){
+            b = function(){
+                    var iframe = document.getElementById('newSlide');
+                    iframe.contentWindow.saveSlide();
+                    sfdcPage.getDialogById('ctpopupfloat').hide();
+                    window.setTimeout(rerenderSlides,1000);
+                    //showMessage('INFO', '{!$Label.clm__ww_succesfullysaved}');
+                }
+            setHandler(b);
+        }
+        
+        function setHandler(handler) {
+            jQuery('#ctpopupfloat_buttons input.zen-btn').each(function(index) {
+                if (index == 0) {
+                    jQuery(this).unbind("click").click(handler);
+                    //jQuery(this).attr('onclick','')
+
+                }
+            });
+        }
+        
+        navigator.sayswho= (function(){
+            var ua= navigator.userAgent, tem, 
+            M= ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+            if(/trident/i.test(M[1])){
+                tem=  /\brv[ :]+(\d+)/g.exec(ua) || [];
+                return 'IE '+(tem[1] || '');
+            }
+            if(M[1]=== 'Chrome'){
+                tem= ua.match(/\bOPR\/(\d+)/)
+                if(tem!= null) return 'Opera '+tem[1];
+            }
+            M= M[2]? [M[1]]: [navigator.appName, '-?'];
+            //if((tem= ua.match(/version\/(\d+)/i))!= null) M.splice(1, 1, tem[1]);
+            return M.join(' ');
+        })();
+        
+        function openPublishApp(){
+            box = new SimpleDialog("hersh"+Math.random(), true);
+                //parent.box = box;
+                box.setTitle("{!$Label.clm__edetpublishapptitle}");
+                box.createDialog();
+                box.setWidth(350);
+                box.setContentInnerHTML("<p align='center'><img src='/img/icon/custom51_100/chalkboard32.png' style='margin:0 5px;'/><img src='/changemgmt/img/cm_inlinearrowright.png' style='margin:5px;'/><img src='/img/icon/custom51_100/globe32.png' style='margin:0 5px;'/></p><p align='center'><small>{!$Label.clm__edetpublishappdescription}</small></p><p align='center'></p><p align='center'>{!$Label.clm__forcedload}: <select id='forcedload'><option value='0'>{!$Label.clm__immediately}</option><option value='3'>{!$Label.clm__in3days}</option><option value='7'>{!$Label.clm__in7days}</option><option value='15'>{!$Label.clm__in15days}</option></select></p><p align='center' id='messagePublish' style='color:green'></p><p align='center'><br /><button class='btn' onclick='publishApp(); return false;'>{!$Label.clm__edetpublishbutton}</button> <button id='cancel' class='btn' onclick='window.box.hide(); return false;'>{!$Label.clm__edetcancelbutton}</button></p>");
+                box.setupDefaultButtons();
+            box.show();
+
+            if ({!lightningEnabled}){ 
+                    var _style = {}
+                    _style['display'] = 'inline-block';
+                    _style['border'] = '1px solid transparent';
+                    _style['padding'] = '0';
+                    _style['font-size'] = '.75rem';
+                    _style['line-height'] = '1.875rem';
+                    _style['text-decoration'] = 'none';
+                    _style['white-space'] = 'normal';
+                    _style['border-radius'] = '.25rem';
+                    _style['background'] = 'transparent';
+                    _style['background-clip'] = 'border-box';
+                    _style['color'] = '#0070d2';
+                    _style['margin-left'] =' .5rem';
+                    _style['vertical-align'] = 'inherit';
+                    _style['padding-left'] = '1rem';
+                    _style['padding-right'] = '1rem';
+                    _style['text-align'] = 'center'; 
+                    _style['border'] = '1px solid #dddbda'; 
+                    _style['transition'] = 'border .15s linear';
+                    _style['border-color'] = '#dddbda';
+                    _style['background-color'] = 'white';
+                    jQuery(box.dialog).find('.btn').css(_style); 
+            }
+
+        }
+        
+        function publishApp() {
+            var appId = document.getElementById('selectedAppId').innerHTML;
+            var currentVer = document.getElementById('selectedAppVersion').innerHTML;
+            var newVersion;
+            var forcedDate = new Date();
+            if (typeof document.getElementById('forcedload') != 'undefined' && document.getElementById('forcedload') != null) {
+                forcedDate.setDate(forcedDate.getDate() + parseInt(document.getElementById('forcedload').value));
+            }
+            if (currentVer == '' || currentVer == null) {
+                currentVer = 1;
+            }
+            currentVer = currentVer.replace(',', '.');
+            newVersion = parseFloat(parseFloat(currentVer) + parseFloat(0.1));
+            var app = new sforce.SObject('clm__Application__c');
+            app.Id = appId;
+            app.clm__Version__c = newVersion;
+            app.clm__IsActive__c = true;
+            app.clm__ForcedLoadDate__c = forcedDate;
+            var result = sforce.connection.update([app]);
+            if (result[0].getBoolean('success')) {
+                document.getElementById('messagePublish').innerHTML = '{!$Label.clm__edetsuccessmessage}';
+                window.setTimeout(function() {
+                   window.location.href = window.location.href//'/apex/clm__WidgetWizard?id=' + appId;
+                },1000);
+            } else {
+                alert('{!$Label.clm__edeterrormessage}');
+                box.hide();
+            }
+        }
+        
+        var browser = navigator.sayswho;
+        sforce.connection.sessionId = "{!$Api.Session_ID}";
+
+        function getRemoteApplications(appid) {
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.WidgetWizardController.getApplicationsRem}',
+                    
+                function(result, event){
+                    if (event.status) {
+                    	var apps = JSON.parse(unescapeJsInHtml(result));
+                    	
+                    	var appSelectList = document.getElementById("appSelectlist");  
+
+						if (appSelectList) {						
+	                    	for(var i=0; i < apps.length; i++) {
+	                    		
+	                    		
+	                    		if (appid && apps[i].value!=undefined && apps[i].value == appid) {
+	                    			appSelectList.options[i] = new Option( apps[i].label, apps[i].value, true, true );
+	                    		}
+	                    		else {
+	                    			appSelectList.options[i] = new Option( apps[i].label, apps[i].value );
+	                    		}
+
+	                    	}
+
+							/*
+                            if (SELECTED_APPLICATION_ID !== null && SELECTED_APPLICATION_ID !== undefined){  
+                                appSelectList.value = SELECTED_APPLICATION_ID;
+                                selectApplication()
+                            }
+                            */
+
+                    	}
+
+                    //set previously selected application
+                    //set_selected_application(appSelectList);
+                    // Get DOM IDs for HTML and Visualforce elements like this
+                    //document.getElementById('remoteAcctId').innerHTML = result.Id
+                    //document.getElementById("{!$Component.block.blockSection.secondItem.acctNumEmployees}").innerHTML = result.NumberOfEmployees;
+
+                    } else if (event.type === 'exception') {
+                        //document.getElementById("responseErrors").innerHTML = event.message + "<br/>\n<pre>" + event.where + "</pre>";
+                    } else {
+                        //document.getElementById("responseErrors").innerHTML = event.message;
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+
+
+        function selectApplication() {
+
+            if (was_application_loaded) return; 
+            was_application_loaded = true;
+            
+        	var appSelectList = document.getElementById("{!$Component.pMain.form.appSelectlist}");
+        	if (appSelectlist) {
+        		var index = appSelectlist.selectedIndex;
+				var options = appSelectlist.options;
+                SELECTED_APPLICATION_ID = options[index].value;
+        		changeApplication(options[index].value);
+        	}
+            setTimeout(clear_was_application_loaded, 1000);
+        }
+
+        function clear_was_application_loaded(){
+            was_application_loaded = false;
+        }
+
+
+        function showCustomConfirm(message,cHandler, params){
+            try{    
+                sfdcPage.unRegisterDialog('ctpopupreplaced')
+                jQuery('#ctpopupreplaced').empty()
+                jQuery('#ctpopupreplaced').remove()
+                box = null
+            }catch(exc){console.log('exception!!!',ex)}
+
+            box = new FunctionalDialog("ctpopupreplaced", true, 'Confirm'); 
+            sfdcPage.registerDialog(box);
+            var html = '<div class="slds>' + message + '</div>'
+            box.setTitle(message);
+            if (!box.getContentElement()) {
+             	box.createDialogElement();
+            }
+            box.setWidth(700);
+            box.showHeader = false
+            box.setContentInnerHTML(html);
+            box.hideSummaryElement();
+            box.clearButtons();
+            box.show();
+
+            //jQuery(box.dialog).find('.zen-btn')[0] // OK
+
+            //slideDelAF
+            if (params.slideId != null){
+                setTimeout(function(){
+                    jQuery(jQuery(box.dialog).find('.zen-btn')[0]).unbind('click').attr('onclick', 'box.hide(); slideDelAF(\'' + params.slideId + '\')'); 
+                },100)
+            } else if(params.selectedWidgetID != null){
+                setTimeout(function(){
+                    jQuery(jQuery(box.dialog).find('.zen-btn')[0]).unbind('click').attr('onclick', 'box.hide(); widgetDelAF(\'' + params.selectedWidgetID + '\',\'' + params.placeholderId + '\')'); 
+                },100)
+            } else if (params.applicationId != null){
+                setTimeout(function(){
+                    jQuery(jQuery(box.dialog).find('.zen-btn')[0]).unbind('click').attr('onclick', 'box.hide(); appDeleteAF(\'' + params.applicationId + '\')'); 
+                },100)
+            } 
+
+        }
+ 
+    </script>
+
+    <script type="text/javascript">
+        
+    jQuery( document ).ready(function() {
+            
+    });  
+
+    function set_SELECTED_APPLICATION_ID(){
+        var url_string = window.location.href
+            var url = new URL(url_string);
+            var p = url.searchParams.get("id");
+            if (p !== null && p !== undefined){
+                //SELECTED_APPLICATION_ID = p
+                //was_application_loaded = true;
+                //setTimeout(clear_was_application_loaded, 1000);
+            }
+    }
+    </script>
+
+    <apex:pageMessages />
+    <apex:form id="form">
+        <apex:inputHidden value="{!applicationId}"/>
+
+        <div id="selectedAppId" style="display: none">{!selectedApplication.Id}</div>
+        <div id="selectedAppVersion" style="display: none">{!selectedApplication['clm__Version__c']}</div>
+        <apex:actionFunction name="rerenderForm" action="{!refreshAppList}" rerender="form, msg"/>
+        <apex:actionFunction name="rerenderSlides" action="{!refreshSlides}" rerender="slMain"/>
+        <apex:actionFunction name="rerenderWidgets" action="{!refreshWidgets}" rerender="form"/>
+        <apex:actionFunction name="backToApp" action="{!cancelPlaceholderMode}" rerender="form"/>
+        <apex:actionFunction name="goToSlide" action="{!startPlaceholderMode}" status="statusSl" rerender="form">
+              <apex:param name="selectedSlideId" assignTo="{!selectedSlideID}" value=""/>
+        </apex:actionFunction>
+        
+        <apex:actionFunction name="changeApplication" action="{!onApplicationChange}" status="statusSl" rerender="form, editorholder">
+              <apex:param name="applicationId" assignTo="{!applicationId}" value=""/>
+        </apex:actionFunction>        
+
+        <apex:actionFunction name="showMessage" action="{!showMessage}" rerender="msg">
+            <apex:param name="errorLevel" assignTo="{!errorLevel}" value="" />
+            <apex:param name="messageName" assignTo="{!messageName}" value="" />
+        </apex:actionFunction>
+        <apex:actionFunction name="saveSlidesAction" action="{!saveSlides}" rerender="form, msg"
+        oncomplete="console.log('save slides completed')" />
+
+
+        <!-- SPECIAL LIGHTNING FUNCTIONS IN CONFIRM -->
+ 
+        <apex:actionFunction name="appDeleteAF" action="{!appDel}" status="statusSl" oncomplete="hideDialog();" rerender="form" >
+            <apex:param name="appToDel" assignTo="{!connector_del_app}" value="" />
+        </apex:actionFunction> 
+
+        <apex:actionFunction name="slideDelAF" action="{!deleteSlide}" status="statusSl" rerender="form">
+            <apex:param name="selectedSlideId" value="" assignTo="{!selectedSlideID}"/>
+        </apex:actionFunction>
+
+       <apex:actionFunction name="widgetDelAF" action="{!deleteWidget}" status="statusWid" rerender="form">
+            <apex:param name="selectedWidgetID"  assignTo="{!selectedWidgetID}" value=""/>
+            <apex:param name="placeholderId" assignTo="{!placeholderId}" value=""/>
+        </apex:actionFunction>
+
+
+<!--         <apex:pageMessages id="msg" /> -->
+
+<!--         <apex:sectionHeader title="{!$Label.clm__ww_applicationeditor}" id="editorholder"/> -->
+<!--        <apex:sectionHeader title="{!selectedApplication['Name']}" id="editorholder"/> -->
+        <p/>
+                         
+        <select id="appSelectlist" onchange="selectApplication();" class="application-select">
+        </select>
+        
+        <script>                 
+             getRemoteApplications("{!applicationId}");
+        </script>
+        
+        <apex:commandButton value="New" onclick="showApplication();" oncomplete="handlerApplication()" rendered="{!showEditor}"/>
+        <apex:commandButton rendered="{!lightningEnabled==false && showEditor}" onclick="if(!confirm('{!$Label.clm__ww_appdel_warning}')){return};showDialog('','Operation In Progress');" action="{!appDel}" value="{!$Label.clm__ww_delete}" status="statusSl" oncomplete="hideDialog();" rerender="form" >
+            <apex:param name="appToDel" assignTo="{!connector_del_app}" value="{!applicationId}" />
+        </apex:commandButton>
+        
+        <apex:commandButton rendered="{!lightningEnabled && showEditor}" onclick="showCustomConfirm('{!$Label.clm__ww_appdel_warning}',appDeleteAF, {applicationId: '{!applicationId}'} )" action="{!empty}" value="{!$Label.clm__ww_delete}" status="statusSl" rerender="form" />
+
+        
+        <div>
+            <apex:outputpanel style="float:left; font-size: 91%; font-weight: bold; color: #333;" rendered="{!isPlaceholderMode}">
+                <apex:commandLink rendered="{!lightningEnabled==false}" action="{!cancelPlaceholderMode}" value="{!$Label.clm__ww_backtoapp}" status="statusSl" rerender="form"/>
+
+                <apex:commandButton style="margin-right: 25px;" rendered="{!lightningEnabled}" action="{!cancelPlaceholderMode}" value="{!$Label.clm__ww_backtoapp}" status="statusSl" rerender="form"/>
+
+                <br /><br />
+            </apex:outputpanel>
+        </div>
+
+        <apex:pageBlock title="{!selectedApplication['Name']}" rendered="{!NOT(showEditor)}">
+<!--            {!not(isPlaceholderMode)} -->
+            <apex:pageblockButtons location="top">
+                <apex:outputPanel rendered="{!not (isPlaceholderMode)}">
+<!--                     <apex:outputlabel value="{!$Label.WW_SelectApp} "/> -->
+                    <apex:commandButton value="New" onclick="showApplication();" oncomplete="handlerApplication()"/>
+                    <apex:commandButton value="Clone" onclick="showDialog('','Operation In Progress');" oncomplete="hideDialog(); rerenderForm();" action="{!cloneApplication}"/>
+                    <apex:commandButton rendered="{!lightningEnabled==false}" onclick="if(!confirm('{!$Label.clm__ww_appdel_warning}')){return};showDialog('','Operation In Progress');" action="{!appDel}" value="{!$Label.clm__ww_delete}" status="statusSl" oncomplete="hideDialog();" rerender="form" >
+                        <apex:param name="appToDel" assignTo="{!connector_del_app}" value="{!applicationId}" />
+                    </apex:commandButton>
+
+
+                    <apex:commandButton rendered="{!lightningEnabled}" onclick="showCustomConfirm('{!$Label.clm__ww_appdel_warning}',appDeleteAF, {applicationId: '{!applicationId}'} )" action="{!empty}" value="{!$Label.clm__ww_delete}" status="statusSl" rerender="form" />
+
+<!--        oncomplete="handlerDeletion();"      rerenderForm();   oncomplete="hideDialog();"      //showDelWarning('{!applicationId}'); -->
+                    
+                    <apex:commandButton value="{!$Label.clm__ww_upload_btn}" style="float: right;" rendered="{!renderUpload}"
+                        onclick="showPPTUploader('{!$Label.clm__ww_upload_btn}', '{!applicationId}');" oncomplete="handlerPresentation('{!applicationId}')" rerender="form"/>
+                                       
+                </apex:outputPanel>
+            </apex:pageblockButtons>
+            <apex:pageblockbuttons location="bottom">
+                
+                <apex:commandButton value="{!$Label.clm__ww_publishapp}" onclick="openPublishApp();" rerender="form"/>
+<!--                 <apex:commandButton value="{!$Label.clm__ww_publishapp}" styleclass="btnImportant" action="{!changePublish}" rerender="form"/> -->
+                <apex:commandButton value="Web Share" onclick="showGeneration('Generation','{!applicationId}');return false;"  rendered="{!isWebShareAllowed}" />
+            </apex:pageblockbuttons>
+            
+             <apex:outputPanel id="msg">
+				<apex:pageMessages />
+             </apex:outputPanel>
+             
+            <apex:pageblocksection title="{!$Label.clm__ww_appdetails}" columns="2">
+                <apex:repeat value="{!appFields}" var="field">
+                    <apex:outputField value="{!selectedApplication[field]}"/>
+                </apex:repeat>
+            </apex:pageblocksection>
+            <apex:pageblocksection columns="1" title="{!$Label.clm__ww_description}">
+                <apex:outputField value="{!selectedApplication['clm__Description__c']}"/>
+            </apex:pageblocksection>
+            
+        </apex:pageBlock>
+
+<!--    ???????? ??????????? -->
+        <apex:outputPanel id="placholderStuff" rendered="{!NOT(showEditor)}">
+            <apex:pageBlock title="{!$Label.clm__ww_slides}" id="slMain" rendered="{!not(isnull(applicationId)) && not(isPlaceholderMode)}" >
+                <apex:pageblockButtons >
+                    <apex:commandButton value="{!$Label.clm__ww_addnew}" onclick="addSlide('{!applicationId}')" oncomplete="handlerSlide()" rerender="editorholder" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <!-- apex:commandButton value="{!$Label.clm__ww_save}" action="{!saveSlides}" rerender="msg"/--> 
+                    <apex:commandButton id="saveSlides" value="{!$Label.clm__ww_save}" 
+                                       onclick="saveSlidesAction()" rerender="msg" />
+                    <apex:commandButton value="{!$Label.clm__ww_cancel}" action="{!cancelSlides}" />
+                    <apex:outputpanel style="float:right; text-align: right; font-size: 91%; font-weight: bold; color: #333;">
+                        <apex:actionStatus id="statusSl" startText="{!$Label.clm__ww_waitmessage}"/>
+                    </apex:outputpanel>
+                </apex:pageblockButtons>
+
+    
+                <apex:pageBlockTable value="{!slideList}" var="slide" id="slidetable">
+                    <apex:column headerValue="{!$Label.clm__ww_active}" width="25px" style="border-bottom: solid 2px orange;">
+                        <center>
+                            <apex:inputField value="{!slide['clm__IsActive__c']}"/>
+                        </center>
+                    </apex:column>
+                    <apex:column headerValue="{!$Label.clm__ww_order}" width="1%" style="border-bottom: solid 2px orange;">
+                        <center>
+                            <apex:outputField value="{!slide['clm__Order__c']}"/>
+                        </center>
+                        <apex:inputHidden value="{!slide['clm__Order__c']}" id="order" />
+                    </apex:column>
+                    <apex:column headerValue="Preview" width="25px" style="border-bottom: solid 2px orange;">
+                        <center>
+                            <apex:outputLink rendered="{!lightningEnabled==false}" value="/apex/clm__preview?id={!slide.id}" target="_blank"><img src="/img/icon/custom51_100/tvWidescreen24.png"/></apex:outputLink>
+                            <apex:outputLink rendered="{!lightningEnabled}" value="/apex/clm__preview?id={!slide.id}&lightning=true" target="_blank"><img src="/img/icon/custom51_100/tvWidescreen24.png"/></apex:outputLink>
+                        </center>
+                    </apex:column>
+                    <apex:column headerValue="{!$Label.clm__ww_slide}" style="border-bottom: solid 2px orange;">
+                        <apex:outputPanel layout="block" rendered="{!not(isnull(slide['TemplateId__r']))}">
+                            <apex:commandLink styleClass="slideid.{!slide['id']}" action="{!startPlaceholderMode}" value="{!slide['name']}" status="statusSl" rerender="form">
+                                <apex:param name="selectedSlideId" value="{!slide['id']}" assignTo="{!selectedSlideID}"/>
+                            </apex:commandLink>
+                            <br /><small>{!slide['clm__Description__c']}</small>                 
+                        </apex:outputPanel>
+                        <apex:outputPanel layout="block" rendered="{!isnull(slide['TemplateId__r'])}">
+                            <apex:outputText value="{!slide['name']}"/>
+                            <br /><small>{!$Label.WW_SlideReadOnly}</small>
+                        </apex:outputPanel>
+                    </apex:column>
+    <!--                 Klimanov Eugene FieldSet for Slide columns -->
+                    <apex:repeat value="{!slideListColsFields}" var="field">
+                        <apex:column headerValue="{!field.label}" style="border-bottom: solid 2px orange;">
+                            <apex:inputField value="{!slide[field]}"/>
+                        </apex:column>
+                    </apex:repeat>
+                    <apex:column headerValue="Template" style="border-bottom: solid 2px orange;">
+                        <apex:commandLink onclick="showTemplate('{!slide['TemplateId__r.Name']}', '{!slide['clm__TemplateId__c']}');" oncomplete="handlerTemplate()" rerender="editorholder">
+                            <apex:outputText value="{!slide['TemplateId__r.Name']}"/>
+                        </apex:commandLink>
+                    </apex:column>
+                    <apex:column style="border-bottom: solid 2px orange; text-align:right" width="25px">
+                        <apex:commandButton rendered="{!lightningEnabled==false}" onclick="if(!confirm('{!$Label.clm__ww_deleteslidedialog}')){return};" action="{!deleteSlide}" value="{!$Label.clm__ww_delete}" status="statusSl" rerender="form">
+                            <apex:param name="selectedSlideId" value="{!slide['id']}" assignTo="{!selectedSlideID}"/>
+                        </apex:commandButton> 
+                        <apex:commandButton rendered="{!lightningEnabled}"
+                                onclick="showCustomConfirm('{!$Label.clm__ww_deleteslidedialog}', slideDelAF, {slideId: '{!slide[idField]}'} ); console.log('lightning'); return; " 
+                                action="{!empty}" 
+                                value="{!$Label.clm__ww_delete}" 
+                                status="statusSl" rerender="form">
+                        </apex:commandButton>
+                    </apex:column>
+                </apex:pageBlockTable>
+    
+                <script type="text/javascript">
+                    makeSortable();
+                </script>
+            </apex:pageBlock>
+        </apex:outputPanel>
+
+<!--    ???????? ??????? JS -->
+        <apex:outputPanel id="SlideEditor" rendered="{!showEditor}" >
+            <c:SlideEditor appid="{!selectedApplication.id}" />
+        </apex:outputPanel>
+        
+<!--    ?????????????? ?????? -->
+        <apex:pageBlock title="{!selectedSlide['name']}" id="addWidgMain" rendered="{!isPlaceholderMode && not(isEditMode)}" mode="inlineEdit">
+            <apex:pageblockButtons location="top">
+                <apex:commandButton value="{!$Label.clm__ww_edittemplate}" style="float: right;"
+                     onclick="showTemplate('{!selectedSlide['TemplateId__r.Name']}', '{!selectedSlide['clm__TemplateId__c']}');" oncomplete="handlerTemplate()" rerender="editorholder"/>
+                <apex:outputpanel style="float:right; text-align: right; font-size: 91%; font-weight: bold; color: #333;">
+                    <apex:actionStatus id="statusWid" startText="{!$Label.clm__ww_waitmessage}"/>
+                </apex:outputpanel>
+                <apex:outputLink rendered="{!lightningEnabled}"  html-class="btn" value="/apex/clm__preview?id={!selectedSlide['id']}&lightning=true" target="_blank">Preview</apex:outputLink>
+                <apex:outputLink rendered="{!lightningEnabled == false}"  value="/apex/clm__preview?id={!selectedSlide['id']}" target="_blank"><img src="/img/icon/custom51_100/tvWidescreen24.png" style="float:left; "/> Preview</apex:outputLink>
+            </apex:pageblockButtons>
+            <apex:pageblockbuttons location="bottom">
+                <apex:commandButton id="saveWidgets" value="{!$Label.clm__ww_save}" rerender="form" action="{!saveWidgets}"/>
+            </apex:pageblockbuttons>
+
+            <apex:pageblocksection title="{!$Label.clm__ww_slidedetails}" columns="2">
+<!--            Klimanov Eugene FieldSet for Slide details -->
+                <apex:repeat value="{!slideDetailsFields}" var="field">
+                    <apex:outputField value="{!selectedSlide[field]}">
+                    <apex:inlineEditSupport showOnEdit="saveWidgets, cancelWidgets"
+                        event="ondblclick"
+                        changedStyleClass="myBoldClass" resetFunction="resetInlineEdit"/>
+                    </apex:outputField>
+                </apex:repeat>
+            </apex:pageblocksection>
+            <apex:pageblocksection columns="1">
+                <apex:outputField value="{!selectedSlide['clm__Description__c']}" style="width:500px;">
+                    <apex:inlineEditSupport showOnEdit="saveWidgets, cancelWidgets"
+                        event="ondblclick"
+                        changedStyleClass="myBoldClass" resetFunction="resetInlineEdit"/>
+                </apex:outputField>
+            </apex:pageblocksection>
+        </apex:pageBlock>
+
+<!--  <apex:sectionHeader title="{!$Label.clm__ww_placeholderswidgets}" rendered="{!isPlaceholderMode && not(isEditMode)}"/>-->
+        
+        
+        <apex:pageBlock title="{!$Label.clm__ww_placeholderswidgets}" rendered="{!isPlaceholderMode && not(isEditMode)}">
+        <apex:actionFunction name="starteditmode" action="{!startEditMode}"/>
+        <apex:pageBlockSection columns="2">
+        <apex:repeat value="{!placeholderList}" var="wrapper">
+        <apex:pageBlock title="{!wrapper.placeHolder['name']}" id="phAndWidgets" rendered="{!isPlaceholderMode && not(isEditMode)}">
+            <apex:pageblockbuttons location="top">
+                <apex:commandButton value="{!$Label.clm__ww_addwidget}" status="statusWid" rerender="editorholder" onclick="addWidget('{!applicationId}', '{!selectedSlideID}', '{!wrapper.placeholder['id']}');" oncomplete="handlerWidget('newWidget')" />
+                <div style="float:right;margin: 0.3em;"><small>{!wrapper.placeHolder['clm__Type__c']}</small></div>
+            </apex:pageblockbuttons>
+            <apex:pageBlockTable value="{!wrapper.widgets}" var="widget" rendered="{!not wrapper.noWidgets}">
+                <apex:repeat value="{!widgetListColsFields}" var="field">
+                    <apex:column headerValue="{!field.label}"
+                            rendered="{!field.type=='id'}">
+<!--                        <apex:outputlink value="/{!widget.Id}">{!widget.name}</apex:outputlink>  -->
+                        <apex:commandLink value="{!widget['name']}" status="statusWid" onclick="editWidget('{!widget.id}')" oncomplete="handlerWidget('editWidget')" rerender="editorholder"></apex:commandLink>
+
+                    </apex:column>
+                    <apex:column headerValue="{!field.label}"
+                            rendered="{!NOT(field.type=='id')}">
+                        <apex:outputField value="{!widget[field]}"/>
+                    </apex:column>
+                </apex:repeat>
+
+                <apex:column style="text-align:right">
+                    <apex:commandButton value="{!$Label.clm__ww_edit}" status="statusWid" onclick="editWidget('{!widget.id}')" oncomplete="handlerWidget('editWidget')" rerender="editorholder"></apex:commandButton>
+
+                    <apex:commandButton rendered="{!lightningEnabled == false}" onclick="if(!confirm('{!$Label.clm__ww_deletewidgetdialog}')){return};" action="{!deleteWidget}" value="{!$Label.clm__ww_delete}" status="statusWid" rerender="form">
+                        <apex:param name="selectedWidgetID" value="{!widget.id}" assignTo="{!selectedWidgetID}"/>
+                        <apex:param name="placeholderId" value="{!wrapper.placeholder['id']}" assignTo="{!placeholderId}"/>
+                    </apex:commandButton>
+
+                    <apex:commandButton rendered="{!lightningEnabled}" 
+                    onclick="showCustomConfirm('{!$Label.clm__ww_deletewidgetdialog}',widgetDelAF, {selectedWidgetID: '{!widget[idField]}', placeholderId: '{!wrapper.placeholder[idField]}' }); return; "  action="{!empty}" value="{!$Label.clm__ww_delete}" status="statusWid" rerender="form">
+                    </apex:commandButton>
+
+                </apex:column>
+            </apex:pageBlockTable>
+        </apex:pageBlock>
+        </apex:repeat>
+        
+        </apex:pageBlockSection>
+        </apex:pageBlock>
+
+        <apex:outputPanel id="tstpopup">
+            <apex:outputPanel styleClass="popupBackground" layout="block" rendered="{!isEditMode}"/>
+            <apex:outputPanel styleClass="custPopup" layout="block" rendered="{!isEditMode}">
+                <apex:outputPanel style="overflow:auto; max-height:100%; max-width:100%" layout="block" rendered="{!isEditMode}">
+            </apex:outputPanel>
+            </apex:outputPanel>
+        </apex:outputPanel>
+    </apex:form>
+
+    <style type="text/css">
+        small {display:block; padding:4px 0 2px 0;}
+        .custPopup{
+            background-color: white;
+            border-width: 2px;
+            border-style: solid;
+            z-index: 9999;
+            top: 3%;
+            left: 3%;
+            padding:10px;
+            position: absolute;
+            /* These are the 3 css properties you will need to change so the popup
+            displays in the center of the screen. First set the width. Then set
+            margin-left to negative half of what the width is. You can add
+            the height property for a fixed size pop up if you want.*/
+            width: 94%;
+            height: 94%;
+        }
+        .popupBackground{
+            background-color:black;
+            opacity: 0.20;
+            filter: alpha(opacity = 20);
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 9998;
+        }
+        
+        .application-select {
+            height: 40px;
+            line-height: 40px;
+            background: #FFFFFF;
+            font-size: 22px;
+            border: 2px solid #3f6075;
+            margin: 10px;
+        }
+        
+    </style>
+    
+</apex:page>

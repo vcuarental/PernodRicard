@@ -1,0 +1,332 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,forceCommunity:availableForAllPageTypes" access="global" controller="ASI_CTY_CN_Vendor_POController">
+	
+	<aura:attribute name="selectedTabId" type="String" default="allPOs"/>
+    <aura:attribute name="isLoading" type="Boolean" default="false" />
+    <aura:attribute name="showSpinner" type="Boolean" default="false"/>
+
+    <!-- All POS Attribute Start -->
+    <aura:attribute name="allPOs" type="List"/>
+    <aura:attribute name="POs" type="List"/>
+    <aura:attribute name="startDate" type="Date" default="" />
+    <aura:attribute name="endDate" type="Date" default="" />
+    <aura:attribute name="term" type="String" default="" />
+    <aura:attribute name="recordToDisply" type="integer" default="10" />
+    <aura:attribute name="page" type="integer" default="1" description="using for store page number"/>
+    <aura:attribute name="pages" type="integer" description="using for store all pages number"/>
+    <aura:attribute name="total" type="integer" description="total records count store"/>
+    <aura:attribute name="pageFirstIndex" type="integer" description=""/>
+    <aura:attribute name="pageLastIndex" type="integer" description=""/>
+
+    <aura:attribute name="sortField" type="String" default="CreatedDate" />
+    <aura:attribute name="sortAsc" type="Boolean" default="false" />
+    <!-- All POS Attribute End -->
+
+    <!-- handler Start -->
+    <aura:handler name="init" value="{! this }" action="{! c.doInit }"/>
+    <aura:handler event="c:ASI_CTY_CN_Vendor_PaginationEvent" action="{! c.handlePage}" name="changePageEvent" />
+
+    <lightning:navigation aura:id="navService"/>
+    <aura:attribute name="pageReference" type="Object"/>
+    <aura:attribute name="url" type="String"/>
+   
+    <!-- handler End -->
+
+    <aura:if isTrue="{!v.showSpinner}">
+        <lightning:spinner alternativeText="loading..." variant="brand"/>
+    </aura:if>
+
+    <!-- PO List Start -->
+    <div class="POList" style="font-family: Lato !important;">
+    	<!-- List Header Start -->
+	    <div class="slds-page-header">
+	        <div class="slds-page-header__row">
+	            <header class="slds-media slds-media_center slds-has-flexi-truncate">
+	                <div class="slds-media__figure slds-page-header__name-title">
+	                    <span class="slds-icon_container slds-icon-standard-customer-portal-users">
+	                        <lightning:icon iconName="standard:contract" alternativeText="down" />
+	                        <span class="slds-assistive-text">{!$Label.c.ASI_CTY_CN_Vendor_PO_Name}</span>
+	                    </span> 
+	                </div>
+	                <div class="slds-media__body">
+	                    <div class="slds-page-header__name-title">
+	                        <h2>
+	                            <span>{!$Label.c.ASI_CTY_CN_Vendor_POList}</span>
+	                        </h2>
+	                    </div>
+	                    <div class="slds-page-header__col-meta">
+	                        <p class="slds-page-header__meta-text slds-text-body--large">
+	                            {!$Label.c.ASI_CTY_CN_Vendor_POList_Total + ' :'} 
+	                            <b>{! ' ' + v.total + ' '}</b> {!$Label.c.ASI_CTY_CN_Vendor_PO_Name}
+	                        </p>
+	                    </div>
+	                </div>
+	            </header>
+	        </div>
+	    </div>
+	    <!-- List Header End -->
+	    <lightning:tabset selectedTabId="{!v.selectedTabId}">
+	        <!-- All PO Table Start -->
+	        <lightning:tab label="{!$Label.c.ASI_CTY_CN_Vendor_AllPO}" id="allPOs">
+		        <div class="dateFilter">
+        			<lightning:input label="{!$Label.c.ASI_CTY_CN_Vendor_POList_Search_StartDate}" variant="label-inline" type="Date" aura:id="startDate" dateStyle="long" class="slds-size_1-of-6 startDate" isLoading="{! v.isLoading }" onchange="{! c.dateFilter}" />
+        			<lightning:input label="{!$Label.c.ASI_CTY_CN_Vendor_POList_Search_EndDate}" dateStyle="long" variant="label-inline" type="Date" aura:id="endDate" class="slds-size_1-of-6 endDate" isLoading="{! v.isLoading }" onchange="{! c.dateFilter}" />
+        			<lightning:button label="{!$Label.c.ASI_CTY_CN_Vendor_POList_Download_POList}" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_Download_POList}" class="downloadBtn" onclick="{!c.downloadPODetails}" />
+	            </div>
+	            <div>
+	                <div class="dataTables_length">
+	                	<lightning:select aura:id="recordSize" label="{!$Label.c.ASI_CTY_CN_Vendor_POList_Show}" variant="label-inline" name="recordSize" value="{!v.recordToDisply}" onchange="{! c.recordSize}">
+	                		<option value="2">2</option>
+	                        <option value="10">10</option>
+	                        <option value="25">25</option>
+	                        <option value="50">50</option>
+	                        <option value="100">100</option>
+	                    </lightning:select>
+	                    <label class="slds-form-element__label">	{!$Label.c.ASI_CTY_CN_Vendor_POList_ResultTotal}</label>
+	            	</div>
+	            	<div class="dataTables_filter slds-size_1-of-3">
+	            		<lightning:input aura:id="enterSearch" label="{!$Label.c.ASI_CTY_CN_Vendor_POList_Search + ':'}" variant="label-inline" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_POList_Search_Info}" type="search" value="{!v.term}" onchange="{! c.dateFilter}" />
+	            	</div>
+	            </div>
+                <table id="poTable" aria-multiselectable="true" class="slds-table slds-table_cell-buffer slds-table_resizable-cols poTable" role="grid">
+                    <thead>
+                        <tr class="slds-line-height_reset">
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                <div onclick="{!c.sortByName}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Number}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Number}
+			                        <aura:if isTrue="{!v.sortField=='Name'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                <div onclick="{!c.sortByStartDate}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Start_Date}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Start_Date}
+			                        <aura:if isTrue="{!v.sortField =='CreatedDate'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                <div onclick="{!c.sortByStatus}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Status}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Status}
+			                        <aura:if isTrue="{!v.sortField=='ASI_MFM_Status__c'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                <div onclick="{!c.sortBySIRStatus}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_SIR_Status}">
+			                       {!$Label.c.ASI_CTY_CN_Vendor_POList_SIR_Status}
+			                       <aura:if isTrue="{!v.sortField=='ASI_CTY_CN_Vendor_Fill_Sir_Str'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByTotalQty}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Qty}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Qty}
+			                        <aura:if isTrue="{!v.sortField=='ASI_MFM_Total_Quantity__c'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByTOVTotalQty}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_TOV_Total_Qty}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_TOV_Total_Qty}
+			                        <aura:if isTrue="{!v.sortField=='TotalQty'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByActualQty}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_WritedSIRQty}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_POList_WritedSIRQty}
+			                        <aura:if isTrue="{!v.sortField=='ActualQty'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByTotalAmount}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Amount}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Amount}
+			                        <aura:if isTrue="{!v.sortField=='ASI_MFM_CN_PO_Amount_RMB__c'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByActualAmount}" class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Paid_Amount}">
+			                        {!$Label.c.ASI_CTY_CN_Vendor_PO_Paid_Amount}
+			                        <aura:if isTrue="{!v.sortField=='ASI_MFM_Total_Paid_Amount__c'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                            <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                            	<div onclick="{!c.sortByPRId}" class="slds-truncate" title="{! $Label.c.ASI_CTY_CN_Vendor_PO_PR_Number}">
+			                        {! $Label.c.ASI_CTY_CN_Vendor_PO_PR_Number}
+			                        <aura:if isTrue="{!v.sortField=='ASI_CTY_CN_Vendor_Purchase_Request_Line__r.Name'}">
+			                            <span>
+			                            	<aura:if isTrue="{!v.sortAsc}">
+			                                    &#8593;
+			                                    <aura:set attribute="else">
+			                                        &#8595;
+			                                    </aura:set>
+			                                </aura:if>
+			                            </span>
+			                        </aura:if>
+			                    </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    	<aura:if isTrue="{!(v.allPOs.length > 0)}">
+                            <aura:iteration indexVar="index" items="{!v.POs}" var="PO">
+	                            <tr class="slds-hint-parent" role="row" >
+	                                <td role="gridcell">
+	                                    <span class="slds-icon slds-icon-text-default details-control" >  
+	                                        <lightning:icon class="{!(PO.showItemGroup ? 'cos-rotate ' : '')}" iconName="utility:chevronright" size="x-small" alternativeText="down" onclick="{!c.controlItemGroup}" id="{!index}" />
+	                                    </span>
+	                                    <a id="{!PO.Id}" onclick="{! c.toPODetail}">{!PO.Name}</a>
+	                                </td>
+	                                <td role="gridcell">{!PO.CreatedDate}</td>
+	                                <td role="gridcell">{!PO.ASI_MFM_Status__c}</td>
+	                                <td role="gridcell">{!PO.ASI_CTY_CN_Vendor_Fill_Sir_Str}
+	                                </td>
+	                                <td role="gridcell">{!PO.ASI_MFM_Total_Quantity__c}</td>
+	                                <td role="gridcell">{!PO.TotalQty}</td>
+	                                <td role="gridcell">{!PO.ActualQty}</td>
+	                                <td role="gridcell">￥ <lightning:formattedNumber value="{!PO.ASI_MFM_CN_PO_Amount_RMB__c}" minimumFractionDigits="2"/></td>
+	                                <td role="gridcell">￥ <lightning:formattedNumber value="{!PO.ASI_MFM_Total_Paid_Amount__c}" minimumFractionDigits="2"/></td>
+	                                <td role="gridcell">
+	                                	<aura:if isTrue="{! PO.ASI_CTY_CN_Vendor_Purchase_Request_Line__r != null &amp;&amp; PO.ASI_CTY_CN_Vendor_Purchase_Request_Line__r != ''}">
+	                                		{! PO.ASI_CTY_CN_Vendor_Purchase_Request_Line__r.ASI_MFM_Purchase_Request__r.Name + '-' + PO.ASI_CTY_CN_Vendor_Purchase_Request_Line__r.Name}
+	                                	</aura:if>
+	                                </td>
+	                            </tr>
+
+	                            <aura:if isTrue="{!PO.showItemGroup}">
+	                            	<aura:if isTrue="{!PO.ItemGroup != null}">
+			                            <tr class="ItemGroups">
+			                            	<td style="padding: 0px;" colspan="11">
+			                            		<table class="slds-table slds-table_bordered slds-border_bottom slds-border_left slds-border_right slds-border_top subTable borderAliceblue">
+			                            			<thead>
+			                            				<tr class="slds-line-height_reset">
+			                            					<th scope="col" class="bgAliceblue"></th>
+			                            					<th scope="col" class="bgAliceblue">{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_Number}</th>
+			                            					<th scope="col" class="bgAliceblue">{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_Name}</th>
+			                            					<th scope="col" class="bgAliceblue">{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_UnitPrice}</th>
+			                            					<th scope="col" class="bgAliceblue">{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_Quantity}</th>
+			                            					<th scope="col" class="bgAliceblue">{!$Label.c.ASI_CTY_CN_Vendor_POList_WritedSIRQty}</th>
+			                            				</tr>
+			                            			</thead>
+
+			                            			<tbody>
+			                            				<tr class="slds-hint-parent ItemGroupInfo">
+			                            					<td width="32px">
+			                            						<button class="slds-button slds-button_icon slds-button_icon-border downloadItemGroup" type="button" title="Download ItemGroup" name="downloadIcon">
+			                            							<lightning:icon alternativeText="down" iconName="standard:product_item" />
+			                            						</button>
+			                            					</td>
+			                            					<td>
+			                            						{! PO.ItemGroup.ASI_MFM_Item_Group_Code__c}
+			                            					</td>
+			                            					<td>{! PO.ItemGroup.ASI_CRM_CN_Chinese_Name__c + '/' + PO.ItemGroup.ASI_CRM_CN_Eng_Name__c + ' - ' + PO.ItemGroup.ASI_MFM_Item_Group_Code__c}</td>
+			                            					<td>￥ <lightning:formattedNumber value="{! PO.UnitPrice}" minimumFractionDigits="2"/></td>
+			                            					<td>{!PO.TotalQty}</td>
+			                            					<td>{!PO.ActualQty}</td>
+			                            				</tr>
+			                            			</tbody>
+			                            		</table>
+			                            	</td>
+			                            </tr>
+
+			                        	<aura:set attribute="else">
+	                                        <tr class="ItemGroups"><td class="noItemGroup" colspan="11">{!$Label.c.ASI_CTY_CN_Vendor_PO_NoRecords}</td></tr>
+	                                    </aura:set>
+		                        	</aura:if>
+	                            </aura:if>
+                            </aura:iteration>
+                        </aura:if>
+                        <aura:if isTrue="{!(v.total == 0)}">
+                        	<tr class="ItemGroups"><td class="noItemGroup" colspan="10">{!$Label.c.ASI_CTY_CN_Vendor_POList_NoRecords}</td></tr>
+                    	</aura:if>
+                    </tbody>
+                </table>
+                <div class="tableFooter">
+	            	<div class="dataTables_info">
+	            		<span class="sortTotal slds-form-element__label">{!$Label.c.ASI_CTY_CN_Vendor_POList_Show + ' '} <b>{! v.pageFirstIndex}</b> {! ' ' + $Label.c.ASI_CTY_CN_Vendor_POList_Paging_To + ' '}  <b>{! v.pageLastIndex}</b> {! ' ' + $Label.c.ASI_CTY_CN_Vendor_POList_ResultTotal + ', ' + $Label.c.ASI_CTY_CN_Vendor_POList_Total + ' '} <b>{! v.total}</b> {! ' ' + $Label.c.ASI_CTY_CN_Vendor_POList_Item}</span>
+	                </div>
+		            <div class="dataTables_paginate">
+		            	<c:ASI_CTY_CN_Vendor_Pagination currentPageNumber="{!v.page}" maxPageNumber="{!v.pages}" />
+		            </div>
+		        </div>
+	        </lightning:tab>
+	        <!-- All PO Table End -->
+	    </lightning:tabset>
+    </div>
+    <!-- PO List End -->
+</aura:component>

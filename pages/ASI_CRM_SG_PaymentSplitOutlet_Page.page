@@ -1,0 +1,218 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_SG_PaymentSplitOutlet_Page
+ * Description:  
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2018-03-22       Vincent Lam             Created    
+-->
+<apex:page controller="ASI_CRM_SG_PaymentSplitOutlet_Ctrl" sidebar="false">
+<head>
+<title>Contract Comparison Page</title>
+</head>
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/multiple-select.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    
+    <!-- Style -->
+    <style>
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        th, td {
+                padding-top    : 5px;
+                padding-bottom : 5px;
+                padding-right  : 10px;
+                padding-left   : 10px;
+				vertical-align : middle;
+            }
+            
+        table { 
+            table-layout : fixed; 
+        }
+        
+        <!-- Datatable Styling -->
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+        
+    </style>
+
+    <script>
+        /*****************
+        VF Page Config
+        *****************/
+    const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : true,
+            "aLengthMenu":[10,25,50],
+            "iDisplayLength":10,
+            "bSort" : false,
+            "bPaginate": true,
+            "bScrollCollapse": true,
+            "bJQueryUI": false
+        };
+
+
+    /*****************
+        Datatable Field Config
+        *****************/
+        const isSelected       = {"title"  : "Select",
+                                  "data"   : "",
+                                  "render" : function(data, type, full) {
+												return "<input type='checkbox' name='selectedOutlet' class='selectedOutlet' value='" + full.outletId + 
+												"' onChange='selectOutlet(this, this.value)'>";
+											}
+                                  };
+
+        const outletName       = {"title"  : "Outlet",
+                                  "data"   : "outletName",
+                                  "defaultContent" : ""
+                                 };
+
+        
+		const NO_OUTLET_SELECTED = 'Please select at least one outlet to split from this payment.';
+		
+        var selectedOutletIdList = [];
+        
+        /****************
+        Define Page Standard Function
+        ****************/                          
+        $(document).ready(
+			function() {
+				setContractSelectionTable();
+			}
+        );
+
+        //Set Contract Selection Data Table
+        function setContractSelectionTable() {
+			var dataTableProperties = CONST_DATA_TABLE_PROPERTIES;
+			dataTableProperties["aaData"] = jQuery.parseJSON('{!JSENCODE(outletListJson)}');
+			
+			//Convert contract list JSON to Object format
+            dataTableProperties["rowId"] = "Id";
+
+			//Set the data table columns
+            var columns = [];
+            columns.push(isSelected);
+            columns.push(outletName);
+
+            dataTableProperties["aoColumns"] = columns;
+
+            $("#outletSelectionTable").dataTable(dataTableProperties);
+        }
+
+        /****************
+       Compare Contract Handler
+        ****************/
+        function beforeSplit() {
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+			
+            if(selectedOutletIdList.length > 0) {
+				splitPayment(JSON.stringify(selectedOutletIdList));
+				//Show loading gif
+				$('body').addClass('savingRecord');
+            } else {
+				var errorMessage = '';
+				if(selectedOutletIdList.length == 0) errorMessage += NO_OUTLET_SELECTED + '<br />';
+
+				//Display the error message
+				$('.errorMessage').html(errorMessage);
+				$('.saveErrorPanel').css("display","block");
+            }
+        }
+
+        function splitPaymentComplete(newPaymentId) {
+            //$('body').removeClass('savingRecord');
+			window.open("/"+newPaymentId,"_Parent");
+        }
+
+        /****************
+        Contract Selection Table Row Event Handler
+        ****************/
+        function selectOutlet(checkbox, contractId) {
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+
+            if($(checkbox).prop('checked')) {
+				selectedOutletIdList.push(contractId);
+            } else {
+				//Remove the contractId in array
+				var selectedOutletIdIndex = selectedOutletIdList.indexOf(contractId);
+				if(selectedOutletIdIndex != -1) selectedOutletIdList.splice(selectedOutletIdIndex, 1);
+            }
+        }
+
+    </script>
+
+    <body>
+    <div class="fullScreenLoading"></div>
+    <div class="saveErrorPanel alert alert-danger" style="display: none;">
+        <strong>Error</strong> 
+        <br />
+        <p class="errorMessage"></p>
+    </div>
+
+        <!-- Define Action Function -->
+        <apex:form >
+            <apex:actionFunction name="splitPayment" action="{!splitPaymentFromVFPage}" onComplete="splitPaymentComplete('{!newPaymentId}');">
+            	<apex:param name="OUTLET_ID_LIST_JSON" value="" />
+            </apex:actionFunction>
+        </apex:form>
+
+		<!-- Selection Dialog for user select contract -->
+		<div id="outletSelectionDialog">
+			<!-- Call JS Function to retrieve contract record from Apex Controller -->
+			<input type="button" class="btn newRowBtn" onClick="beforeSplit()" value="Split selected outlets" />
+			<table id="outletSelectionTable" width="100%" />
+		</div>
+	
+    </body>
+
+</apex:page>

@@ -1,0 +1,281 @@
+<!--
+
+/***************************************************************************************************
+ * Name : ASI_CRM_MY_FOCItemMassEditPage
+ 
+ * Revision History:
+ * 1. 11/12/2020 - [Ceterna 11122020] - Change sku id tracking to sku name and sku code for query  
+  **************************************************************************************************/
+
+-->
+
+<apex:page standardController="ASI_FOC_Free_Goods_Request__c" extensions="ASI_CRM_MY_FOCItemMassEditCtl" recordSetVar="planLineItems" sideBar="true" id="aPage">
+    <link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/themes/smoothness/jquery-ui.css" />
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>  
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
+    
+    <apex:form id="aForm">
+        <apex:pageBlock id="aPageBlock">
+        <apex:pageMessages id="ErrorMessage"/>
+        <apex:pageBlockButtons >
+            <apex:commandButton value="Save" action="{!SAVE}" status="ActionStatus" oncomplete="gotoRecord('{!strPageID}')" reRender="Resultitem, ErrorMessage" disabled="{!AND(isKH,!isEdit)}"/>
+            <apex:commandButton value="Quick Save" action="{!quicksave}" status="ActionStatus" reRender="Resultitem, ErrorMessage" disabled="{!AND(isKH,!isEdit)}"/>
+            <apex:commandButton value="Cancel" action="{!cancel}"/>
+        </apex:pageBlockButtons>
+        
+        <apex:panelGrid columns="1" width="100%">         
+            <apex:pageBlockSection columns="1" title="{!if(isKH,'FOC Order Detail', 'FIS Claim Detail')}">
+                <apex:outputField value="{!FOC.name}"/>    
+                <apex:outputField value="{!FOC.ASI_FOC_Date_of_Delivery__c}"  rendered="{!!isKH}"/> 
+                <apex:pageBlockSectionItem rendered="{!!isKH}"></apex:pageBlockSectionItem>
+                <apex:outputField value="{!FOC.ASI_CRM_Contract__c}"/> 
+                <apex:outputField value="{!FOC.ASI_CRM_KH_Total_Amount__c}" rendered="{!isKH}"/> 
+                <apex:outputField value="{!FOC.ASI_CRM_JDE_SO_Number__c}" rendered="{!!isKH}"/>                       
+            </apex:pageBlockSection>
+        </apex:panelGrid>
+        
+        <apex:panelGrid columns="1" width="100%">   
+            <apex:pageBlockSection title="{!if(isKH,'FOC Order Item', 'FIS Claim Line Item')}">
+                <apex:pageBlockSectionItem >
+                    <apex:outputPanel layout="block">
+                        <apex:commandButton rendered="{!isEdit}" action="{!DELETESELECTED}" title="Delete Selected" status="ActionStatus" reRender="Resultitem, ErrorMessage" value="Delete Selected"/>
+                        <apex:commandButton rendered="{!isEdit}" action="{!CLONESELECTED}" title="Clone Selected" status="ActionStatus" oncomplete="calculateTotal();" reRender="Resultitem, ErrorMessage" value="Clone Selected"/>
+                        <apex:commandButton rendered="{!isEdit}" action="{!ADDNEW}" title="Add New Row" status="ActionStatus" reRender="Resultitem, ErrorMessage" value="Add New Row"/>
+                    </apex:outputPanel>
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+            
+            <apex:pageblocktable value="{!results}" var="itm" id="Resultitem">
+                <apex:column >                    
+                    <apex:facet name="header">
+                        <apex:inputCheckbox value="{!allSelected}" id="allInput" onchange="selectAllCheckboxes(this,'inputId')" />
+                    </apex:facet>
+
+                    <apex:inputCheckbox value="{!itm.selected}" id="inputId" />
+                </apex:column>
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">SKU</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:inputfield value="{!itm.ppl.ASI_FOC_SKU__c}" required="true" rendered="{!IF(!isEdit, false, true)}" onchange="modiftyRecord()" style="width: 400px"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_FOC_SKU__c}" rendered="{!IF(!isEdit, true, false)}" />
+                </apex:column>
+                 <apex:column rendered="{!isKH}">
+                    <apex:facet name="header">SKU</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:inputfield value="{!itm.ppl.ASI_FOC_SKU__c}" required="true" rendered="{!IF(!isEdit, false, true)}" id="InputFieldId" onchange="populateLookup('{!$Component.InputFieldId}')" style="width: 400px"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_FOC_SKU__c}" rendered="{!IF(!isEdit, true, false)}" />
+                    
+                </apex:column>
+                
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">Issue Qty</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:inputfield value="{!itm.ppl.ASI_FOC_Issued_Qty__c}"  rendered="{!IF(!isEdit, false, true)}" onchange="modiftyRecord()" style="width: 50px"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_FOC_Issued_Qty__c}" rendered="{!IF(!isEdit, true, false)}" />
+                </apex:column>
+                 <apex:column rendered="{!isKH}" id="availableQty">
+                    <apex:facet name="header">Available Quantity(Carton)</apex:facet>
+                        <apex:outputText value="{!itm.availableSKUQuantity}" />
+                        <apex:inputHidden id="availableBottle" value="{!itm.availableSKUQuantityBottle}" />
+                </apex:column>
+                <apex:column rendered="{!isKH}">
+                    <apex:facet name="header">Request Quantity (Bottle)</apex:facet>
+                        <div class="requiredInput">
+                            
+                            <div class="requiredBlock"></div>
+                            <apex:inputField value="{!itm.ppl.RecordTypeId}" style="display:none"/>
+                            <apex:inputfield id="inpQty" value="{!itm.ppl.ASI_FOC_Request_Quantity_Bottle__c}" required="true" rendered="{!IF(!isEdit, false, true)}" onchange="validateQuantity('{!$Component.inpQty}','{!$Component.availableBottle}'); modiftyRecord();" style="width: 50px"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_FOC_Request_Quantity_Bottle__c}" rendered="{!IF(!isEdit, true, false)}" />
+                </apex:column>
+                
+               <!--  <apex:column rendered="{!isKH}">
+                    <apex:facet name="header"> A&amp;P Code</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:inputfield value="{!itm.ppl.ASI_CRM_KH_AP_Code__c}" id="inpAPCode" required="true" rendered="{!IF(!isEdit, false, true)}" onchange="populateFOCType('{!$Component.inpAPCode}')"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_CRM_KH_AP_Code__c}" rendered="{!IF(!isEdit, true, false)}" />
+                </apex:column> 
+                
+                <apex:column rendered="{!isKH}">
+                    <apex:facet name="header"> FOC Type</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:inputHidden value="{!itm.ppl.ASI_CRM_SG_FOC_Type__c}"/>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_CRM_SG_FOC_Type__c}" />
+                </apex:column> -->
+                  <!--  <apex:column headerValue="A&P Code">
+                        <apex:inputField value="{!itm.ppl.ASI_CRM_KH_AP_Code__c}"/>
+                    </apex:column>
+                    <apex:column headerValue="FOC Type">
+                      <!--  <apex:inputfield value="{!itm.ppl.ASI_CRM_SG_FOC_Type__c}"/> -->
+                   <!-- </apex:column> -->
+              <apex:column rendered="{!isKH}">
+                    <apex:facet name="header"> Unit Price</apex:facet>
+                        
+                       <apex:inputhidden value="{!itm.ppl.ASI_CRM_SG_Unit_Price__c}"/>
+                        <apex:outputfield id="unitPrice" value="{!itm.ppl.ASI_CRM_SG_Unit_Price__c}"  />
+                </apex:column>
+                
+                
+                
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">Setup Code</apex:facet>
+                        <div class="requiredInput">
+                            <div class="requiredBlock"></div>
+                            <apex:selectList rendered="{!IF(!isEdit, false, true)}"  value="{!itm.ppl.ASI_CRM_SetupCode__c}" size="1" onchange="modiftyRecord()">
+                                <apex:selectOptions value="{!ContractSetupCodeValue}"/>
+                            </apex:selectList>
+                        </div>
+                        <apex:outputfield value="{!itm.ppl.ASI_CRM_SetupCode__c}" rendered="{!IF(!isEdit, true, false)}" />
+                </apex:column>
+                
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">GL Reason Code</apex:facet>
+                        <apex:outputField value="{!itm.ppl.ASI_CRM_GLReasonCode__c}" />
+                </apex:column>
+                
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">JDE COA</apex:facet>
+                        <apex:outputField value="{!itm.ppl.ASI_CRM_JDECOA__c}" />
+                </apex:column>
+                
+                <apex:column rendered="{!!isKH}">
+                    <apex:facet name="header">Remarks</apex:facet>
+                        <apex:inputfield value="{!itm.ppl.ASI_FOC_Remark__c}" onchange="modiftyRecord()" />
+                </apex:column>
+            </apex:pageblocktable>
+            
+            <!-- Hidden field to store the variable of modifiedVF-->
+            <apex:inputHidden value="{!modifiedVF}" id="hiddenModifiedField"/>
+        <apex:outputPanel layout="block" id="Pageing">                          
+            <apex:commandButton action="{!BEGINNING}" title="Beginning" value="<<" disabled="{!disablePrevious}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+            <apex:commandButton action="{!PREVIOUS}" title="Previous" value="<" disabled="{!disablePrevious}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>        
+            <apex:commandButton action="{!NEXT}" title="Next" value=">" disabled="{!disableNext}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+            <apex:commandButton action="{!END}" title="End" value=">>" disabled="{!disableNext}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+            <apex:outputText value="{!recordNumberDisplay}" id="recordNumberDisplay"/>                  
+        </apex:outputPanel>
+
+        </apex:panelGrid>
+           
+        </apex:pageBlock>
+         <apex:actionFunction name="populatePrice" action="{!populatePrice}" oncomplete="calculateTotal();" reRender="Resultitem,ErrorMessage,availableQty" status="ActionStatus" immediate="true">
+                         <apex:param name="node" value=""/> 
+                         <apex:param name="node1" value=""/> 
+                     </apex:actionFunction>
+      <!--   <apex:actionFunction name="populateFOCTypeFunc" action="{!populateFOCType}" oncomplete="calculateTotal();" reRender="Resultitem,ErrorMessage" status="ActionStatus" immediate="true">
+                         <apex:param name="nodeType" value=""/> 
+                         <apex:param name="node1Type" value=""/> 
+                     </apex:actionFunction>     -->   
+    </apex:form>
+    
+    <!------------------------------------------------ FOR LOADING ANIMATION ------------------------------------------------>
+    <apex:actionstatus id="ActionStatus">
+        <apex:facet name="start">
+            <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+               height: 1000%; width:1000%; opacity:0.65;"> 
+                <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                    &nbsp;&nbsp;&nbsp;
+                    <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                    <span class="waitingDescription">Please Wait...</span>
+                </div>
+            </div>
+        </apex:facet>
+    </apex:actionstatus>
+
+    <script>
+        $(document).on('mousemove', function(e){
+            $('#loadtext').css({
+               left:  e.pageX,
+               top:   e.pageY
+            });
+        });
+    
+        function selectAllCheckboxes(obj,receivedInputID){
+            var inputCheckBox = document.getElementsByTagName("input"); 
+            for(var i=0; i<inputCheckBox.length; i++){          
+                if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){                                     
+                    inputCheckBox[i].checked = obj.checked;
+                }
+            }
+        }
+        
+        function gotoRecord(pageID){  
+            //alert(pageID);
+            if(pageID != 'ERROR')
+                window.open("/" + pageID, '_self');
+        }
+            
+    /*   function populateFOCType(fieldId){
+           console.log(fieldId);
+        modiftyRecord();
+        var str = JSON.stringify(fieldId).split(':');
+         console.log(JSON.stringify(str));
+         console.log(JSON.stringify(str[str.length-2]));
+        var focType = document.getElementById(fieldId).value;
+        populateFOCTypeFunc(focType,str[str.length-2]);   
+       }  */  
+    
+       function populateLookup(fieldId) {
+        modiftyRecord();
+        console.log(JSON.stringify(fieldId));
+        var str = JSON.stringify(fieldId).split(':');
+         console.log(JSON.stringify(str));
+         console.log(JSON.stringify(str[str.length-2]));
+        var skuid = document.getElementById(fieldId).value;
+        populatePrice(skuid,str[str.length-2]);
+        }
+        function modiftyRecord(){
+         /*[Ceterna 11122020] Start   */      
+            document.getElementById('aPage:aForm:aPageBlock:hiddenModifiedField').value = 'Y';
+         /* [Ceterna 11122020] End   */
+        }
+    window.onload = function() {
+        //calculateTotal();
+    };
+    
+    function validateQuantity(inputQty, availableQunatity){
+         console.log(document.getElementById(inputQty).value);
+         console.log(document.getElementById(availableQunatity).value);
+        var inpQtystr = document.getElementById(inputQty).value;
+         var availableQtystr =document.getElementById(availableQunatity).value ;
+        var inpQty = parseInt( inpQtystr.replace(/,/g, ""));
+        
+        var availableQty = parseInt( availableQtystr.replace(/,/g, ""));
+        console.log('@'+inpQty + '@#'+availableQty);
+        if(inpQty > availableQty){
+            alert('Maximum available Quantity is '+document.getElementById(availableQunatity).value);
+            document.getElementById(inputQty).value = null;
+        }
+    }
+        function calculateTotal(input){
+            
+            /*   if({!isEdit}==true && {!isKH} == true){
+            var totalPrice = 0.00;
+            var i=0;
+            while(document.getElementById('aPage:aForm:aPageBlock:Resultitem:'+ i + ':inpQty') != null){
+                var qty = document.getElementById('aPage:aForm:aPageBlock:Resultitem:'+ i + ':inpQty').value.replace(',','');
+                var unitPrice = document.getElementById('aPage:aForm:aPageBlock:Resultitem:'+ i + ':unitPrice').innerText.replace('HKD ','').replace(',','');
+                    totalPrice += qty*unitPrice;  
+                i++;
+                }
+            console.log('total Price'+ totalPrice);
+            if(totalPrice == null){
+                totalPrice = 0.00;
+            }
+            // alert({!isEdit});
+            
+                 document.getElementById('aPage:aForm:aPageBlock:j_id101:grandTotal').innerHTML = 'HKD '+ totalPrice;
+                document.getElementById('aPage:aForm:aPageBlock:j_id101:grandTotalInput').value = totalPrice;
+            }*/
+        }
+    </script>
+</apex:page>

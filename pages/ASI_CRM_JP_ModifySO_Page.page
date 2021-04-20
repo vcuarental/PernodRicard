@@ -1,0 +1,1293 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_JP_ModifySO_Page
+ * Description: VF Page for modifing Sales Order record
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 16/02/2017       Hugo Cheung             Created
+-->
+<apex:page standardController="ASI_CRM_JP_Sales_Order__c" extensions="ASI_CRM_JP_ModifySO_Controller" sidebar="false">
+	
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/jquery-ui.min.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/bootstrap.min.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    
+    <head>
+        <script>
+            //Lookup Field Parameter
+            const CUSTOMER_OBJECT_PREFIX    = "{!$ObjectType.ASI_CRM_AccountsAdditionalField__c.keyPrefix}";
+            const USER_OBJECT_PREFIX        = "{!$ObjectType.User.keyPrefix}";
+            const SALES_ORDER_OBJECT_PREFIX = "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.keyPrefix}";
+            const PAY_TO_OBJECT_PREFIX      = "{!$ObjectType.ASI_CRM_Pay_To__c.keyPrefix}";
+            
+            //Store all field id for lookup field
+            const fieldIdMap              = jQuery.parseJSON('{!JSENCODE(fieldIdMapJson)}');
+            const SHIP_TO_FIELD_ID        = fieldIdMap["ASI_CRM_Ship_To__c"];
+            const SOLD_TO_FIELD_ID        = fieldIdMap["ASI_CRM_Sold_To__c"];
+            const SALESMAN_FIELD_ID       = fieldIdMap["ASI_CRM_Salesman__c"];
+            const SUB_WHOLESALER_FIELD_ID = fieldIdMap["ASI_CRM_Sub_Wholesaler__c"];
+
+            //Picklist value 
+            const branchPlantValueList    = jQuery.parseJSON('{!JSENCODE(branchPlantValueListJson)}');
+            const deliveryTimeValueList   = jQuery.parseJSON('{!JSENCODE(deliveryTimeValueListJson)}');
+            const taxAreaValueList        = {"CR8" : "CR8", "CR0" : "CR0"};
+            const taxCodeValueList        = jQuery.parseJSON('{!JSENCODE(taxCodeValueListJson)}');
+            const reasonCodeValueList     = jQuery.parseJSON('{!JSENCODE(reasonCodeValueListJson)}');
+            const businessReasonValueList = jQuery.parseJSON('{!JSENCODE(businessReasonValueListJson)}');
+            const orderTypeValueList      = jQuery.parseJSON('{!JSENCODE(orderTypeValueListJson)}');
+            const apCodeValueList         = jQuery.parseJSON('{!JSENCODE(apCodeValueListJson)}');
+            const freightCodeValueList    = jQuery.parseJSON('{!JSENCODE(freightCodeValueMapJson)}');
+            
+            //Need to be cleared when ship to/sold to is changed
+            const resetShipToRelatedFieldList = ["ASI_CRM_Branch_Plant__c",
+                                                 "ASI_CRM_Freight_Code__c",
+                                                 "ASI_CRM_Route_Code__c",
+                                                 "ASI_CRM_Delivery_Instruction_1__c",
+                                                 "ASI_CRM_Delivery_Instruction_2__c",
+                                                 "ASI_CRM_Salesman__c",
+                                                 "ASI_CRM_Salesman_Code__c",
+                                                 "ASI_CRM_JP_Sales_Group__c",
+                                                 "shipToPhone",
+                                                 "shipToAddr"
+                                                ];
+            const resetSoldToRelatedFieldList = ["ASI_CRM_Tax_Area__c",
+                                                 "ASI_CRM_Tax_Code__c",
+                                                 "soldToPhone",
+                                                 "soldToAddr"
+                                                 ];
+
+            //Picklist value with different record type
+			const PICKLIST_DEFAULT_VALUE_MAP = [{"recordType"      : ["ASI_CRM_JP_Normal_SO"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"           : "111"},
+                                                                                                 {"114-Tokyo Return Only"      : "114"},
+                                                                                                 {"116-Tokyo Not Start"        : "116"},
+                                                                                                 {"117-Tokyo SCM"              : "117"},
+                                                                                                 {"118-Tokyo Mktg POS"         : "118"},
+                                                                                                 {"119-Tokyo Defect-Can Drink" : "119"},
+                                                                                                 {"120-Tokyo PRJ Office"       : "120"},
+                                                                                                 {"131-Osaka Normal"           : "131"},
+                                                                                                 {"134-Osaka Return Only"      : "134"},
+                                                                                                 {"136-Osaka Not Start"        : "136"},
+                                                                                                 {"137-Osaka SCM"              : "137"},
+                                                                                                 {"138-Osaka Mktg POS"         : "138"},
+                                                                                                 {"139-Osaka Defect-Can Drink" : "139"},
+                                                                                                 {"190-Osaka PRJ Office"       : "190"},
+                                                                                                 {"711-Tokyo Mktg Only"        : "711"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"],
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            {"recordType"      : ["ASI_CRM_JP_Employee_Sales"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"    : "111"}, 
+                                                                                                 {"131-Osaka Normal"    : "131"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"],
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            {"recordType"      : ["ASI_CRM_JP_Entertainment_Sales"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"           : "111"},
+                                                                                                 {"114-Tokyo Return Only"      : "114"},
+                                                                                                 {"116-Tokyo Not Start"        : "116"},
+                                                                                                 {"118-Tokyo Mktg POS"         : "118"},
+                                                                                                 {"119-Tokyo Defect-Can Drink" : "119"},
+                                                                                                 {"120-Tokyo PRJ Office"       : "120"},
+                                                                                                 {"131-Osaka Normal"           : "131"},
+                                                                                                 {"134-Osaka Return Only"      : "134"},
+                                                                                                 {"136-Osaka Not Start"        : "136"},
+                                                                                                 {"138-Osaka Mktg POS"         : "138"},
+                                                                                                 {"139-Osaka Defect-Can Drink" : "139"},
+                                                                                                 {"190-Osaka PRJ Office"       : "190"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"], 
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            {"recordType"      : ["ASI_CRM_JP_Marketing_FOC"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"           : "111"},
+                                                                                                 {"116-Tokyo Not Start"        : "116"},
+                                                                                                 {"118-Tokyo Mktg POS"         : "118"},
+                                                                                                 {"120-Tokyo PRJ Office"       : "120"},
+                                                                                                 {"131-Osaka Normal"           : "131"},
+                                                                                                 {"136-Osaka Not Start"        : "136"},
+                                                                                                 {"138-Osaka Mktg POS"         : "138"},
+                                                                                                 {"190-Osaka PRJ Office"       : "190"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"], 
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            {"recordType"      : ["ASI_CRM_JP_Sample_Sales"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"           : "111"},
+                                                                                                 {"116-Tokyo Not Start"        : "116"},
+                                                                                                 {"118-Tokyo Mktg POS"         : "118"},
+                                                                                                 {"120-Tokyo PRJ Office"       : "120"},
+                                                                                                 {"131-Osaka Normal"           : "131"},
+                                                                                                 {"136-Osaka Not Start"        : "136"},
+                                                                                                 {"138-Osaka Mktg POS"         : "138"},
+                                                                                                 {"190-Osaka PRJ Office"       : "190"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"], 
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            {"recordType"      : ["ASI_CRM_JP_Direct_Sales"],
+                                             "picklistDefault" : {"ASI_CRM_AP_Code__c"        : ["SSSS"],
+                                                                 "ASI_CRM_Branch_Plant__c"    : [{"111-Tokyo Normal"     : "111"}, 
+                                                                                                 {"116-Tokyo Not Start"  : "116"},
+                                                                                                 {"118-Tokyo Mktg POS"   : "118"}, 
+                                                                                                 {"131-Osaka Normal"     : "131"}, 
+                                                                                                 {"136-Osaka Not Start"  : "136"}, 
+                                                                                                 {"138-Osaka Mktg POS"   : "138"},
+                                                                                                 {"190-Osaka PRJ Office" : "190"}],
+                                                                 "ASI_CRM_Business_Reason__c" : ["TBD"],
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                            	{"recordType"      : ["ASI_CRM_JP_Duty_Free_SO"],
+                                             "filterCriteria"  : [{"criteria"        : {"ASI_CRM_Order_Type__c"   : "Sample Sales"
+                                                                                       },
+                                                                   "picklistDefault" : {"ASI_CRM_Branch_Plant__c" : [{"421-DF Tokyo Normal-Domestic"    : "421"}, 
+                                                                                                                     {"426-DF Tokyo 2nd Class-Domestic" : "426"}],
+                                                                                        "ASI_CRM_AP_Code__c"      : ["3800"]
+                                                                                       }
+                                                                  },
+                                                                  {"criteria"        : {"ASI_CRM_Order_Type__c"   : "Normal SO"
+                                                                                       },
+                                                                   "picklistDefault" : {"ASI_CRM_Branch_Plant__c" : [{"411-DF Tokyo Normal-Foreign" : "411"}],
+                                                                                        "ASI_CRM_AP_Code__c"      : ["SSSS"]
+                                                                                       }
+                                                                  },
+                                                                  {"criteria"        : {"ASI_CRM_Order_Type__c"   : "POSM"
+                                                                                       },
+                                                                   "picklistDefault" : {"ASI_CRM_Branch_Plant__c" : [{"611-DF Tokyo Domestic"  : "611"}, 
+                                                                                                                     {"612-DF Tokyo On-Pack Material" : "612"},
+                                                                                                                     {"618-DF Komaki POS"      : "618"}],
+                                                                                        "ASI_CRM_AP_Code__c"      : ["SSSS"]
+                                                                                       }
+                                                                  }
+                                                                 ],
+                                             "picklistDefault" : {"ASI_CRM_Business_Reason__c" : ["TBD"],
+                                                                 "ASI_CRM_Delivery_Time__c"   : ["0000-0000", "0000-1200", "1200-0000", "1200-1400", "1400-1600", "1600-1800", "1800-2000", "2000-2100"],
+                                                                 "ASI_CRM_INMG__c"            : ["SHANAI", "Fax"],
+                                                                 "ASI_CRM_Order_Type__c"      : ["Normal SO", "Sample Sales", "POSM"],
+                                                                 "ASI_CRM_Payment_Option__c"  : ["COD", "Advanced Payment", "Invoice"],
+                                                                 "ASI_CRM_Reason_Code__c"     : ["TBD"],
+                                                                 "ASI_CRM_Status__c"          : ["Open", "Requested", "Rejected", "Final"],
+                                                                 "ASI_CRM_Tax_Area__c"        : ["CP0", "CR0", "IVAT", "SVAT"],
+                                                                 "ASI_CRM_Tax_Code__c"        : ["E"]
+                                                                }
+                                            },
+                                           		];
+            
+            /*****************
+            SO Field Config
+            *****************/
+            const FIELD_CONFIG_MAPPING = {
+                "shipTo"        		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Ship_To__c.Label}",
+                                           "value" : function () {
+                                                        var id           = 'shipTo';
+                                                        var fieldAPIName = 'ASI_CRM_Ship_To__c';
+                                                        var lookupTitle  = 'Ship To Lookup (New Window)';
+
+                                                        var customerName = '';
+                                                        var customerId   = salesOrderWrapper.salesOrder.ASI_CRM_Ship_To__c;
+                                                        if(salesOrderWrapper.salesOrder.ASI_CRM_Ship_To__c) {
+                                                            customerName = salesOrderWrapper.salesOrder.ASI_CRM_Ship_To__r.Name;
+                                                        }
+
+                                                        var fieldStr = "<span class='lookupInput'>"; 
+                                                        fieldStr += "<input class='" + fieldAPIName + "' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + customerName + "' required/>";
+                                                        fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='" + customerId + "' onChange='resetFieldValue(resetShipToRelatedFieldList); updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'/>";
+                                                        fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                        fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                "onblur='lookupButtonOnBlur(this)'" + 
+                                                                "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + CUSTOMER_OBJECT_PREFIX + "\", \"" + SHIP_TO_FIELD_ID + "\", \"" + SALES_ORDER_OBJECT_PREFIX + "\")' />";
+                                                        fieldStr += "</span>";
+
+                                                        return fieldStr;
+                                                     }
+                                           },
+
+                "soldTo"             		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Sold_To__c.Label}",
+                                               "value" : function () {
+                                                            var id                  = 'soldTo';
+                                                            var fieldAPIName        = 'ASI_CRM_Sold_To__c';
+                                                            var lookupTitle         = 'Sold To Lookup (New Window)';
+
+                                                            var customerName = '';
+                                                            var customerId   = salesOrderWrapper.salesOrder.ASI_CRM_Sold_To__c;
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Sold_To__c) {
+                                                                customerName = salesOrderWrapper.salesOrder.ASI_CRM_Sold_To__r.Name;
+                                                            }
+
+                                                            var fieldStr = "<span class='lookupInput'>"; 
+                                                            fieldStr += "<input class='" + fieldAPIName + "' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + customerName + "' required/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='" + customerId + "' onChange='resetFieldValue(resetSoldToRelatedFieldList); updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                            fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                    "onblur='lookupButtonOnBlur(this)'" + 
+                                                                    "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                    "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                    "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                    "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + CUSTOMER_OBJECT_PREFIX + "\", \"" + SOLD_TO_FIELD_ID + "\", \"" + SALES_ORDER_OBJECT_PREFIX + "\")' />";
+                                                            fieldStr += "</span>";
+
+                                                            return fieldStr;
+                                                         }
+                                               },
+                
+                "salesman"             		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Salesman__c.Label}",
+                                               "value" : function () {
+                                                            var id                  = 'salesman';
+                                                            var fieldAPIName        = 'ASI_CRM_Salesman__c';
+                                                            var lookupTitle         = 'Salesman Lookup (New Window)';
+
+                                                            var userName = '';
+                                                            var userId   = salesOrderWrapper.salesOrder.ASI_CRM_Salesman__c;
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Salesman__c) {
+                                                                userName = salesOrderWrapper.salesOrder.ASI_CRM_Salesman__r.Name;
+                                                            }
+
+                                                            var fieldStr = "<span class='lookupInput'>"; 
+                                                            fieldStr += "<input class='" + fieldAPIName + "' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + userName + "' />";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='" + userId + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                            fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                    "onblur='lookupButtonOnBlur(this)'" + 
+                                                                    "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                    "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                    "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                    "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + USER_OBJECT_PREFIX + "\", \"" + SALESMAN_FIELD_ID + "\", \"" + SALES_ORDER_OBJECT_PREFIX + "\")' />";
+                                                            fieldStr += "</span>";
+
+                                                            return fieldStr;
+                                                         }
+                                               },
+                
+                "shipToPhoneReadOnly"   		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Ship_To_Phone_Number__c.Label}",
+						    		           "value" : function () {
+		                                       				var fieldAPIName = 'shipToPhone';
+					                           				var shipToPhone = '';
+							    		           			if(salesOrderWrapper.shipToPhone) {
+							    		           				shipToPhone = salesOrderWrapper.shipToPhone;
+							    		           			}
+								                        	return "<span class='" + fieldAPIName + "'>" + shipToPhone + "</span>";
+								                         }
+						    		           },
+
+                "soldToPhoneReadOnly"   		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Sold_To_Phone_Number__c.Label}",
+                                                   "value" : function () {
+                                                                var fieldAPIName = 'soldToPhone';
+                                                                var soldToPhone = '';
+                                                                if(salesOrderWrapper.soldToPhone) {
+                                                                    soldToPhone = salesOrderWrapper.soldToPhone;
+                                                                }
+                                                                return "<span class='" + fieldAPIName + "'>" + soldToPhone + "</span>";
+                                                             }
+                                                   },
+
+                "shipToAddressReadOnly"	    	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Ship_To_Address__c.Label}",
+                                                   "value" : function () {
+                                                                var fieldAPIName = 'shipToAddr';
+                                                                var shipToAddress = '';
+                                                                if(salesOrderWrapper.shipToAddr) {
+                                                                    shipToAddress = salesOrderWrapper.shipToAddr;
+                                                                }
+                                                                return "<span class='" + fieldAPIName + "'>" + shipToAddress + "</span>";
+                                                             }
+                                                   },
+
+                "soldToAddressReadOnly"		    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Sold_To_Address__c.Label}",
+                                                   "value" : function () {
+                                                                var fieldAPIName = 'soldToAddr';
+                                                                var soldToAddress = '';
+                                                                if(salesOrderWrapper.soldToAddr) {
+                                                                    soldToAddress = salesOrderWrapper.soldToAddr;
+                                                                }
+                                                                return "<span class='" + fieldAPIName + "'>" + soldToAddress + "</span>";
+                                                             }
+                                                   },
+
+                "apCode"             		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_AP_Code__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_AP_Code__c';
+                                                            var picklistValueList = [];
+                                                            if(picklistDefaultValueInCurrentRecordType["picklistDefault"].hasOwnProperty(fieldAPIName)) {
+                                                                picklistValueList = picklistDefaultValueInCurrentRecordType["picklistDefault"][fieldAPIName];
+                                                            }
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var i = 0 ; i < picklistValueList.length ; i++) {
+                                                                if(picklistValueList[i] == salesOrderWrapper.salesOrder.ASI_CRM_AP_Code__c) {
+                                                                    selectOptionTag += "<option value='" + picklistValueList[i] + "' selected>" + picklistValueList[i] + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + picklistValueList[i] + "'>" + picklistValueList[i] + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                               },
+
+                "branchAndPlant" 		    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Branch_Plant__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Branch_Plant__c';
+                                                            var picklistValueList = [];
+                                                            if(picklistDefaultValueInCurrentRecordType["picklistDefault"].hasOwnProperty(fieldAPIName)) {
+                                                                picklistValueList = picklistDefaultValueInCurrentRecordType["picklistDefault"][fieldAPIName];
+                                                            }
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var i in picklistValueList) {
+                                                                var label = Object.keys(picklistValueList[i])[0];
+                                                                var value = picklistValueList[i][label];
+                                                                if(value == salesOrderWrapper.salesOrder.ASI_CRM_Branch_Plant__c) {
+                                                                    selectOptionTag += "<option value='" + value + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + value + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                               },
+
+                "subwholesaler"     		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Sub_Wholesaler__c.Label}",
+                                               "value" : function () {
+                                                            var id           = 'subWholesaler';
+                                                            var fieldAPIName = 'ASI_CRM_Sub_Wholesaler__c';
+                                                            var lookupTitle  = 'Sub Wholesaler Lookup (New Window)';
+
+                                                            var customerName = '';
+                                                            var customerId   = salesOrderWrapper.salesOrder.ASI_CRM_Sold_To__c;
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Sub_Wholesaler__c) {
+                                                                customerName = salesOrderWrapper.salesOrder.ASI_CRM_Sub_Wholesaler__r.Name;
+                                                            }
+
+                                                            var fieldStr = "<span class='lookupInput'>"; 
+                                                            fieldStr += "<input class='" + fieldAPIName + "' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + customerName + "' />";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='" + customerId + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                            fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                    "onblur='lookupButtonOnBlur(this)'" + 
+                                                                    "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                    "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                    "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                    "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + CUSTOMER_OBJECT_PREFIX + "\", \"" + SUB_WHOLESALER_FIELD_ID + "\", \"" + SALES_ORDER_OBJECT_PREFIX + "\")' />";
+                                                            fieldStr += "</span>";
+                                                            return fieldStr;
+                                                         }
+                                               },
+                
+                "orderType"              : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Order_Type__c.Label}",
+                                            "value" : function () {
+                                                        var fieldAPIName = 'ASI_CRM_Order_Type__c';
+                                                        var picklistValueList = [];
+                                                        if(picklistDefaultValueInCurrentRecordType["picklistDefault"].hasOwnProperty(fieldAPIName)) {
+                                                            picklistValueList = picklistDefaultValueInCurrentRecordType["picklistDefault"][fieldAPIName];
+                                                        }
+                                                        var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);checkPicklistDefaultValue();updateOrderTypeRelated(this.value);' required>"
+                                                        selectOptionTag += "<option value=''></option>";
+                                                        for(var i = 0 ; i < picklistValueList.length ; i++) {
+                                                                if(picklistValueList[i] == salesOrderWrapper.salesOrder.ASI_CRM_Order_Type__c) {
+                                                                    selectOptionTag += "<option value='" + picklistValueList[i] + "' selected>" + picklistValueList[i] + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + picklistValueList[i] + "'>" + picklistValueList[i] + "</option>";
+                                                                }
+                                                            }
+                                                        selectOptionTag += "</select>";
+                                                        return selectOptionTag;
+                                                     }
+                                           },
+
+                "customerPO"    		    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Customer_PO_No__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Customer_PO_No__c';
+                                                            var customerPO = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Customer_PO_No__c) {
+                                                                customerPO = salesOrderWrapper.salesOrder.ASI_CRM_Customer_PO_No__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + customerPO + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                         }
+                                               },
+                
+                "customerPOMandatory"       : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Customer_PO_No__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Customer_PO_No__c';
+                                                            var customerPO = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Customer_PO_No__c) {
+                                                                customerPO = salesOrderWrapper.salesOrder.ASI_CRM_Customer_PO_No__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + customerPO + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>";
+                                                         }
+                                               },
+                
+                "orderDate"             	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Order_Date__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Order_Date__c';
+                                                            var orderDate = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c) {
+                                                                orderDate = salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c;
+                                               					if(orderDate) {
+                                                                	var dateSplit = orderDate.split("-");
+                                                                    orderDate = dateSplit[0] + "/" + dateSplit[1] + "/" + dateSplit[2];
+                                                                }
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + " dateField' value='" + orderDate + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>";
+                                                        }
+                                              },
+                
+                "orderDateReadOnly"      		: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Order_Date__c.Label}",
+                                                   "value" : function() {
+                                                                var fieldAPIName = 'ASI_CRM_Order_Date__c';
+                                                                var orderDate = '';
+                                                                if(salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c) {
+                                                                    orderDate = salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c;
+                                                                    if(orderDate) {
+                                                                        var dateSplit = orderDate.split("-");
+                                                                        orderDate = dateSplit[0] + "/" + dateSplit[1] + "/" + dateSplit[2];
+                                                                    }
+                                                                }
+                                                                return "<input type='text' class='" + fieldAPIName + "' value='" + orderDate + "' disabled>";
+                                                            }
+                                                  },
+                
+                "requestDate"            	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Requested_Date__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Requested_Date__c';
+                                                            var requestDate = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c) {
+                                                                requestDate = salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c;
+                                                                if(requestDate) {
+                                                                	var dateSplit = requestDate.split("-");
+                                                                    requestDate = dateSplit[0] + "/" + dateSplit[1] + "/" + dateSplit[2];
+                                                                }
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + " dateField' value='" + requestDate + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>";
+                                                        }
+                                              },
+                
+                "taxArea"               	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Tax_Area__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Tax_Area__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in taxAreaValueList) {
+                                                                if(taxAreaValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Tax_Area__c) {
+                                                                    selectOptionTag += "<option value='" + taxAreaValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + taxAreaValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                              }, 
+
+                
+                "deliveryTime"  		    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Delivery_Time__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Delivery_Time__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in deliveryTimeValueList) {
+                                                                if(deliveryTimeValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Delivery_Time__c) {
+                                                                    selectOptionTag += "<option value='" + deliveryTimeValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + deliveryTimeValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                               },
+                
+                "akabouDeliveryTime"         : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_AKABOU_Delivery_Time__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_AKABOU_Delivery_Time__c';
+                                                            var deliveryTime = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_AKABOU_Delivery_Time__c) {
+                                                                deliveryTime = salesOrderWrapper.salesOrder.ASI_CRM_AKABOU_Delivery_Time__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + deliveryTime + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                              },
+                
+                "taxCode"                	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Tax_Code__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Tax_Code__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in taxCodeValueList) {
+                                                                if(taxCodeValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Tax_Code__c) {
+                                                                    selectOptionTag += "<option value='" + taxCodeValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + taxCodeValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                              }, 
+                
+                "reasonCode"             	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Reason_Code__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Reason_Code__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in reasonCodeValueList) {
+                                                                if(reasonCodeValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Reason_Code__c) {
+                                                                    selectOptionTag += "<option value='" + reasonCodeValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + reasonCodeValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                              },
+
+                "taxCertNo"             	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Tax_Certificate_No__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Tax_Certificate_No__c';
+                                                            var taxCertNo = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Tax_Certificate_No__c) {
+                                                                taxCertNo = salesOrderWrapper.salesOrder.ASI_CRM_Tax_Certificate_No__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + taxCertNo + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                              },
+                
+                "freightCode"           	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Freight_Code__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Freight_Code__c';
+                                                   
+                                                   			var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in freightCodeValueList) {
+                                                                if(freightCodeValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Freight_Code__c) {
+                                                                    selectOptionTag += "<option value='" + freightCodeValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + freightCodeValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                        }
+                                              },
+                
+                "businessReason"        	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Business_Reason__c.Label}",
+                                               "value" : function () {
+                                                            var fieldAPIName = 'ASI_CRM_Business_Reason__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>"
+                                                            selectOptionTag += "<option value=''></option>";
+                                                            for(var label in businessReasonValueList) {
+                                                                if(businessReasonValueList[label] == salesOrderWrapper.salesOrder.ASI_CRM_Business_Reason__c) {
+                                                                    selectOptionTag += "<option value='" + businessReasonValueList[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + businessReasonValueList[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                         }
+                                              },
+                
+                "routeCode"             	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Route_Code__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Route_Code__c';
+                                                            var routeCode = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Route_Code__c) {
+                                                                routeCode = salesOrderWrapper.salesOrder.ASI_CRM_Route_Code__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + routeCode + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>";
+                                                        }
+                                              },
+                
+                "salesmanCodeName"    	    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Salesman_Code__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Salesman_Code__c';
+                                                            var salesmanCodeName = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Salesman_Code__c) {
+                                                                salesmanCodeName = salesOrderWrapper.salesOrder.ASI_CRM_Salesman_Code__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + salesmanCodeName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' >";
+                                                        }
+                                               },
+                
+                "remark"                 	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Remark__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Remark__c';
+                                                            var remark = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Remark__c) {
+                                                                remark = salesOrderWrapper.salesOrder.ASI_CRM_Remark__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + remark + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                              }, 
+
+                
+                "effectiveDate"            	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Price_Effective_Date__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_JP_Price_Effective_Date__c';
+                                                            var effectiveDate = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c) {
+                                                                effectiveDate = salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c;
+                                                                if(effectiveDate) {
+                                                                	var dateSplit = effectiveDate.split("-");
+                                                                    effectiveDate = dateSplit[0] + "/" + dateSplit[1] + "/" + dateSplit[2];
+                                                                }
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + " dateField' value='" + effectiveDate + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);' required>";
+                                                        }
+                                              },
+                
+				"remark2"                 	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Remark_2__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_JP_Remark_2__c';
+                                                            var remark = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Remark_2__c) {
+                                                                remark = salesOrderWrapper.salesOrder.ASI_CRM_JP_Remark_2__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + remark + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                              }, 
+                
+                "mailingName"           	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Mailing_Name__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Mailing_Name__c';
+                                                            var mailingName = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Mailing_Name__c) {
+                                                                mailingName = salesOrderWrapper.salesOrder.ASI_CRM_Mailing_Name__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + mailingName + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                              },
+
+                "postalCode"          	    : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Postal_Code__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Postal_Code__c';
+                                                            var postalCode = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Postal_Code__c) {
+                                                                postalCode = salesOrderWrapper.salesOrder.ASI_CRM_Postal_Code__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + postalCode + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                               },
+
+                "addressLineOne"         	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Address_Line_1__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Address_Line_1__c';
+                                                            var addressLineOne = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Address_Line_1__c) {
+                                                                addressLineOne = salesOrderWrapper.salesOrder.ASI_CRM_Address_Line_1__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + addressLineOne + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                               },
+
+                "addressLineTwo"        	: {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Address_Line_2__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_Address_Line_2__c';
+                                                            var addressLineTwo = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_Address_Line_2__c) {
+                                                                addressLineTwo = salesOrderWrapper.salesOrder.ASI_CRM_Address_Line_2__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + addressLineTwo + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                               },
+                
+                "salesGroup"                : {"title" : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Sales_Group__c.Label}",
+                                               "value" : function() {
+                                                            var fieldAPIName = 'ASI_CRM_JP_Sales_Group__c';
+                                                            var salesGroup = '';
+                                                            if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Sales_Group__c) {
+                                                                salesGroup = salesOrderWrapper.salesOrder.ASI_CRM_JP_Sales_Group__c;
+                                                            }
+                                                            return "<input type='text' class='" + fieldAPIName + "' value='" + salesGroup + "' onChange='updateSalesOrderValue(\"" + fieldAPIName + "\", this.value);'>";
+                                                        }
+                                               },
+            };
+            
+            const recordTypeHeaderFieldMapping = {
+            	"ASI_CRM_JP_Normal_SO" : [
+                    "shipTo",
+                    "soldTo",
+                    "shipToPhoneReadOnly",
+                    "soldToPhoneReadOnly",
+                    "shipToAddressReadOnly",
+                    "soldToAddressReadOnly",
+                    "apCode",
+                    "branchAndPlant",
+                    "subwholesaler",
+                    "customerPO",
+                    "orderDateReadOnly",
+                    "requestDate",
+                    "effectiveDate",
+                    "deliveryTime",
+                    "taxArea",
+                    "akabouDeliveryTime",
+                    "taxCode",
+                    "freightCode",
+                    "businessReason",
+                    "routeCode",
+                    "salesman",
+                    "remark",
+                    "salesmanCodeName",
+                    "remark2",
+                    "salesGroup"
+                ],
+                "ASI_CRM_JP_Duty_Free_SO" : [
+                    "shipTo",
+                    "soldTo",
+                    "shipToPhoneReadOnly",
+                    "soldToPhoneReadOnly",
+                    "shipToAddressReadOnly",
+                    "soldToAddressReadOnly",
+                    "orderType",
+                    "branchAndPlant",
+                    "apCode",
+                    "customerPOMandatory",
+                    "orderDate",
+                    "requestDate",
+                    "effectiveDate",
+                    "deliveryTime",
+                    "taxArea",
+                    "akabouDeliveryTime",
+                    "taxCode",
+                    "freightCode",
+                    "taxCertNo",
+                    "routeCode",
+                    "businessReason",
+                    "remark",
+                    "salesman",
+                    "remark2",
+                    "salesmanCodeName",
+                    "salesGroup"
+                ]
+            }
+            
+            const recordTypeDetailFieldMapping = {
+            	"ASI_CRM_JP_Normal_SO" : [
+                    "mailingName",
+                    "postalCode",
+                    "addressLineOne",
+                    "addressLineTwo"
+                ],
+                "ASI_CRM_JP_Duty_Free_SO" : [
+                    "mailingName",
+                    "postalCode",
+                    "addressLineOne",
+                    "addressLineTwo"
+                ]
+            }
+            
+            //Div table config
+            const CELL_SIZE_IN_ROW = 2;
+
+            //Sales Order Wrapper Record
+            var salesOrderWrapper;
+            
+        	var picklistDefaultValueInCurrentRecordType = {};
+            
+            $(document).ready(
+                function() {
+                    setPicklistDefault('{!JSENCODE(salesOrderRecordTypeAPIName)}');
+                    setTable('{!JSENCODE(salesOrderWrapperJson)}');
+                    $('.dateField').datepicker({
+                        dateFormat: 'yy/mm/dd',
+                    });
+                }
+            );
+            
+            function setPicklistDefault(recordType) {
+                for(var i = 0 ; i < PICKLIST_DEFAULT_VALUE_MAP.length ; i++) {
+                    var tempPicklistDefaultValue = PICKLIST_DEFAULT_VALUE_MAP[i];
+                    if(jQuery.inArray(recordType, tempPicklistDefaultValue["recordType"]) != -1) {
+                        if(tempPicklistDefaultValue.hasOwnProperty("filterCriteria")) {
+                            picklistDefaultValueInCurrentRecordType["filterCriteria"] = tempPicklistDefaultValue["filterCriteria"];
+                        }
+                        picklistDefaultValueInCurrentRecordType["picklistDefault"] = tempPicklistDefaultValue["picklistDefault"];
+                    }
+                }
+            }
+            
+            function setTable(salesOrderWrapperJson) {
+                salesOrderWrapper = jQuery.parseJSON(salesOrderWrapperJson);
+                console.log(jQuery.parseJSON(salesOrderWrapperJson));
+
+                var salesOrderRecordTypeAPIName = '{!salesOrderRecordTypeAPIName}';
+
+                appendTableRowToDivTable(recordTypeHeaderFieldMapping, salesOrderRecordTypeAPIName, "soDetailDiv");
+                appendTableRowToDivTable(recordTypeDetailFieldMapping, salesOrderRecordTypeAPIName, "soDeliveryInfoDiv");
+                
+                checkPicklistDefaultValue();
+                
+                $('.dateField').datepicker({
+                    dateFormat: 'yy/mm/dd',
+                });
+            }
+            
+            function appendTableRowToDivTable(fieldMap, salesOrderRecordTypeAPIName, divTableId) {
+                if(fieldMap[salesOrderRecordTypeAPIName]) {
+                    //Retrieve the SO Detail field array by different record type
+                    var fieldArray = fieldMap[salesOrderRecordTypeAPIName];
+
+                    //Assign the field config to SO Detail div table 
+                    var tableRow = '<div class="divTableRow">';
+                    var isRowEnd = true;
+                    for(var fieldIndex = 0 ; fieldIndex < fieldArray.length ; fieldIndex++) {
+                        var fieldConf = FIELD_CONFIG_MAPPING[fieldArray[fieldIndex]];
+                        tableRow += '<div class="divTableCell fieldTitle">';
+                        tableRow += fieldConf.title;
+                        tableRow += '</div>';
+
+                        tableRow += '<div class="divTableCell fieldValue">';
+                        tableRow += fieldConf.value();
+                        tableRow += '</div>';
+                        isRowEnd = false;
+                        //Append the row to div table and create new row
+                        if((fieldIndex + 1) % CELL_SIZE_IN_ROW == 0) {
+                            tableRow += '</div>';
+                            $("#" + divTableId).append(tableRow);
+                            tableRow = '<div class="divTableRow">';
+                            isRowEnd = true;
+                        } 
+                    }
+                    if(isRowEnd == false) {
+                        tableRow += '</div>';
+                        $("#" + divTableId).append(tableRow);
+                    }			
+                }
+    		}
+
+            function checkPicklistDefaultValue() {
+                if(picklistDefaultValueInCurrentRecordType.hasOwnProperty("filterCriteria")) {
+                    var criteriaList = picklistDefaultValueInCurrentRecordType["filterCriteria"];
+                    for(var i = 0 ; i < criteriaList.length ; i++) {
+                        var criteria = criteriaList[i]["criteria"];
+                        var isMatchCriteria = true
+                        for(var fieldAPIName in criteria) {
+                            if($("." + fieldAPIName)) {
+                                if($("." + fieldAPIName).val() != criteria[fieldAPIName]) {
+                                    isMatchCriteria = false;
+                                }
+                            }
+                        }
+                        if(isMatchCriteria) {
+                            updatePicklistDefaultValue(criteriaList[i]["picklistDefault"]);
+                        }
+                    }
+                }                                               
+            }
+
+            function updatePicklistDefaultValue(picklistDefault) {
+                for(var fieldAPIName in picklistDefault) {
+                    var selectOption = '';
+                    for(var i = 0 ; i < picklistDefault[fieldAPIName].length ; i++) {
+                        if(typeof picklistDefault[fieldAPIName][i] === 'object') {
+                            var label = Object.keys(picklistDefault[fieldAPIName][i])[0];
+                            var value = picklistDefault[fieldAPIName][i][label];
+                        	selectOption += "<option value='" + value + "'>" + label + "</option>";
+                        } else {
+                        	selectOption += "<option value='" + picklistDefault[fieldAPIName][i] + "'>" + picklistDefault[fieldAPIName][i] + "</option>";
+                        }
+                    }
+                    $("." + fieldAPIName).find('option').remove().end().append(selectOption);
+                    $("." + fieldAPIName).trigger("change");
+                }
+            }
+
+            function resetFieldValue(fieldArray) {
+                for(var i = 0 ; i < fieldArray.length ; i++) {
+                    if($("." + fieldArray[i]).is(':checkbox')) {
+                        $("." + fieldArray[i]).prop('checked', false);
+                    } else if($("." + fieldArray[i]).is('span')){
+                        $("." + fieldArray[i]).html("");
+                    } else {
+                        $("." + fieldArray[i]).val("");
+                    }
+                    $("." + fieldArray[i]).trigger("change");
+                }
+            }
+            
+            //Assign default value from Ship To/Sold To
+            function assignShipToDefaultValueJS() {
+                //Clear the error
+                $('.error').removeClass('error');
+                $('.saveErrorPanel').css("display","none");
+                
+                if($("#shipTo_lkid").val() && $("#shipTo_lkid").val() != 'undefined') {
+                    //Show loading gif
+                    $("body").addClass("savingRecord");
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    assignShipToDefaultValue(JSON.stringify(salesOrderWrapper.salesOrder), $("#shipTo_lkid").val());
+                } else {
+                    //Display the error message and change the customer name field to red
+                    $('#shipTo').addClass('error');
+                    $('.saveErrorPanel').css("display","block");
+                    $('.errorMessage').html(SHIP_TO_CANNOT_BE_NULL);
+                }
+            }
+
+            function assignSoldToDefaultValueJS() {
+                //Clear the error
+                $('.error').removeClass('error');
+                $('.saveErrorPanel').css("display","none");
+
+                if($("#soldTo_lkid").val() && $("#soldTo_lkid").val() != 'undefined') {
+                    //Show loading gif
+                    $("body").addClass("savingRecord");
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    assignSoldToDefaultValue(JSON.stringify(salesOrderWrapper.salesOrder), $("#soldTo_lkid").val());
+                } else {
+                    //Display the error message and change the customer name field to red
+                    $('#soldTo').addClass('error');
+                    $('.saveErrorPanel').css("display","block");
+                    $('.errorMessage').html(SOLD_TO_CANNOT_BE_NULL);
+                }
+            }
+
+            function assignDefaultValueComplete(salesOrderWrapperJson) {
+                //Remove all child under divTable
+                $("#soDetailDiv").empty();
+                $("#soDeliveryInfoDiv").empty();
+
+                //Reset the div tabletry {
+    			try {
+                	setTable(salesOrderWrapperJson);
+                } catch(error) {
+                	console.log(error);
+                }
+
+                //Hide the loading gif
+                $("body").removeClass("savingRecord");
+            }
+
+            //Update the sales order value when field value updated
+            function updateSalesOrderValue(fieldAPIName, newValue) {
+                salesOrderWrapper.salesOrder[fieldAPIName] = newValue;
+            }
+		
+            //Update order type related field once order type is changed
+            function updateOrderTypeRelated(orderTypeVal) {
+                console.log(orderTypeVal);
+                if(orderTypeVal == 'Sample Sales' || 
+                   orderTypeVal == 'POSM') {
+                    $("#soldTo").prop('readonly', true);
+                    $("#soldTo").removeAttr('required');
+                    $('img[title="Sold To Lookup (New Window)"]').hide();
+                } else {
+                    $("#soldTo").prop('readonly', false);
+                    $("#soldTo").prop('required', true);
+                    $('img[title="Sold To Lookup (New Window)"]').show();
+                }
+                $(".ASI_CRM_Sold_To__c").val('');
+                $("#soldTo_lkid").val('');
+                $("#soldTo_lkold").val('');
+                $('.soldToPhone').html('');
+                $('.soldToAddr').html('');
+            }
+            
+            //Save Handler
+            function saveRecord() {
+                //Hide the error message panel
+                $('.error').removeClass('error');
+                $('.saveErrorPanel').css("display","none");
+                
+                var isRequiredFieldNotFill = false;
+                $('input,textarea,select').filter('[required]:visible').each(function(ele) {
+                    if(!$(this).val()) {
+                        $(this).addClass("error");
+                        isRequiredFieldNotFill = true;
+                    }
+                });
+                
+                if(isRequiredFieldNotFill == true) {
+                    //Display the error message
+                    $('.saveErrorPanel').css("display","block");
+                    $('.errorMessage').html('Please input all required fields');
+                } else {
+                    //Show loading gif
+                    $("body").addClass("savingRecord");
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Order_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_Requested_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    if(salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c && 
+                       salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.includes("/")) {
+                        var dateSplit = salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c.split("/");
+                        salesOrderWrapper.salesOrder.ASI_CRM_JP_Price_Effective_Date__c = dateSplit[0] + "-" + dateSplit[1] + "-" + dateSplit[2];
+                    }
+                    
+                    save(JSON.stringify(salesOrderWrapper.salesOrder));
+                }
+            }
+
+            function saveErrorOccur(exceptionMsg) {
+                console.log('HI');
+				console.log(exceptionMsg);
+            	$('.saveErrorPanel').css("display","block");
+            	$('.errorMessage').html(exceptionMsg);
+                
+                $("body").removeClass("savingRecord");
+            }
+            
+            //Lookup Popup Control Function (Start)
+            function showLookup(ctrlID, objKeyPrefix, lookupFieldId, currentObjectPrefix) {
+                openLookup("/_ui/common/data/LookupPage?lkfield=" + lookupFieldId + "&lkent=" + currentObjectPrefix + "&lknm=" + ctrlID + "&lktp=" + objKeyPrefix + "&lksrch=" + $("#" + ctrlID).val(), 500);
+            }
+
+            function lookupPick(formId, idInputId, nameFieldId, emptyField2, lookupId, lookupName, emtpyField3, emptyField4) {
+                closePopup();
+                $("#" + idInputId).val(lookupId);
+                $("#" + nameFieldId).val(lookupName);
+                $("#" + idInputId).trigger("change");
+            }
+
+            function resetLookup(ctrlID) {
+                $("#" + ctrlID + '_lkid').val(null);
+                $("#" + ctrlID + '_lkold').val(null);
+
+                $("#" + ctrlID + '_lkid').trigger('change');
+                $("#" + ctrlID + '_lkold').trigger('change');
+            }
+
+            function lookupButtonOnFocus(lookupButton) {
+                $(lookupButton).removeClass('lookupIcon').addClass('lookupIconOn');
+            }
+        
+            function lookupButtonOnBlur(lookupButton) {
+                $(lookupButton).removeClass('lookupIconOn').addClass('lookupIcon');
+            }
+            //Lookup Popup Control Function (End)
+
+        </script>
+        
+        <style>
+            .error {
+                border : 2px solid red;
+            }
+
+            hr {
+                margin-top    : 5px;
+                margin-bottom : 5px;
+                border-top    : 2px solid #000;
+            }
+
+            input:required {
+                border-left-width : 2px;
+                border-left-color : #ff0000;
+                border-left-style : solid;
+            }
+
+            select:required {
+                border-left-width : 2px;
+                border-left-color : #ff0000;
+                border-left-style : solid;
+            }
+
+            .subTitle {
+                margin-top : 15px;
+            }
+
+            .savingRecord .fullScreenLoading {
+                display : block;
+            }
+
+            .fullScreenLoading {
+                display    : none;
+                position   : fixed;
+                z-index    : 1000;
+                top        : 0;
+                left       : 0;
+                height     : 100%;
+                width      : 100%;
+                background : rgba(255, 255, 255, .8)
+                             url('{!URLFOR($Resource.ASI_CRM_JP_Library, '/images/loading.gif')}')  
+                             50% 50% 
+                             no-repeat;
+            }
+
+            .divTable{
+                display : table;
+                width   : 100%;
+            }
+
+            .divTableBody {
+                display : table-row-group;
+            }
+
+            .divTableRow {
+                display : table-row;
+            }
+
+            .divTableCell {
+                border  : 0px solid #999999;
+                display : table-cell;
+                padding : 3px 10px;
+            }
+
+            .divTableCell.fieldTitle {
+                width : 400px;
+            }
+
+            .divTableCell.fieldValue {
+                width : 500px;
+            }
+        </style>
+        
+    </head>
+    
+	<body>
+        <div class="fullScreenLoading"></div>
+        
+		<div class="saveErrorPanel alert alert-danger" style="display: none;">
+        	<strong>Error</strong> 
+        	<br />
+        	<p class="errorMessage"></p>
+        </div>
+        
+        <!-- Defind Action Function -->
+        <apex:form >
+            <apex:actionFunction name="save" action="{!save}" reRender="pageMsg" oncomplete="saveErrorOccur('{!exceptionMsg}');">
+                <apex:param name="salesOrderJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="cancel" action="{!cancel}"/>
+            <apex:actionFunction name="assignShipToDefaultValue" action="{!assignShipToDefaultValue}" oncomplete="assignDefaultValueComplete('{!JSENCODE(salesOrderWrapperJson)}')">
+                <apex:param name="salesOrderJson" value="" />
+                <apex:param name="customerId" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="assignSoldToDefaultValue" action="{!assignSoldToDefaultValue}" oncomplete="assignDefaultValueComplete('{!JSENCODE(salesOrderWrapperJson)}')">
+                <apex:param name="salesOrderJson" value="" />
+                <apex:param name="customerId" value="" />
+            </apex:actionFunction>
+        </apex:form>
+
+        <apex:pageBlock >
+            <apex:pageblockButtons >
+                <input type='button' class='btn' value='{!$Label.ASI_CRM_JP_Assign_Ship_To}' onClick='assignShipToDefaultValueJS()'/>
+            	<input type='button' class='btn' value='{!$Label.ASI_CRM_JP_Assign_Sold_To}' onClick='assignSoldToDefaultValueJS()'/>
+            	<input type="button" class='btn' onclick="saveRecord()" value="{!$Label.ASI_CRM_JP_Save}" />
+            	<input type="button" class='btn' onclick="cancel()" value="{!$Label.ASI_CRM_JP_Cancel}" />
+            </apex:pageblockButtons>
+            
+            <div>
+                <div class="panel panel-info">
+                    <div class="panel-heading">SO Detail</div>
+                    <div id="soDetailDiv" class="panel-body divTable"></div>
+                </div>
+
+                <div class="panel panel-info">
+                    <div class="panel-heading">{!$Label.ASI_CRM_JP_Delivery_Information_Section}</div>
+                    <div id="soDeliveryInfoDiv" class="panel-body divTable"></div>
+                </div>
+            </div>
+            
+        </apex:pageBlock>
+       	
+    </body>
+    
+</apex:page>

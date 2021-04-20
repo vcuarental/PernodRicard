@@ -1,0 +1,364 @@
+<!--
+ - Created by Jeffrey Cheung on 18/3/2019.
+ -->
+
+<apex:component id="ASI_CRM_CN_PromotionVolumeReportComp" controller="ASI_CRM_CN_PromotionVolumeReportCompCtrl" access="global" layout="none">
+
+    <apex:attribute name="headerId" type="String" description=" " assignTo="{!currentHeaderId}"/>
+    <apex:attribute name="StartDateString" description="Start Date String" type="String" assignto="{!StartDateStr}"/>
+    <apex:attribute name="EndDateString" description="End Date String" type="String" assignto="{!EndDateStr}"/>
+
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_PDF_Landscape_CSS)}"/>
+    <head>
+        <style>
+            .cell {
+                border: 1px solid black;
+                border-collapse:collapse;
+            }
+            .underline {
+                border-bottom: 1px solid black;
+            }
+            .Total td{
+                font-weight: bold;
+            }
+
+        </style>
+    </head>
+
+    <div class="header" >
+        <table class="header-table" width="100%" border="0" cellspacing="0" cellpadding="2">
+            <tr>
+                <td colspan="8" align="center"><apex:image height="2cm" width="7cm" url="{!URLFOR($Resource.ASI_MFM_CN_Logo)}"/></td>
+            </tr>
+            <tr>
+                <td colspan="8" align="center"><h1>Value / Volume Report</h1></td>
+            </tr>
+            <tr>
+                <td width="16%" >Outlet/WS:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_Outlet_WS__r.Name}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">Region:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_Region__c}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">Refresh Date:</td>
+                <td width="16%" class="underline">
+                    <apex:outputText value="{0,date,dd/MM/yyyy}">
+                        <apex:param value="{!TODAY()}"/>
+                    </apex:outputText>
+                </td>
+            </tr>
+
+            <tr>
+                <td width="16%">PO No.:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_PO_No__c}"/></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">Promotion Type:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!ContractSelected.ASI_TH_CRM_Promotion_Type__c}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">PO Channel:</td>
+                <td width="16%" class="underline">
+                    <apex:outputText value="{!ContractSelected.ASI_CRM_PO_Channel__r.Name}"/>
+                </td>
+            </tr>
+            <tr>
+                <td width="16%">Data Source</td>
+                <td width="16%" class="underline"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_Data_Source__c}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">PO Period:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!POPeriodStr}"/></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%">Volume Period:</td>
+                <td width="16%" class="underline"><apex:outputText value="{!VolPeriodStr}"/></td>
+            </tr>
+        </table>
+    </div>
+    <!-- Body -->
+    <body>
+    <apex:outputPanel rendered="{!noData}" id="noData">
+        <table width="100%" cellspacing="0" cellpadding="2">
+            <tr><td align="center">Sorry, no data to show.</td></tr>
+        </table>
+    </apex:outputPanel>
+
+    <apex:outputPanel rendered="{!noData!=true}" id="table">
+        <!-- Define Variable for Total -->
+        <apex:variable value="{!0}" var="TotalTargetVol"/>
+        <apex:variable value="{!0}" var="TotalIntakeVol"/>
+        <apex:variable value="{!0}" var="TotalOfftakeVol"/>
+
+        <apex:variable value="{!0}" var="TotalTargetValue"/>
+        <apex:variable value="{!0}" var="TotalIntakeValue"/>
+        <apex:variable value="{!0}" var="TotalOfftakeValue"/>
+
+        <!-- By Subbrand Detail -->
+        <table width="100%" cellspacing="0" cellpadding="2" class="table-bordered" border="1">
+            <thead>
+            <tr>
+                <th align="center" width="7%" rowspan="2">No</th>
+                <th align="center" width="7%" rowspan="2">Sub-Brand</th>
+                <th align="center" width="7%" colspan="3">Volume(9L)</th>
+                <th align="center" width="7%" colspan="3">Purchase Value</th>
+            </tr>
+            <tr>
+                <th align="center" width="7%">V0.0 Target</th>
+                <th align="center" width="7%">{!ContractSelected.ASI_CRM_CN_Festival_Season__c}</th>
+                <th align="center" width="7%">vs Target</th>
+                <th align="center" width="7%">V0.0 Target</th>
+                <th align="center" width="7%">{!ContractSelected.ASI_CRM_CN_Festival_Season__c}</th>
+                <th align="center" width="7%">vs Target</th>
+            </tr>
+
+            <!--<tr>-->
+                <!--<th colspan="11" bgcolor="#FFFF66" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">-->
+                    <!--<apex:outputText value="Calendar Period:"/>-->
+                <!--</th>-->
+            <!--</tr>-->
+            </thead>
+
+
+            <apex:variable value="{!0}" var="totalVolumeV0"/>
+            <apex:variable value="{!0}" var="totalPurchaseValueV0"/>
+            <apex:variable value="{!0}" var="totalVolume"/>
+            <apex:variable value="{!0}" var="totalPurchaseValue"/>
+            <apex:variable value="{!0}" var="subBrandNo"/>
+
+            <apex:repeat value="{!interimDataSortMap}" var="key">
+                <apex:variable var="subBrandNo" value="{! subBrandNo+1 }"/>
+                <tr>
+                    <td align="center" style="border: 1px solid black; border-collapse: collapse;">
+                        {!subBrandNo}
+                    </td>
+                    <td style="border: 1px solid black; border-collapse: collapse;">
+                        {!interimDataMap[interimDataSortMap[key]].subBrand.Name}
+                    </td>
+                    <!-- Vol / 9L -->
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].volume9LV0 !=null && interimDataMap[interimDataSortMap[key]].volume9LV0 !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].volume9LV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].volume9LV0 ==null || interimDataMap[interimDataSortMap[key]].volume9LV0 ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].volume9L !=null && interimDataMap[interimDataSortMap[key]].volume9L !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].volume9L}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].volume9L ==null || interimDataMap[interimDataSortMap[key]].volume9L ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].volume9L - interimDataMap[interimDataSortMap[key]].volume9LV0 !=null&& interimDataMap[interimDataSortMap[key]].volume9L - interimDataMap[interimDataSortMap[key]].volume9LV0 !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].volume9L - interimDataMap[interimDataSortMap[key]].volume9LV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].volume9L - interimDataMap[interimDataSortMap[key]].volume9LV0 ==null||interimDataMap[interimDataSortMap[key]].volume9L - interimDataMap[interimDataSortMap[key]].volume9LV0 ==0}"/>
+                    </td>
+                    <!-- Purchase Value -->
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValueV0 !=null && interimDataMap[interimDataSortMap[key]].purchaseValueV0 !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].purchaseValueV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValueV0 ==null || interimDataMap[interimDataSortMap[key]].purchaseValueV0 ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValue !=null && interimDataMap[interimDataSortMap[key]].purchaseValue !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].purchaseValue}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValue ==null || interimDataMap[interimDataSortMap[key]].purchaseValue ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValue - interimDataMap[interimDataSortMap[key]].purchaseValueV0 !=null && interimDataMap[interimDataSortMap[key]].purchaseValue - interimDataMap[interimDataSortMap[key]].purchaseValueV0 !=0}">
+                            <apex:param value="{!interimDataMap[interimDataSortMap[key]].purchaseValue - interimDataMap[interimDataSortMap[key]].purchaseValueV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!interimDataMap[interimDataSortMap[key]].purchaseValue - interimDataMap[interimDataSortMap[key]].purchaseValueV0 ==null || interimDataMap[interimDataSortMap[key]].purchaseValue - interimDataMap[interimDataSortMap[key]].purchaseValueV0 ==0}"/>
+                    </td>
+                </tr>
+
+                <apex:variable var="totalVolumeV0" value="{!totalVolumeV0+interimDataMap[interimDataSortMap[key]].volume9LV0}"/>
+                <apex:variable var="totalPurchaseValueV0" value="{!totalPurchaseValueV0+interimDataMap[interimDataSortMap[key]].purchaseValueV0}"/>
+                <apex:variable var="totalVolume" value="{!totalVolume+interimDataMap[interimDataSortMap[key]].volume9L}"/>
+                <apex:variable var="totalPurchaseValue" value="{!totalPurchaseValue+interimDataMap[interimDataSortMap[key]].purchaseValue}"/>
+
+            </apex:repeat>
+            <tr class ="Total">
+                <td>
+                    Total
+                </td>
+                <td></td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalVolumeV0 !=null && totalVolumeV0 !=0}">
+                        <apex:param value="{!totalVolumeV0}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalVolumeV0 ==null || totalVolumeV0 ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalVolume !=null && totalVolume !=0}">
+                        <apex:param value="{!totalVolume}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalVolume ==null || totalVolume ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}">
+                        <apex:param value="{!totalVolume - totalVolumeV0}"/>
+                    </apex:outputText>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalPurchaseValueV0 !=null && totalPurchaseValueV0 !=0}">
+                        <apex:param value="{!totalPurchaseValueV0}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalPurchaseValueV0 ==null || totalPurchaseValueV0 ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalPurchaseValue !=null && totalPurchaseValue !=0}">
+                        <apex:param value="{!totalPurchaseValue}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalPurchaseValue ==null || totalPurchaseValue ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}">
+                        <apex:param value="{!totalPurchaseValue - totalPurchaseValueV0}"/>
+                    </apex:outputText>
+                </td>
+            </tr>
+        </table>
+
+        <div style="page-break-after:always;"/>
+
+
+        <br/>
+
+        <br/>
+
+        <table width="100%" cellspacing="0" cellpadding="2" style="border-collapse: collapse;" border="1">
+            <thead>
+            <tr>
+                <th align="center" width="7%" rowspan="2">No</th>
+                <th align="center" width="7%" rowspan="2">CRM</th>
+                <th align="center" width="7%" rowspan="2">Outlet</th>
+                <th align="center" width="7%" colspan="3">Volume(9L)</th>
+                <th align="center" width="7%" colspan="3">Purchase Value</th>
+            </tr>
+            <tr>
+                <th align="center" width="7%">V0.0 Target</th>
+                <th align="center" width="7%">{!ContractSelected.ASI_CRM_CN_Festival_Season__c}</th>
+                <th align="center" width="7%">vs Target</th>
+                <th align="center" width="7%">V0.0 Target</th>
+                <th align="center" width="7%">{!ContractSelected.ASI_CRM_CN_Festival_Season__c}</th>
+                <th align="center" width="7%">vs Target</th>
+            </tr>
+
+            <!--<tr>-->
+            <!--</tr>-->
+            </thead>
+
+            <apex:variable value="{!0}" var="totalVolumeV0ByOutlet"/>
+            <apex:variable value="{!0}" var="totalPurchaseValueV0ByOutlet"/>
+            <apex:variable value="{!0}" var="totalVolumeByOutlet"/>
+            <apex:variable value="{!0}" var="totalPurchaseValueByOutlet"/>
+            <apex:variable value="{!0}" var="OutletNo"/>
+
+
+            <apex:repeat value="{!OutletDataSortMap}" var="key">
+                <apex:variable var="OutletNo" value="{! OutletNo+1 }"/>
+                <tr>
+                    <td>
+                        {!OutletNo}
+                    </td>
+                    <td>
+                        {!OutletDataMap[OutletDataSortMap[key]].outlet.ASI_CRM_CN_CRM_Code__c}
+                    </td>
+                    <td>
+                        {!OutletDataMap[OutletDataSortMap[key]].outlet.Name}
+                    </td>
+                    <!-- Vol / 9L -->
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9LV0 !=null && OutletDataMap[OutletDataSortMap[key]].volume9LV0 !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].volume9LV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9LV0 ==null || OutletDataMap[OutletDataSortMap[key]].volume9LV0 ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9L !=null && OutletDataMap[OutletDataSortMap[key]].volume9L !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].volume9L}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9L ==null || OutletDataMap[OutletDataSortMap[key]].volume9L ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9L - OutletDataMap[OutletDataSortMap[key]].volume9LV0 !=null && OutletDataMap[OutletDataSortMap[key]].volume9L - OutletDataMap[OutletDataSortMap[key]].volume9LV0 !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].volume9L - OutletDataMap[OutletDataSortMap[key]].volume9LV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" 0 " rendered="{!OutletDataMap[OutletDataSortMap[key]].volume9L - OutletDataMap[OutletDataSortMap[key]].volume9LV0 == null || OutletDataMap[OutletDataSortMap[key]].volume9L - OutletDataMap[OutletDataSortMap[key]].volume9LV0 ==0}"/>
+                    </td>
+                    <!-- Purchase Value -->
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 !=null && OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].purchaseValueV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 ==null || OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue !=null && OutletDataMap[OutletDataSortMap[key]].purchaseValue !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue ==null || OutletDataMap[OutletDataSortMap[key]].purchaseValue ==0}"/>
+                    </td>
+                    <td  align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue - OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 !=null && OutletDataMap[OutletDataSortMap[key]].purchaseValue - OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 !=0}">
+                            <apex:param value="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue - OutletDataMap[OutletDataSortMap[key]].purchaseValueV0}"/>
+                        </apex:outputText>
+                        <apex:outputText value=" 0 " rendered="{!OutletDataMap[OutletDataSortMap[key]].purchaseValue - OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 == null || OutletDataMap[OutletDataSortMap[key]].purchaseValue - OutletDataMap[OutletDataSortMap[key]].purchaseValueV0 ==0}"/>
+                    </td>
+                </tr>
+
+                <apex:variable var="totalVolumeV0ByOutlet" value="{!totalVolumeV0ByOutlet+OutletDataMap[OutletDataSortMap[key]].volume9LV0}"/>
+                <apex:variable var="totalPurchaseValueV0ByOutlet" value="{!totalPurchaseValueV0ByOutlet+OutletDataMap[OutletDataSortMap[key]].purchaseValueV0}"/>
+                <apex:variable var="totalVolumeByOutlet" value="{!totalVolumeByOutlet+OutletDataMap[OutletDataSortMap[key]].volume9L}"/>
+                <apex:variable var="totalPurchaseValueByOutlet" value="{!totalPurchaseValueByOutlet+OutletDataMap[OutletDataSortMap[key]].purchaseValue}"/>
+
+            </apex:repeat>
+            <tr class ="Total">
+                <td>
+                    Total
+                </td>
+                <td></td>
+                <td></td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalVolumeV0ByOutlet !=null && totalVolumeV0ByOutlet !=0}">
+                        <apex:param value="{!totalVolumeV0ByOutlet}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalVolumeV0ByOutlet ==null || totalVolumeV0ByOutlet ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalVolumeByOutlet !=null && totalVolumeByOutlet !=0}">
+                        <apex:param value="{!totalVolumeByOutlet}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalVolumeByOutlet ==null || totalVolumeByOutlet ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}">
+                        <apex:param value="{!totalVolumeByOutlet - totalVolumeV0ByOutlet}"/>
+                    </apex:outputText>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalPurchaseValueV0ByOutlet !=null && totalPurchaseValueV0ByOutlet !=0}">
+                        <apex:param value="{!totalPurchaseValueV0ByOutlet}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalPurchaseValueV0ByOutlet ==null || totalPurchaseValueV0ByOutlet ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}" rendered="{!totalPurchaseValueByOutlet !=null && totalPurchaseValueByOutlet !=0}">
+                        <apex:param value="{!totalPurchaseValueByOutlet}"/>
+                    </apex:outputText>
+                    <apex:outputText value=" - " rendered="{!totalPurchaseValueByOutlet ==null || totalPurchaseValueByOutlet ==0}"/>
+                </td>
+                <td align="right">
+                    <apex:outputText value="{0,number,#,###,###}">
+                        <apex:param value="{!totalPurchaseValueByOutlet - totalPurchaseValueV0ByOutlet}"/>
+                    </apex:outputText>
+                </td>
+            </tr>
+        </table>
+
+
+    </apex:outputPanel>
+    </body>
+</apex:component>

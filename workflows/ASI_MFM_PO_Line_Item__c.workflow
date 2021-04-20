@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fieldUpdates>
+        <fullName>ASI_MFM_Clear_BAVerify_Flag</fullName>
+        <field>ASI_MFM_SG_BA_verify__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI_MFM_Clear_BAVerify_Flag</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Clear_Sync_Flag</fullName>
+        <field>ASI_MFM_Synced__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI_MFM_Clear_Sync_Flag</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_HK_Update_PayAcc_A</fullName>
+        <field>ASI_MFM_Pay_Acc__c</field>
+        <literalValue>A</literalValue>
+        <name>ASI MFM HK Update PayAcc A</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_POL_Update_Original_Amount</fullName>
+        <field>ASI_MFM_Original_Amount__c</field>
+        <formula>PRIORVALUE( ASI_MFM_Amount__c )</formula>
+        <name>POL Update Original Amount</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_SG_Set_GLDate_Field_Update</fullName>
+        <field>ASI_MFM_G_L_Date__c</field>
+        <formula>ASI_MFM_PO__r.ASI_MFM_PO_Start_Date__c</formula>
+        <name>ASI MFM SG Set GLDate Field Update</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Set_External_ID_Upload</fullName>
+        <field>ASI_MFM_PO_Line_Item_External_IDUpload__c</field>
+        <formula>Name</formula>
+        <name>Set External ID (Upload)</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_TR_POL_Set_Duplication_Key</fullName>
+        <field>ASI_MFM_PO_Line_Item_External_ID__c</field>
+        <formula>ASI_MFM_PO__r.Name &amp; ASI_MFM_AP_Code__c &amp; ASI_MFM_BU_Code__c &amp; ASI_MFM_Sub_brand_Code__c &amp;   TEXT(ASI_MFM_G_L_Date__c)   &amp; ASI_MFM_Customer_Name__c &amp; ASI_MFM_List_Item_Description__c</formula>
+        <name>ASI_MFM_TR_POL_Set_Duplication_Key</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Uncheck_POL_Synced_Flag</fullName>
+        <field>ASI_MFM_Synced__c</field>
+        <literalValue>0</literalValue>
+        <name>Uncheck POL Synced Flag</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Uncheck_PO_Synced_Flag_From_POL</fullName>
+        <field>ASI_MFM_Synced__c</field>
+        <literalValue>0</literalValue>
+        <name>Uncheck PO Synced Flag</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+        <targetObject>ASI_MFM_PO__c</targetObject>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_UpdateRemainingBalanceCry</fullName>
+        <field>ASI_MFM_Remaining_Balance_Base_Currency__c</field>
+        <formula>IF( 
+	AND (CONTAINS(RecordType.DeveloperName, &quot;ASI_MFM_TR&quot;),
+		OR(
+			TEXT(ASI_MFM_PO__r.ASI_MFM_Source_of_A_D__c) = &quot;Manual&quot;,
+			TEXT(ASI_MFM_PO__r.ASI_MFM_Source_of_A_D__c) = &quot;Advanced Pricing&quot;)
+	), 
+	ASI_MFM_Remaining_Balance__c * ASI_MFM_Exchange_Rate__c, 
+	ASI_MFM_Remaining_Balance__c * ASI_MFM_PO__r.ASI_MFM_Exchange_Rate__c)</formula>
+        <name>ASI_MFM_UpdateRemainingBalanceCry</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Update_Base_Currency_Amount</fullName>
+        <field>ASI_MFM_Base_Currency_Amount__c</field>
+        <formula>IF( ASI_MFM_Exchange_Rate__c &gt; 0, if( begins(RecordType.DeveloperName, &quot;ASI_MFM_TW&quot;), round(ASI_MFM_Amount__c * ASI_MFM_Exchange_Rate__c, 0), ASI_MFM_Amount__c * ASI_MFM_Exchange_Rate__c), null)</formula>
+        <name>Update Base Currency Amount</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_Update_PO_Line_ETL_Date</fullName>
+        <field>ASI_MFM_ETL_Date__c</field>
+        <formula>NOW()</formula>
+        <name>ASI MFM Update PO Line ETL Date</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_MFM_Clear_BAVerify_Flag</fullName>
+        <actions>
+            <name>ASI_MFM_Clear_BAVerify_Flag</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>SG PO Line Item,TH PO Line Item,PH PO Line Item</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_Synced__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_Clear_Sync_Flag</fullName>
+        <actions>
+            <name>ASI_MFM_Clear_Sync_Flag</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>SG PO Line Item,TH PO Line Item,PH PO Line Item</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_SG_BA_verify__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_HK_PO_Line_PayAcc</fullName>
+        <actions>
+            <name>ASI_MFM_HK_Update_PayAcc_A</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_Pay_Acc__c</field>
+            <operation>equals</operation>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>HK PO Line Item</value>
+        </criteriaItems>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_POL_Update_Original_Amount</fullName>
+        <actions>
+            <name>ASI_MFM_POL_Update_Original_Amount</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <formula>ISCHANGED(ASI_MFM_Amount__c)</formula>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_PO_Line_Update_ETL_Date</fullName>
+        <actions>
+            <name>ASI_MFM_Update_PO_Line_ETL_Date</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>PH PO Line Item,MY PO Line Item,SG PO Line Item,TH PO Line Item</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_Synced__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_SG_Set_G_L_Date</fullName>
+        <actions>
+            <name>ASI_MFM_SG_Set_GLDate_Field_Update</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>SG PO Line Item</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_G_L_Date__c</field>
+            <operation>equals</operation>
+        </criteriaItems>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_UpdateExternalUploadID</fullName>
+        <actions>
+            <name>ASI_MFM_Set_External_ID_Upload</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <formula>AND(OR  (  ISNEW() , ISCHANGED(Name) ),NOT(CONTAINS(RecordType.DeveloperName, &quot;ASI_MFM_KR_PO&quot;)), NOT(CONTAINS(RecordType.DeveloperName, &quot;ASI_MFM_TR_PO&quot;)))</formula>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_Update_Base_Currency_Amount</fullName>
+        <actions>
+            <name>ASI_MFM_Update_Base_Currency_Amount</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <formula>ISNEW() || ISCHANGED( ASI_MFM_Exchange_Rate__c ) ||  ISCHANGED( ASI_MFM_Amount__c )</formula>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_Update_Remaining_Balance_Base_Currency</fullName>
+        <actions>
+            <name>ASI_MFM_UpdateRemainingBalanceCry</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.ASI_MFM_Remaining_Balance__c</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_PO_Line_Item__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>HK PO Line Item,RM PO Line Item,TR PO Line Item</value>
+        </criteriaItems>
+        <triggerType>onAllChanges</triggerType>
+    </rules>
+</Workflow>

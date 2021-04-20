@@ -1,0 +1,972 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_SG_Contract_Printout_Component
+ * Description: a agreement of proposal/contract
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 28/03/2017       Hugo Cheung             Created
+ * 02/04/2019       Wilken Lee              [WL 1.0] Change the logic to display as listing. Listing: Target Case < 1. Non-Listing: Target Case >= 1
+-->
+<apex:component controller="ASI_CRM_SG_Contract_Printout_ComCtrl" access="global" allowDml="true">
+    
+    <apex:attribute name="headerId" type="String" description="The contract id for contract agreement" assignTo="{!contractId}"/>
+    <apex:attribute name="allowEdit" type="Boolean" description="Allow edit the content of contract agreement" assignTo="{!isEditable}"/>
+    <apex:attribute name="forExternal" type="Boolean" description="Print agreement without stating the changes" assignTo="{!isExternal}"/>
+    <apex:attribute name="forCN" type="Boolean" description="For CN demo" assignTo="{!isCN}"/>
+    <apex:attribute name="forSave" type="Boolean" description="For CN demo" assignTo="{!isSave}"/>
+    
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    
+    <head>
+    	<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/contract-printout.css')}" />
+		<style>
+		td {
+			vertical-align: top;
+			page-break-inside: avoid;
+		}
+		@page {
+			@bottom-right {
+				content: "Page " counter(page) " of " counter(pages);
+				font-weight: lighter;
+				font-size:12pt;
+			}
+		}
+		</style>
+    </head>
+    
+    <script>
+        function save(preview) {
+            $(".fullScreenLoading").show();
+			
+			var contractId = "{!contractId}";
+            
+            var bodySelectedList       = $("[class^='bodySelection']");
+            var bodyEditableList       = $("[class^='bodyEditable']");
+            var scheduleEditableList   = $("[class^='scheduleEditable']");
+        	var wholesalerSelectedList = $("[class^='wholesalerSelection']");
+            var appendixSelectedList   = $("[class^='appendixSelection']");
+            var scheduleSelectedList   = $("[class^='scheduleSelection']");
+            
+            var outletContactName = $(".outletContactName").val();
+            var outletLegalName   = $(".outletLegalName").val();
+            var salesDirectorName = $(".salesDirectorName").val();
+            var contractOwnerName = $(".contractOwnerName").val();
+            
+            var bodyUpdateSelectedList = [];
+            bodySelectedList.each(function(index, element) {
+                var str = $(element).attr("class").replace("bodySelection ", "");
+                str += ":" + $(element).is(":checked");
+                bodyUpdateSelectedList.push(str);
+            });
+            
+            var bodyUpdateEditableList = [];
+            bodyEditableList.each(function(index, element) {
+                var str = $(element).attr("class").replace("bodyEditable ", "");
+                str += ":" + $(element).val();
+                bodyUpdateEditableList.push(str);
+            });
+            
+            var scheduleUpdateEditableList = [];
+            scheduleEditableList.each(function(index, element) {
+                var str = $(element).attr("class").replace("scheduleEditable ", "");
+                str += ":" + $(element).val();
+                scheduleUpdateEditableList.push(str);
+            });
+            
+            var wholesalerSelectedId = '';
+            wholesalerSelectedList.each(function(index, element) {
+                if($(element).is(":checked")) {
+                	wholesalerSelectedId += $(element).attr("class").replace("wholesalerSelection ", "") + ",";
+                }
+            });
+           	
+            var appendixUpdateSelectedList = [];
+            appendixSelectedList.each(function(index, element) {
+                var str = $(element).attr("class").replace("appendixSelection ", "");
+                str += ":" + $(element).is(":checked");
+                appendixUpdateSelectedList.push(str);
+            });
+            
+            var scheduleUpdateSelectedList = [];
+            scheduleSelectedList.each(function(index, element) {
+                var str = $(element).attr("class").replace("scheduleSelection ", "");
+                str += ":" + $(element).is(":checked");
+                scheduleUpdateSelectedList.push(str);
+            });
+            
+            Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.ASI_CRM_SG_Contract_Printout_ComCtrl.saveTemplate}', preview, 
+                                                      contractId, outletContactName, outletLegalName, salesDirectorName, contractOwnerName,
+                                                      JSON.stringify(bodyUpdateSelectedList), JSON.stringify(bodyUpdateEditableList), JSON.stringify(scheduleUpdateEditableList), wholesalerSelectedId, JSON.stringify(appendixUpdateSelectedList), JSON.stringify(scheduleUpdateSelectedList), 
+                                                      function(result, event) {
+                										var url = '';
+														switch (preview) {
+															case 'back' :
+																//url = '/' + contractId;
+																url = '/apex/ASI_CRM_SG_Contract_Printout_Page?id=' + contractId + '&save=1&edit=1';
+																break;
+															case 'approver' :
+																url = '/apex/ASI_CRM_SG_Contract_Printout_Page?id=' + contractId + '&edit=0';
+																break;
+															case 'customer' :
+																url = '/apex/ASI_CRM_SG_Contract_Printout_Page?id=' + contractId + '&edit=0&external=1';
+																break;
+															default:
+																url = '/' + contractId;
+																break;
+														}
+														window.location = url;
+            										  },
+                                                      {escape: true}
+                                                     );
+        }
+		
+		$(document).ready( function () {
+			if ('{!isSave}'=='true'){
+				saveAsPDF();
+			}
+		});
+		
+		function saveAsPDF(){
+			$(".fullScreenLoading").show();
+			var contractId = "{!contractId}";
+			Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.ASI_CRM_SG_Contract_Printout_ComCtrl.savePDFtoContract}', contractId, 
+                                                      function(result, event) {
+														window.location = '/' + contractId;
+            										  },
+                                                      {escape: true}
+                                                     );
+		}
+    
+    </script>
+    
+    <body>
+		<div class="fullScreenLoading"></div>
+            
+        <form class="center">
+            
+            <!-- Call init attribute to init the page -->
+            <input type="hidden" value="{!isPageInit}"/>
+			
+            <input type="button" class="btn" value="Back" onclick="window.location='/{!contractId}'"/>
+            <input type="button" class="btn" value="Save" onclick="save('back')"/>
+            <input type="button" class="btn" value="Preview As Approver" onclick="save('approver')"/>
+            <input type="button" class="btn" value="Preview As Customer" onclick="save('customer')"/>
+			<br />
+            <apex:outputPanel rendered="{!!isCN}">
+            <div class="header">
+                <center><apex:image width="100%" height="100%" url="{!URLFOR($Resource.ASI_MFM_SG_Logo)}"/></center>
+            </div>
+			<br />
+			<br />
+            <!-- Print the header -->
+			<table width="100%" cellpadding="3">
+				<apex:repeat value="{!headerSectionSortedMap}" var="headerIndex">
+				<tr>
+					<td style="text-align:justify">
+						<apex:variable value="{!headerSectionSortedMap[headerIndex]}" var="header" />
+						<apex:outputText value="{!header.content}" escape="false" />
+						<apex:outputPanel rendered="{!header.hasSubSection}">
+							<table cellpadding="3">
+								<apex:repeat value="{!header.subSectionMap}" var="subSectionIndex">
+									<apex:variable value="{!header.subSectionMap[subSectionIndex]}" var="subSection" />
+									<tr>
+										<td>
+											<apex:outputText value="{!subSection.displayNumber}" escape="false" />
+										</td>
+										<td style="text-align:justify">
+											<apex:outputText value="{!subSection.content}" escape="false" />
+										</td>
+									</tr>
+								</apex:repeat>
+							</table>
+						</apex:outputPanel>
+					</td>
+				</tr>
+						
+				</apex:repeat>
+			</table>
+			
+			<br/>
+            </apex:outputPanel>
+            
+            <!-- Print the body -->
+            <apex:repeat value="{!bodySectionSortedMap}" var="bodyIndex">
+                <apex:variable value="{!bodySectionSortedMap[bodyIndex]}" var="body" />
+				<!--
+                <apex:outputText value="<b>{!bodyIndex}.</b>" escape="false" />
+                <apex:outputText value="{!body.content}" escape="false" />
+				-->
+                <apex:outputPanel rendered="{!body.hasSubSection}">
+                    <table cellpadding="3">
+						<tr>
+							<td style="text-align:left; width:21px;"><apex:outputText value="<b>{!bodyIndex}.</b>" escape="false" /></td>
+							<td style="text-align:left"><apex:outputText value="<b>{!body.content}</b>" escape="false" /></td>
+						</tr>
+                        <apex:repeat value="{!body.subSectionMap}" var="subSectionIndex">
+                            <apex:variable value="{!body.subSectionMap[subSectionIndex]}" var="subSection" />
+							<tr style="{!if(OR(!isCN, AND(isCN, OR(subSection.type == 'Selectable', subSection.type == 'Editable'))),'','display:none')}">
+                                <td style="text-align:left">
+                                    <apex:outputText value="{!bodyIndex}.{!subSectionIndex}." escape="false" />
+                                    <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, subSection.isShow)}">
+                                    	<input type="checkbox" checked="true" class="bodySelection {!subSection.name}"/>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel rendered="{!AND(subSection.type == 'Selectable', isEditable, NOT(subSection.isShow))}">
+                                    	<input type="checkbox" class="bodySelection {!subSection.name}"/>
+                                    </apex:outputPanel>
+                                </td>
+                                <td style="text-align:justify">
+                                    <apex:outputText value="{!subSection.content}" escape="false" rendered="{!OR(subSection.type == 'Read', subSection.type == 'Selectable', !isEditable)}"/>
+                                    <apex:outputPanel rendered="{!AND(subSection.type == 'Editable', isEditable)}">
+                                        <textarea cols="100" rows="5" class="bodyEditable {!subSection.name}">{!subSection.content}</textarea>
+                                    </apex:outputPanel>
+									<!--
+                                    <apex:outputPanel rendered="{!subSection.hasSubSection}">
+                                        <table>
+                                            <apex:repeat value="{!subSection.subSectionMap}" var="deepSectionIndex">
+                                                <apex:variable value="{!subSection.subSectionMap[deepSectionIndex]}" var="deepSection" />
+                                                <tr>
+                                                    <td><apex:outputText value="{!deepSection.displayNumber}" escape="false" /></td>
+                                                    <td><apex:outputText value="{!deepSection.content}" escape="false" /></td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+                                    </apex:outputPanel>
+									-->
+                                </td>
+                            </tr>
+                            <tr style="{!if(isCN,'display:none','')}">
+                                <td></td>
+                                <td>
+									<apex:outputPanel rendered="{!subSection.hasSubSection}">
+                                        <table>
+                                            <apex:repeat value="{!subSection.subSectionMap}" var="deepSectionIndex">
+                                                <apex:variable value="{!subSection.subSectionMap[deepSectionIndex]}" var="deepSection" />
+                                                <tr>
+                                                    <td><apex:outputText value="{!deepSection.displayNumber}" escape="false" /></td>
+                                                    <td><apex:outputText value="{!deepSection.content}" escape="false" /></td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+									</apex:outputPanel>
+                                </td>
+                            </tr>
+                        </apex:repeat>
+                    </table>
+                </apex:outputPanel>
+                <br />
+            </apex:repeat>
+			
+			<div style="{!if(isCN,'display:none','')}">
+            <apex:outputPanel rendered="{!NOT(isEditable)}">
+			<!--
+			<div style="position:relative; height:29.7cm; float:left;">
+				<div style="position:absolute; bottom:0; width: 19cm; font-size:10px; border-top: 2px solid #000000">
+					  1 http://pernod-ricard.com/12796/csr/the-pernod-ricard-code-for-commercial-communications <br/>
+					  2 http://www.unglobalcompact.org/AboutTheGC/TheTenPrinciples/ <br/>
+					  3	http://www.ilo.org/global/standards/introduction-to-international-labour-standards/conventions-and-recommendations/lang--en/index.htm <br/>
+				</div>
+			</div>
+			-->
+			<div style="width: 19cm; font-size:10px; border-top: 2px solid #000000">
+				  1 http://pernod-ricard.com/12796/csr/the-pernod-ricard-code-for-commercial-communications <br/>
+				  2 http://www.unglobalcompact.org/AboutTheGC/TheTenPrinciples/ <br/>
+				  3	http://www.ilo.org/global/standards/introduction-to-international-labour-standards/conventions-and-recommendations/lang--en/index.htm <br/>
+			</div>
+			</apex:outputPanel>
+            
+            <p style="page-break-before: always"></p>
+            <div style="z-index:1000">
+                <b>EXECUTED AS AN AGREEMENT</b>
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                SIGNED, by _____________________________
+                <br />
+                <input type="text" value="{!outletContactName}" style="width:500px;{!If(isEditable,'','display:none;')}" class="outletContactName" />
+                <apex:outputText value="{!outletContactName}" rendered="{!!isEditable}" />
+                <br />
+                For and on behalf of 
+                <br />
+                <input type="text" value="{!outletLegalName}" style="width:500px;{!If(isEditable,'','display:none;')}" class="outletLegalName" />
+                <b><apex:outputText value="{!outletLegalName}" rendered="{!!isEditable}" /></b>
+
+                <br />
+                <br />
+				<apex:outputPanel rendered="{!salesDirectorChanged}">
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                SIGNED, by _____________________________
+				</apex:outputPanel> 
+				<apex:outputPanel rendered="{!!salesDirectorChanged}">
+				SIGNED, by <apex:image width="240px" style="border-bottom:2px solid black;" url="{!URLFOR($Resource.ASI_CRM_SG_SalesDirectorSignature)}"/>
+				</apex:outputPanel> 
+                <br />
+                <input type="text" value="{!salesDirectorName}" style="width:500px;{!If(isEditable,'','display:none;')}" class="salesDirectorName" />
+                <apex:outputText value="{!salesDirectorName}" rendered="{!!isEditable}" />
+                <br />
+                For and on behalf of 
+                <br />
+                <b>PERNOD RICARD SINGAPORE PTE LTD</b>
+                <br />
+                <br />
+                In the presence of
+                <br />
+                <input type="text" value="{!contractOwnerName}" style="width:500px;{!If(isEditable,'','display:none;')}" class="contractOwnerName" />
+                <b><apex:outputText value="{!contractOwnerName}" rendered="{!!isEditable}" /></b>
+                <br />
+            </div>
+            
+            <!-- Print the Schedule -->
+            <apex:repeat value="{!scheduleSectionSortedMap}" var="scheduleIndex">
+				<apex:outputPanel rendered="{!MOD(scheduleIndex,1)=0}">
+				<p style="page-break-before: always"></p>
+				</apex:outputPanel>
+                <apex:variable value="{!scheduleSectionSortedMap[scheduleIndex]}" var="schedule" />
+				<table width="100%" cellpadding="3">
+					<tr style="{!IF(MOD(scheduleIndex,1)=0,'','display:none')}">
+						<td>
+						<apex:outputPanel rendered="{!AND(schedule.type == 'Selectable', isEditable, schedule.isShow)}">
+							<input type="checkbox" checked="true" class="scheduleSelection {!schedule.name}"/>
+						</apex:outputPanel>
+						<apex:outputPanel rendered="{!AND(schedule.type == 'Selectable', isEditable, NOT(schedule.isShow))}">
+							<input type="checkbox" class="scheduleSelection {!schedule.name}"/>
+						</apex:outputPanel>
+						<apex:outputText value="<u><b>Schedule {!scheduleIndex}</b></u>" escape="false" />
+						<br />
+						<apex:outputText value="{!schedule.title}" escape="false" />
+						</td>
+					</tr>
+					<tr>
+						<td style="text-align:justify">
+						<apex:outputText value="{!schedule.content}" escape="false" />
+						</td>
+					</tr>
+					<tr>
+						<td>
+						<apex:outputPanel rendered="{!schedule.hasSubSection}">
+							<table width="100%" cellpadding="3">
+								<colgroup>
+									<col style="width:2%"/>
+									<col style="width:98%"/>
+								</colgroup>
+								<apex:repeat value="{!schedule.subSectionMap}" var="subSectionIndex">
+									<apex:variable value="{!schedule.subSectionMap[subSectionIndex]}" var="subSection" />
+									<tr>
+										<td>
+											<apex:outputText value="{!subSectionIndex}." escape="false" rendered="{!subSection.content != '{TABLE}'}"/>
+										</td>
+										<td style="text-align:justify">
+											<apex:outputText value="{!subSection.content}" escape="false" rendered="{!AND(subSection.content != '{TABLE}', OR(subSection.type == 'Read', !isEditable))}"/>
+											<apex:outputPanel rendered="{!AND(subSection.content != '{TABLE}', subSection.type == 'Editable', isEditable)}">
+												<textarea cols="100" rows="5" class="scheduleEditable {!subSection.name}">{!subSection.content}</textarea>
+											</apex:outputPanel>
+										</td>
+									</tr>
+									<tr>
+										<td></td>
+										<td>
+											<apex:outputPanel rendered="{!IF(subSection.name == 'Authorised Wholesale Section 1', true, false)}">
+												<apex:dataTable value="{!wholesalerWrapperList}" var="wholesalerWrapper" width="99%" border="1" cellpadding="3" styleClass="wholesalerTable">
+													<apex:column headerValue="No." style="text-align:center">
+														<apex:outputText value="{!wholesalerWrapper.index}" escape="false"/>
+													</apex:column>
+													<apex:column headerValue="Authorised Wholesaler" style="text-align:left">
+														<apex:outputText value="{!wholesalerWrapper.customer.name}" escape="false" />
+														<br />
+														<apex:outputText value="ACRA registration number {!wholesalerWrapper.customer.ASI_CRM_Business_Registration_Number__c}" escape="false" />
+														<br />
+														<apex:outputText value="{!wholesalerWrapper.combinedAddress}" escape="false" />
+														<br />
+														<apex:outputText value="Tel: {!wholesalerWrapper.customer.ASI_CRM_CN_Phone_Number__c}" escape="false" />
+														<br />
+														<apex:outputText value="Fax: {!wholesalerWrapper.customer.ASI_CRM_CN_Fax_Number__c}" escape="false" />
+													</apex:column>
+													<apex:column headerValue="Select" rendered="{!isEditable}">
+														<apex:outputPanel rendered="{!wholesalerWrapper.isSelected}">
+															<input type="checkbox" checked="true" class="wholesalerSelection {!wholesalerWrapper.customer.id}"/>
+														</apex:outputPanel>
+														<apex:outputPanel rendered="{!NOT(wholesalerWrapper.isSelected)}">
+															<input type="checkbox" class="wholesalerSelection {!wholesalerWrapper.customer.id}"/>
+														</apex:outputPanel>
+													</apex:column>
+												</apex:dataTable>
+											</apex:outputPanel>
+											<apex:outputPanel rendered="{!IF(subSection.name == 'Price List and Sales Targets Section 1', true, false)}">
+												<!--
+												<apex:dataTable value="{!contractTargetList}" var="contractTarget" width="100%" border="1" cellpadding="3">
+													<apex:column headerValue="No." style="text-align:center">
+														<apex:outputText value="{!contractTarget.ASI_CRM_Sequence_No__c}" />
+													</apex:column>
+													<apex:column headerValue="Product" style="text-align:left">
+														<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" />
+													</apex:column>
+													<apex:column headerValue="Offer Price (per bottle)" style="text-align:right">
+														<apex:outputText value="{0, number, ###,###,###,##0.00}" rendered="{!IF(contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c == NULL, false, true)}"> 
+															S$ <apex:param value="{!contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c}"/>
+														</apex:outputText>
+														<apex:outputText value="{0, number, ###,###,###,##0.00}" rendered="{!IF(contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c == NULL, true, false)}"> 
+															S$ <apex:param value="{!contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}"/>
+														</apex:outputText>
+													</apex:column>
+													<apex:column headerValue="Quantity (per case)" style="text-align:center">
+														<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_HK_CRM_Pack_Factor__c}" />
+													</apex:column>
+													<apex:column headerValue="Contract Sales Target (Actual Case)" style="text-align:right">
+														<apex:outputText value="{!contractTarget.ASI_CRM_TargetCase__c}" />
+													</apex:column>
+													<apex:column headerValue="Trade Deal (Bottle per Case)" rendered="{!showTradeDealSection}" style="text-align:right">
+														<apex:outputText value="{!ROUND(contractTarget.ASI_CRM_SG_Sales_Incentive__c*contractTarget.ASI_CRM_TargetCase__c/contractTarget.ASI_CRM_PackagingSize__c,2)}"  
+																		 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Sales_Incentive__c == NULL, contractTarget.ASI_CRM_SG_Sales_Incentive__c == 0), false, true)}"/>
+														<apex:outputText value="{!contractTarget.ASI_CRM_SG_Sales_Incentive__c}"  
+																		 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Sales_Incentive__c == NULL, contractTarget.ASI_CRM_SG_Sales_Incentive__c == 0), false, true)}"/>
+														<apex:outputText value="N/A"  
+																		 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Sales_Incentive__c == NULL, contractTarget.ASI_CRM_SG_Sales_Incentive__c == 0), true, false)}"/>
+													</apex:column>
+												</apex:dataTable>
+												-->
+												<table width="99%"  border="1" cellpadding="3" cellspacing="0">
+													<tr>
+														<th>No.</th>
+														<th>Product</th>
+														<th>Offer Price (per Bottle)</th>
+														<th>Quantity (per Case)</th>
+														<th>Contract Sales Target (Actual Case)</th>
+														<th style="{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c && showTradeDealSection,'','display:none;')}">Trade Deal (Bottle per Case)</th>
+													</tr>
+													<apex:repeat value="{!contractTargetList}" var="contractTarget">
+														<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), false, true)}">-->
+														<tr>
+															<td style="text-align:center">
+																<apex:outputText value="{!contractTarget.ASI_CRM_Sequence_No__c}" />
+															</td>
+															<td style="text-align:left">
+																<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" />
+															</td>
+															<td style="text-align:right">
+																<apex:outputText value="{0, number, ###,###,###,##0.00}" rendered="{!IF(contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c == NULL, false, true)}"> 
+																	S$ <apex:param value="{!contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c}"/>
+																</apex:outputText>
+																<apex:outputText value="{0, number, ###,###,###,##0.00}" rendered="{!IF(contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c == NULL, true, false)}"> 
+																	S$ <apex:param value="{!contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}"/>
+																</apex:outputText>
+															</td>
+															<td style="text-align:center">
+																<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_HK_CRM_Pack_Factor__c}" />
+															</td>
+															<td style="text-align:right">
+																<apex:outputText value="{!contractTarget.ASI_CRM_TargetCase__c}" rendered="{!contract.ASI_CRM_Contract_Exist_Before_RTM__c}" />
+                                                                
+                                                                <!--[WL 1.0] BEGIN-->
+                                                                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!contractTarget.ASI_CRM_TargetCase__c >= 1 &&!contract.ASI_CRM_Contract_Exist_Before_RTM__c}">
+                                                                    <apex:param value="{!contractTarget.ASI_CRM_TargetCase__c}" /></apex:outputText>
+                                                                <apex:outputText value="Listing" rendered="{!!contract.ASI_CRM_Contract_Exist_Before_RTM__c && contractTarget.ASI_CRM_TargetCase__c < 1}"/>
+                                                                <!--[WL 1.0] END-->
+                                                                
+															</td>
+															<td style="text-align:right;{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c && showTradeDealSection,'','display:none;')}">
+																<apex:outputText value="{!contractTarget.ASI_CRM_SG_Sales_Incentive__c}"  
+																				 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Sales_Incentive__c == NULL, contractTarget.ASI_CRM_SG_Sales_Incentive__c == 0), false, true)}"/>
+																<apex:outputText value="N/A"  
+																				 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Sales_Incentive__c == NULL, contractTarget.ASI_CRM_SG_Sales_Incentive__c == 0), true, false)}"/>
+															</td>
+														</tr>
+														<!--</apex:outputPanel>-->
+													</apex:repeat>
+												</table>
+											</apex:outputPanel>
+											<apex:outputPanel rendered="{!IF(subSection.name == 'Price Rebate Section 1', true, false)}">
+												<!--
+												<apex:dataTable value="{!contractTargetList}" var="contractTarget" width="100%" border="1" cellpadding="3">
+													<apex:column headerValue="No." style="text-align:center">
+														<apex:outputText value="{!contractTarget.ASI_CRM_Sequence_No__c}" />
+													</apex:column>
+													<apex:column headerValue="Product" style="text-align:left">
+														<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" />
+													!--
+													</apex:column><apex:column headerValue="Price Rebate (per bottle)">
+														<apex:outputText value="{!contractTarget.ASI_CRM_SG_Wholesaler_Margin__c}" />
+													--
+													</apex:column><apex:column headerValue="Bottle Incentive (per bottle)" style="text-align:right">
+														<apex:outputText value="S$ {!contractTarget.ASI_CRM_Bottle_Incentive__c}"   
+																		 rendered="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), false, true)}"/>
+														<apex:outputText value="N/A"  
+																		 rendered="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), true, false)}"/>
+													</apex:column>
+												</apex:dataTable>
+												-->
+												<table width="99%"  border="1" cellpadding="3" cellspacing="0">
+													<tr>
+														<th>No.</th>
+														<th>Product</th>
+														<th>Quantity (per Case)</th>
+														<th>
+															<span style="{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c,'','display:none;')}">Bottle Incentive </span>
+                                                            <span style="{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c,'display:none;','')}">Back Rebate</span>
+                                                            (per bottle)
+														</th>
+														<th>
+															<span style="{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c,'','display:none;')}">Bottle Incentive </span>
+                                                            <span style="{!IF(contract.ASI_CRM_Contract_Exist_Before_RTM__c,'display:none;','')}">Back Rebate</span>
+                                                            (Total)
+														</th>
+													</tr>
+													<apex:variable value="{!1}" var="count" />
+													<apex:repeat value="{!contractTargetList}" var="contractTarget">
+														<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), false, true)}">-->
+														<tr style="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), 'Display:none', '')}">
+															<td style="text-align:center">
+																<apex:outputText value="{!count}" />
+															</td>
+															<td style="text-align:left">
+																<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" />
+															</td>
+															<td style="text-align:center">
+																<apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_HK_CRM_Pack_Factor__c}" />
+															</td>
+															<td style="text-align:right">
+																<apex:outputText value="{0, number, ###,###,###,##0.00}"> 
+																	S$ <apex:param value="{!contractTarget.ASI_CRM_Bottle_Incentive__c}"/>
+																</apex:outputText>
+															</td>
+															<td style="text-align:right">
+																<apex:outputText value="{0, number, ###,###,###,##0.00}"> 
+																	S$ <apex:param value="{!contractTarget.ASI_CRM_Bottle_Incentive_Total__c}"/>
+																</apex:outputText>
+															</td>
+														</tr>
+														<apex:variable value="{!IF(OR(contractTarget.ASI_CRM_Bottle_Incentive__c == NULL, contractTarget.ASI_CRM_Bottle_Incentive__c == 0), count, count + 1)}" var="count" />
+														<!--</apex:outputPanel>-->
+													</apex:repeat>
+												</table>
+											</apex:outputPanel>
+											<apex:outputPanel rendered="{!subSection.hasSubSection}">
+												<table width="100%" cellpadding="3">
+													<colgroup>
+														<col style="width:5%"/>
+														<col style="width:94%"/>
+														<col style="width:1%"/>
+													</colgroup>
+													<apex:repeat value="{!subSection.subSectionMap}" var="deepSectionIndex">
+														<apex:variable value="{!subSection.subSectionMap[deepSectionIndex]}" var="deepSection" />
+														<tr>
+															<td colspan="{!IF(deepSection.content == '{TABLE}','2','1')}" style="text-align:justify">
+																<apex:outputText value="{!subSectionIndex}.{!deepSection.displayNumber}" escape="false" rendered="{!deepSection.content != '{TABLE}'}"/>
+																<apex:outputPanel rendered="{!IF(deepSection.name == 'Cash Contract Target Sponsorship Section 2.1', true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:15%"/>
+                                                                            <col style="width:35%"/>
+                                                                            <col style="width:50%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>Payment No.</th>
+																			<th>Cash Sponsorship Amount</th>
+																			<th>Condition for Sponsorship Payment</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!paymentCashScheduleList_excludeUpfront}" var="paymentSchedule">
+																			<tr>
+																				<td style="text-align:center">
+																					<apex:outputText value="{!count}" />
+																				</td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{0, number, ###,###,###,##0.00}"> 
+																						S$ <apex:param value="{!paymentSchedule.ASI_CRM_Sponsorship__c}"/>
+																					</apex:outputText>
+																				</td>
+																				<td style="text-align:left">
+																					<apex:outputText value="Achievement of {!paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c}% of Contract Sales Value Target"
+																							 rendered="{! paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != NULL && paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != '101'}"/>
+																					<apex:outputText value="Timely Completion"
+																							 rendered="{! paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != NULL && paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c == '101'}"/>
+																					<apex:outputText value="On {0,date,dd MMM yyyy}" 
+																									 rendered="{! paymentSchedule.ASI_CRM_Schedule_Date__c != NULL}">
+																									 <apex:param value="{!paymentSchedule.ASI_CRM_Schedule_Date__c}" />
+																					</apex:outputText>
+																				</td>
+																			</tr>
+																			<apex:variable value="{!count + 1}" var="count" />
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																<apex:outputPanel rendered="{!IF(deepSection.name == 'Contract Target Sponsorship Section 2.1', true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:15%"/>
+                                                                            <col style="width:35%"/>
+                                                                            <col style="width:50%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>Payment No.</th>
+																			<th>Cash Sponsorship (Goods in Kind)</th>
+																			<th>Condition for Sponsorship Payment</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!paymentContractScheduleList_excludeUpfront}" var="paymentSchedule">
+																			<tr>
+																				<td style="text-align:center">
+																					<apex:outputText value="{!count}" />
+																				</td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{0, number, ###,###,###,##0.00}"> 
+																						S$ <apex:param value="{!(paymentSchedule.ASI_CRM_Sponsorship__c * totalContractSponsorshipWSOT / totalContractSponsorship)}"/>
+																					</apex:outputText>
+																				</td>
+																				<td style="text-align:left">
+																					<apex:outputText value="Achievement of {!paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c}% of Contract Sales Value Target"
+																							 rendered="{! paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != NULL && paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != '101'}"/>
+																					<apex:outputText value="Timely Completion"
+																							 rendered="{! paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c != NULL && paymentSchedule.ASI_CRM_Percentof_achieved_Sales_Target__c == '101'}"/>
+																					<apex:outputText value="On {0,date,dd MMM yyyy}" 
+																									 rendered="{! paymentSchedule.ASI_CRM_Schedule_Date__c != NULL}">
+																									 <apex:param value="{!paymentSchedule.ASI_CRM_Schedule_Date__c}" />
+																					</apex:outputText>
+																				</td>
+																			</tr>
+																			<apex:variable value="{!count + 1}" var="count" />
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																<apex:outputPanel rendered="{!IF(AND(deepSection.name == 'A&P Sponsorship Goods In Kind Section 1.1',contract.ASI_CRM_Contract_Exist_Before_RTM__c), true, false)}">
+																	<table width="100%" border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:10%"/>
+                                                                            <col style="width:70%"/>
+                                                                            <col style="width:20%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>No.</th>
+																			<th>Product</th>
+																			<th>No. of Cases</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!contractTargetList}" var="contractTarget">
+																			<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == 0), false, true)}">-->
+																			<tr style="{!IF(OR(contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == 0), 'Display:none', '')}">
+																				<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+																				<td style="text-align:left"><apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" /></td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{!contractTarget.ASI_CRM_SG_Events_Free_Bottles__c}"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == 0), false, true)}"/>
+																					<apex:outputText value="N/A"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == 0), true, false)}"/>
+																				</td>
+																			</tr>		
+																			<apex:variable value="{!IF(OR(contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Events_Free_Bottles__c == 0), count, count + 1)}" var="count" />
+																			<!--</apex:outputPanel>-->
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																<!--
+																<apex:outputPanel rendered="{!IF(deepSection.name == 'A&P Sponsorship Goods In Kind Section 2.1', true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+																		<tr>
+																			<th>No.</th>
+																			<th>Product</th>
+																			<th>No. of Cases</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!contractTargetList}" var="contractTarget">
+																			<tr>
+																				<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+																				<td style="text-align:left"><apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" /></td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{!contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c}"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c == NULL, contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c == 0), false, true)}"/>
+																					<apex:outputText value="N/A"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c == NULL, contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c == 0), true, false)}"/>
+																				</td>
+																			</tr>
+																			<apex:variable value="{!count + 1}" var="count" />
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																-->
+																<apex:outputPanel rendered="{!IF(deepSection.name == 'A&P Sponsorship Goods In Kind Section 2.1', true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:10%"/>
+                                                                            <col style="width:70%"/>
+                                                                            <col style="width:20%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>No.</th>
+																			<th>Product</th>
+																			<th>No. of Cases</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!contractTargetList}" var="contractTarget">
+																			<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == NULL, contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == 0), false, true)}">-->
+																			<tr style="{!IF(OR(contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == NULL, contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == 0), 'Display:none', '')}">
+																				<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+																				<td style="text-align:left"><apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" /></td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{!contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c}"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == NULL, contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == 0), false, true)}"/>
+																					<apex:outputText value="N/A"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == NULL, contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == 0), true, false)}"/>
+																				</td>
+																			</tr>															
+																			<apex:variable value="{!IF(OR(contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == NULL, contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c == 0), count, count + 1)}" var="count" />
+																			<!--</apex:outputPanel>-->
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																<apex:outputPanel rendered="{!IF(OR(AND(deepSection.name == 'A&P Sponsorship Goods In Kind Section 3.1',contract.ASI_CRM_Contract_Exist_Before_RTM__c),AND(deepSection.name == 'A&P Sponsorship Goods In Kind Section 1.1',!contract.ASI_CRM_Contract_Exist_Before_RTM__c)), true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:10%"/>
+                                                                            <col style="width:70%"/>
+                                                                            <col style="width:20%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>No.</th>
+																			<th>Product</th>
+																			<th>No. of Cases</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!contractTargetList}" var="contractTarget">
+																			<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == 0), false, true)}">-->
+																			<tr style="{!IF(OR(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == 0), 'Display:none', '')}">
+																				<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+																				<td style="text-align:left"><apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" /></td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{!contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c}"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == 0), false, true)}"/>
+																					<apex:outputText value="N/A"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == 0), true, false)}"/>
+																				</td>
+																			</tr>														
+																			<apex:variable value="{!IF(OR(contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == NULL, contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c == 0), count, count + 1)}" var="count" />
+																			<!--</apex:outputPanel>-->
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+																<apex:outputPanel rendered="{!IF(deepSection.name == 'A&P Sponsorship Goods In Kind Section 4.1', true, false)}">
+																	<table width="100%"  border="1" cellpadding="3" cellspacing="0">
+                                                                        <colgroup>
+                                                                            <col style="width:10%"/>
+                                                                            <col style="width:70%"/>
+                                                                            <col style="width:20%"/>
+                                                                        </colgroup>
+																		<tr>
+																			<th>No.</th>
+																			<th>Product</th>
+																			<th>No. of Cases</th>
+																		</tr>
+																		<apex:variable value="{!1}" var="count" />
+																		<apex:repeat value="{!contractTargetList}" var="contractTarget">
+																			<!--<apex:outputPanel rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Management_Incentives__c == NULL, contractTarget.ASI_CRM_SG_Management_Incentives__c == 0), false, true)}">-->
+																			<tr style="{!IF(OR(contractTarget.ASI_CRM_SG_Management_Incentives__c == NULL, contractTarget.ASI_CRM_SG_Management_Incentives__c == 0), 'Display:none', '')}">
+																				<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+																				<td style="text-align:left"><apex:outputText value="{!contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__r.ASI_MFM_Sub_brand_Description__c}" /></td>
+																				<td style="text-align:right">
+																					<apex:outputText value="{!contractTarget.ASI_CRM_SG_Management_Incentives__c}"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Management_Incentives__c == NULL, contractTarget.ASI_CRM_SG_Management_Incentives__c == 0), false, true)}"/>
+																					<apex:outputText value="N/A"  
+																									 rendered="{!IF(OR(contractTarget.ASI_CRM_SG_Management_Incentives__c == NULL, contractTarget.ASI_CRM_SG_Management_Incentives__c == 0), true, false)}"/>
+																				</td>
+																			</tr>													
+																			<apex:variable value="{!IF(OR(contractTarget.ASI_CRM_SG_Management_Incentives__c == NULL, contractTarget.ASI_CRM_SG_Management_Incentives__c == 0), count, count + 1)}" var="count" />
+																			<!--</apex:outputPanel>-->
+																		</apex:repeat>
+																	</table>
+																</apex:outputPanel>
+															</td>
+															<td colspan="{!IF(deepSection.content != '{TABLE}','2','1')}" style="text-align:justify">
+																<apex:outputText value="{!deepSection.content}" escape="false" rendered="{!AND(deepSection.content != '{TABLE}', OR(deepSection.type == 'Read', !isEditable))}"/>
+																<apex:outputPanel rendered="{!AND(deepSection.content != '{TABLE}', deepSection.type == 'Editable', isEditable)}">
+																	<textarea cols="100" rows="5" class="scheduleEditable {!deepSection.name}">{!deepSection.content}</textarea>
+																</apex:outputPanel>
+															</td>
+														</tr>
+													</apex:repeat>
+												</table>
+											</apex:outputPanel>
+										</td>
+									</tr>
+								</apex:repeat>
+							</table>
+						</apex:outputPanel>
+						</td>
+					</tr>
+				</table>
+            </apex:repeat>
+            
+            <!-- Print the Appendix -->
+            <apex:repeat value="{!appendixSectionSortedMap}" var="appendixIndex">
+				<p style="page-break-before: always"></p>
+                <apex:variable value="{!appendixSectionSortedMap[appendixIndex]}" var="appendix" />
+				<table width="99%" cellpadding="3">
+					<tr>
+						<td>
+						<apex:outputPanel rendered="{!AND(appendix.type == 'Selectable', isEditable, appendix.isShow)}">
+							<input type="checkbox" checked="true" class="appendixSelection {!appendix.name}"/>
+						</apex:outputPanel>
+						<apex:outputPanel rendered="{!AND(appendix.type == 'Selectable', isEditable, NOT(appendix.isShow))}">
+							<input type="checkbox" class="appendixSelection {!appendix.name}"/>
+						</apex:outputPanel>
+						<b><u><apex:outputText value="Appendix {!appendixIndex}" escape="false" /></u></b>
+						<br />
+						<apex:outputText value="{!appendix.title}" escape="false" />
+						</td>
+					</tr>
+					<tr>
+						<td style="text-align:justify">
+						<apex:outputText value="{!appendix.content}" escape="false" />
+						</td>
+					</tr>
+					<tr>
+						<td>
+						<apex:outputPanel rendered="{!appendix.hasSubSection}">
+							<table width="100%" cellpadding="3">
+								<apex:repeat value="{!appendix.subSectionMap}" var="subSectionIndex">
+									<apex:variable value="{!appendix.subSectionMap[subSectionIndex]}" var="subSection" />
+									<tr>
+										<!--
+										<td>
+											<apex:outputText value="{!subSectionIndex}." escape="false" rendered="{!subSection.content != '{TABLE}'}"/>
+										</td>
+										-->
+										<td style="text-align:justify">
+											<apex:outputText value="{!subSection.content}" escape="false" rendered="{!AND(subSection.content != '{TABLE}', OR(subSection.type == 'Read', !isEditable))}"/>
+											<apex:outputPanel rendered="{!AND(subSection.content != '{TABLE}', subSection.type == 'Editable', isEditable)}">
+												<textarea cols="100" rows="5" class="appendixEditable {!subSection.name}">{!subSection.content}</textarea>
+											</apex:outputPanel>
+											<apex:outputPanel rendered="{!IF(subSection.name == 'Designated Outlets Table', true, false)}">
+												<table width="100%" border="1" cellpadding="3" cellspacing="0">
+													<tr>
+														<th>No.</th>
+														<th>Outlet</th>
+													</tr>
+													<apex:variable value="{!1}" var="count" />
+													<apex:repeat value="{!outletList}" var="outlet">
+														<tr>
+															<td style="text-align:center"><apex:outputText value="{!count}" /></td>
+															<td style="text-align:left">
+																<apex:outputText value="{!outlet.name}" escape="false" />
+																<br />
+																<apex:outputText value="ACRA registration number {!outlet.ASI_CRM_Business_Registration_Number__c}" escape="false" />
+																<br />
+																<apex:outputText value="{!outlet.ASI_CRM_JP_City_Ward__c}" escape="false" rendered="{!outlet.ASI_CRM_JP_City_Ward__c != NULL}"/>
+																<br />
+																<apex:outputText value="{!outlet.ASI_CRM_JP_Town__c}" escape="false" rendered="{!outlet.ASI_CRM_JP_Town__c != NULL}"/>
+																<br />
+																<apex:outputText value="{!outlet.ASI_CRM_Street_Number__c}" escape="false" rendered="{!outlet.ASI_CRM_Street_Number__c != NULL}"/>
+																<br />
+																<apex:outputText value="Tel: {!outlet.ASI_CRM_CN_Phone_Number__c}" escape="false" />
+																<br />
+																<apex:outputText value="Fax: {!outlet.ASI_CRM_CN_Fax_Number__c}" escape="false" />
+															</td>
+														</tr>
+														<apex:variable value="{!count + 1}" var="count" />
+													</apex:repeat>
+												</table>
+											</apex:outputPanel>
+											<!--
+											<apex:outputPanel rendered="{!IF(subSection.name == 'Personal Guarantee Table', true, false)}">
+												<apex:outputText value="{!subSection.content}" escape="false" rendered="{!OR(subSection.type == 'Read', subSection.type == 'Selectable', !isEditable)}"/>
+												<apex:outputPanel rendered="{!AND(subSection.type == 'Editable', isEditable)}">
+													<textarea cols="100" rows="5" class="bodyEditable {!subSection.name}">{!subSection.content}</textarea>
+												</apex:outputPanel>
+												<apex:outputPanel rendered="{!subSection.hasSubSection}">
+													<table>
+														<apex:repeat value="{!subSection.subSectionMap}" var="deepSectionIndex">
+															<apex:variable value="{!subSection.subSectionMap[deepSectionIndex]}" var="deepSection" />
+															<tr>
+																<td><apex:outputText value="{!deepSection.displayNumber}" escape="false" /></td>
+																<td><apex:outputText value="{!deepSection.content}" escape="false" /></td>
+															</tr>
+														</apex:repeat>
+													</table>
+												</apex:outputPanel>
+											</apex:outputPanel>
+											-->
+										</td>
+									</tr>
+								</apex:repeat>
+							</table>
+						</apex:outputPanel>
+						</td>
+					</tr>
+				</table>
+            </apex:repeat>
+            
+			<!--
+            <p style="page-break-before: always"></p>
+            <apex:outputPanel rendered="{!outletList.size != 0}">
+                <b><u>Appendix A</u></b>
+                <br />
+                <b><u>Designated Outlets</u></b>
+                <br />
+                <br />
+                <table width="100%" border="1" cellpadding="3" cellspacing="0">
+                    <tr>
+                        <th>No.</th>
+                        <th>Outlet</th>
+                    </tr>
+                    <apex:variable value="{!1}" var="count" />
+                    <apex:repeat value="{!outletList}" var="outlet">
+                        <tr>
+                            <td style="text-align:center"><apex:outputText value="{!count}" /></td>
+                            <td>
+                                <apex:outputText value="{!outlet.name}" escape="false" />
+                                <br />
+                                <apex:outputText value="ACRA registration number {!outlet.ASI_CRM_Business_Registration_Number__c}" escape="false" />
+                                <br />
+                                <apex:outputText value="{!outlet.ASI_CRM_JP_City_Ward__c}" escape="false" rendered="{!outlet.ASI_CRM_JP_City_Ward__c != NULL}"/>
+                                <br />
+                                <apex:outputText value="{!outlet.ASI_CRM_JP_Town__c}" escape="false" rendered="{!outlet.ASI_CRM_JP_Town__c != NULL}"/>
+                                <br />
+                                <apex:outputText value="{!outlet.ASI_CRM_Street_Number__c}" escape="false" rendered="{!outlet.ASI_CRM_Street_Number__c != NULL}"/>
+                                <br />
+                                <apex:outputText value="Tel: {!outlet.ASI_CRM_CN_Phone_Number__c}" escape="false" />
+                                <br />
+                                <apex:outputText value="Fax: {!outlet.ASI_CRM_CN_Fax_Number__c}" escape="false" />
+                            </td>
+                        </tr>
+                        <apex:variable value="{!count + 1}" var="count" />
+                    </apex:repeat>
+                </table>
+            </apex:outputPanel>
+            -->
+			
+            <apex:outputPanel rendered="{!AND(editedContent.size != 0, !isExternal)}">
+            <p style="page-break-before: always"></p>
+				<b>Change in standard T&amp;C</b>
+				<table width="100%" border="1" cellpadding="3" cellspacing="0">
+                    <tr>
+                        <th>Section</th>
+                        <th>No.</th>
+                        <th>Edited Content</th>
+                        <th>Original Content</th>
+                        <th>Change</th>
+                    </tr>
+                    <apex:repeat value="{!editedContent}" var="wrapEditedContent">
+                        <tr>
+                            <td><apex:outputText value="{!wrapEditedContent.sectionInfo.name}" /></td>
+                            <td style="text-align:center"><apex:outputText value="{!wrapEditedContent.sectionInfo.sectionNumber}" /></td>
+                            <td><apex:outputText value="{!IF(OR(wrapEditedContent.sectionInfo.name=='A&P Sponsorship Goods In Kind', wrapEditedContent.sectionInfo.name=='A&P Sponsorship'), 'Hidden Schedule', wrapEditedContent.sectionInfo.content)}" /></td>
+                            <td><apex:outputText value="{!IF(OR(wrapEditedContent.sectionInfo.name=='A&P Sponsorship Goods In Kind' || wrapEditedContent.sectionInfo.name=='A&P Sponsorship'), '', wrapEditedContent.sectionInfo.content_original)}" /></td>
+                            <td style="text-align:center"><apex:outputText value="{!wrapEditedContent.typeOfChange}" /></td>
+                        </tr>
+                    </apex:repeat>
+				</table>
+            </apex:outputPanel>
+            </div>
+        </form>
+    </body>
+    
+</apex:component>

@@ -1,0 +1,1299 @@
+<apex:page controller="ASI_MFM_KR_DirectPaymentCtler"  docType="html-5.0" sidebar="false" >
+    <header>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_6, '/ASI_JS_Bootstrap_V3_3_6/dist_less/css/bootstrap.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, 'build.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_6, '/ASI_JS_Bootstrap_V3_3_6/dist_less/js/bootstrap.min.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        
+        <style>
+            div.hid {display: none;}
+            .dateFormat{
+            display:none;
+            }     
+            .headerCen {
+            text-align: center !important;
+            }
+            .requirefield{
+            border-left: 3px solid darkred !important;          
+            }
+            .bsbutton{
+            padding: 2px 4px !important; 
+            }
+            
+            .required {
+            border-left: 3px solid darkred !important;  
+            }
+            
+            /* highlight results */ 
+            .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+            }
+            
+            /* loading - the AJAX indicator */
+            .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+            }
+            
+            
+            .ui-autocomplete-input{ 
+            //border-left: 3px solid darkred !important;    
+            }
+            
+            .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            /* prevent horizontal scrollbar */
+            overflow-x: hidden;
+            overflow:auto;
+            /* add padding to account for vertical scrollbar */
+            padding-right: 20px;
+            left: 0;
+            }
+            
+            *html .ui-autocomplete {
+            height: 200x;
+            }
+            
+            
+            #theIframe {
+            max-width: 100%;
+            max-height: 100%;
+            }   
+            
+            
+            .fluidMedia {
+            position: relative;
+            padding-bottom: 56.25%; /* proportion value to aspect ratio 16:9 (9 / 16 = 0.5625 or 56.25%) */
+            padding-top: 30px;
+            height: 0;
+            overflow: hidden;
+            }
+            
+            .fluidMedia iframe {
+            position: absolute;
+            top: 0; 
+            left: 0;
+            width: 100%;
+            height: 100%;
+            }          
+            
+            
+            .LookupCss input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            
+            }
+            
+            .LookupSearch input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            border-left: 3px solid darkred !important;
+            }
+            
+        </style>
+        
+        <script type="text/javascript">  
+        $j = jQuery.noConflict();
+          window.onload = function() {
+        jQuery('input[type=text]').blur();
+        /*
+        //For putting the Focus on particular field
+        jQuery('[id$=pList]').focus();
+        */
+    };
+        
+        $j(document).ready(function(){
+            retrieveExchangeRate();
+            SQLstatement='{!SQLstatement}'
+        });
+        var APType=[];
+        var APCategory=[]
+        var APCodes = [];
+        var iFrames ;
+        var Customers = [];
+        var subLedgers=[];
+        var VenueWhere=[];
+        var exchangeRateTable;
+        var taxCodeHTML='';
+        var SQLstatement=null;
+        
+        function htmlEncode( input ) {
+            var e = document.createElement('div');
+            e.innerHTML = input;
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+        };
+        
+        function retrieveExchangeRate() {
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_DirectPaymentCtler.retrieveExchangeRate}'
+                , ConstructFX
+                , {escape: true}
+            );       
+        }
+        
+        function ConstructFX(result, event){
+            if (event.status) {
+                if (result) {
+                    exchangeRateTable=result;
+                    console.log('Get E R!!!');
+                    calculateSum();
+                    retrieveAPCode();
+                    retrieveCustomer();
+                    retrieveSubLedger();
+                }
+            }
+        }
+        
+        
+        function retrieveCustomer() {
+            
+            var whereClause =   ' WHERE (RecordType.DeveloperName = \'ASI_CRM_KR_Wholesaler\'  or RecordType.DeveloperName = \'ASI_CRM_KR_Venue\' )  '+SQLstatement;
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_DirectPaymentCtler.findCustomers}','ASI_CRM_AccountsAdditionalField__c', whereClause 
+                , callbackCustomer
+                , { buffer: false,escape: true}
+            );       
+        }
+        
+        function callbackCustomer(result, event){
+            if (event.status) {
+                if (result) {
+                    
+                    Customers = [];
+                    var size = result.length;
+                    
+                    for (var i = 0; i < size; i++) {
+                        var cu = new Object();
+                        cu.label =  htmlEncode(result[i]["Name"]);
+                        cu.value =  htmlEncode(result[i]["Id"]);
+                        
+                        if(result[i]["ASI_CRM_CN_Address__c"]){
+                            cu.desc = htmlEncode(result[i]["ASI_CRM_CN_Address__c"]);
+                        }else{
+                            cu.desc='';
+                        }
+                        
+                        if(result[i]["ASI_CRM_CN_Phone_Number__c"]) 
+                            cu.phone =htmlEncode(result[i]["ASI_CRM_CN_Phone_Number__c"]);
+                        else cu.phone ='';
+                        Customers.push(cu);
+                        if(result[i].RecordType.DeveloperName=='ASI_CRM_KR_Venue'){
+                            VenueWhere.push(cu);
+                        }
+                    }
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+        
+        
+        //sub ledger
+        function retrieveSubLedger() {
+            var subLedgerTypeName='ASI_TnE_KR_Branch_Channel';
+            var whereClause =   ' WHERE RecordType.DeveloperName = \''+ subLedgerTypeName + '\' '
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_DirectPaymentCtler.findSObjects}','ASI_TnE_Branch_Channel__c', whereClause 
+                , callbackSubLedger
+                , {escape: true}
+            );       
+        }
+        
+        
+        function callbackSubLedger(result, event){
+            if (event.status) {
+                if (result) {
+                    subLedgers = [];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        var sb = new Object();
+                        sb.label =  htmlEncode(result[i]["Name"]);
+                        sb.value =  htmlEncode(result[i]["Id"]);
+                        subLedgers.push(sb);
+                    }
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+        
+        
+        function retrieveAPCode() {
+            var whereClause =   ' WHERE RecordType.DeveloperName = \'ASI_KR_AP_Code\' and ASI_MFM_PRPO_Needed__c=false';
+            var statement='id,name,ASI_MFM_AP_Category__c,ASI_MFM_AP_Type__c,ASI_MFM_AP_Code__c,ASI_MFM_Beneficiary_WS_Venue__c ';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_DirectPaymentCtler.findList}','ASI_MFM_AP_Code__c', statement, whereClause 
+                , callbackAPCode
+                , {escape: true}
+            );       
+        }
+        
+        function callbackAPCode(result, event){
+            if (event.status) {//console.log(result);
+                if (result) {
+                    APCategory=[];
+                    APType=[];
+                    APCodes = [];
+                    var TempAPTypeList = [];
+                    var TempAPcateList = [];
+                    var size = result.length;
+                    for (var i = 0; i < size; i++) {
+                        //Put AP Code
+                        var ap = new Object();
+                        ap.label =  htmlEncode(result[i]["Name"]);
+                        ap.value =  htmlEncode(result[i]["Id"]);
+                        ap.aptype=  htmlEncode(result[i]["ASI_MFM_AP_Type__c"]);
+                        ap.APCate=htmlEncode(result[i]["ASI_MFM_AP_Category__c"]);// 
+                        ap.NeedVenue=htmlEncode(result[i]["ASI_MFM_Beneficiary_WS_Venue__c"]);
+                        APCodes.push(ap);
+                        
+                        //AP Type
+                        var at = new Object();
+                        at.value =  htmlEncode(result[i]["ASI_MFM_AP_Type__c"]);
+                        if(TempAPTypeList.indexOf(at.value)== -1 && at.value !== 'undefined'){
+                            TempAPTypeList.push(at.value);
+                            APType.push(at);
+                        }
+                        
+                        //AP Category
+                        var apc = new Object();
+                        apc.value =  htmlEncode(result[i]["ASI_MFM_AP_Category__c"]);
+                        
+                        if(TempAPcateList.indexOf(apc.value)== -1 && apc.value!== 'undefined'){
+                            TempAPcateList.push(apc.value);
+                            APCategory.push(apc);
+                        }
+                        //console.log('AP Type : '+APType);
+                    }
+                    
+                }
+            } else {
+            }   
+            initalizeAutoCompleteComponent();
+        }
+        
+        function initalizeAutoCompleteComponent() {
+            //Customer 
+            $j(".CustomerClass").autocomplete
+            (
+                {
+                    source:
+                    Customers,
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("No result found");
+                        }
+                    },
+                    minLength: 1,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                        //  $j(this).val(ui.item.label);
+                        $j(".ui-autocomplete > li").attr("title", ui.item.phoe);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function() {
+                
+                $j(this).autocomplete("search", "");
+            }
+                   )
+            .each(function() {
+                $j(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                    return $j("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                    .appendTo(ul); 
+                };                        
+            });
+            
+            
+            
+            //VenueWhere 
+            $j(".VenueWhereClass").autocomplete
+            (
+                {
+                    source:
+                    VenueWhere,
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("No result found");
+                        }
+                    },
+                    minLength: 1,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                        //  $j(this).val(ui.item.label);
+                        $j(".ui-autocomplete > li").attr("title", ui.item.phoe);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function() {
+                
+                $j(this).autocomplete("search", "");
+            }
+                   )
+            .each(function() {
+                $j(this).data('ui-autocomplete')._renderItem = function( ul, item ) {
+                    
+                    return $j("<li>").html("<a style='margin-left: 2px;'><span><strong>" + item.label + "</strong></span><span style='margin-right: 2px; float:right;'>" + item.desc + "</span><a>")  
+                    .appendTo(ul); 
+                };                        
+            });
+            
+            
+            
+            
+            // AP Type 
+            $j(".apTypeClass").autocomplete({
+                source: 
+                APType,
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("No result found");
+                    }
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.value = '';
+                    }
+                    
+                    //Clear AP Category and AP Code Name and Id
+                    $j(this).parent().next().children().val('');
+                    $j(this).parent().next().next().children().val('');
+                    $j(this).parent().next().next().children().next().children().val('');
+                },
+                focus: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+            }).focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+            
+            // AP Category 
+            $j(".apcategoryClass").autocomplete({
+                source: 
+                APCodes,
+                search: function(event, ui) {
+                    var currentid = $j(this).attr('data-id');
+                    var sValue = $j('#APType_manageAll_' + currentid + '_input')[0].innerText; ///$j('#APType_manageAll_' + currentid + '_input input').val();
+                    var aSearch = [];
+                    $j(APCodes).each(function(iIndex, sElement) {
+                        if(sElement.aptype==sValue){
+                            if(aSearch.indexOf(sElement.APCate)== -1){
+                                aSearch.push(sElement.APCate);
+                            }
+                        }
+                    });    
+                    $j(this).autocomplete('option', 'source', aSearch);
+                    
+                },
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("No result found");
+                    }
+                }, minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.label = '';
+                    }
+                    //Clear AP Code Name and Id
+                    $j(this).parent().next().children().val('');
+                    $j(this).parent().next().children().next().children().val('');
+                },
+                focus: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+            }).focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+            
+            
+            // Sub Ledger
+            $j(".SubLedgerClass").autocomplete({
+                source: 
+                subLedgers,
+                response: function(event, ui) 
+                {
+                    if(ui.content.length===0){ 
+                        console.log("No result found");
+                    }
+                }
+                ,
+                minLength: 0,
+                autoFocus: true,
+                scroll: true,
+                change: function (event, ui) {
+                    if (!ui.item) {
+                        this.value = '';
+                    }
+                },
+                select: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    $j(this).next().next().children().val(ui.item.value);                
+                    event.preventDefault();
+                },
+                focus: function(event, ui){
+                    $j(this).val(ui.item.label);
+                    event.preventDefault();
+                }  
+                
+            })
+            .focus(function () {
+                $j(this).autocomplete("search", "");
+            })
+            
+            
+            
+            
+            //AP Code
+            $j(".apCodeClass").autocomplete
+            (
+                {
+                    source:
+                    APCodes,
+                    search: function(event, ui) {
+                        var currentid = $j(this).attr('data-id');
+                        var APtype = $j('#APType_manageAll_' + currentid + '_input')[0].innerText;//$j('#APType_manageAll_' + currentid + '_input input').val();
+                        var APcate = $j('#APCategory_manageAll_' + currentid + '_input input').val();
+                        var aSearch = [];
+                        var templist=[];
+                        $j(APCodes).each(function(iIndex, sElement) {
+                            if(sElement.aptype==APtype && sElement.APCate==APcate ){
+                                if(templist.indexOf(sElement.label)== -1){
+                                    templist.push(sElement.label);
+                                    aSearch.push(sElement);
+                                }
+                            }
+                        });    
+                        $j(this).autocomplete('option', 'source', aSearch);
+                        
+                    },
+                    response: function(event, ui)
+                    {
+                        if(ui.content.length===0)
+                        { 
+                            console.log("AP Code: No result found");
+                        }
+                    },
+                    minLength: 0,
+                    autoFocus: true,
+                    scroll: true,
+                    change: function (event, ui) {
+                        if (!ui.item) {
+                            this.value = '';
+                        }
+                    },
+                    select: function(event, ui)
+                    {
+                        $j(this).val(ui.item.label);
+                        $j(this).next().next().children().val(ui.item.value);
+                        var currentid = $j(this).attr('data-id');
+                        UpdateCustomerCSS(currentid,FindValue(ui.item.value,APCodes))
+                        event.preventDefault();
+                    },
+                    focus: function(event, ui)
+                    {
+                        // $j(this).val(ui.item.label);
+                        event.preventDefault();
+                    }
+                }
+            ).focus(function()
+                    {
+                        $j(this).autocomplete("search", "");
+                    }
+                   );
+        }
+        
+        
+        function UpdateCustomerCSS(lineid,mandatoryfields){
+            if(mandatoryfields=='true'){
+                $j(".Customer_" +lineid).addClass('required');// 
+                $j(".Venue_" +lineid).addClass('required');
+            }else{
+                $j(".Customer_" +lineid).removeClass('required'); 
+                $j(".Venue_" +lineid).removeClass('required');
+            }
+        } 
+        
+        //Find a value in an array
+        function FindValue(Searchvalue,InputList){
+            var result = InputList.filter(function(v) {
+                return (v.value === Searchvalue); // Filter out the appropriate one
+            })[0];
+            return result.NeedVenue;
+        }
+        
+        
+        
+        function calculateSum(){
+            //console.log('Cal');
+            var TotalSum = 0;
+            
+            var exRateInput  = $j('[class*=ExchangeRateIdInput]').val();
+            
+            if(isNaN(exRateInput)) {
+                $j('[class*=ExchangeRateIdInput]').parent().addClass('has-error').addClass('has-feedback');
+            }else{
+                $j('[class*=ExchangeRateIdInput]').parent().removeClass('has-error').removeClass('has-feedback'); 
+            }
+            
+            var exRate = parseFloat(exRateInput.replace(/[$,]+/g,""));
+            $j('.LineAmount').each(function() { 
+                if($j(this).val()){
+                    
+                    
+                    if(!isNaN(exRateInput)) {
+                        if(!isNaN($j(this).val().replace(/[$,]+/g,""))){
+                            var ConvertedAmount = Math.ceil(exRate * parseFloat($j(this).val().replace(/[$,]+/g,"")));
+                            $j(this).closest('tr').children('td.ConvertedAmount').text(ConvertedAmount.toFixed(2).replace(/(\d)(?=(\d{3})+\.)/g, '$1,')); 
+                        }else{
+                            $j(this).closest('tr').children('td.ConvertedAmount').html("<b>Please revise the Payment Amount (exclude VAT).</b>");
+                        }
+                    }else{
+                        $j(this).closest('tr').children('td.ConvertedAmount').html("<b>Please revise the exchange rate.</b>");
+                    }
+                    
+                    if(isNaN($j(this).val().replace(/[$,]+/g,""))){
+                        $j(this).parent().addClass('has-error').addClass('has-feedback');
+                    }else{
+                        TotalSum=TotalSum+parseFloat($j(this).val().replace(/[$,]+/g,""));
+                        $j(this).parent().removeClass('has-error').removeClass('has-feedback');
+                    }
+                    
+                }
+            });
+            $j('#TotalAmount').html('Total Amount Exclude VAT: '+TotalSum.toFixed(2).replace(/(\d)(?=(\d{3})+\.)/g, '$1,'));
+            
+            //remove Tax Code if currency!= KRW
+            var selectSection= document.getElementById("FXPart").children[0];
+            var selectOpt = selectSection.options;
+            var selectedCurrency= selectOpt[selectSection.selectedIndex].value; 
+            if(selectedCurrency!='KRW'){
+                $j('.TaxCodeTD').each(function() { 
+                    $j(this)[0].children[0].innerHTML='';
+                });             
+            }
+        }		
+        
+        
+        //When change exchaneg rate calls this function
+        function ChangeFX(){
+            //Get Selected currency
+            var selectSection= document.getElementById("FXPart").children[0];
+            var selectOpt = selectSection.options;
+            var selectedCurrency= selectOpt[selectSection.selectedIndex].value;
+            
+            
+            //Get exchange rate from table
+            var EXnumber=1.0;
+            if(selectedCurrency!='KRW'){
+                EXnumber= Number(exchangeRateTable[selectedCurrency]);
+            }
+            
+            //change exchange Rate
+            document.getElementById("RatePart").children[0].value=EXnumber;
+            //Finished changing exchange Rate
+            $j('.TaxCodeTD').each(function() { 
+                if(selectedCurrency!='KRW'){ //taxCodeHTML=$j(this)[0].children[0];//console.log($j(this)[0].children[0]); 
+                    $j(this)[0].children[0].innerHTML='';
+                }else{
+                    $j(this)[0].children[0].innerHTML=taxCodeHTML;
+                }
+                
+            });  
+            
+            calculateSum();
+        }
+        
+        function getTaxCode(){
+            $j('.TaxCodeTD').each(function() { 
+                taxCodeHTML=$j(this)[0].children[0].innerHTML;
+            });   
+        }
+        
+        
+        
+        //check all function 
+        function checkAll(ele) {
+            var checkboxes = document.getElementsByTagName('input');
+            if (ele.checked) {
+                for (var i = 0; i < checkboxes.length; i++) {
+                    if (checkboxes[i].type == 'checkbox') {
+                        checkboxes[i].checked = true;
+                        var ele=document.getElementById(checkboxes[i].id);//console.log(ele.parentElement.parentElement.id);
+                        var ChxId= ele.parentElement.parentElement.id;//console.log(ChxId);
+                        if(ChxId){
+                            var CHEle= document.getElementById(ChxId) ;
+                            CHEle.setAttribute('chx','true');
+                        }
+                    }
+                }
+            } else {
+                for (var i = 0; i < checkboxes.length; i++) {
+                    if (checkboxes[i].type == 'checkbox') {
+                        checkboxes[i].checked = false;
+                        var ele=document.getElementById(checkboxes[i].id);//console.log(ele.parentElement.parentElement.id);
+                        var ChxId= ele.parentElement.parentElement.id;// console.log(ChxId);
+                        if(ChxId){
+                            var CHEle= document.getElementById(ChxId) ;
+                            CHEle.setAttribute('chx','false');
+                            
+                        }
+                        
+                    }
+                }
+            }
+        }//checkbox function
+        
+        //change the line item checkbox 
+        function changeItemCB(e){
+            var checkAllEle= document.getElementById('checkall');
+            var ele= e.parentElement.parentElement;
+            console.log(ele);
+            var ChxId= ele.id;
+            if(!e.checked){
+                var CHEle= document.getElementById(ChxId) ;
+                CHEle.setAttribute('chx','false');
+                checkAllEle.checked=false;
+            }else{
+                var CHEle= document.getElementById(ChxId) ;
+                CHEle.setAttribute('chx','true');
+                //uncheck
+                
+            }
+        }
+        
+        function adjustIframes()
+        {
+            $j('#theIframe').each(function(){
+                var
+                $this       = $j(this),
+                    proportion  = $this.data( 'proportion' ),
+                    w           = $this.attr('width'),
+                    actual_w    = $this.width();
+                
+                if ( ! proportion )
+                {
+                    proportion = $this.attr('height') / w;
+                    $this.data( 'proportion', proportion );
+                }
+                
+                if ( actual_w != w )
+                {
+                    $this.css( 'height', Math.round( actual_w * proportion ) + 'px' );
+                }
+            });
+        }
+        
+        $j(window).on('resize load',adjustIframes);       
+        
+        
+        function SetIframeURL(){
+            var portId= "{!$User.ASI_OBIEE_Domain__c}";
+            var PlanN= document.getElementById("PlanName").children[1].value ;
+            console.log(PlanN);
+            var domain = "{!$Setup.ASI_MFM_Report__c.ASI_MFM_KR_Domain__c}";
+            if(!domain){
+                domain='https://obiee.pernod-ricard-asia.com:';
+            } // $('#reportPanel').attr('src', domain+portId+'/analytics/saw.dll?PortalGo&Action=extract&path=%2Fshared%2FPRK%2FMFM%2FReport%2FBudget%20Checking%20for%20New%20Promotion%2FBudget%20Checking%20for%20New%20Promotion&P0=1&P1=eq&P2=%22Plan Dim%22.%22Plan No%22&P3=%22'+PlanN+'%22') ;          
+            document.getElementById("reportPanel").src=domain+portId+'/analytics/saw.dll?PortalGo&Action=extract&path=%2Fshared%2FPRK%2FMFM%2FReport%2FBudget%20Checking%20for%20New%20Promotion%2FBudget%20Checking%20for%20New%20Promotion&P0=1&P1=eq&P2=%22Plan Dim%22.%22Plan No%22&P3=%22'+PlanN+'%22';  
+        }
+        
+        
+        function Changecheckbox(){
+            var e = document.getElementById("Linecheckbox");
+            var CheckboxResult = e.options[e.selectedIndex].value;
+            var SearchResult='';
+           
+            var input, filter, table, tr, td, i;
+            input = document.getElementById("SBInput");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("ResultTable");
+            tr = table.getElementsByTagName("tr");
+            for (i = 2; i < tr.length-1; i++) {
+                td = tr[i].getElementsByTagName("td")[2];
+                var Cid= td.id;
+                var ele= document.getElementById(Cid);
+                console.log(i+' || '+ele.getAttribute('chx'));
+                if(td){
+                    if(CheckboxResult=='Checked'){
+                        if(ele.getAttribute('chx')=='true'){
+                            tr[i].style.display = "";
+                        }else{
+                            tr[i].style.display = "none";
+                        }
+                    }else if (CheckboxResult=='UnChecked'){
+                        if(ele.getAttribute('chx')=='false'){
+                            tr[i].style.display = "";
+                        }else{
+                            tr[i].style.display = "none";
+                        }
+                    }else{
+                        tr[i].style.display = "";
+                    }
+                }
+            }
+            
+            
+            
+            
+        }  
+        
+        
+        
+        
+        
+        
+        
+        function SearchSB(){
+            var input, filter, table, tr, td, i;
+            input = document.getElementById("SBInput");//APCodeInput
+            filter = input.value.toUpperCase();
+            table = document.getElementById("ResultTable");
+            tr = table.getElementsByTagName("tr");
+            for (i = 2; i < tr.length-1; i++) {
+                td = tr[i].getElementsByTagName("td")[3];
+                if (td) {
+                    var SBValue=td.getElementsByTagName("span")[0].innerText;
+                    if (SBValue.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+                //console.log(td);
+                
+            }
+        }   
+        
+        
+        
+        
+        
+        
+        
+        
+        function SearchAPCode(){
+            var input, filter, table, tr, td, i;
+            input = document.getElementById("APCodeInput");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("ResultTable");
+            tr = table.getElementsByTagName("tr");
+            for (i = 2; i < tr.length-1; i++) {
+                td = tr[i].getElementsByTagName("td")[7];
+                if (td) {
+                    var APValue=td.getElementsByTagName("input")[0].value;
+                    if (APValue.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+            
+            
+        }   
+        
+        
+        function filterfun(){
+            
+            
+            var table, tr, i;
+            
+            //Check Box
+            var e = document.getElementById("Linecheckbox");
+            var CheckboxResult = e.options[e.selectedIndex].value;
+            console.log('Now CheckboxResult : '+CheckboxResult);
+            table = document.getElementById("ResultTable");
+            tr = table.getElementsByTagName("tr");
+            for (i = 2; i < tr.length-1; i++) {
+                //checkbox
+                var  td2 = tr[i].getElementsByTagName("td")[2];
+                var Cid= td2.id;
+                var ele= document.getElementById(Cid);
+                
+                //SB-Brand
+                var  td3 = tr[i].getElementsByTagName("td")[3];
+                var SBValue=td3.getElementsByTagName("span")[0].innerText;
+                
+                //AP Code
+                var td7 = tr[i].getElementsByTagName("td")[7];
+                var APValue=td7.getElementsByTagName("input")[0].value;
+               console.log(ele.getAttribute('chx'));
+                if(checkboxChecking(CheckboxResult,ele.getAttribute('chx')) && SBChecking(SBValue)&& APCodeChecking(APValue) ){
+                    tr[i].style.display = "";
+                }else{
+                    tr[i].style.display = "none";
+                }
+                
+                
+            }
+        }
+        
+        function APCodeChecking(InputVal){
+            var input, filter;
+            input = document.getElementById("APCodeInput");
+            filter = input.value.toUpperCase();
+            if(filter){
+                if (InputVal.toUpperCase().indexOf(filter) > -1) {
+                    return true; //tr[i].style.display = "";
+                } else {
+                    return false; // tr[i].style.display = "none";
+                }
+            }else{
+                return true;  
+            }
+            
+        }
+        
+        
+        
+        function SBChecking(InputVal){
+            var input, filter;
+            input = document.getElementById("SBInput");
+            filter = input.value.toUpperCase();
+            if(filter){
+                if (InputVal.toUpperCase().indexOf(filter) > -1) {
+                    return true; //tr[i].style.display = "";
+                } else {
+                    return false; // tr[i].style.display = "none";
+                }
+            }else{
+                return true;  
+            }
+            
+        }
+        
+        
+        
+        function checkboxChecking(CBR,chxval){
+            
+            var resultFlag=true;//display = "";
+            if(CBR =='Checked'){
+                if(chxval=='true'){
+                    resultFlag= true; 
+                }else{
+                    resultFlag= false; 
+                }
+            }else if(CBR=='UnChecked'){
+                if(chxval=='false'){
+                    resultFlag= true; 
+                }else{
+                    resultFlag= false;  
+                }
+            }else{
+                resultFlag= true; 
+            }
+            console.log('Enter'+CBR+chxval +'->'+resultFlag);
+            return resultFlag;
+        }
+        
+        </script>
+    </header>
+    <body class="bs">
+        
+        <apex:sectionHeader Subtitle="PRK MFM Direct Payment" title=""/>
+        
+        <!----------------------------------------Main Form Start---------------------------------------------------->
+        <apex:form id="InputForm" styleClass="InputFormCls">
+            
+            <div class="container-fluid" style="margin:0;">
+                <div class="bs row">
+                    <apex:outputPanel styleclass="bs col-md-12">
+                        <div class="panel panel-primary " id="HeaderPart">
+                            
+                            <div class="panel-heading" style="{!IF(isRedirect,'display:none;','')}" >
+                                <h5>
+                                    Step1: Select Plan and Input Required Information
+                                </h5>
+                            </div>           
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                <strong>Error! </strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            
+                            <div class="control-group panel-body "  >
+                                <div class="bs row" >
+                                    <!---------Input Header------------->
+                                        <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Plan:</apex:outputLabel>
+                                        <div  class="form-group divsearch LookupSearch" id="PlanName">
+                                            <apex:inputField value="{!Header.po.ASI_MFM_Plan__c}" html-placeholder=" Plan"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Supplier:</apex:outputLabel>
+                                        <div class="form-group divsearch LookupSearch">
+                                            <apex:inputField value="{!Header.pay.ASI_MFM_Supplier_Name__c}"   html-placeholder=" Supplier"/>
+                                        </div>
+                                    </div> 
+                                 
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Company</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:selectList value="{!Company}" size="1"  label="Company:" styleClass="form-control searchcss input-sm" >
+                                                <apex:selectOption itemValue="PRK" itemLabel="PRK"/>
+                                                <apex:selectOption itemValue="PRKI" itemLabel="PRKI"/>
+                                            </apex:selectList>    
+                                        </div>
+                                    </div> 
+                                    
+                                    
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Currency:</apex:outputLabel>
+                                        
+                                        <div class="form-group divsearch"  id="FXPart" >
+                                            
+                                            <apex:selectList value="{!CurrencyName}" size="1" label="Currency:" styleClass="form-control searchcss input-sm"  onChange="ChangeFX();" >
+                                                <apex:selectOption itemValue="KRW" itemLabel="KRW"/>
+                                                <apex:selectOption itemValue="AUD" itemLabel="AUD"/>
+                                                <apex:selectOption itemValue="EUR" itemLabel="EUR"/>
+                                                <apex:selectOption itemValue="GBP" itemLabel="GBP"/>
+                                                <apex:selectOption itemValue="HKD" itemLabel="HKD"/>
+                                                <apex:selectOption itemValue="SGD" itemLabel="SGD"/>
+                                                <apex:selectOption itemValue="USD" itemLabel="USD"/>
+                                            </apex:selectList>    
+                                            
+                                        </div>
+                                    </div> 
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Exchange Rate:</apex:outputLabel>
+                                        <div class="form-group divsearch" id="RatePart">
+                                            <apex:inputText id="ExchangeRateIdInput" value="{!exchangeRate}" styleClass="form-control searchcss input-sm ExchangeRateIdInput"  onchange="calculateSum();" html-placeholder="Exchange Rate"/>
+                                        </div>
+                                    </div> 
+                                    
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Invoice Number:</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.pay.ASI_MFM_Invoice_Number__c}" styleClass="form-control searchcss input-sm"  html-placeholder="Invoice Number"/>
+                                        </div>
+                                    </div> 
+                                      <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Total Payment Amount (Including VAT):</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.pay.ASI_MFM_KR_TotalPayAmtIncludeVAT__c}" styleClass="form-control searchcss input-sm required"  html-placeholder="Total Payment Amount"/>
+                                        </div>
+                                    </div>
+                                   
+                                    
+                                    <div class="col-sm-2">
+                                        <apex:outputLabel style="font-weight:bold;">Invoice Date:</apex:outputLabel>
+                                        <div class="form-group divsearch">
+                                            <apex:inputField value="{!Header.pay.ASI_MFM_Invoice_Date__c}" styleClass="form-control searchcss input-sm" style="width: 10em;"  html-placeholder="Invoice Date"/>
+                                        </div>
+                                    </div> 
+                                    
+                                </div>
+                                
+                            
+                                
+                                
+                            </div>
+                        </div>
+                    </apex:outputPanel>   
+                    
+                </div>
+                <div class="row">
+                    
+                </div> 
+                
+                
+                <div class="bs row">
+                    
+                    <apex:outputPanel styleclass="bs col-xs-12" id="LinePanel"   >
+                        <div class="panel panel-primary " id="MiddlePart" style="{!IF(UpsertPermission,'','display:none;')}" >
+                            <div class="panel-heading">
+                                <h5>
+                                    Step2: Select Plan Line and Create Payment
+                                </h5>
+                            </div>                 
+                            
+                            <apex:pageMessages id="errormsg"/>
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(IsProcess,'display:none;','')} "  id="SaveFailPart">
+                                <strong>Error! </strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>
+                            
+                            <div class="alert alert-success fade in" style="{!IF(isRedirect,'','display:none;')}"  id="SaveSuccessPart">
+                                <strong>Save Success:</strong> &nbsp;&nbsp;
+                                <apex:commandButton styleClass="btn btn-default bsbutton"  style="font-weight: bold; "  id="btn2" value="View" onclick="window.open('/{!create_pa.id}');"/>   
+                                &nbsp;
+                               
+                            </div>    
+                            
+                            
+                            <div class="panel" style="{!IF(isRedirect,'display:none;','')}" >
+                                <div class="bs table-responsive" style="padding: 2px 4px"> 
+                                    &nbsp;
+                                    <apex:commandButton styleClass="btn btn-default bsbutton"
+                                                        value="Copy From Plan"
+                                                        action="{!CopyFromPlan}"
+                                                        style="font-weight: bold; "
+                                                        oncomplete="calculateSum();retrieveAPCode();adjustIframes();retrieveCustomer();SetIframeURL();"
+                                                        html-formnovalidate="formnovalidate" reRender="LinePanel,reportPanel,HeaderPart,errormsg"  status="ActionStatus" ></apex:commandButton>
+                                    &nbsp;
+                                    <apex:commandButton styleClass="btn btn-default bsbutton" value="Refresh" action="{!Refresh}" style="font-weight: bold" oncomplete="calculateSum();retrieveAPCode();adjustIframes();retrieveCustomer();"
+                                                        html-formnovalidate="formnovalidate" reRender="LinePanel,reportPanel"  status="ActionStatus" ></apex:commandButton>
+                                    
+                                    &nbsp;
+                                    Filter 
+                                    &nbsp;
+                                    
+                                    <select id="Linecheckbox" onChange="filterfun();" 
+                                            style="padding: 5px 10px; font-size: 12px; line-height: 1.5; border-radius: 3px; color: #555; background-color: #fff; background-image: none; border: 1px solid #ccc;" >
+                                        <option value=" "> </option>
+                                        <option value="Checked">Checked</option>
+                                        <option value="UnChecked">UnChecked</option>
+                                    </select>
+                                    
+                                    &nbsp;
+                                    
+                                    <input type="text" id="SBInput" 
+                                           style="padding: 5px 10px; font-size: 12px; line-height: 1.5; border-radius: 3px; color: #555; background-color: #fff; background-image: none; border: 1px solid #ccc;" 
+                                           onkeyup="filterfun()" placeholder="Search for Sub-Brand.." title="Type in a Sub-Brand" />
+                                    
+                                    &nbsp;
+                                    
+                                    <input type="text" id="APCodeInput"
+                                           style="padding: 5px 10px; font-size: 12px; line-height: 1.5; border-radius: 3px; color: #555; background-color: #fff; background-image: none; border: 1px solid #ccc;" 
+                                           onkeyup="filterfun()"
+                                           placeholder="Search for AP Code.."
+                                           title="Type in a APCode" />
+                                    
+                                    &nbsp;
+                                    <apex:commandButton styleClass="btn btn-primary bsbutton" value="Save" action="{!SaveRecord}" style="font-weight: bold" oncomplete="calculateSum();retrieveAPCode();adjustIframes();"
+                                                        html-formnovalidate="formnovalidate" reRender="LinePanel,reportPanel,HeaderPart,SaveSuccessPart,errormsg"  status="ActionStatus" ></apex:commandButton>
+                                    
+                                    <table class="table" id="ResultTable" sytle="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th colspan ="2"  class="headerCen" >Action</th>
+                                                <th class="headerCen" >
+                                                    Payment<br/>Y/N <br/> 
+                                                    <div class="checkbox checkbox-primary">
+                                                        <input type="checkbox" id="checkall" onchange="checkAll(this)" />
+                                                        <label for="checkall"></label>
+                                                    </div>
+                                                </th>
+                                                <th>Sub-brand</th>
+                                                <th>Sub Ledger</th> 
+                                                <th>AP Type</th>
+                                                <th>AP Category</th>
+                                                <th>AP Code</th>
+                                                <th>Customer (Beneficiary)</th>
+                                                <th>Venue (Where)</th>
+                                                <th>Plan Line Amount</th>
+                                                <th > Payment Amount (Exclude VAT) </th>
+                                                <th>Payee</th>
+                                                <th > Converted Amount(KRW) </th>
+                                                <th>Tax Code</th>
+                                                <th>Invoice Number</th>
+                                                <th >Invoice Date</th>
+                                                <th>AP Remark</th>
+                                            </tr>
+                                        </thead>
+                                        
+                                        <tbody>
+                                            <tr>
+                                                <td colspan="100%" class="headerCen" style="{!IF(ItemMapIndex=0,'','display:none;')}" >Please Copy From Plan</td>
+                                            </tr>
+                                            <apex:variable value="{!0}" var="i"/>
+                                            <apex:repeat value="{!ItemMap}" var="PolId">
+                                                <apex:variable var="i" value="{!i+1}"/>
+                                                <tr>
+                                                    <td style="padding-bottom: 1em;" >
+                                                        <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-xs"
+                                                                          style="border: none;background-color: transparent;width:30px "
+                                                                          reRender="LinePanel,SaveFailPart,SaveSuccessPart"
+                                                                          action="{!cloneLine}"
+                                                                          status="ActionStatus"                                                   
+                                                                          html-formnovalidate="formnovalidate" 
+                                                                          title="Clone line {!i}"
+                                                                          onComplete="console.log('Clone Row'); calculateSum();retrieveAPCode();adjustIframes();"   
+                                                                          html-data-loading-text="Loading..." >
+                                                            <span class="bs glyphicon glyphicon-duplicate"  style="color:black;font-size: 20px;"></span>
+                                                            <apex:param name="PARAM_clone_ID" value="{!PolId}" />
+                                                        </apex:commandLink>
+                                                    </td>
+                                                    <td>
+                                                        <apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                          style="border: none;background-color: transparent;"
+                                                                          reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                          action="{!removeLine}"
+                                                                          status="ActionStatus"
+                                                                          immediate="false"
+                                                                          title="Remove line {!i}"
+                                                                          onComplete="console.log('Delete Row'); calculateSum();retrieveAPCode();adjustIframes();"   
+                                                                          html-formnovalidate="formnovalidate"
+                                                                          html-data-loading-text="Loading..." >
+                                                            <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;"></span>
+                                                            <apex:param name="PARAM_RLine_ID" value="{!PolId}" />
+                                                        </apex:commandLink>
+                                                        
+                                                    </td>
+                                                    <td class="headerCen" chx='{!ItemMap[PolId].boolSelected}' id="Chx_{!PolId}" >
+                                                        <div class="checkbox checkbox-primary"  >
+                                                            <apex:inputCheckbox value="{!ItemMap[PolId].boolSelected}" id="chkApprove"  onchange="changeItemCB(this);" />
+                                                            <label></label>
+                                                        </div>  
+                                                    </td>
+                                                    
+                                                    <td><apex:outputField value="{!ItemMap[PolId].pol.ASI_MFM_Sub_brand_Code__c}" ></apex:outputField></td>
+                                                    
+                                                    <td class="lookupCen2">
+                                                        <apex:input value="{!ItemMap[PolId].subLedger}" styleclass="searchcss form-control input-sm SubLedgerClass requirefield" style="width: 8em; "  />
+                                                        <div class="hid">
+                                                            <apex:inputText value="{!ItemMap[PolId].subLedgerId}" styleclass="value"/>
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td id="APType_manageAll_{!PolId}_input">
+                                                        {!ItemMap[PolId].APType}
+                                                    </td>
+                                                    
+                                                    <td id="APCategory_manageAll_{!PolId}_input" >
+                                                        <apex:input value="{!ItemMap[PolId].APCategory}" styleclass="searchcss input-sm form-control apcategoryClass requirefield" html-data-id="{!PolId}" style="width: 15em; " />
+                                                    </td>
+                                                    
+                                                    <td  class="lookupCen" id="APCode_manageAll_{!PolId}_input"  >
+                                                        <apex:input value="{!ItemMap[PolId].APCode}" styleclass="form-control searchcss input-sm requirefield apCodeClass requirefield" html-data-id="{!PolId}" style="width: 15em; " />
+                                                        <div class="hid" >
+                                                            <apex:inputText value="{!ItemMap[PolId].APCodeId}" styleclass="value"/>
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td>
+                                                        <apex:inputText value="{!ItemMap[PolId].Customer}"  styleclass="CustomerClass searchcss input-sm form-control {!IF(ItemMap[PolId].NeedCustomer=true,'required','')}  Customer_{!PolId} " />
+                                                        <div class="hid">
+                                                            <apex:inputText value="{!ItemMap[PolId].CustomerId}" styleclass="value"/>
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td>
+                                                        <apex:inputText value="{!ItemMap[PolId].VenueWhere}"  styleclass="VenueWhereClass searchcss input-sm form-control {!IF(ItemMap[PolId].NeedCustomer=true,'required','')}  Venue_{!PolId} " style="width: 10em; "/>
+                                                        <div class="hid">
+                                                            <apex:inputText value="{!ItemMap[PolId].VenueWhereId}" styleclass="value"/>
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td><apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!ItemMap[PolId].PlanLine.ASI_MFM_Total_Cost__c/exchangeRate}"/></apex:outputText></td>
+                                                    <td ><apex:inputField value="{!ItemMap[PolId].pl.ASI_MFM_Payment_Amount__c}"  onchange="calculateSum();" styleClass="LineAmount form-control searchcss input-sm requirefield"  ></apex:inputField></td>
+                                            		<td class="LookupCss" > <apex:inputField value="{!ItemMap[PolId].pl.ASI_MFM_Payee__c}"></apex:inputField>  </td>
+                                                    <td class="ConvertedAmount"></td>
+                                                    <td Class="TaxCodeTD"><div>{!ItemMap[PolId].tx.name}</div></td>
+                                                    <td><apex:inputField value="{!ItemMap[PolId].pl.ASI_MFM_Invoice_Number__c}" styleClass="form-control searchcss input-sm" ></apex:inputField></td>
+                                                    <td><apex:inputField value="{!ItemMap[PolId].pl.ASI_MFM_Invoice_Date__c}" styleClass="form-control searchcss input-sm"  style="width: 10em;"></apex:inputField></td>
+                                                    <td><apex:inputField value="{!ItemMap[PolId].pl.ASI_MFM_AP_Remark__c}" styleClass="form-control searchcss input-sm requirefield "  style="width: 15em;" ></apex:inputField></td>
+                                                </tr>
+                                            </apex:repeat> 
+                                            
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan ="10" ></td>
+                                                <td colspan ="3" ><div id="TotalAmount"> </div></td>
+                                                <td colspan ="4" ></td>
+                                                
+                                            </tr>
+                                        </tfoot>
+                                        
+                                        
+                                    </table>
+                                </div>                      
+                                
+                            </div>
+                        </div>
+                    </apex:outputPanel>   
+                    
+                </div>
+                
+            </div>
+        </apex:form>
+        <!----------------------------------------Main Form End---------------------------------------------------->
+        
+        <!-------------------------------------------------------------------Loading-------------------------------------------------------------------------------------->
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus> 
+        <!-------------------------------------------------------------------Loading-------------------------------------------------------------------------------------->
+        
+        
+        
+    </body>
+    
+    
+    
+</apex:page>

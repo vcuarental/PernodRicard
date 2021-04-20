@@ -1,0 +1,380 @@
+<!--*********************************************************************************
+ * Name: ASI_CRM_SG_SalesOrderPDFComponent
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2017-05-07       Wilken Lee		     	[WL 1.0] CHM115161419 Add SKU Description and Code, Packing Size
+ * 2017-07-20       Wilken Lee		     	[WL 2.0] Separate PDF of WS SO and ReExport SO
+ * 2018-02-21       Wilken Lee		     	[WL 3.0] Change PDF to display SKU Name instead of JDE Search Text, add Total Price, add Tax Amount and Invoice Total
+ *-->
+<apex:component controller="ASI_CRM_SG_SalesOrderPDFController" access="global" allowDml="true"  >
+    <apex:attribute name="headerId" type="String" description=" " assignTo="{!currentHeaderId}"/>
+    <html>
+    <head>
+        <style>
+            @Page{
+                size: A4 landscape;
+                margin:0.25in;
+                margin-top: 0.8in; margin-bottom: 0.25in; margin-left: 0.25in; margin-right: 0.25in;
+            
+                @PageBreak{
+                    page-break-inside:avoid;
+                    page-break:always;
+                }       
+
+                @top-center {
+                    content: element(header); 
+
+                }
+                   
+            }
+            div.header {
+                position: running(header);
+            }
+             
+        
+            .nobreak{
+                page-break-inside: avoid;       
+            } 
+            
+            
+            table {
+                -fs-table-paginate: paginate; 
+    <!--        page-break-inside: auto;    -->
+                padding: 0;
+                margin: 0;
+                border-spacing: 0;
+                border-collapse: collapse;
+            }
+            
+            tr{
+                page-break-inside:avoid;
+            }
+            
+            body{
+                font-family: "Tms Rmn","serif";
+                font-size: 10pt;
+            }
+            
+            tbody {display:table-row-group;
+            }
+ 
+            .standardtd{
+                border: solid 1px black;    
+            }
+            thead {
+                display: table-header-group;
+                border-top: solid 1px black;
+            }
+            
+            
+        </style>
+    <div class="header">
+        <center><apex:image width="100%" height="100%" url="{!URLFOR($Resource.ASI_MFM_SG_Logo)}"/></center>
+    </div>
+    </head>
+    <body> 
+        <table class="tableFixed" width="100%"> 
+            <tr ><td colspan="8" style='font-size:14.0pt;font-family:"Tms Rmn","serif";color:#376091;text-align:center' >Sales Order</td></tr>
+        </table>
+        <br/>
+        <br/>
+        <table border="0" cellpadding="1" cellspacing="1" width="100%">
+            <colgroup>
+                <col span="1" style="width: 15%;padding-left:5px;"/>
+                <col span="1" style="width: 35%;padding-left:5px;"/>
+                <col span="1" style="width: 15%;padding-left:5px;"/>
+                <col span="1" style="width: 35%;padding-right:5px;"/>
+            </colgroup>
+            <tr>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Order Date" /> </td>
+                <td style="border:1px solid black;">
+                    <apex:outputtext value="{0,date,dd/MM/YYYY}"> 
+                    <apex:param value="{!header.ASI_CRM_SG_Order_Date__c}" />
+                    </apex:outputText>
+                </td>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Customer" /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.ASI_CRM_SG_Customer__c}" /> </td>
+            </tr>
+            <tr>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Owner" /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.owner.name}" /> </td>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Sales Order Request No." /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.name}" /> </td>
+            </tr>
+            <tr>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Country" /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.ASI_CRM_SG_Country__c}" /> </td>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Customer PO No." /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.ASI_KOR_Customer_PO_No__c}" /> </td>
+            </tr>
+            <tr>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Order Status" /> </td>
+                <td style="border:1px solid black;"> <apex:outputfield value="{!header.ASI_KOR_Order_Status__c}" /> </td>
+            </tr>
+        </table >
+        <br/>
+        <br/>
+        <br/>
+        <br/>
+
+        <table border="0" cellpadding="1" cellspacing="1" width="100%">
+            <apex:variable var="v" value="" rendered="{!NOT(isWholeSaler)}">
+                <colgroup>
+                    <col span="1" style="width: 37%;padding-left:5px;"/>
+                    <col span="1" style="width: 21%;padding-left:5px;"/>
+                    <col span="1" style="width: 21%;padding-left:5px;"/>
+                    <col span="1" style="width: 21%;padding-right:5px;"/>
+                </colgroup>
+                <tr>
+                    <td style="border:1px solid black;"  > <apex:outputtext value="SKU" /> </td>
+                    <td style="border:1px solid black;"  > <apex:outputtext value="Request Quantity (Carton)" /> </td>
+                    <td style="border:1px solid black;"  > <apex:outputtext value="Request Quantity (Bottle)" /> </td>
+                    <td style="border:1px solid black;"  >FOC</td>
+					<td style="border:1px solid black;"  >Stock Availability(Yes/No)</td>
+                </tr>
+            </apex:variable>
+
+            <apex:variable var="v" value="" rendered="{!isWholeSaler}">
+                <!--<colgroup>
+                    <col span="1" style="width: 30%;padding-left:5px;"/>
+                    <col span="1" style="width: 10%;padding-left:5px;"/>
+                    <col span="1" style="width: 13%;padding-left:5px;"/>
+                    <col span="1" style="width: 10%;padding-right:5px;"/>
+                    <col span="1" style="width: 10%;padding-right:5px;"/>
+                    <col span="1" style="width: 10%;padding-right:5px;"/>
+                </colgroup>-->
+                <tr>
+                    <!--[WL 1.0 BEGIN]
+					<td style="border:1px solid black;width: 50px;"  > <apex:outputtext value="SKU" /> </td>-->
+					<td style="border:1px solid black;width: 200px;"  >SKU Description</td>
+					<td style="border:1px solid black;width: 40px;"  >SKU Code</td>
+					<td style="border:1px solid black;width: 100px;"  >Pack Size</td>					
+                    <!--<td style="border:1px solid black;"  > <apex:outputtext value="Request Quantity (Carton)" /> </td>-->
+					<!--[WL 1.0 END]-->
+                    <td style="border:1px solid black;width: 40px;"  > <apex:outputtext value="Request Quantity (Bottle)" /> </td>
+                    <td style="border:1px solid black;width: 40px;"  >FOC</td>
+                    <td style="border:1px solid black;width: 40px;"  ><apex:outputtext value="FOC(Additional)" rendered="{!isWholeSaler}"/> </td>
+                    <td style="border:1px solid black;width: 40px;"  ><apex:outputtext value="FOC(Total)" rendered="{!isWholeSaler}"/> </td>
+					<td style="border:1px solid black;width: 40px;"  >Stock Availability</td>
+					<!--[WL 1.0 BEGIN]-->
+					<td style="border:1px solid black;width: 60px;"  >Unit Price</td>
+					<!--[WL 1.0 END]-->
+					<!--[WL 3.0 BEGIN]-->
+					<td style="border:1px solid black;width: 60px;"  ><apex:outputtext value="Subtotal" rendered="{!isWholeSaler}"/></td>
+					<!--[WL 3.0 END]-->
+                </tr>
+            </apex:variable>
+
+			<!-- [WL 2.0 BEGIN]-->
+            <apex:repeat value="{!details}" var="detail" id="detailListReExport" rendered="{!NOT(isWholeSaler)}">
+                <tr>
+					<td style="border:1px solid black;"> 
+                        <apex:outputfield value="{!detail.salesOrderLineItem.ASI_CRM_SG_SKU__c}"/> 
+                    </td>
+					
+					<td style="border:1px solid black;">
+                        <apex:outputText value="{0,number,#,##0}">
+                            <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Carton__c}"/>
+                        </apex:outputText>
+                    </td>
+                    <td style="border:1px solid black;">
+                        <apex:outputText value="{0,number,#,##0}">
+                            <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"/>
+                        </apex:outputText>
+                    </td>
+                    <td style="border:1px solid black;">
+                        <apex:outputText value="{0,number,#,##0}">
+                            <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_SG_FOC__c}"/>
+                        </apex:outputText>
+                    </td>
+					<!--Begin 20170406 Wilken: CHM114615809 Add Stock Availability-->
+					<td style="border:1px solid black;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_Stock_Availability__c}"/>
+                    </td>
+					<!--End 20170406 Wilken: CHM114615809 Add Stock Availability-->
+                </tr>
+            </apex:repeat>
+			<!-- [WL 2.0 END]-->
+			
+			<apex:repeat value="{!details}" var="detail" id="detailListWholesaler" rendered="{!isWholeSaler}">
+                <tr>
+                    <!--[WL 1.0 BEGIN]-->
+					<td style="border:1px solid black;">
+						<!--[WL 3.0 BEGIN]-->
+						<!--<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_English_Name__c}"/>-->
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_SG_SKU__r.Name}"/>
+						<!--[WL 3.0 END]-->
+                    </td>
+					<td style="border:1px solid black;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_SKU_Code__c}"/>
+                    </td>
+					<td style="border:1px solid black;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_Pack_Factor__c}"/>
+                    </td>					
+                    <td style="border:1px solid black;text-align:right;">
+                        <apex:outputText value="{0,number,#,##0}">
+                            <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"/>
+                        </apex:outputText>
+                    </td>
+                    <td style="border:1px solid black;text-align:right;">
+                        <apex:outputText value="{0,number,#,##0}">
+                            <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_SG_FOC__c}"/>
+                        </apex:outputText>
+                    </td>
+					
+                    <apex:variable var="v" value="" >
+                        <td style="border:1px solid black;text-align:right;">
+                            <apex:outputText value="{0,number,#,##0}">
+                                <apex:param value="{!detail.salesOrderLineItem.ASI_CRM_FOC_Additional__c}"/>
+                            </apex:outputText>
+                        </td>
+                        <td style="border:1px solid black;text-align:right;">
+                            <apex:outputText value="{0,number,#,##0}">
+                                <apex:param value="{!detail.totalFOC}"/>
+                            </apex:outputText>
+                        </td>
+                    </apex:variable>
+					<!--Begin 20170406 Wilken: CHM114615809 Add Stock Availability-->
+					<td style="border:1px solid black;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_Stock_Availability__c}"/>
+                    </td>
+					<!--End 20170406 Wilken: CHM114615809 Add Stock Availability-->
+					<!--[WL 1.0 BEGIN]-->
+					<td style="border:1px solid black;text-align:right;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_Selling_Price_Per_Bottle_PRS_WS__c}"/>
+                    </td>
+					<!--[WL 1.0 END]-->
+					<!--[WL 3.0 BEGIN]-->
+					<td style="border:1px solid black;text-align:right;">
+						<apex:outputText value="{!detail.salesOrderLineItem.ASI_CRM_SG_Total_Price_PRS_WS__c}"/>
+                    </td>
+					<!--[WL 3.0 END]-->
+                </tr>
+            </apex:repeat>
+			
+			<!--[WL 2.0 BEGIN]-->
+			<apex:variable var="v" value="" rendered="{!isWholeSaler}">
+				<tr>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:1px solid black;text-align:left;font-weight: bold;"> Total: </td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0}">
+							<apex:param value="{!totalBottle}"/>
+						</apex:outputText>
+					</td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0}">
+							<apex:param value="{!totalFOC}"/>
+						</apex:outputText>
+					</td>               
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0}">
+							<apex:param value="{!totalAdditionalFOC}"/>
+						</apex:outputText>
+					</td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0}">
+							<apex:param value="{!totalSumFOC}"/>
+						</apex:outputText>
+					</td>
+					<td style="border:1px solid black;"></td>
+					<td style="border:1px solid black;"></td>
+					<td style="border:1px solid black;"></td>
+				</tr>				
+				<!--[WL 3.0 BEGIN]-->
+				<tr>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:1px solid black;" colspan="2">Total Price:</td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0.00}">
+							<apex:param value="{!header.ASI_CRM_SG_Total_Price__c}"/>
+						</apex:outputText>
+					</td>
+				</tr>
+				
+				<tr>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:1px solid black;" colspan="2">GST:</td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0.00}">
+							<apex:param value="{!header.ASI_CRM_Tax_Amount__c}"/>
+						</apex:outputText>
+					</td>
+				</tr>
+				
+				<tr>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:none;"></td>
+					<td style="border:1px solid black;" colspan="2">Invoice Total:</td>
+					<td style="border:1px solid black;text-align:right;font-weight: bold;">
+						<apex:outputText value="{0,number,#,##0.00}">
+							<apex:param value="{!header.ASI_CRM_Invoice_Total__c}"/>
+						</apex:outputText>
+					</td>
+				</tr>
+				<!--[WL 3.0 END]-->
+			</apex:variable>
+			
+			<apex:variable var="v" value="" rendered="{!NOT(isWholeSaler)}">
+				<tr>
+				<td style="border:1px solid black;"> Total: </td>
+                <td style="border:1px solid black;">
+                    <apex:outputText value="{0,number,#,##0}">
+                        <apex:param value="{!totalCarton}"/>
+                    </apex:outputText>
+                </td>
+                <td style="border:1px solid black;">
+                    <apex:outputText value="{0,number,#,##0}">
+                        <apex:param value="{!totalBottle}"/>
+                    </apex:outputText>
+                </td>
+                <td style="border:1px solid black;">
+                    <apex:outputText value="{0,number,#,##0}">
+                        <apex:param value="{!totalFOC}"/>
+                    </apex:outputText>
+                </td>
+				<td style="border:1px solid black;"></td>
+            </tr>
+			</apex:variable>
+			<!--[WL 2.0 END]-->
+            
+        </table >
+        <br/>
+        <br/>
+        <br/>
+        <br/>
+        <table border="0" cellpadding="1" cellspacing="1" width="40%">
+            <colgroup>
+                <col span="1" style="width: 25%;padding-right:5px;"/>
+            </colgroup>
+            <tr>
+                <td style="border:1px solid black;"  > <apex:outputtext value="Approved By Managing Director/ Commercial Director/ Sales Manager:" /> </td>
+            </tr>
+            <tr>
+                <td style="border:1px solid black;"  ><br/> {!approverName} <br/> <br/> </td>
+            </tr>
+        </table >
+    </body>  
+</html> 
+</apex:component>

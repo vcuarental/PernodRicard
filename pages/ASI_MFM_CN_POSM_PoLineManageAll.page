@@ -1,0 +1,1323 @@
+<apex:page standardController="ASI_MFM_PO__c" extensions="ASI_MFM_CN_POSM_PoLineManageAllCls">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    
+    <meta charset="UTF-8" />
+    <head>
+        <script>
+        var isEditMode;
+        var isOwner;
+        var oTable;
+        var deletedRowIds=[];
+        var cloneSavedRow=[];
+        var savedRows=[];
+        var poid;
+        var poType;
+        var itemGroupNameList;
+        var itemGroupMap;
+        var warehouseNameList;
+        var warehouseMap;
+        var outletNameList;
+        var outletMap;
+        var cityMap;
+        var cityList;
+        var userMap;
+        var userNameList;
+        var provinceList;
+        var poEditable;
+        var taxCodeList=[];
+        var taxCodeMap={};
+        var vasList=[];
+        var vasMap={}
+        
+        function requestConfig(callbackSuccess) {
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.searchConfig}',
+                JSON.stringify({poid:poid}), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log('request remote sucess');
+                            callbackSuccess(result);
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Request POSM Line Config');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+        
+        function requestPosmLine(callbackSuccess) {
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.searchPosmLineList}',
+                JSON.stringify({poid:poid}), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            callbackSuccess(result.posmLineList);
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Save Receipt Phasing');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+        
+        $(document).ready(function(){ 
+            $('.waitingSearchDiv').hide();
+            poid = '{!pid}';
+            poType = '{!poType}';
+            poEditable = {!poEditable};
+            isOwner = {!isOwner};
+            console.info('---isOwner---')
+            console.info(isOwner);
+            console.log(poEditable);
+            //itemGroupNameList = {!posmItemListJson};
+            //itemGroupMap = {!posmItemMapJson};
+            warehouseNameList = {!warehouseListJson};
+            warehouseMap = {!warehouseMapJson};
+
+            requestConfig(function(result){
+                outletNameList = result.outletNameList;
+                outletMap = result.outletMap;
+				cityMap = result.cityMap;
+                cityList = result.cityList;
+                userMap = result.userMap;
+                userNameList = result.userList;
+        		provinceList = result.provinceList;
+                taxCodeMap = result.taxCodeMap;
+                taxCodeList = [];
+                for(var key in taxCodeMap) {
+                    var taxCode = taxCodeMap[key];
+                    taxCodeList.push({'name':taxCode.Name,'value':taxCode.Id});
+                }
+                console.log(taxCodeList);
+                
+                vasMap = result.vasMap;
+                vasList = [];
+                for(var key in vasMap) {
+                    vasList.push({'name':vasMap[key],'value':key});
+                }
+                
+                requestPosmLine(function(posmLineList){
+                    savedRows = cloneLineList(posmLineList);
+                    cloneSavedRow = cloneLineList(posmLineList);
+                    oTable = constructTbl(savedRows);
+                    updateUI(false);
+                    calculatePosmLineAmount();
+                    if(!poEditable) {
+                        $("[id$=manageAllBtn]").removeClass("btn").addClass("hidden");
+                    }
+                });
+            });
+            
+        });
+        function cloneLineList(posmLineList) {
+            var cloneList=[];
+            for(var i=0;i<posmLineList.length;i++) {
+                cloneList.push(Object.assign({},posmLineList[i]));
+            }
+            return cloneList;
+        }
+        function updateUI(editmode){
+            isEditMode = editmode;
+            if(isEditMode) {
+                $("[id$=manageAllBtn]").removeClass("btn").addClass("hidden");
+                $("[id$=cancelBtn]").addClass("btn").removeClass("hidden");
+                $("[id$=submitBtn]").addClass("btn").removeClass("hidden");
+            } else {
+                $("[id$=cancelBtn]").removeClass("btn").addClass("hidden");
+                $("[id$=manageAllBtn]").addClass("btn").removeClass("hidden");
+                $("[id$=submitBtn]").removeClass("btn").addClass("hidden");
+            }
+            oTable.column(0).visible( isEditMode );
+            oTable.column(1).visible( !isEditMode);
+            oTable.column(13).visible( isEditMode );
+            oTable.column(16).visible( !isEditMode );
+            
+            // hidden column
+            oTable.column(5).visible( false );
+            oTable.column(7).visible( false );
+            oTable.column(15).visible( false );
+        }
+        function constructTbl(initData) {
+            										
+            var columns = [
+                { title: "rowcontrol",				"data": "rowcontrol"},
+                { className:'details-control', 		"data":null, "defaultContent":''},
+                { title: "",			"data": "itemgroupCode" },
+                { title: "Item Group",				"data": "itemgroupName", defaultContent:'' },
+                { title: "Item Group Description",	"data": "itemgroupDesc", defaultContent:'' },
+                { title: "MOQ",	"data": "minOrderQty", "defaultContent":0 },
+                { title: "Unit Price",				"data": "unitPrice" },
+                { title: "Bundle Quantity",			"data": "bundleQty" },
+                { title: "Quantity",				"data": "qty" },
+                { title: "Total Price",				"data": "totalPrice" },
+                { title: "Total Price (w/ VAT)",	"data": "totalPriceVat" },
+				{ title: "VAT",						"data": "vat", "defaultContent":''},
+                { title: "VAS",						"data": "vas", "defaultContent":''},
+                { className:'details-control-addr', "data":null, "defaultContent":''},
+                { title: "Delivery Address",		"data": "warehouseName" },
+                { title: "Bundle Flag",				"data": "bundleFlag" },
+                { title: "",						"data": "sentMail" },
+                //{ title: "TIV Number",				"data": "tivNum" },
+                //{ title: "Related SIR",				"data": "sirLink" },
+            ];
+            
+            var dataTable = $('#posmLineTbl').removeAttr('width').DataTable({
+                scrollX: true,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: initData,
+	            columns: columns,
+                fixedColumns: true,
+                "columnDefs":[
+                    {
+                        "targets": 0,
+                        'className': 'dt-body-center',
+                		"render": function ( data, type, row, meta ) {
+                            var editable = row.editable;//(row.id==null || row.id=='');
+                            var newData = '<a onclick="cloneRow(this)">Clone</a>';
+                            if(editable) {
+                                newData += '|<a onclick="deleteRow(this)">Delete</a>';
+                            }
+							return newData;
+                        }
+                    },
+                	{
+                        "targets": 1,
+                        "width": '1%',
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                            $(nTd).html('<h1 style="font-size:large ">+</h1>');
+                        }
+                    },
+                    {
+                		"targets": 2, // item group
+                        "render": function ( data, type, row, meta ) {
+			                var key = columns[meta.col].data;
+                            if(isEditMode) {
+                                var editable = row.editable;//(row.id==null || row.id=='');
+                                if(editable && !isOwner){
+                                    // get the dummy lookup field by JQuery and replace the id
+                                    var htmlStr = $('#lookupDummy')[0].innerHTML;
+                                    htmlStr = htmlStr.replace(/_row/g, '_'+meta.col+'_'+meta.row+'_'+new Date().getTime());
+                                    return htmlStr;
+                                    //return '<input class="userinput" id="'+key+'" name="'+key+'" value="'+data+'" onblur="itemGroupChange(this)" style="border-left: 3px solid #f00;">';
+                                }
+                            }
+                            return data;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                            var inputbox = $(nTd).find('.hideField');
+                            inputbox.val(oData.itemgroupLabel);
+                            /*
+                            $(nTd).find('input').autocomplete({
+                                source: itemGroupNameList,
+				                minLength: 0
+                            });
+                            */
+                        }
+              		},
+                    {
+                		"targets": 3, // item group Name Link
+                        "render": function ( data, type, row, meta ) {
+			                var key = columns[meta.col].data;
+                            //var htmlLink = '<a href="">'+data+'</a>'
+                            return data;
+                        },
+              		},
+                    {
+                        "targets": [6,5,8], // Qty UnitPrice
+                        "render": function ( data, type, row, meta ) {
+			                var key = columns[meta.col].data;
+                            if(isEditMode) {
+                                var styleWidth = 'width:50px';
+                                var editable = row.editable;//(row.id==null || row.id=='');
+                                if(poType=='eMarket'&&key=='unitPrice'&&!row.bundleFlag) {
+                                    return data;
+                                }
+                                if(editable){
+                                    return '<input class="userinput" type="number" id="'+key+'" name="'+key+'" value="'+data+'" oninput="amountChange(this)" style="'+styleWidth+'; margin-right:5px;">';
+                                }
+                            }
+                            return data;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                        }
+              		},
+                    {
+                        "targets": [9,10], // total
+                        "render": function ( data, type, row, meta ) {
+                            return parseInt(Math.round(data*100))/100;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                        }
+              		},
+                    {
+                        "targets": 11,
+                        "width": '1%',
+                        "render": function ( data, type, row, meta ) {
+                            var key = columns[meta.col].data;
+                            if(isEditMode) {
+                                if(row.editable){
+                                    var htmlPicklist = '<select id="'+key+'" name="'+key+'" onchange="taxSelect(this)"><option value="">Select VAT</option>';
+                                    for(var i=0;i<taxCodeList.length;i++){
+                                        if(data == taxCodeList[i].name) {
+                                            htmlPicklist += '<option value="'+taxCodeList[i].value+'" selected>'+taxCodeList[i].name+'</option>';
+                                        } else {
+                                            htmlPicklist += '<option value="'+taxCodeList[i].value+'">'+taxCodeList[i].name+'</option>';
+                                        }
+                                    }
+                                    htmlPicklist +='</select>';
+                                    return htmlPicklist;
+                                }
+                            }
+                            return data;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                        }
+                    },
+                    {
+                        "targets": 12,
+                        "render": function ( data, type, row, meta ) {
+                            var key = columns[meta.col].data;
+                            if(isEditMode) {
+                                if(row.editable){
+                                    var htmlPicklist = '<select id="'+key+'" name="'+key+'" onchange="vasSelect(this)"><option value="">Select VAS</option>';
+                                    for(var i=0;i<vasList.length;i++){
+                                        if(data == vasList[i].value) {
+                                            htmlPicklist += '<option value="'+vasList[i].value+'" selected>'+vasList[i].name+'</option>';
+                                        } else {
+                                            htmlPicklist += '<option value="'+vasList[i].value+'">'+vasList[i].name+'</option>';
+                                        }
+                                    }
+                                    htmlPicklist +='</select>';
+                                    return htmlPicklist;
+                                }
+                            } else {
+                                return vasMap[data];
+                            }
+                            return data;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                        }
+                    },
+                    {
+                        "targets": 13,
+                        "width": '1%',
+                        "render": function ( data, type, row, meta ) {
+                            if(isEditMode) {
+                                if(row.editable){
+                                    return '<h1 style="font-size:large ">+</h1>';
+                                }
+                            }
+                            return '';
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                            //$(nTd).html('<h1 style="font-size:large ">+</h1>');
+                        }
+                    },
+                    {
+                        "targets": 14, // devlivery addr 
+                        "render": function ( data, type, row, meta ) {
+			                var key = columns[meta.col].data;
+                            var warehouseName = '';
+                            if(row.warehouseName!=null&&row.warehouseName!='') {
+                                warehouseName = row.warehouseName;
+                            }
+                            return warehouseName;
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                            $(nTd).addClass("addr_"+iRow);
+                            $(nTd).attr("title", "tooltip");
+                            $(nTd).tooltip({
+                                content: tooltipHtml(oData),
+                                position: { my: "left+30 center", at: "right center" },
+                                track:true
+                            });
+                        }
+                    },
+        			{
+                        "targets": 15, //Bundle Flag
+                        "render": function ( data, type, row, meta ) {
+			                var key = columns[meta.col].data;
+                           	var checked = (data)? 'checked="checked"':'';
+                            return '<input type="checkbox" disabled="disabled" '+checked+'>';
+                        },
+                        "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                        }
+              		},
+        			{
+                        "targets": 16, //Button Mail
+                        "render": function ( data, type, row, meta ) {
+                            if(row.editable){
+                                return '';
+                            }
+                            return '<div style="width:250px;"><button type="button" onclick="sendTIV(this)">Send TIV</button></div>'; 
+                        }
+              		}
+                ]
+            });
+        
+        	// Add event listener for opening and closing details
+            $('#posmLineTbl tbody').on('click', 'td.details-control', function () {
+                var tr = $(this).closest('tr');
+                var row = oTable.row( tr );
+                if ( row.child.isShown() ) {
+                    // This row is already open - close it
+                    row.child.hide();
+                    tr.find('.details-control').html('<h1 style="font-size:large ">+</h1>');
+                } else {
+                    // Open this row
+                    row.child( format(row.data(),row.index()) ).show();
+                    tr.find('.details-control').html('<h1 style="font-size:large ">-</h1>');
+                }
+            });
+        	$('#posmLineTbl tbody').on('click', 'td.details-control-addr', function () {
+                var tr = $(this).closest('tr');
+                var row = oTable.row( tr );
+                var editable = row.data().editable;
+                if(!editable) return;
+                if ( row.child.isShown() ) {
+                    // This row is already open - close it
+                    row.child.hide();
+                    tr.find('.details-control-addr').html('<h1 style="font-size:large ">+</h1>');
+                } else {
+                    // Open this row
+                    row.child( formatAddr(row) ).show();
+                    tr.find('.details-control-addr').html('<h1 style="font-size:large ">-</h1>');
+                    var warehouseInput = $('#Warehouse_'+row.index()+'');
+                    warehouseInput.autocomplete({
+                        source: warehouseNameList,
+                        minLength: 0
+                    });
+                    var outletInput = $('#Outlet_'+row.index()+'');
+                    outletInput.autocomplete({
+                        source: outletNameList,
+                        minLength: 0
+                    });
+                    var provinceInput = $('#Province_'+row.index()+'');
+                    provinceInput.autocomplete({
+                        source: provinceList,
+                        minLength: 0
+                    });
+                    var cityInput = $('#City_'+row.index()+'');
+                    cityInput.autocomplete({
+                        source: cityList,
+                        minLength: 0
+                    });
+                    var receiptOwnerInput = $('#ReceiptOwner_'+row.index()+'');
+                    receiptOwnerInput.autocomplete({
+                        source: function(request, response) {
+                            var results = $.ui.autocomplete.filter(userNameList, request.term);
+                            response(results.slice(0, 10));
+                        },
+                        minLength: 0
+                    });
+                    var warehouseName = row.data().warehouseName;
+                    var warehouseObj = warehouseMap[warehouseName];
+
+                    console.info('---row.data()--');
+                    console.info(row.data());
+                    var directDelivery = true;
+                    if(warehouseObj!=null) {
+                        directDelivery = warehouseObj.ASI_MFM_Direct_Delivery__c;
+                    }
+                    setupAddrInputUI($('#deliveryAddrTbl_'+row.index()+' tbody tr'),!directDelivery);
+                }
+            });
+
+	        var addNewHtml = '';
+            addNewHtml="<a onclick='addNewRow()'>Add New</a>";
+            $(dataTable.column(0).header()).html(addNewHtml);
+        	return dataTable;
+        }
+        function sendTIV(button) {
+            var row 	= oTable.row(button.closest("td"));
+            var rowData = row.data();
+            var sirList = rowData.sirList;
+            if(sirList==null||sirList.length==0) {
+                alert('No SIR Line');
+                return;
+            }
+            else
+            {   
+                var flag = false;
+                sirList.forEach(function(e){
+                   if(e.isSendEmail && e.tivnum !='' && e.tivnum != undefined)
+                   {
+                     flag = true;
+                   }
+                })
+
+                if(!flag)
+                {
+                      alert('Please Select SIR Line Send Email Or Fill in TIV Number!');
+                      return;
+                }
+
+            }
+            var posmLineId = rowData.id;
+            if(posmLineId==null||posmLineId=='') {
+                alert('Not allow to send SIR for unsubmitted line');
+                return;
+            }
+            //console.log('send tiv '+ JSON.stringify(rowData));
+            
+            
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.sendTIV}',
+                JSON.stringify({
+                    poid:poid,
+                    sirList:sirList,
+                    posmLineId:posmLineId
+                }), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log('request remote sucess');
+                            savedRows = cloneLineList(result.posmLineList);
+                            cloneSavedRow = cloneLineList(result.posmLineList);
+                            updateUI(false);
+                            oTable.clear();
+                            oTable.rows.add(savedRows).draw();
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Send TIV');
+                    }
+                }, 
+                {escape: true}
+            );
+            
+        }
+        /*
+        function sendSIR(button) {
+            var row 	= oTable.row(button.closest("td"));
+            var rowData = row.data();
+            var posmLineId = rowData.id;
+            if(posmLineId==null||posmLineId=='') {
+                alert('Not allow to send SIR for unsubmitted line');
+                return;
+            }
+            
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.sendSir}',
+                JSON.stringify({
+                    poid:poid,
+                    posmLineId:posmLineId
+                }), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log('request remote sucess');
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Send SIR');
+                    }
+                }, 
+                {escape: true}
+            );
+            
+        }*/
+        function bundleChange(checkbox) {
+            var id 		= checkbox.id;
+            var value 	= checkbox.checked;
+            var row 	= oTable.row(checkbox.closest("td"));
+            var rowData = row.data();
+            rowData[id] = value;
+        }
+        function taxSelect(selectBox) {
+            var id 		= selectBox.id;
+            var name    = selectBox.name;
+            var value 	= selectBox.value;
+            var row 	= oTable.row(selectBox.closest("td"));
+            var rowData = row.data();
+            
+            var taxCode = taxCodeMap[value];
+            if(taxCode==null) {
+                rowData.vat = '';
+                rowData.vatId = '';
+                rowData.vatRate = 0;
+			} else {
+                rowData.vat = taxCode.Name;
+                rowData.vatId = taxCode.Id;
+                rowData.vatRate = taxCode.ASI_MFM_VAT_Rate__c;
+            }
+
+            
+            var total = totalVat = Number(Number(rowData['unitPrice'])*Number(rowData['qty']));
+            total /= (1+(rowData.vatRate/100));
+            total = parseInt(Math.round(total*100))/100;
+            rowData['totalPrice'] = total;
+            rowData['totalPriceVat'] = totalVat;
+            row.column(9).nodes()[row.index()].innerHTML = total;
+            row.column(10).nodes()[row.index()].innerHTML = totalVat;
+            calculatePosmLineAmount();
+        }
+        function vasSelect(selectBox) {
+            var id 		= selectBox.id;
+            var name    = selectBox.name;
+            var value 	= selectBox.value;
+            var row 	= oTable.row(selectBox.closest("td"));
+            var rowData = row.data();
+
+			rowData.vas = value;
+        }
+        function amountChange(inputBox) {
+            var id 		= inputBox.id;
+            var name    = inputBox.name;
+            var value 	= Number(inputBox.value);
+            var row 	= oTable.row(inputBox.closest("td"));
+            var rowData = row.data();
+            var taxRate = rowData.vatRate;
+            if(taxRate==null) taxRate=0;
+            console.log(taxRate);
+            if(value<0) { value = 0; }
+            if(name=='qty') { value = parseInt(value); }
+            inputBox.value = value;
+            rowData[name] = value;
+            var total = totalVat = Number(Number(rowData['unitPrice'])*Number(rowData['qty']));
+            total /= (1+(taxRate/100));
+            total = parseInt(Math.round(total*100))/100;
+            rowData['totalPrice'] = total;
+            rowData['totalPriceVat'] = totalVat;
+            row.column(9).nodes()[row.index()].innerHTML = total;
+            row.column(10).nodes()[row.index()].innerHTML = totalVat;
+            
+            calculatePosmLineAmount();
+        }
+        
+        function calculatePosmLineAmount () {
+            var datas = oTable.rows().data();
+            var posmTotalAmount = 0;
+            
+            for(var i=0; i<datas.length; i++) {
+                var row = datas[i];
+                posmTotalAmount += Number((row.totalPrice!=null)?row.totalPrice:0);
+            }
+            
+            $("#posmtTotalAmount").html(posmTotalAmount.toFixed(2));
+        }
+        function itemGroupLookupChange(row,itemGroupObj) {
+            var id 		= itemGroupObj.id;
+            var rowData = row.data();
+            if(itemGroupObj==null && value!='') {
+                alert('Item Group Not Found.');
+                inputBox.value = rowData.itemgroupCode;
+            } else {
+                rowData['itemgroup'] = itemGroupObj.id;
+                rowData[id] = itemGroupObj.name;
+                var styleWidth = 'width:50px';
+                var inputHtml = '<input class="userinput" type="number" id="unitPrice" name="unitPrice" value="'+itemGroupObj.unitPrice+'" oninput="amountChange(this)" style="'+styleWidth+'; margin-right:5px;">';
+                if(poType=='eMarket'&&!itemGroupObj.isBundle) {
+					inputHtml = itemGroupObj.unitPrice;
+                }
+                var taxRate = rowData.vatRate;
+	            if(taxRate==null) taxRate=0;
+                rowData.unitPrice = itemGroupObj.unitPrice
+                var total= totalVat = Number(rowData.qty) * itemGroupObj.unitPrice;
+                total /= (1+(taxRate/100));
+	            total = parseInt(Math.round(total*100))/100;
+                rowData.totalPrice = total;
+                rowData.totalPriceVat = totalVat;
+                rowData.bundleFlag = itemGroupObj.isBundle;
+                
+                var checked = (itemGroupObj.isBundle)? 'checked="checked"':'';
+                row.column(3).nodes()[row.index()].innerHTML = itemGroupObj.name;
+                row.column(4).nodes()[row.index()].innerHTML = itemGroupObj.description;
+                row.column(5).nodes()[row.index()].innerHTML = itemGroupObj.minOrderQty;
+                row.column(6).nodes()[row.index()].innerHTML = inputHtml;
+                row.column(9).nodes()[row.index()].innerHTML = total;
+                row.column(10).nodes()[row.index()].innerHTML = totalVat;
+                row.column(15).nodes()[row.index()].innerHTML = '<input type="checkbox" disabled="disabled" '+checked+'>';
+                calculatePosmLineAmount();
+            }
+        }
+/*        
+        function itemGroupChange(inputBox) {
+            var id 		= inputBox.id;
+            var value 	= inputBox.value;
+            var row 	= oTable.row(inputBox.closest("td"));
+            var rowData = row.data();
+            var itemGroupObj = itemGroupMap[value];
+            if(itemGroupObj==null && value!='') {
+                alert('Item Group Not Found.');
+                inputBox.value = rowData.itemgroupCode;
+            } else {
+                rowData['itemgroup'] = itemGroupObj.id;
+                rowData[id] = value;
+                var styleWidth = 'width:50px';
+                var inputHtml = '<input class="userinput" type="number" id="unitPrice" name="unitPrice" value="'+itemGroupObj.unitPrice+'" oninput="amountChange(this)" style="'+styleWidth+'; margin-right:5px;">';
+                if(poType=='eMarket'&&!itemGroupObj.isBundle) {
+					inputHtml = itemGroupObj.unitPrice;
+                }
+                var taxRate = rowData.vatRate;
+	            if(taxRate==null) taxRate=0;
+                rowData.unitPrice = itemGroupObj.unitPrice
+                var total= totalVat = Number(rowData.qty) * itemGroupObj.unitPrice;
+                total /= (1+(taxRate/100));
+	            total = parseInt(Math.round(total*100))/100;
+                rowData.totalPrice = total;
+                rowData.totalPriceVat = totalVat;
+                rowData.bundleFlag = itemGroupObj.isBundle;
+                
+                var checked = (itemGroupObj.isBundle)? 'checked="checked"':'';
+                
+                row.column(4).nodes()[row.index()].innerHTML = itemGroupObj.description;
+                row.column(5).nodes()[row.index()].innerHTML = itemGroupObj.minOrderQty;
+                row.column(6).nodes()[row.index()].innerHTML = inputHtml;
+                row.column(9).nodes()[row.index()].innerHTML = total;
+                row.column(10).nodes()[row.index()].innerHTML = totalVat;
+                row.column(14).nodes()[row.index()].innerHTML = '<input type="checkbox" disabled="disabled" '+checked+'>';
+                calculatePosmLineAmount();
+            }
+        }
+*/        
+        function tooltipHtml(rowData) {
+            var outletname = '';
+            if(rowData.outletName!=null&&rowData.outletName!='') {
+                var outlet = outletMap[rowData.outletName];
+                outletname = (outlet!=null)? outlet.Name:'';
+            }
+            var province = (rowData.province!=null)?rowData.province:'';
+            var city = (rowData.city!=null)?rowData.city:'';
+            var address = (rowData.address!=null)?rowData.address:'';
+            var contact = (rowData.contactPerson!=null)?rowData.contactPerson:'';
+            var phone = (rowData.phoneNumber!=null)?rowData.phoneNumber:'';
+            var email = (rowData.email!=null)?rowData.email:'';
+            var receiptOwnerName = (rowData.receiptOwnerName!=null)?rowData.receiptOwnerName:'';
+
+            var htmlTbl = '<table>';
+            htmlTbl += '<tr><td>Outlet</td><td>'+outletname+'</td></tr>';
+            htmlTbl += '<tr><td>Province</td><td>'+province+'</td></tr>';
+            htmlTbl += '<tr><td>City</td><td>'+city+'</td></tr>';
+            htmlTbl += '<tr><td>Detail Address</td><td>'+address+'</td></tr>';
+            htmlTbl += '<tr><td>Contact</td><td>'+contact+'</td></tr>';
+            htmlTbl += '<tr><td>Phone Number</td><td>'+phone+'</td></tr>';
+            htmlTbl += '<tr><td>E-mail</td><td>'+email+'</td></tr>';
+            htmlTbl += '<tr><td>Receipt Owner</td><td>'+receiptOwnerName+'</td></tr>';
+            htmlTbl += '</table>';
+            return htmlTbl;
+        }
+        function addNewRow() {
+            var newData = contructRow();
+            oTable.row.add(newData).draw(false);
+        }
+        function defaultRow() {
+            var rowData = {
+                id:'',rowcontrol:0,editable:true,itemgroupCode:'',itemgroupName:'',itemgroupDesc:'',minOrderQty:0,unitPrice:0,bundleQty:0,qty:0,totalPrice:0,totalPriceVat:0,warehouseName:'',bundleFlag:false,sentMail:'',tivNum:'',sirLink:''
+            };
+            return rowData;
+		}
+        function contructRow() {
+            var rowData;
+            rowData = defaultRow();
+            return rowData;
+        }
+        
+        function cloneRow(cloneBtn) {
+            var refData = Object.assign({},oTable.row(cloneBtn.closest("td")).data());
+            var newRowData = defaultRow();
+            newRowData.itemgroup  = refData.itemgroup;
+            newRowData.bundleFlag = refData.bundleFlag;
+            newRowData.itemgroupCode = refData.itemgroupCode;
+            newRowData.itemgroupName = refData.itemgroupName;
+            newRowData.itemgroupDesc = refData.itemgroupDesc;
+            newRowData.qty = refData.qty;
+            newRowData.totalPrice = refData.totalPrice;
+            newRowData.totalPriceVat = refData.totalPriceVat;
+            newRowData.unitPrice = refData.unitPrice;
+            oTable.row.add(newRowData).draw(false);
+        }
+        
+        function deleteRow(deleteBtn) {
+            var removeData = oTable.row(deleteBtn.closest("td")).data();
+            if(removeData.id!=null&&removeData.id!='') {
+                deletedRowIds.push(removeData.id);
+            }
+            console.log(deletedRowIds);
+            oTable.row(deleteBtn.closest("td")).remove().draw();
+        }
+        function submitData() {
+			var rows = oTable.rows().data();
+            if(rows.length==0) {
+                alert('Please Insert New POSM Line.');
+                return;
+            }
+
+            var lastRow = rows[rows.length-1];
+            var submitData = [];
+            for(var i=0; i<rows.length; i++) {
+                submitData.push(rows[i]);
+                console.log(rows[i]);
+            }
+            //console.log(submitData);return;
+            savedRows = submitData;
+            
+            var submitObj = {
+                submitedList:savedRows,
+                deleteIdList:deletedRowIds,
+                poid:poid
+            }
+            console.log(JSON.stringify(submitObj));
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.submit}',
+                JSON.stringify(submitObj), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log(result.message);
+                            savedRows = cloneLineList(result.posmLineList);
+                            cloneSavedRow = cloneLineList(result.posmLineList);
+                            updateUI(false);
+                            oTable.clear();
+                            oTable.rows.add(savedRows).draw();
+                            //window.top.location = '/{!pid}';
+                        } else {
+                            console.log('fail');
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        console.log('exception');
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Save POSM Line');
+                    }
+                }, 
+                {escape: true}
+            );
+            
+        }
+        function manageAll() {
+            if(!isEditMode) {
+                updateUI(true);
+                oTable.clear();
+                oTable.rows.add(savedRows).draw();
+            }
+        }
+        function cancelManage() {
+            if(isEditMode){
+                updateUI(false);
+    	        oTable.clear();
+                savedRows = [];
+                for(var i=0;i<cloneSavedRow.length;i++) {
+                    savedRows.push(Object.assign({},cloneSavedRow[i]));
+                }
+	            oTable.rows.add(savedRows).draw();
+            }
+        }
+
+        function setupAddrInputUI( tr, directDevliery) {
+			tr.find( "td .Outlet" ).attr("disabled", directDevliery);
+            //tr.find( "td .Province" ).attr("disabled", directDevliery);
+            //tr.find( "td .City" ).attr("disabled", directDevliery);
+            tr.find( "td .Address" ).attr("disabled", directDevliery);
+            //tr.find( "td .Contact" ).attr("disabled", directDevliery);
+            //tr.find( "td .Phone" ).attr("disabled", directDevliery);
+        }
+        function formatAddr ( row ) {
+            // `d` is the original data object for the row
+            var index = row.index();
+            var data = row.data();
+            var warehouseName = (data.warehouseName!=null)?data.warehouseName:'';
+            var outletName = (data.outletName!=null)?data.outletName:'';
+            var province = (data.province!=null)?data.province:'';
+            var city = (data.city!=null)?data.city:'';
+            var address = (data.address!=null)?data.address:'';
+            var contact = (data.contactPerson!=null)?data.contactPerson:'';
+            var phone = (data.phoneNumber!=null)?data.phoneNumber:'';
+            var email = (data.email!=null)?data.email:'';
+            var receiptOwnerName = (data.receiptOwnerName!=null)?data.receiptOwnerName:'';
+            var strHtml = '<table id="deliveryAddrTbl_'+index+'" cellspacing="0" border="0" style="margin:20px; border: 1px solid black;">';
+            strHtml+='<tr>';
+            strHtml+='<th>Warehouse</th>';
+            strHtml+='<th>Outlet</th>';
+            strHtml+='<th>Province</th>';
+            strHtml+='<th>City</th>';
+            strHtml+='<th>Detail Address</th>';
+            strHtml+='<th>Contact</th>';
+            strHtml+='<th>Contact Phone Number</th>';
+            strHtml+='<th>E-mail</th>';
+            strHtml+='<th>Receipt Owner</th>';
+            strHtml+='</tr>';
+
+            strHtml+='<tr>';
+            strHtml+='<td><input id="Warehouse_'+index+'" 	class="Warehouse"name="Warehouse" value="'+warehouseName+'" onblur="addrLookupChange(this,'+index+')" autocomplete="on" style="border-left: 3px solid #f00;"></td>';
+            strHtml+='<td><input id="Outlet_'+index+'" 		class="Outlet"	 name="Outlet" 	 	value="'+outletName+'" 	onblur="addrLookupChange(this,'+index+')" autocomplete="on"></td>';
+            strHtml+='<td><input id="Province_'+index+'" 	class="Province" name="Province"	value="'+province+'" 	onblur="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="City_'+index+'" 		class="City" 	 name="City" 	 	value="'+city+'" 		onblur="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="Address_'+index+'" 	class="Address"	 name="Address" 	value="'+address+'" 	onblur="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="Contact_'+index+'" 	class="Contact"	 name="Contact" 	value="'+contact+'" 	oninput="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="Phone_'+index+'" 		class="Phone"	 name="Phone" 	 	value="'+phone+'" 		oninput="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="Email_'+index+'" 		class="Email"	 name="Email" 	 	value="'+email+'" 		oninput="addrContentChange(this,'+index+')"></td>';
+            strHtml+='<td><input id="ReceiptOwner_'+index+'"       class="ReceiptOwner"    name="ReceiptOwner"       value="'+receiptOwnerName+'"    onblur="addrContentChange(this,'+index+')" autocomplete="on"></td>';
+            strHtml+='</tr>';
+            strHtml += '</table>';
+
+            return strHtml;
+        }
+        function addrContentChange(inputBox,index) {
+            var id 		= inputBox.id;
+            var name 	= inputBox.name;
+            var value 	= inputBox.value;
+            console.log(id+ ' name: '+name+' : '+value);
+            var rowData = oTable.rows().data()[index];
+
+            if(name=='Province') {
+                rowData.province=value;
+				var citys = cityMap[value];
+                var cityInput = $('#deliveryAddrTbl_'+index+' tbody tr #City_'+index+'');
+                if(citys!=null&&citys.length>0) {
+                    cityInput.autocomplete({
+                        source: citys,
+                        minLength: 0
+                    });
+                } else {
+                    cityInput.autocomplete({
+                        source: cityList,
+                        minLength: 0
+                    });
+                }
+            } else if(name=='City') {
+                rowData.city=value;
+            } else if(name=='Address') {
+                rowData.address=value;
+            } else if(name=='Contact') {
+                rowData.contactPerson=value;
+            } else if(name=='Phone') {
+                rowData.phoneNumber=value;
+            } else if(name=='Email') {
+                rowData.email=value;
+            } else if(name=='ReceiptOwner') {
+                rowData.receiptOwnerName=value;
+                rowData.receiptOwnerId=userMap[value];
+            }
+            
+            $(".addr_"+index).tooltip({
+                content: tooltipHtml(rowData),
+                track:true
+            });
+        }
+        function addressRowClear(index,clearList) {
+            var rowData = oTable.rows().data()[index];
+            for(var i=0;i<clearList.length;i++){
+                var keyword = clearList[i];
+                if(keyword=='warehouse') {
+					rowData.warehouseid='';     
+                    row.Data.warehouseName='';
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Warehouse_'+index+'').val("");
+                } else if(keyword=='outlet') {
+					rowData.outletid='';     
+                    rowData.outletName='';
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Outlet_'+index+'').val("");
+                } else if(keyword=='province') {
+					rowData.province='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Province_'+index+'').val("");
+                } else if(keyword=='city') {
+					rowData.city='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #City_'+index+'').val("");
+                } else if(keyword=='address') {
+					rowData.address='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Address_'+index+'').val("");
+                } else if(keyword=='contact') {
+					rowData.contactPerson='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Contact_'+index+'').val("");
+                } else if(keyword=='phone') {
+					rowData.phoneNumber='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Phone_'+index+'').val("");
+                } else if(keyword=='email') {
+                    rowData.email='';     
+                    $('#deliveryAddrTbl_'+index+' tbody tr #Email_'+index+'').val("");
+                }
+            }
+            
+        }
+        function addrLookupChange(inputBox,index) {
+            var id 		= inputBox.id;
+            var name 	= inputBox.name;
+            var value 	= inputBox.value;
+            var row  	= oTable.row(index);
+            var rowData = oTable.rows().data()[index];
+            
+            var lookupObj;
+            if(name=='Warehouse') {
+                var prevWarehouse = rowData.warehouseName;
+                if(value!=prevWarehouse){
+                    addressRowClear(index, ['outlet','province','city','address','contact','phone','email']);
+                }
+                lookupObj = warehouseMap[value];
+            } else {
+                lookupObj = outletMap[value];
+            }
+            console.log('lookup mapping : ' );
+            console.log(lookupObj);
+            console.log(rowData);
+            if(lookupObj==null) {
+                if(name=='Warehouse') {
+                    inputBox.value = '';
+                    addressRowClear(index, ['outlet','province','city','address','contact','phone','email']);
+                    setupAddrInputUI($('#deliveryAddrTbl_'+index+' tbody tr'),true);
+                    row.column(14).nodes()[row.index()].innerHTML = '';
+                    rowData.directDelivery = false;
+                    rowData.warehouseid = '';
+                    rowData.warehouseName = '';
+                    if(value!='')alert(name+' Not Find');
+                } else if(name=='Outlet'){
+                    if(value=='') {
+                        rowData.outletName = '';
+                        rowData.outletid = null;
+                    }
+                    setupAddrInputUI($('#deliveryAddrTbl_'+index+' tbody tr'),false);
+                }
+            } else {
+                var tr = $('#deliveryAddrTbl_'+index+' tbody tr');
+                var index = id.replace(name+"_", "");
+                
+                if(name=='Warehouse') {
+                    var prevWarehouse = rowData.warehouseName;
+                    if(value==prevWarehouse){
+                        return;
+                    }
+                    var direct = lookupObj.ASI_MFM_Direct_Delivery__c ;
+                    setupAddrInputUI($('#deliveryAddrTbl_'+index+' tbody tr'),!direct);
+                    rowData.directDelivery = direct;
+                    rowData.warehouseid = lookupObj.Id;
+                    rowData.warehouseName = value;
+                    assignEmailsToRowData(rowData,lookupObj);
+                    
+                    tr.find( "td .Outlet" ).val("");
+                    rowData.outletid='';
+                   	row.column(14).nodes()[row.index()].innerHTML = value;
+                    
+                    if(lookupObj.ASI_FOC_City__c!=null&&lookupObj.ASI_FOC_City__r.ASI_CRM_CN_Province__r.ASI_CRM_Chinese_Name__c!=null) {
+                        tr.find( "td .Province" ).val(lookupObj.ASI_FOC_City__r.ASI_CRM_CN_Province__r.ASI_CRM_Chinese_Name__c);
+                        rowData.province=lookupObj.ASI_FOC_City__r.ASI_CRM_CN_Province__r.ASI_CRM_Chinese_Name__c;
+                    }
+                    if(lookupObj.ASI_FOC_City__c!=null&&lookupObj.ASI_FOC_City__r.Name!=null) {
+                        tr.find( "td .City" ).val(lookupObj.ASI_FOC_City__r.Name);
+                        rowData.city=lookupObj.ASI_FOC_City__r.Name;
+                    }
+                    if(lookupObj.ASI_FOC_Warehouse_Address__c!=null) {
+                        tr.find( "td .Address" ).val(lookupObj.ASI_FOC_Warehouse_Address__c);
+                        rowData.address=lookupObj.ASI_FOC_Warehouse_Address__c;
+                    }
+                    if(lookupObj.ASI_FOC_Contact__c!=null) {
+                        tr.find( "td .Contact" ).val(lookupObj.ASI_FOC_Contact__c);
+                        rowData.contactPerson=lookupObj.ASI_FOC_Contact__c;
+                    }
+                    if(lookupObj.ASI_FOC_Phone_Number__c!=null) {
+                        tr.find( "td .Phone" ).val(lookupObj.ASI_FOC_Phone_Number__c);
+                        rowData.phoneNumber=lookupObj.ASI_FOC_Phone_Number__c;
+                    }
+                    if(lookupObj.ASI_FOC_SIR_Email_Address_1__c!=null) {
+                        tr.find( "td .Email" ).val(lookupObj.ASI_FOC_SIR_Email_Address_1__c);
+                        rowData.email=lookupObj.ASI_FOC_SIR_Email_Address_1__c;
+                    }
+                } else {
+                    var prevOutletName = rowData.outletName;
+                    if(prevOutletName==value) return;
+                    rowData.outletName = value;
+                    rowData.outletid = lookupObj.Id;
+                    if(lookupObj.ASI_CRM_CN_Province__c!=null) {
+                        tr.find( "td .Province" ).val(lookupObj.ASI_CRM_CN_Province__c);
+                        rowData.province=lookupObj.ASI_CRM_CN_Province__c;
+                    }
+                    if(lookupObj.ASI_CRM_CN_City_Name__c!=null) {
+                        tr.find( "td .City" ).val(lookupObj.ASI_CRM_CN_City_Name__c);
+                        rowData.city=lookupObj.ASI_CRM_CN_City_Name__c;
+					}
+                    if(lookupObj.ASI_CRM_CN_Address__c!=null) {
+                        tr.find( "td .Address" ).val(lookupObj.ASI_CRM_CN_Address__c);
+                        rowData.address=lookupObj.ASI_CRM_CN_Address__c;
+                    }
+                    if(lookupObj.ASI_CRM_CN_Contact_Person__c!=null) {
+                        tr.find( "td .Contact" ).val(lookupObj.ASI_CRM_CN_Contact_Person__c);
+                        rowData.contactPerson=lookupObj.ASI_CRM_CN_Contact_Person__c;
+                    }
+                    if(lookupObj.ASI_CRM_CN_Phone_Number__c!=null) {
+                        tr.find( "td .Phone" ).val(lookupObj.ASI_CRM_CN_Phone_Number__c);
+                        rowData.phoneNumber=lookupObj.ASI_CRM_CN_Phone_Number__c;
+                    }
+                    if(lookupObj.ASI_CRM_CN_Email__c!=null) {
+                        tr.find( "td .Email" ).val(lookupObj.ASI_CRM_CN_Email__c);
+                        rowData.email=lookupObj.ASI_CRM_CN_Email__c;
+                    }
+                }
+                
+                console.log('lookup selected');                
+            }
+            $(".addr_"+index).tooltip({
+                content: tooltipHtml(rowData),
+                track:true
+            });
+        }
+        
+        function assignEmailsToRowData(rowData, lookupObj) {
+            for(var i=1; i<=8; i++) {
+                var keyOp = 'ASI_MFM_Operation_Team_Email_'+i+'__c';
+                var keySIR = 'ASI_FOC_SIR_Email_Address_'+i+'__c';
+                rowData['opEmail_'+i] = (lookupObj[keyOp]!=null)? lookupObj[keyOp]:'';
+				rowData['sirEmail_'+i] = (lookupObj[keySIR]!=null)? lookupObj[keySIR]:'';
+            }
+            console.log('assign emails ');
+            console.log(rowData);
+		}
+        
+        function format ( d,index ) {
+            // `d` is the original data object for the row
+            var strHtml = '<table cellspacing="0" border="0" style="margin:20px; border: 1px solid black;">';
+            strHtml+='<tr>';
+            strHtml+='<th>Send TIV</th>';
+            strHtml+='<th>Stock In Request</th>';
+            strHtml+='<th>TIV Number</th>';
+            strHtml+='<th>TIV Note Sent</th>';
+            strHtml+='<th>送货地点</th>';
+            strHtml+='<th>批次�?/th>';
+            strHtml+='<th>PO Number</th>';
+            strHtml+='<th>Item Group Code</th>';
+            strHtml+='<th>单件重量(祼重KG)</th>';
+            strHtml+='<th>外箱体积(M3)</th>';
+            strHtml+='<th>外箱毛重(KG)</th>';
+            strHtml+='<th>最小计量单位单�?RMB)</th>';
+            strHtml+='<th>总件�?/th>';
+            strHtml+='<th>分批送货数量</th>';
+            //Andy@Introv 20181212 - fix fields - start
+            /*
+            strHtml+='<th>每箱有几个大�?大盒</th>';
+            strHtml+='<th>每大�?大盒里几个小�?/th>';
+            strHtml+='<th>每箱中几个小�?/th>';
+            */
+            strHtml+='<th>每箱中几个小�?/th>';
+            strHtml+='<th>每箱有几个大�?大盒</th>';
+            strHtml+='<th>每大�?大盒里几个小�?/th>';
+            //Andy@Introv 20181212 - fix fields - end
+            strHtml+='<th>零头箱中礼品件数</th>';
+            strHtml+='<th>产品总箱�?含零头箱)</th>';
+            strHtml+='<th>批送货日期</th>';
+            strHtml+='</tr>';
+            for (var i=0; i<d.sirList.length; i++) {
+                var itemDetail = d.sirList[i];
+                itemDetail.isSendEmail = false;
+                var checked = (itemDetail.tivnotesent)? 'checked="checked"':'';
+                var tivElement = (itemDetail.tivnotesent)? itemDetail.tivnum:'<input id="'+index+'" value="'+itemDetail.tivnum+'" onchange="tivNumberChange(this,'+i+')" style="width:150px;">';
+                var isSendEmailElement = '<input type="radio" id="'+index+'"  onchange="isSendEmailChange(this,'+i+')" Name ="selectedSendEmail" >'
+                strHtml+='<tr>';
+                strHtml+='<td>'+isSendEmailElement+'</td>';
+                strHtml+='<td>'+itemDetail.name+'</td>';
+                strHtml+='<td>'+tivElement+'</td>';
+                strHtml+='<td><input type="checkbox" disabled="disabled" '+checked+'></td>';
+                strHtml+='<td>'+itemDetail.address +'</td>';
+                strHtml+='<td>'+itemDetail.lognum +'</td>';
+                strHtml+='<td>'+itemDetail.ponum +'</td>';
+                strHtml+='<td>'+itemDetail.itemgroupcode +'</td>';
+                strHtml+='<td>'+itemDetail.netweight +'</td>';
+                strHtml+='<td>'+itemDetail.boxsizem3 +'</td>';
+                strHtml+='<td>'+itemDetail.boxnetweight +'</td>';
+                strHtml+='<td>'+itemDetail.minunitprice +'</td>';
+                strHtml+='<td>'+itemDetail.totalqty +'</td>';
+                strHtml+='<td>'+itemDetail.lotqty +'</td>';
+                //Andy@Introv 20181212 - fix fields - start
+                /*
+                strHtml+='<td>'+itemDetail.totalqtyperbagbox +'</td>';	//8
+                strHtml+='<td>'+itemDetail.qtyperbagbox +'</td>';		//56
+                strHtml+='<td>'+itemDetail.qtyperbox +'</td>';			//7
+                */
+                strHtml+='<td>'+itemDetail.qtyperbagbox +'</td>';
+                strHtml+='<td>'+itemDetail.totalqtyperbagbox +'</td>';
+                strHtml+='<td>'+itemDetail.qtyperbox +'</td>';
+                //Andy@Introv 20181212 - fix fields - end
+                strHtml+='<td>'+itemDetail.fractionqty +'</td>';
+                strHtml+='<td>'+itemDetail.totalnumofbox +'</td>';
+                strHtml+='<td>'+itemDetail.deliverydate +'</td>';
+                strHtml+='</tr>';
+            }
+            strHtml += '</table>';
+            return strHtml;
+        }
+        function tivNumberChange(inputBox,sirIndex) {
+            var id 		= inputBox.id;
+            var value 	= inputBox.value;
+            var rowData = oTable.rows().data()[id];
+            rowData.sirList[sirIndex].tivnum = value;
+            cloneSavedRow = cloneLineList(rowData);
+            savedRows = cloneLineList(rowData);
+        }
+        
+        function isSendEmailChange(inputBox,sirIndex)
+        {
+            debugger;
+             var id         = inputBox.id;
+            var value   = inputBox.value;
+            var rowData = oTable.rows().data()[id];
+            var sirList = rowData.sirList;
+            sirList.forEach(function(e){
+              e.isSendEmail = false;
+            })
+            var tivnum = rowData.sirList[sirIndex].tivnum;
+            rowData.sirList[sirIndex].isSendEmail = true;
+            if('' ==tivnum || tivnum == undefined)
+            {
+               alert('Fill in first TIV Number');
+               return false;
+            }
+            
+        }
+        function filterItem() {
+            console.log($('#filterItem').value());
+        }
+        
+        function openLookup(baseURL, width, modified, searchParam){
+            var originalbaseURL = baseURL;
+            var originalwidth = width;
+            var originalmodified = modified;
+            var originalsearchParam = searchParam;
+            
+            var lookupType = baseURL.substr(baseURL.length-3, 3);
+            if (modified == '1') baseURL = baseURL + searchParam;
+            
+            var isCustomLookup = false;
+            // Following "001" is the lookup type for Account object so change this as per your standard or custom object
+            //if(lookupType == "001"){
+            
+            var urlArr = baseURL.split("&");
+            var txtId = '';
+            if(urlArr.length > 2) {
+                urlArr = urlArr[1].split('=');
+                txtId = urlArr[1];
+            }
+            // Following is the url of Custom Lookup page. You need to change that accordingly
+            baseURL = "/apex/ASI_MFM_CN_POSM_ItemGroupPopupPage?txt=" + txtId;
+            
+            // Following is the id of apex:form control "myForm". You need to change that accordingly
+            baseURL = baseURL + "&frm=" + escapeUTF("{!$Component.myForm}");
+            if (modified == '1') {
+                baseURL = baseURL + "&lksearch=" + searchParam;
+            }
+            
+            // Following is the ID of inputField that is the lookup to be customized as custom lookup
+            if(txtId.indexOf('ItemGroup') > -1 ){
+                isCustomLookup = true;
+            }
+            //}
+            
+            
+            if(isCustomLookup == true){
+                openPopup(baseURL, "lookup", 350, 480, "width="+width+",height=480,toolbar=no,status=no,directories=no,menubar=no,resizable=yes,scrollable=no", true);
+            }
+            else {
+                if (modified == '1') originalbaseURL = originalbaseURL + originalsearchParam;
+                openPopup(originalbaseURL, "lookup", 350, 480, "width="+originalwidth+",height=480,toolbar=no,status=no,directories=no,menubar=no,resizable=yes,scrollable=no", true);
+            } 
+        }
+        function lookupCallback(tmp, inputBox){
+            var row 	= oTable.row(inputBox.closest("td"));
+            var itemId = document.getElementById(tmp+'_lkid').value;
+
+            if(itemId==null||itemId=='') {
+                //alert('Please select Item Group');
+                return;
+			}
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_PoLineManageAllCls.getItemGroup}',
+                itemId,
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        console.log(result);
+                        if(result!=null){
+                            itemGroupLookupChange(row,result);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to get Item Group');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+        </script>
+<style>
+input.hideField {
+    width:0px;
+    visibility:collapse;
+}
+</style>
+    </head>
+    
+    <apex:pageMessages />
+
+    
+    <apex:form id="posmLineManageAll">
+        <div id='lookupDummy' hidden="true">
+            <apex:inputfield styleClass="hideField" id="ItemGroup_row" value="{!sku.ASI_MFM_Item_Group__c}" onchange="lookupCallback('{!$Component.posmLineManageAll:ItemGroup_row}',this);return false;"/>
+        </div>
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        <apex:pageBlock id="pageBlock">
+            <!--
+            <apex:pageBlockButtons id="filterArea" location="top">
+                <input id="filterItemInput" />
+                <apex:commandButton id="filterItem" value="Filter Item Group" onclick="filterItem(); return false;"/>
+            </apex:pageBlockButtons>
+-->
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                <apex:commandButton id="manageAllBtn" value="Manage All" onclick="manageAll(); return false;"/>
+                <apex:commandButton id="submitBtn" value="Save" onclick="submitData(); return false;"/>
+                <apex:commandButton id="cancelBtn" value="Cancel" onclick="cancelManage(); return false;"/>
+            </apex:pageBlockButtons>
+<!--             
+            <apex:outputLabel>Search Item Group here : </apex:outputLabel>
+            <apex:inputfield id="ItemGroup" value="{!sku.ASI_MFM_Item_Group__c}" onchange="itemGroupLookupChange('{!$Component.posmLineManageAll.pageBlock:ItemGroup}');return false;"/>
+            <br/>
+           
+            <input id="filterItemInput" />
+            <apex:commandButton id="filterItem" value="Filter Item Group" onclick="filterItem(); return false;"/>
+
+-->
+            <p>POSM Total Amount : <b id="posmtTotalAmount"></b></p><br/>
+            <table id="posmLineTbl" class="display compact" style="width:100%">
+            </table>
+            
+            
+        </apex:pageBlock>
+    </apex:form>
+</apex:page>

@@ -1,0 +1,544 @@
+<!-- 
+/**********************************************************************************
+ * Name : ASI_CRM_SG_WholesalerDepletion
+ * Created : DC @03/03/2016 2:18 PM
+ * Revision History:
+ * 1. 03/03/2016 - [DC 1.0] Created
+ * 2. 03/11/2016 - [VL 2.0] There is an issue that after clicking Save button, cannot redirect to Customer page; Solved it
+ * 2. 03/11/2016 - [VL 2.1] Change Sub-brand to SKU level
+ * 3. 03/15/2016 - [DC 2.0] Added logic for enabling / disabling "Opening Stock".
+ * 4. 2016-04-28 - [VL 3.0] Change all "Opening Stock" to read-only.
+ * 4. 2016-04-28 - [VL 4.0] Hide the input field of Closing Stock.
+ * 5. 04/29/2016 - [DC 3.0] Changed text-alignment to "right" for number columns.
+                            Reduced "Adjusted Quantity" column width to avoid horizontal scrolling.
+ **********************************************************************************/
+ -->
+
+<apex:page id="page"
+           title="Wholesaler Depletion"
+           standardController="ASI_CRM_AccountsAdditionalField__c" 
+           extensions="ASI_CRM_SG_WholesalerDepletionController"
+           sidebar="false"
+           showHeader="false"
+           action="{!initData}">
+
+    <apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/styles/common.css')}" />
+    
+    
+    <link href="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+    
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+
+    <script type="text/javascript">
+
+        j$ = jQuery.noConflict();
+        var isModified;
+        var isDisabled;
+
+        j$( document ).ready(function() {
+            onReady();
+        });
+
+        function onReady() {
+
+            console.log('inside ready {!isEdit}');
+           
+            isModified = false;
+            isDisabled = false;
+
+            if('{!isEdit}' == 'false') {
+                j$(":input").each(function(){
+                    if (this.id.substr(this.id.length - 11) != ':selectYear'
+                    &&  this.id.substr(this.id.length - 12) != ':selectMonth'
+                    &&  this.id.substr(this.id.length - 6) != ':goBtn') {
+                        j$(this).prop("disabled", true);
+                    }
+               });
+            } else {
+                j$(":input").each(function(){
+                    if(this.id.substr(this.id.length - 11) == ':isEditable') {
+
+                        if(j$(this).val() === "true") {
+
+                            j$(this).parent().find('div').find('input').first().prop("disabled", false);
+
+                        } else if(j$(this).val() === "false") {
+                            j$(this).parent().find('input').first().prop("disabled", true);
+                        }
+                    }
+               });
+            }
+           
+           /*
+            var basicDataTableProperties = {
+                "bDestroy":true,
+                "bStateSave":true,
+                "aaSorting": [[1, "asc"]],
+                "bSearch":false,
+                "bFilter" : false,
+                "aLengthMenu":[10,25,50,100,200],
+                "iDisplayLength":25,
+                "bSort" : false,
+                "oLanguage" : {"sSearch": "Filter"},
+                "ordering" : true
+            };
+    
+            //function setSKUTable(){
+                basicDataTableProperties["iDisplayLength"] = 200;
+                var cliSKU_dataTableProperties = basicDataTableProperties;
+                //cliSKU_dataTableProperties["order"] = [[ 1, "asc" ]];
+                cliSKU_dataTableProperties["aoColumns"] = [
+                    {"sTitle": "SKU"},
+                    {"sTitle": "Year"},
+                    {"sTitle": "Month"},
+                    {"sTitle": "Opening Stock"},
+                    {"sTitle": "Sell-In"},
+                    {"sTitle": "FOC"},
+                    {"sTitle": "Offtake"},
+                    {"sTitle": "Adjusted<br/>Quantity", "sWidth": "50px"},
+                    {"sTitle": "Adjusted<br/>Reason", "sWidth": "50px"},
+                    {"sTitle": "Closing Stock"},
+                    {"sTitle": "Depletion<br/>Gap<br/>Quantity", "sWidth": "50px"},
+                    {"sTitle": "Depletion %"}
+                ];
+                
+                j$("#mainTable").dataTable(cliSKU_dataTableProperties);
+        
+            //}
+            */
+        }
+
+        function validateNumber(input){
+            console.log(" ** validation called **" );
+            input = normalizeInt(input, [", ", "."]);
+            var numRe =  new RegExp("^[-+]?[0-9]*\.?[0-9]+null|$"); 
+            console.log(" ** validation called **" + numRe.test(input) );
+            return numRe.test(input);
+        }
+
+        
+        function normalizeInt(number, chars) {
+            var lastIndex = -1;
+            for(i=0; i < chars.length; i++) {
+                t = number.lastIndexOf(chars[i]);
+
+                if (t > lastIndex) {
+                    lastIndex = t;
+                }
+            }
+
+            if (lastIndex == -1) {
+                lastIndex = number.length;
+            }
+
+            var whole = number.substring(0, lastIndex);   
+            var precision = number.substring(lastIndex);
+            for (i=0; i < chars.length; i++) {
+                whole = whole.replace(chars[i], '');
+                precision = precision.replace(chars[i],'.');           
+            }
+            number = whole + precision;
+
+            f = parseInt(number);
+            return f;
+        }
+        
+
+        /* Calculate Closing Stock */
+        var calculateClosingStock = function(inputQuantityField, isOpeningStock) {
+            console.log(" ** inside calculate function **");
+            var inputQuantity = inputQuantityField.prop("value");
+            console.log(" ** inputQuantity  **" + inputQuantity );
+            
+            if(!validateNumber(inputQuantity)) {
+                return;
+            }
+            var closestTr;
+
+            // [DC 2.0] START
+            if(isOpeningStock == false) {
+                closestTr = inputQuantityField.parent().parent();   
+            } else if(isOpeningStock == true) {
+                closestTr = inputQuantityField.parent().parent().parent();   
+            }
+            // [DC 2.0] END
+
+            // Index is calculated as Column1 : 0, Column2 : 1 and so on..
+            // In case of change in columns / order of columns, indices will need to be changed too.
+            var eleOpeningStockCell = j$(closestTr).find("td")[3];            
+            var eleSellInCell = j$(closestTr).find("td")[4];
+            var eleFocCell = j$(closestTr).find("td")[5];
+            var eleOfftakeCell = j$(closestTr).find("td")[6];
+            var eleAdjustedQuantityCell = j$(closestTr).find("td")[7];
+            var eleClosingStockCell = j$(closestTr).find("td")[9];
+
+            // [DC 2.0] START
+            var eleOpeningStock;
+            /* [VL 3.0] BEGIN */
+            /*
+            if(isOpeningStock == false) {
+                eleOpeningStock = j$(eleOpeningStockCell).find("input");
+            } else if(isOpeningStock == true) {
+                eleOpeningStock = j$(eleOpeningStockCell).find("div").find("input");
+            }            
+            */
+            eleOpeningStock = j$(eleOpeningStockCell).find("span");
+            /* [VL 3.0] END */
+            // [DC 2.0] END
+            var eleSellIn = j$(eleSellInCell).find("span");
+            var eleFoc = j$(eleFocCell).find("span");
+            var eleOfftake = j$(eleOfftakeCell).find("span");
+            var eleClosingStockRead = j$(eleClosingStockCell).find("span");
+            var eleAdjustedQuantity = j$(eleAdjustedQuantityCell).find("input");
+            /* [VL 4.0] BEGIN */
+            /*
+            var eleClosingStock = j$(eleClosingStockCell).find("input");
+            */
+            /* [VL 4.0] END */
+            
+          console.log(" ** Assigning values to variable **");
+                var adjustedQuantity = parseInt(eleAdjustedQuantity.val().replace("," , ""));                
+                if(isNaN(adjustedQuantity) || adjustedQuantity == "undefined") {
+                    adjustedQuantity = 0;
+                    console.log(adjustedQuantity );
+                }
+                else
+                console.log(adjustedQuantity );
+                  
+                /* [VL 3.0] BEGIN */
+                /*
+                var openingStock = parseInt(eleOpeningStock.val().replace("," , ""));
+                */
+                var openingStock = parseInt(eleOpeningStock.html().replace("," , ""));
+                /* [VL 3.0] END */
+                console.log(openingStock);
+                          
+                var sellIn = parseInt(eleSellIn.html().replace("," , ""));
+                if(isNaN(sellIn) || sellIn == "undefined") {
+                    sellIn = 0;
+                    console.log(sellIn);
+                }
+                
+                var foc = parseInt(eleFoc.html().replace("," , ""));
+                if(isNaN(foc ) || foc == "undefined") {
+                    foc = 0;
+                    console.log(foc );
+                }
+                var offtake = parseInt(eleOfftake.html().replace("," , ""));
+                if(isNaN(offtake ) || offtake == "undefined") {
+                    offtake = 0;
+                    console.log(offtake );
+                }
+    
+                
+                /* [VL 4.0] BEGIN */
+                /*
+                var closingStock = parseInt(eleClosingStock.html().replace("," , "")); ;
+                if(isNaN(closingStock ) || closingStock == "undefined") {
+                    closingStock = openingStock + sellIn + foc - offtake + adjustedQuantity;
+                    console.log('***'+closingStock);
+                }
+                */
+                var closingStock = parseInt(eleClosingStockRead.html().replace("," , ""));
+                if(isNaN(closingStock ) || closingStock == "undefined") {
+                    closingStock = 0;
+                    console.log('***'+closingStock);
+                } else {
+                    closingStock = openingStock + sellIn + foc - offtake + adjustedQuantity;
+                    console.log('***'+closingStock);
+                }
+                /* [VL 4.0] END */
+                                
+            eleClosingStockRead.html(closingStock);
+            /* [VL 4.0] BEGIN */
+            /*
+            eleClosingStock.prop("value", closingStock);
+            */
+            /* [VL 4.0] BEGIN */
+            
+        }
+
+        /* Set isModified to true if values are changed */
+        var setModified = function(value) {
+            isModified = value;
+        }
+
+        /* validate if values are changed and new data needs to be fetched */
+        var checkModification = function(i) {
+
+            if(isModified == true) {
+            
+                if(confirm("All changes have not been saved. Do you still want to refresh?")) {
+                    console.log('** is isModified is true **');
+                    switch (i) {
+                        case 0: go(); break;
+                        case 1: firstPage(); break;
+                        case 2: prevPage(); break;
+                        case 3: nextPage(); break;
+                        case 4: lastPage(); break;
+                        default: go(); break;
+                    }
+                } else {
+                    console.log('** is isModified is false **');
+                    //go();
+                    return false;
+                }
+
+            } else { 
+                console.log('** is isModified false **');
+                    switch (i) {
+                        case 0: go(); break;
+                        case 1: firstPage(); break;
+                        case 2: prevPage(); break;
+                        case 3: nextPage(); break;
+                        case 4: lastPage(); break;
+                        default: go(); break;
+                    }
+                
+            }
+            return false;
+        }
+        
+    </script>
+    
+    <style>
+    .overlay{
+            height: 100%;
+            left: 0;
+            position: fixed;
+            top: 0;
+            opacity: 0.3;
+            -moz-opacity: 0.3;
+            width: 100%;
+            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+            filter: alpha(opacity=30);
+            background: #000;
+            -khtml-opacity: 0.3;
+            z-index: 1000;
+    }
+    </style>
+    
+    <body>
+    
+    <apex:actionStatus id="loading">
+        <apex:facet name="start">
+                <div class="overlay"> 
+                </div>
+            </apex:facet>
+     </apex:actionStatus>
+    
+    <apex:form id="pageForm">
+
+
+        <apex:pageMessages id="pageMsgs" />
+
+        <apex:actionFunction name="go" action="{!go}" reRender="tbl0,OutPnl,pgblck0" oncomplete="setModified(true),onReady();" status="loading"/>
+
+        <apex:actionFunction name="firstPage" action="{!firstPage}" reRender="tbl0,OutPnl,pgblck0" oncomplete="setModified(true),onReady();" status="loading"/>
+        <apex:actionFunction name="prevPage" action="{!prevPage}" reRender="tbl0,OutPnl,pgblck0" oncomplete="setModified(true),onReady();" status="loading"/>
+        <apex:actionFunction name="nextPage" action="{!nextPage}" reRender="tbl0,OutPnl,pgblck0" oncomplete="setModified(true),onReady();" status="loading"/>
+        <apex:actionFunction name="lastPage" action="{!lastPage}" reRender="tbl0,OutPnl,pgblck0" oncomplete="setModified(true),onReady();" status="loading"/>
+
+        <apex:pageBlock id="pgblck0" title="Wholesaler Depletion">
+
+            <apex:pageBlockButtons id="pgBlckBtns" location="both" rendered="{!isEdit}">
+                <!-- [VL 2.0] BEGIN -->
+                <!--
+                <apex:commandButton id="saveBtn" value=" Save " action="{!saveOfftakeDetails}" reRender="pageMsgs" oncomplete="setModified(false);">
+                    <apex:param name="IS_QUICK_SAVE" value="false" />
+                </apex:commandButton>
+                -->
+                <apex:commandLink value=" Save " 
+                    status="loading"
+                    action="{!saveOfftakeDetails}"
+                    target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;">
+                    <apex:param name="IS_QUICK_SAVE" value="false"/>
+                </apex:commandLink>
+                <!-- [VL 2.0] END -->
+                <apex:commandButton id="quickSaveBtn" value=" Quick Save "  action="{!saveOfftakeDetails}" reRender="pageMsgs" oncomplete="setModified(false),onReady();" status="loading">
+                    <apex:param name="IS_QUICK_SAVE" value="true" />
+                </apex:commandButton>
+                <apex:commandButton id="cancelBtn" value=" Cancel " action="{!cancelAndRedirect}" immediate="true" />
+            </apex:pageBlockButtons>
+
+            <table id="tbl0" border="0" width="100%">
+                <tr>
+                    <th width="15%"></th>
+                    <th width="10%" style="text-align: right;">
+                        <apex:outputLabel value="Year" />
+                    </th>
+                    <th width="15%">
+                        <apex:selectList id="selectYear" value="{!selectedYear}" size="1" >
+                            <apex:selectOptions value="{!lstYearOptions}" />
+                        </apex:selectList>
+                    </th>
+                    <th width="10%" style="text-align: right;">
+                        <apex:outputLabel value="Month" />
+                    </th>
+                    <th width="15%">
+                        <apex:selectList id="selectMonth" value="{!selectedMonth}" size="1" >
+                            <apex:selectOptions value="{!lstMonthOptions}" />
+                        </apex:selectList>
+                    </th>
+                    <th width="10%">
+                        <apex:commandButton id="goBtn" value=" Go " immediate="true" onclick="return checkModification(0);" />
+                    </th>
+                    <th width="25%"></th>
+                </tr>
+            </table>
+            <apex:outputPanel id="OutPnl">
+            
+            <!--
+            <table id="mainTable">
+                <apex:repeat value="{!lstStockDetailWrapper}" var="stockDetail">
+                <tr>
+                    <td>
+                        <apex:outputField id="ASI_CRM_SKU__c" value="{!stockDetail.detailRecord.ASI_CRM_SKU__c}" />
+                    </td>
+                    <td>
+                        <apex:outputField id="ASI_TH_CRM_Year__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Year__c}" />
+                    </td>
+                    <td>
+                        <apex:outputField id="ASI_TH_CRM_Month__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Month__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_TH_CRM_Beginning_Stock__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Beginning_Stock__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_TH_CRM_Sell_In__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Sell_In__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_TH_CRM_FOC__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_FOC__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_TH_CRM_Total_Offtake_Final__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Total_Offtake_Final__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:inputField id="ASI_CRM_Adjusted_Quantity__c" value="{!stockDetail.detailRecord.ASI_CRM_Adjusted_Quantity__c}" style="width:50px;" onchange="setModified(true);calculateClosingStock(j$(this), false);"/>
+                    </td>
+                    <td>
+                        <apex:inputField id="ASI_CRM_Adjusted_Reason__c" value="{!stockDetail.detailRecord.ASI_CRM_Adjusted_Reason__c}" onChange="setModified(true);" style="height:15px" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_TH_CRM_Ending_Stock_Final__cRead" value="{!stockDetail.detailRecord.ASI_TH_CRM_Ending_Stock_Final__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_CRM_Depletion_Gap_Quantity__c" value="{!stockDetail.detailRecord.ASI_CRM_Depletion_Gap_Quantity__c}" />
+                    </td>
+                    <td style="text-align:right;">
+                        <apex:outputField id="ASI_CRM_Depletion_Gap_Percent__c" value="{!stockDetail.detailRecord.ASI_CRM_Depletion_Gap_Percent__c}" />
+                    </td>
+                </tr>
+                </apex:repeat>
+            </table>
+            -->
+            
+            
+            <apex:pageBlockTable id="pgTbl0" value="{!lstStockDetailWrapper}" var="stockDetail" width="100%">
+                <!-- [VL 2.1] BEGIN -->
+                <!-- Column: Sub-Brand -->
+                <!--
+                <apex:column headerValue="Sub-Brand" >
+                    <apex:outputField id="ASI_TH_CRM_Sub_brand__c" value="{!stockDetail.ASI_TH_CRM_Sub_brand__c}" />
+                </apex:column>
+                -->
+                <apex:column headerValue="SKU" >
+                    <apex:outputField id="ASI_CRM_SKU__c" value="{!stockDetail.detailRecord.ASI_CRM_SKU__c}" />
+                </apex:column>
+                <!-- [VL 2.1] END -->
+                <!-- Column: Year -->
+                <apex:column headerValue="Year" >
+                    <apex:outputField id="ASI_TH_CRM_Year__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Year__c}" />
+                </apex:column>
+                <!-- Column: Month -->
+                <apex:column headerValue="Month" >
+                    <apex:outputField id="ASI_TH_CRM_Month__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Month__c}" />
+                </apex:column>
+                <!-- [DC 2.0] START -->
+                <!-- Column: Opening Stock -->
+                <apex:column headerValue="Opening Stock" style="text-align:right;">
+                    <!-- [VL 3.0] BEGIN -->
+                    <!--
+                    <apex:inputField id="ASI_TH_CRM_Beginning_Stock__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Beginning_Stock__c}" onchange="setModified(true);calculateClosingStock(j$(this), true);" required="{!stockDetail.isOpeningStockEnabled}"/>
+                    <apex:inputHidden id="isEditable" value="{!stockDetail.isOpeningStockEnabled}" />
+                    -->
+                    <apex:outputField id="ASI_TH_CRM_Beginning_Stock__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Beginning_Stock__c}" />
+                    <!-- [VL 3.0] END -->
+                </apex:column>
+                <!-- [DC 2.0] END -->
+                <!-- Column: Sell-In -->
+                <apex:column headerValue="Sell-In" style="text-align:right;">
+                    <apex:outputField id="ASI_TH_CRM_Sell_In__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Sell_In__c}" />
+                </apex:column>
+                <!-- Column: FOC -->
+                <apex:column headerValue="FOC" style="text-align:right;">
+                    <apex:outputField id="ASI_TH_CRM_FOC__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_FOC__c}" />
+                </apex:column>
+                <!-- Column: Offtake -->
+                <apex:column headerValue="Offtake" style="text-align:right;">
+                    <apex:outputField id="ASI_TH_CRM_Total_Offtake_Final__c" value="{!stockDetail.detailRecord.ASI_TH_CRM_Total_Offtake_Final__c}" />
+                </apex:column>
+                <!-- [DC 2.0] START -->
+                <!-- Column: Adjusted Quantity -->
+                <apex:column headerValue="Adjusted Quantity" width="50px" style="text-align:right;" >
+                    <apex:inputField id="ASI_CRM_Adjusted_Quantity__c" value="{!stockDetail.detailRecord.ASI_CRM_Adjusted_Quantity__c}" style="width:50px;" onchange="setModified(true);calculateClosingStock(j$(this), false);"/>
+                </apex:column>
+                <!-- [DC 2.0] END -->
+                <!-- Column: Adjusted Reason -->
+                <apex:column headerValue="Adjusted Reason" style="width:25px;">
+                    <apex:inputField id="ASI_CRM_Adjusted_Reason__c" value="{!stockDetail.detailRecord.ASI_CRM_Adjusted_Reason__c}" onChange="setModified(true);" style="height:15px" />
+                </apex:column>
+                <!-- Column: Closing Stock -->
+                <apex:column headerValue="Closing Stock" style="text-align:right;">
+                    <apex:outputField id="ASI_TH_CRM_Ending_Stock_Final__cRead" value="{!stockDetail.detailRecord.ASI_TH_CRM_Ending_Stock_Final__c}" />
+                    <!-- [VL 4.0] BEGIN -->
+                    <!--
+                    <apex:inputField id="ASI_TH_CRM_Ending_Stock_Final__c" style="display: none;" value="{!stockDetail.detailRecord.ASI_TH_CRM_Ending_Stock_Final__c}" />
+                    -->
+                    <!-- [VL 4.0] END -->
+                </apex:column>
+                <!-- Column: Depletion Gap Quantity -->
+                <apex:column headerValue="Depletion Gap Quantity" width="50px" style="text-align:right;">
+                    <apex:outputField id="ASI_CRM_Depletion_Gap_Quantity__c" value="{!stockDetail.detailRecord.ASI_CRM_Depletion_Gap_Quantity__c}" />
+                </apex:column>
+                <!-- Column: Depletion % -->
+                <apex:column headerValue="Depletion %" style="text-align:right;">
+                    <apex:outputField id="ASI_CRM_Depletion_Gap_Percent__c" value="{!stockDetail.detailRecord.ASI_CRM_Depletion_Gap_Percent__c}" />
+                </apex:column>
+            </apex:pageBlockTable>
+            
+            <apex:outputPanel id="pagination" >
+                <apex:outputPanel style="width:100%;" layout="block" >
+                    <table style="width: 100%;" >
+                        <tr>
+                            <td idth="33%" ></td>
+                            <td width="33%" style="text-align:center;">
+                                <apex:commandLink value="<<" onclick="return checkModification(1);" />
+                                <span style="height:1px">&nbsp;&nbsp;</span>
+                                <apex:commandLink value="< Previous" onclick="return checkModification(2);" />
+                                <span style="height:1px">&nbsp;</span>
+                                <apex:commandLink value="Next >" onclick="return checkModification(3);" />
+                                <span style="height:1px">&nbsp;&nbsp;</span>
+                                <apex:commandLink value=">>" onclick="return checkModification(4);" />
+                            </td>
+                            <td width="33%" style="text-align:right;">
+                                Page
+                                <apex:inputText id="pageInputBox" style="align:right;" size="2" maxlength="4" value="{!newPageNum}" tabindex="100" />
+                                of {!maxPageNum}
+                            </td>
+                        </tr>
+                    </table>
+                </apex:outputPanel>
+
+            </apex:outputPanel>
+            
+            </apex:outputPanel>
+        </apex:pageBlock>
+    </apex:form>
+    </body>
+</apex:page>

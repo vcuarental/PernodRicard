@@ -1,0 +1,265 @@
+<!-------------------------------------------------------------------------------------------------------------
+* Company: Valuenet
+* Desarrollador: Waldemar Mayo
+* Nombre del pagina: LAT_BR_VFP05_PriceSimulate
+* Descripcion: 
+* Fecha: 19/12/2013
+-------------------------------------------------------------------------------------------------------------->
+
+<apex:page controller="LAT_BR_VFC05_PriceSimulateCtrl" tabStyle="Opportunity">
+    
+    <style>
+        .label {margin-right:10px; font-weight:bold;}
+        .centraliza {text-align: center;}
+        .textRight {text-align: right;}
+        .customPopup {background-color: white; border-style: solid; border-width: 2px; left: 50%; padding:10px; position: fixed; z-index: 9999; width: 550px; margin-left: -250px; top:100px;}
+    </style>        
+    
+    <script type='text/javascript'>
+        
+        var arriba;                        
+                                
+        function subir() {
+            if (document.body.scrollTop != 0 || document.documentElement.scrollTop != 0){
+                window.scrollBy(0, -50);
+                arriba = setTimeout('subir()', 10);
+            }else{
+                clearTimeout(arriba);
+            }
+        }
+        
+        function openPopUp() {                                                                 
+            var left = (screen.width/2-(700/2)); 
+            var top = (screen.height/2-(250/2));     
+            window.open("/apex/LAT_BR_VFP06_ResumoPedido?priceSim=1&accId="+'{!theOpp.AccountId}', "MsgWindow","top="+top+", left="+left+", width=600,height=400");                
+        } 
+        function guardaValor( aQtde )
+        {
+          var qtde = document.getElementById( aQtde );
+          qtde.oldValue = getNumber( qtde.value );
+        }
+        
+        function limpaBonus( aQtde, aQtBonus, aPercBonus )
+        {
+          var qtde = document.getElementById( aQtde );
+          var novoValor = getNumber( qtde.value );
+          if ( novoValor != qtde.oldValue )
+          {
+            var qtBonus = document.getElementById( aQtBonus );
+            var percBonus = document.getElementById( aPercBonus );
+            qtBonus.value="";
+            percBonus.value="";
+          }
+        }
+            
+        function getNumber( aValue )
+        {
+          if ( !aValue ) return 0;
+          else return Number( aValue.replace( ".", "" ).replace(",", "." ) );
+        }      
+            
+        function calculaPercBonus( aQtde, aQtBonus, aPercBonus )
+        {
+          var qtde = document.getElementById( aQtde );
+          var qtBonus = document.getElementById( aQtBonus );
+          var nQtBonus = getNumber( qtBonus.value );
+          if ( nQtBonus > 0 )
+          {
+            var percBonus = document.getElementById( aPercBonus );     
+            var nQtde = getNumber( qtde.value );
+            var total = Math.floor( ( nQtBonus * 100 ) / nQtde ); 
+            percBonus.value = total;
+          }
+        }
+        
+        function calculaQtBonus( aQtde, aQtBonus, aPercBonus )
+        {
+          var qtde = document.getElementById( aQtde );
+          var qtBonus = document.getElementById( aQtBonus );
+          var percBonus = document.getElementById( aPercBonus );     
+          var nQtBonus = getNumber( qtBonus.value );
+          var nPercBonus = getNumber( percBonus.value );
+          if ( nQtBonus==0 && nPercBonus>0 )
+          {
+            var nQtde = getNumber( qtde.value );
+            var total = Math.floor( ( nPercBonus * nQtde ) / 100 );
+            qtBonus.value = total;
+          }
+        }                
+        
+    </script>             
+    
+    <apex:form id="form">
+        
+        <!-- STATUS LOADING -->
+        <apex:actionStatus id="status">
+            <apex:facet name="start">
+                <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_BR_VFP05_00023}"/>
+                <!-- Label.LAT_BR_VFP05_00023 = Espere... -->
+            </apex:facet>
+        </apex:actionStatus>
+        
+        <!-- ENCABEZADO -->
+        <apex:sectionHeader Title="{!$Label.LAT_BR_VFP05_00001}" subtitle="{!theopp.Name}"/>
+        <!-- Label.LAT_BR_VFP05_00001 = Simulação de preços -->
+        <apex:pageMessages />
+        <apex:pageBlock title="{!$Label.LAT_BR_VFP05_00002}">
+            <!-- Label.LAT_BR_VFP05_00002 = Detalhe da order -->
+            <apex:outputLabel value="{!$Label.LAT_BR_VFP05_00003}" styleClass="label"/>
+            <!-- Label.LAT_BR_VFP05_00003 = Cliente -->
+            <apex:outputField value="{!theOpp.AccountId}"/>
+            <br/>
+            <apex:outputLabel value="{!$Label.LAT_BR_VFP05_00004}" styleClass="label"/>
+            <!-- Label.LAT_BR_VFP05_00004 = Condição de pagamento -->
+            <apex:selectList size="1" value="{!paymentCondition}">
+                <apex:selectOptions value="{!PaymentConditionPickList}"/>
+                <apex:actionSupport event="onchange" action="{!doChangePaymentCondition}"/>
+            </apex:selectList>
+            <br/>
+        </apex:pageBlock>
+        
+        <!-- Aca tenemos todos los olis que tenemos que pasarle al pop up -->
+        <apex:panelGroup id="panelGroupOlis">
+            <input id="olis" value="{!sOlis}" type="hidden" name="olis"/>
+        </apex:panelGroup>
+        
+        <!-- SECCION "PRODUCTOS SELECCIONADOS" -->
+        <apex:pageBlock title="{!$Label.LAT_BR_VFP05_00005}" id="selected">
+        <!-- Label.LAT_BR_VFP05_00005 = Produtos selecionados -->
+            
+            <!-- BOTONES -->
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00006}" action="{!doCancel}"/>
+                <!-- Label.LAT_BR_VFP05_00006 = Sair -->
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00007}" action="{!doClean}"/>
+                <!-- Label.LAT_BR_VFP05_00007 = Limpar -->
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00008}" action="{!doCalculatePrice}" reRender="status,form"      status="status"/>
+                <!-- Label.LAT_BR_VFP05_00008 = Obter preços -->                                
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00009}" action="{!doAllResumed}"     reRender="panelGroupOlis"   oncomplete="openPopUp(); "/>
+                <!-- Label.LAT_BR_VFP05_00009 = Resumo total -->                                                
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00010}" action="{!doSave}"/>
+                <!-- Label.LAT_BR_VFP05_00010 = Gerar ordem -->
+            </apex:pageBlockButtons>
+            
+            <apex:variable var="i" value="{!0}"/>
+            
+            <!-- TABLA DE PRODUCTOS SELECCIONADOS -->
+            <apex:pageblockTable value="{!shoppingCart}" var="psc" style="width:100%">
+                
+                <apex:column headerValue="{!$ObjectType.Product2.Label}" width="300px">
+                    <apex:outputlink value="/{!psc.oli.PriceBookEntry.Product2Id}">
+                        <apex:outputText value="{!psc.oli.PriceBookEntry.Product2.Name}"/>
+                    </apex:outputlink>
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.Product2.Fields.CD_Unit__c.Label}" value="{!psc.oli.PriceBookEntry.Product2.CD_Unit__c}" styleClass="centraliza"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_MultipleQuantity__c.Label}" value="{!psc.oli.LAT_MultipleQuantity__c}" styleClass="textRight"/>
+                
+                <!-- COLUMNAS DE DESCUENTOS -->
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_PercentualBonus__c.Label}"  value="{!psc.oli.LAT_PercentualBonus__c}"  styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Quantity.Label}" styleClass="textRight">
+                    <apex:inputField value="{!psc.oli.Quantity}" required="false" style="width:50px" id="edQtde" onfocus="guardaValor('{!$Component.edQtde}')" onblur="limpaBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                </apex:column>
+                
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.QT_Bonus__c.Label}" styleClass="textRight">
+                    <apex:inputField value="{!psc.oli.QT_Bonus__c}" style="width:50px" id="edQtBonus" onblur="calculaPercBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                </apex:column>
+                
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Percentual_de_bonus__c.Label}" styleClass="textRight">
+                    <apex:inputField value="{!psc.oli.Percentual_de_bonus__c}" style="width:50px" id="edPercBonus" onblur="calculaQtBonus('{!$Component.edQtde}','{!$Component.edQtBonus}','{!$Component.edPercBonus}');"/>
+                </apex:column>
+                
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Qt_total__c.Label}" value="{!psc.oli.Qt_total__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.UnitPrice.Label}" value="{!psc.oli.UnitPrice}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Preco_total__c.Label}" value="{!psc.oli.Preco_total__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.BottlesPerBox__c.Label}" value="{!psc.oli.BottlesPerBox__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.preco_garrafa__c.Label}" value="{!psc.oli.preco_garrafa__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.UnitWeight__c.Label}" value="{!psc.oli.UnitWeight__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$Label.LAT_BR_VFP05_00011}" styleClass="textRight">
+                    <!-- Label.LAT_BR_VFP05_00011 = N/A -->
+                    <apex:inputCheckbox value="{!psc.notApply}" disabled="true"/>
+                </apex:column>
+                
+                <!-- BOTON RESUMEN -->
+                <apex:column headerValue=" " styleClass="centraliza">
+                    <apex:commandButton value="{!$Label.LAT_BR_VFP05_00012}" action="{!doShowPopup}" reRender="popup">
+                    <!-- Label.LAT_BR_VFP05_00012 = Resume -->
+                        <apex:param value="{!psc.oli.PriceBookEntry.Product2Id}" name="idProdParam"/>
+                    </apex:commandButton>
+                </apex:column>
+                
+                <!-- BOTON REMOVER -->
+                <apex:column headerValue=" " styleClass="centraliza">
+                    <apex:commandButton value="{!$Label.LAT_BR_VFP05_00027}" action="{!doRemoveFromShoppingCart}" reRender="form">
+                    <!-- Label.LAT_BR_VFP05_00027 = Remover --> 
+                        <apex:param value="{!psc.oli.PricebookEntry.Product2Id}" name="idProdParam"/>
+                    </apex:commandButton> 
+                    
+                    <apex:variable var="i" value="{!i+1}"/>
+                </apex:column>
+                
+                
+                
+                
+                
+            </apex:pageblockTable>
+        </apex:pageBlock>
+              
+        <!-- SECCION DE PRODUCTOS HABILITADOS PARA SELECCIONAR -->
+        <apex:pageBlock title="{!$Label.LAT_BR_VFP05_00013}">
+        <!-- Label.LAT_BR_VFP05_00013 = Lista de produtos -->
+            
+            <!-- BOTONES -->
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00014}" action="{!doAddItemsToShoppingCart}" reRender="status,form" oncomplete="subir();return false" status="status" style="float:right"/>
+                <!-- Label.LAT_BR_VFP05_00014 = Agregar -->
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00015}" action="{!doPrevious}" reRender="form" disabled="{!prevDisable}"/>
+                <!-- Label.LAT_BR_VFP05_00015 = Anterior --> 
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00016}" action="{!doNext}" reRender="form" disabled="{!nextDisable}"/>
+                <!-- Label.LAT_BR_VFP05_00016 = Próxima --> 
+            </apex:pageBlockButtons>
+            
+            <!-- BUSCADOR DE PRODUCTOS -->
+            <apex:outputLabel value="{!$Label.LAT_BR_VFP05_00017}" styleClass="label"/>
+            <!-- Label.LAT_BR_VFP05_00017 = Buscar productos --> 
+            <apex:inputText value="{!searchProd}" onkeydown="if(event.keyCode==13){this.blur();searchFunc();}" style="width:300px"/>&nbsp;
+            <apex:commandButton value="{!$Label.LAT_BR_VFP05_00018}" action="{!doSearchProducts}" reRender="form"/>
+            <!-- Label.LAT_BR_VFP05_00018 = Busca -->
+            <apex:actionFunction name="searchFunc" action="{!doSearchProducts}" reRender="form"/>
+            <br/><br/>
+            
+            <!-- TABLA -->
+            <apex:pageBlockTable value="{!listAvailableProductsWrapper}" var="wrap" style="width:100%">
+                <apex:column headerValue="{!$ObjectType.Product2.Label}" width="300px">
+                    <apex:outputlink value="/{!wrap.app.Product__c}" tabindex="-1">
+                        {!wrap.app.Product__r.Name}
+                    </apex:outputlink>
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.Product2.Fields.SKU__c.Label}" value="{!wrap.app.Product__r.SKU__c}"/>
+                <apex:column headerValue="{!$Label.LAT_BR_VFP05_00019}" value="{!wrap.app.PaymentConditionDescription__c}"/>
+                <!-- Label.LAT_BR_VFP05_00019 = Cond Pagto -->
+                <apex:column headerValue="{!$ObjectType.LAT_Account_product_payment__c.Fields.MultipleQuantity__c.Label}" value="{!wrap.app.MultipleQuantity__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.Product2.Fields.CD_Unit__c.Label}" value="{!wrap.app.Product__r.CD_Unit__c}" styleClass="centraliza"/>
+                <apex:column headerValue="{!$ObjectType.LAT_Account_product_payment__c.Fields.PercentualBonus__c.Label}" value="{!wrap.app.PercentualBonus__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$Label.LAT_BR_VFP05_00020}" styleClass="centraliza" headerClass="centraliza">
+                <!-- Label.LAT_BR_VFP05_00020 = Selecionar -->
+                    <apex:inputCheckbox value="{!wrap.isSelected}" disabled="{!wrap.app.PaymentConditionDescription__c != paymentCondition}"/>
+                </apex:column>
+            </apex:pageBlockTable>
+        </apex:pageBlock>
+        
+        <!-- POP UP DE RESUMEN -->  
+        <apex:outputPanel id="popup">           
+            <apex:outputPanel styleClass="customPopup" layout="block" rendered="{!displayPopUp}">
+               <apex:pageBlock >
+                    <apex:pageBlockTable value="{!itemPopUp}" var="item" >
+                        <apex:column headerValue="{!$Label.LAT_BR_VFP05_00021}" value="{!item.Campo_de_formatacao__c}"/><br/><br/>
+                        <!-- Label.LAT_BR_VFP05_00021 = Composição de preço -->
+                    </apex:pageBlockTable>
+                <apex:commandButton value="{!$Label.LAT_BR_VFP05_00022}" action="{!doClosePopup}" rerender="popup"/>
+                <!-- Label.LAT_BR_VFP05_00022 = Fechar --> 
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </apex:outputPanel>
+        
+    </apex:form>
+</apex:page>

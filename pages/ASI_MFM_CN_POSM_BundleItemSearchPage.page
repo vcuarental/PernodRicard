@@ -1,0 +1,209 @@
+<apex:page Controller="ASI_MFM_CN_POSM_BundleItemSearchCls">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    <apex:includeScript value="{!$Resource.ASI_Datatable_Builder}"/>
+
+    <meta charset="UTF-8" />
+    <head>
+        <script>
+        var table;
+        $(document).ready(function(){ 
+            $('.waitingSearchDiv').hide();
+            var itemMap  = {};//{!posmItemMapJson};
+            var isDelete = {!isDelete};
+            var dItemId  = '{!dItemId}';
+            if(isDelete && dItemId!=null && dItemId!='') {
+                deleteItem(dItemId);
+            }
+            
+            var columns = [
+                {title:"Item", 		data:"itemgroup", 	defaultContent:"", 	fieldType:TYPE_LOOKUP, 	mandate:true, lookupMap:itemMap},
+                {title:"Quantity",	data:"qty", 		defaultContent:0, 	fieldType:TYPE_NUM, 	mandate:true}
+            ];
+            var config = {
+                scrollX: true,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: [],
+                fixedColumns: false,
+                autoWidth: false,
+            };
+            
+            
+            var createdCell = function(nTd, oData, dataKey, iRow, iCol) {
+                console.log(dataKey);
+                if(dataKey=='itemgroup') {
+                    //Enoch@Introv 20191204 ---------- Fix View State by loading itemgroup in autocomplete ---------
+                    var input = $(nTd).find('input');
+                    input.css("width", "400px");
+                    var mapResult;
+                    input.autocomplete('option', 'minLength', 4);
+                    input.autocomplete('option', 'source', (request, response)=>{
+                        ASI_MFM_CN_POSM_BundleItemSearchCls.searchItemByName(request.term,(result, event) => 
+                        {
+                            if(result!=null) {
+                                if(result.error != null && result.error != '') {
+                                //Fail case
+                                } else {
+                                //success case
+		                        mapResult=result;
+                        		var nameLists = [];
+                                for(var key in mapResult){
+                            		nameLists.push(key);
+                                }
+                                    response(nameLists);
+                                }
+                            }
+                            }
+                            ,{escape: true}
+                        );
+                    });
+                	input.autocomplete('option','select',( event, ui ) => {
+                        console.log(event);
+                        console.log(ui);
+                        var lookupObj = mapResult[ui.item.label];
+                        if(lookupObj!=null){
+                            oData[dataKey] = ui.item.label;
+                            oData['id'] = lookupObj.id;
+                        }
+                    });
+
+                	input.unbind('blur');
+					input.on('blur', ()=>{
+                        var lookupObj = null
+                        if(mapResult!=null) {lookupObj = mapResult[$(input).val()];}
+                        if(lookupObj==null){
+                        	oData[dataKey] = '';
+                            oData['id'] = null;
+	                        $(input).val('');
+                        }
+                    });
+                    //Enoch@Introv 20191204 ---------- Fix View State by loading itemgroup in autocomplete ---------
+                    
+                } else if(dataKey=='qty') {
+                    $(nTd).find('input').css("width", "50px");
+                }
+                //$(nTd).css("width", "1%");
+            };
+            var oninput = function(nTd, result) {};
+            var onblur  = function(nTd, result, lookupObj) {
+                //Enoch@Introv 20191204 ---------- Fix View State by loading itemgroup in autocomplete ---------
+                // Action done above
+                /*
+                if(result.data=="itemgroup") {
+                    var tdItemGroup = table.getCell(nTd, 1);
+                    console.log(result);
+                    console.log(lookupObj);
+                    result.oData.id = lookupObj.id;
+                }
+                */
+                //Enoch@Introv 20191204 ---------- Fix View State by loading itemgroup in autocomplete ---------
+            };
+            table = new DataTableBuilder("posmItemTbl",config,columns,false,[],[],createdCell,oninput,onblur);
+            table.defLine = function() {
+                return {itemgroup:'',qty:1,editable:true};
+            };
+            table.setEditMode(true);
+            table.dataTable.row.add(table.defLine()).draw(false);
+        });
+        
+        function deleteItem(itemid) {
+            $('.waitingSearchDiv').show();
+            ASI_MFM_CN_POSM_BundleItemSearchCls.deleteBundle(itemid, function(result, event){
+                $('.waitingSearchDiv').hide();
+                if(event && result){
+                    console.log(result);
+                }
+            });
+        }
+        
+        function search() {
+            var itemList = table.getCurrentData();
+            if(itemList==null || itemList.length==0) {
+                alert('Please Select Item');
+                return;
+            }
+            //console.log(JSON.stringify({itemList:itemList}));
+            console.log(itemList);
+            $('.waitingSearchDiv').show();
+
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_BundleItemSearchCls.searchBundleItem}',
+                JSON.stringify({itemList:itemList}), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            if(result.bundleItemId!=null) { 
+                                alert('Redirecting to Bundle Item Group.');
+                                window.top.location.href = '/' + result.bundleItemId;
+                            } else {
+                                if (confirm('Create New Item Group And Redirect?')) {
+                                    // Save it!
+                                    createNewItemGroup(itemList);
+                                } else {
+                                    // Do nothing!
+                                }
+                            }
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Search POSM Item');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+        
+        function createNewItemGroup(itemList) {
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_BundleItemSearchCls.createBundleItem}',
+                JSON.stringify({itemList:itemList}), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log(result.message);
+                            if(result.bundleItemId!=null) { 
+                                window.top.location.href = '/' + result.bundleItemId +'/e?saveURL='+result.bundleItemId+'&cancelURL=%2Fapex%2FASI_MFM_CN_POSM_BundleItemSearchPage?delete=true%26Id='+result.bundleItemId;
+                            }
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Create POSM Item');
+                    }
+                }, 
+                {escape: true}
+            );
+		}
+        </script>
+    </head>
+        
+    <apex:pageMessages />
+    <apex:form id="posmBundleItem">
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                <apex:commandButton id="searchItem" value="Search Item" onclick="search(); return false;"/>
+            </apex:pageBlockButtons>
+            <div style="width:600px"><table id="posmItemTbl" class="display compact" style="width:100%"></table></div>
+        </apex:pageBlock>
+    </apex:form>
+</apex:page>

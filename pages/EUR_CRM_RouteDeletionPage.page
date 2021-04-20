@@ -1,0 +1,286 @@
+<apex:page standardController="EUR_CRM_Route_Template__c" extensions="EUR_CRM_RouteDeletionControllerExt">
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />
+
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'css/formbubble.css')}" media="screen" rel="stylesheet" type="text/css" />
+<link href="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'css/viewmore.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/lib/jquery-1.7.1.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/lib/jquery-ui-1.8.17.custom.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/_loader.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/jquery.formbubble.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/date.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_Resource_RoutePlanning, 'js/src/viewmore/fullcalendar.viewmore.js')}"/>
+
+
+<script type="text/javascript">
+    $ = jQuery.noConflict(true);
+    
+    $(document).ready(function(){
+        console.log("Route Schedule - On ready");
+        //setCalendarDisplay();
+    });
+    
+    function setCalendar(){
+        console.log('INIT CALENDAR');
+        $('#external-events').show(); //HIDE EVENT DIV
+        console.log('Show External events');
+        $('#calendar').fullCalendar('destroy');
+    
+        /* initialize the calendar
+        -----------------------------------------------------------------*/
+        var date = new Date();
+        var d = date.getDate();
+        var m = date.getMonth();
+        var y = date.getFullYear();
+        
+        /* initialize the external events
+        -----------------------------------------------------------------*/
+    
+        $('#external-events div.external-event').each(function() {
+        
+            // create an External Event Object 
+            // it doesn't need to have a start or end
+            var eventObject = {
+                title: $.trim($(this).text()) // use the element's text as the event title
+            };
+            
+            // store the Event Object in the DOM element so we can get to it later
+            console.log('1. ID:' + $(this).attr('id') + 'ID:' + $(this).attr('class'));
+            $(this).data('eventObject', eventObject);
+            
+            console.log('Flag - Check data object:' + $(this).data('eventObject') + '|' + $(this).data('eventObject').title);
+            
+            // make the external event draggable using jQuery UI
+            $(this).draggable({
+                zIndex: 999,
+                revert: true,      // will cause the event to go back to its
+                revertDuration: 0  //  original position after the drag
+            });
+            
+        });
+        
+        console.log('Flag - EVENTS JS:' + JSON.stringify({!eventsJS}));
+        $('#calendar').fullCalendar({
+            header: {
+                left: 'prev, next',
+                center: 'title',
+                right: ''
+            },
+            year:y,
+            month:m,
+            date:d,
+            defaultView:'month',
+            firstDay:1,
+            editable: true,
+            droppable: true, // this allows things to be dropped onto the calendar !!!
+            events:{!eventsJS},
+            drop: function(date, allDay, cell) { // this function is called when something is dropped
+                var currDate = new Date();
+                console.log('DROP - CHECK: '+date + '|' + allDay + '|' + cell);
+                console.log('DROP - CHECK getDay: '+date.getDay() + '|' + currDate + '|'+ (date<currDate));
+                // retrieve the dropped element's stored Event Object
+                console.log('2. ID:' + $(this).attr('id') + 'ID:' + $(this).attr('class') + $(this).attr('parent'));
+                var originalEventObject = $(this).data('eventObject');
+                console.log('Flag - Check Orginal Event:' + originalEventObject.title);
+                // we need to copy it, so that multiple events don't have a reference to the same object
+                var copiedEventObject = $.extend({}, originalEventObject);
+                
+                // assign it the date that was reported
+                copiedEventObject.start = date;
+                copiedEventObject.allDay = allDay;
+                
+                // render the event on the calendar
+                // the last `true` argument determines if the event "sticks" (http://arshaw.com/fullcalendar/docs/event_rendering/renderEvent/)
+                
+                if (date<currDate){
+                    alert('Invalid source day, cannot select past date');
+                }
+                else if(date.getDay()!=1){
+                    alert('Invalid source day, it should always be a Monday');
+                }
+                else{
+                    console.log('Flag - Event Title:' + copiedEventObject.title);
+                    console.log('Flag - Selected Date:' + copiedEventObject.start + '|' + copiedEventObject.start.toDateString() + '|' + copiedEventObject.start.toISOString() + '|' + copiedEventObject.start.toUTCString());
+                    console.log('Flag - Parse Date:' + (copiedEventObject.start.getMonth()+1)+ '/' + copiedEventObject.start.getDate()+'/' + copiedEventObject.start.getFullYear())
+                    //tempPopulateCalendar(copiedEventObject.start.getFullYear()+'/'+(copiedEventObject.start.getMonth()+1)+'/'+copiedEventObject.start.getDate());
+                    clearTempCalendar((copiedEventObject.start.getMonth()+1)+'/'+copiedEventObject.start.getDate()+'/'+copiedEventObject.start.getFullYear());
+                    
+                    $('#calendar').fullCalendar('removeEvents', function(event) {
+                        //if(event.start.toDateString()>=date.toDateString())
+                            return true;
+                    });
+
+                    $('#calendar').fullCalendar('renderEvent', copiedEventObject, true);
+
+                    $(this).remove();
+                    //alert('Invalid start day, it should always be a Monday');
+                    
+                }
+
+            }
+        }).limitEvents(3);
+    }
+    
+        function setCalendarDisplay(){
+        console.log('INIT CALENDAR DISPLAY');
+        console.log('Flag - event source:' + {!eventsJS});
+
+        $('#external-events').hide(); //HIDE EVENT DIV
+        $('#calendar').fullCalendar('destroy');
+        /* initialize the calendar
+        -----------------------------------------------------------------*/       
+        $('#calendar').fullCalendar({
+            header: {
+                left: 'prev, next',
+                center: 'title',
+                right: ''
+            },
+            defaultView:'month',
+            firstDay:1, //Set first day to Monday
+            editable: false,
+            draggable:false,
+            droppable: false, // this allows things to be dropped onto the calendar !!!
+            events: {!eventsJS}
+        }).limitEvents(3);
+        
+        $('#calendar').fullCalendar('gotoDate', new Date());
+        console.log('2- Check FullCalendar'+  $('#calendar').fullCalendar())
+    }
+
+    function refetchEvents(){
+        $('#calendar').fullCalendar('rerenderEvents');
+        console.log('Refetch events');
+    }
+
+    
+</script>
+
+<style>
+    body {
+        margin-top: 40px;
+        font-size: 12px;
+        font-family: Helvetica,Arial,Verdana,sans-serif;
+        }
+        
+    #wrap {
+        width: 1100px;
+        margin: 0 auto;
+        }
+        
+    #external-events {
+        float: left;
+        width: 150px;
+        padding: 0 10px;
+        border: 1px solid #ccc;
+        background: #eee;
+        text-align: left;
+        }
+        
+    #external-events h4 {
+        font-size: 16px;
+        margin-top: 0;
+        padding-top: 1em;
+        }
+        
+    .external-event { /* try to mimick the look of a real event */
+        margin: 10px 0;
+        padding: 2px 4px;
+        background: #3366CC;
+        color: #fff;
+        font-size: 12px;
+        cursor: pointer;
+        }
+        
+    #external-events p {
+        margin: 1.5em 0;
+        font-size: 11px;
+        color: #666;
+        }
+        
+    #external-events p input {
+        margin: 0;
+        vertical-align: middle;
+        }
+
+    #calendar {
+        float: right;
+        width: 900px;
+        }
+
+</style>
+
+
+
+</head>
+
+<apex:actionStatus id="idStatus" >
+    <apex:facet name="start">
+        <c:EUR_CRM_LoadingStatus BackColor="#ffffff"
+                                borderColor="#6B6B6B"
+                                borderSize="1"
+                                height="50px"
+                                width="150px"
+                                margintop="-25px"
+                                marginleft="-60px"
+                                ImageUrl="{!$Resource.loadingStatus}"
+                                Message=" Processing ..."/>
+    </apex:facet>
+</apex:actionStatus>
+
+<apex:form >
+
+<apex:actionFunction name="clearTempCalendar" action="{!clearTempCalendar}" status="idStatus" 
+    onComplete="console.log('Temp Populate Calendar'); " reRender="pageMessages, eventsJS">
+    <apex:param name="selectedDate" value="" assignTo="{!selectedDate}" /> 
+</apex:actionFunction>
+
+<apex:actionFunction name="refreshEventList" action="{!initEvents}" status="idStatus" 
+    onComplete="console.log('Refreshed Event List');" reRender="pageMessages, eventsJS">
+</apex:actionFunction>
+
+<apex:pageBlock >
+    <apex:pageMessages id="pageMessages">
+    </apex:pageMessages>
+
+    <apex:pageblockButtons >
+        <apex:commandButton value="{!$Label.EUR_CRM_Save}" action="{!clearCalendar}" disabled="{!IF((eventsToDeleteSize>0),false, true)}"/>
+        <apex:commandButton value="Refresh" onClick="return refreshEventList();" onComplete="return setCalendar(); refetchEvents();" rendered="false"/>
+        <apex:commandButton value="{!$Label.EUR_CRM_Exit}" action="{!cancel}"/>
+    </apex:pageblockButtons>
+    
+    <apex:pageBlockSection title="{!$Label.EUR_CRM_RT_RouteTemplateDetails}" columns="1">
+        <apex:pageBlockSectionItem >
+        <apex:outputLabel value="{!$Label.EUR_CRM_RouteTemplate}"/>
+        <apex:outputLink value="/{!routeTemplate.Id}">
+        <apex:outputText label="{!$Label.EUR_CRM_RouteTemplate}" value="{!routeTemplate.Name}"></apex:outputText>
+        </apex:outputLink>
+        </apex:pageBlockSectionItem>
+        
+        <apex:pageBlockSectionItem >
+        <apex:outputLabel value="{!$Label.EUR_CRM_RT_LastPopulationDate}"/>
+        <apex:outputField label="{!$Label.EUR_CRM_RT_LastPopulationDate}" value="{!routeTemplate.EUR_CRM_Last_Date_Populated__c}"></apex:outputField>
+        </apex:pageBlockSectionItem>
+        
+    </apex:pageBlockSection>
+    
+    <apex:pageBlockSection title="{!$Label.EUR_CRM_Calendar}" columns="1" id="calendarSection" rendered="false">
+    <apex:outputPanel id="wrap">
+        <div id='external-events'>
+            <h4>Template Start Day</h4>
+            <div class='external-event' id='ee1'>Route Template Delete Day</div>
+            <p>
+                <apex:commandButton rendered="false" value="Save" onclick="return setCalendarDisplay();" onComplete="refetchEvents();" rerender="calendarSection, eventsJS"/>
+            </p>
+        </div>
+
+        <div id='calendar'></div>
+        <div style='clear:both'></div>
+
+    </apex:outputPanel>
+
+</apex:pageBlockSection>
+
+</apex:pageBlock>
+</apex:form>
+</apex:page>

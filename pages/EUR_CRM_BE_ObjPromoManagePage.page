@@ -1,0 +1,923 @@
+<apex:page standardController="EUR_CRM_ObjPromo__c"
+    extensions="EUR_CRM_BE_ObjPromoManageController" action="{!setPublishStatus}">
+
+    <apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_ZA_PublishContractPageCSS)}" />
+    <script src="//code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_JQuery_UI, 'jquery-ui-1.11.4/jquery-ui.css')}" />
+    <style>
+input[name='clone'] {
+    display: none;
+}
+
+input[name='del'] {
+    display: none;
+}
+
+input[name='edit'] {
+    display: none;
+}
+
+input[name='eur_crm_za_deactivate_o_p'] {
+    display: none;
+}
+
+input[name='eur_crm_be_manageobjpromo'] {
+    display: none;
+}
+
+input[name='share'] {
+    display: none;
+}
+
+.targetQTY
+
+.warning { 
+    background-color:red !important;
+    color: #FFFFFF !important;
+}
+.warning a{
+    color: #FF0000 !important;
+}
+.textwarning{     
+    color: #FF0000 !important;
+}
+.activeTab {background-color: #FFFFFF; color:white; background-image:none}
+.inactiveTab { background-color: lightgrey; color:black; background-image:none}
+.targetQTY{ text-align:center;}
+
+.targetBottle{ text-align:right;}
+.targetPromoKit{ text-align:right;}
+</style>
+
+    <script>
+        $ = jQuery.noConflict();
+        
+        // Jquery to control the tabs with a confirmation dialog
+        $(document).ready(function() {
+            $('#tabs').tabs({
+                activate: function(event, ui) {
+                    $(this).tabs("option", "active", ui.newTab.index());
+                }              
+            });
+            
+            $('#target-tabs').tabs({
+                activate: function(event, ui) {
+                    $(this).tabs("option", "active", ui.newTab.index());
+                }
+            });
+            
+            $('#targetspy-tabs').tabs({
+                activate: function(event, ui) {
+                    $(this).tabs("option", "active", ui.newTab.index());
+                }
+            });
+
+            $('#targetPromoKit-tabs').tabs({
+                activate: function(event, ui) {
+                    $(this).tabs("option", "active", ui.newTab.index());
+                }
+            });
+
+            setButtons();
+            
+            openSpecifiedTab();
+
+            updateNavigationButtons('{!euAccountsFirstIndex}', '{!euAccountsPageHasMore}', '{!euAccountsPageNum}');
+
+            changePromoKitTargetUnit('{!PromoKitTargetUnitOpt}',false);
+        });
+        
+        function setButtons() {
+            var cancelButton = '<input class="btn" value=" Cancel " name="cancelButton" title="Cancel" type="Button" onClick="xcancel();"/>';    
+            $("#bottomButtonRow").append(cancelButton);
+            $("#topButtonRow").append(cancelButton);
+
+            var isPublishReady = "{!EUR_CRM_ObjPromo__c.EUR_CRM_Is_Publish_ready__c}";
+            
+            if(isPublishReady == 'true' && status == "Draft") {
+                var publishButton = '<input class="btn" value=" Publish " name="customPublish" title="Publish" type="Button" onClick="xpublish();"/>';
+                $("#bottomButtonRow").append(publishButton);
+                $("#topButtonRow").append(publishButton);
+            }
+        }
+        
+        function openSpecifiedTab() {
+            //var hash = window.location.hash;
+            var hash = getUrlParameter('pageReference');
+            var isSpyder = "{!IsSpyder}";
+            var isPromo = "{!IsOnPromoKit}";
+            if(hash != null && hash != '') {
+                if(hash == 'objective') {
+                    if(isSpyder == 'true'){
+                        $('#tabs').tabs('option', 'active', 3);
+                        $('#targetspy-tabs').tabs('option', 'active', 0);
+                    }else if(isPromo == 'true'){
+                        $('#tabs').tabs('option', 'active', 4);
+                        $('#targetPromoKit-tabs').tabs('option', 'active', 0);
+                    }else{
+                        $('#tabs').tabs('option', 'active', 2);
+                        $('#target-tabs').tabs('option', 'active', 0);
+                    }
+                } else if(hash == 'manager') {
+                    $('#tabs').tabs('option', 'active', 2);
+                    $('#target-tabs').tabs('option', 'active', 1);                
+                } else if(hash == 'salesRep') {
+                    if(isSpyder == 'true'){
+                        $('#tabs').tabs('option', 'active', 3);
+                        $('#targetspy-tabs').tabs('option', 'active', 1);
+                    }else if(isPromo == 'true'){
+                        $('#tabs').tabs('option', 'active', 4);
+                        $('#targetPromoKit-tabs').tabs('option', 'active', 1);
+                    }else{
+                        $('#tabs').tabs('option', 'active', 2);
+                        $('#target-tabs').tabs('option', 'active', 2);   
+                    }
+                } else if(hash == 'product') {
+                    $('#tabs').tabs('option', 'active', 1);            
+                }
+             }
+         };
+         
+		function getUrlParameter(sParam) {
+		   var sPageURL = decodeURIComponent(window.location.search.substring(1)),
+		       sURLVariables = sPageURL.split('&'),
+		       sParameterName,
+		       i;
+		
+		   for (i = 0; i < sURLVariables.length; i++) {
+		       sParameterName = sURLVariables[i].split('=');
+		
+		       if (sParameterName[0] === sParam) {
+		           return sParameterName[1] === undefined ? true : sParameterName[1];
+		       }
+		   }
+		};
+
+        function updateNavigationButtons(firstIndex, hasMore, pageNum){
+            if(parseInt(firstIndex) == 0){
+                $('.previousSpan').css("pointer-events", "none");
+            }
+            else {
+                $('.previousSpan').css("pointer-events", "auto");
+            }
+            if(hasMore == 'false'){
+                $('.nextSpan').css("pointer-events", "none");
+            }
+            else{
+                $('.nextSpan').css("pointer-events", "auto");
+            }
+            updatePageNumber(parseInt(pageNum));
+        };
+        
+        function updatePageNumber(pageNum){
+            var pageNumSpans = $('.PageNumberSpan');
+            for(var i=0; i<pageNumSpans.length; i++){
+                pageNumSpans[i].innerHTML=pageNum+1;
+            }
+        };           
+
+        function updateBottles(bottlePrSKUId, noOfDisplayId, noOfBottleID){
+            //Disabled - User Dont want to see this conversion
+            //SKU = document.getElementById(bottlePrSKUId).innerHTML;
+            //NOD = document.getElementById(noOfDisplayId).value;
+            //console.debug('SKU:' + SKU);
+            //console.debug('Nod:' + NOD);
+            //document.getElementById(noOfBottleID).value = SKU * NOD;
+            //document.getElementById(noOfBottleID).innerHTML = SKU * NOD;
+        };
+
+        function removeDisplay(noOfDisplayId){
+            //document.getElementById(noOfDisplayId).value = '';
+        }
+
+        function changePromoKitTargetUnit(Unit,ClearValue){
+            console.debug('Unit Change to:' + Unit);
+            var bottleEnable = false;
+            var promoEnable = false;
+
+            if(Unit == 'Bottles'){
+                promoEnable = true;
+            }else{
+                bottleEnable = true;
+            }
+            var bottleTargetFields = document.getElementsByClassName("targetBottle");
+            for(var i=0; i<bottleTargetFields.length; i++)
+            {
+                bottleTargetFields[i].disabled = bottleEnable;
+                if(ClearValue){bottleTargetFields[i].value = 0;}
+                //bottleTargetFields[i].value = 0;
+            }
+            var PromoKtargetFields = document.getElementsByClassName("targetPromoKit");
+            for(var i=0; i<PromoKtargetFields.length; i++)
+            {
+                PromoKtargetFields[i].disabled = promoEnable;
+                if(ClearValue){PromoKtargetFields[i].value = 0;}
+                //PromoKtargetFields[i].value = 0;
+            }
+        }
+    </script>
+
+    <apex:sectionHeader subtitle="Manage Objective" />
+    <apex:detail subject="{!objPromo.Id}" inlineEdit="false" title="false"
+        relatedList="false" />
+    <br />
+
+    <apex:actionStatus id="loadingStatus">
+        <apex:facet name="start">
+            <c:EUR_CRM_LoadingStatus BackColor="#ffffff" borderColor="#6B6B6B"
+                borderSize="1" height="50px" width="150px" margintop="-25px"
+                marginleft="-60px" ImageUrl="{!$Resource.loadingStatus}"
+                Message="Loading..." />
+        </apex:facet>
+    </apex:actionStatus>
+
+    <apex:form >
+        <apex:actionFunction name="xcancel" action="{!cancel}" />
+        <apex:actionFunction action="{!nextPage}" name="nextPage" rerender="selectedAccounts" onComplete="updateNavigationButtons({!euAccountsFirstIndex}, {!euAccountsPageHasMore}, {!euAccountsPageNum})"/>
+        <apex:actionFunction action="{!previousPage}" name="previousPage" rerender="selectedAccounts"  onComplete="updateNavigationButtons({!euAccountsFirstIndex}, {!euAccountsPageHasMore}, {!euAccountsPageNum})"/>
+        <apex:actionFunction action="{!firstPage}" name="firstPage" rerender="selectedAccounts" onComplete="updateNavigationButtons({!euAccountsFirstIndex}, {!euAccountsPageHasMore}, {!euAccountsPageNum})"/>
+        <apex:actionFunction action="{!lastPage}" name="lastPage" rerender="selectedAccounts"  onComplete="updateNavigationButtons({!euAccountsFirstIndex}, {!euAccountsPageHasMore}, {!euAccountsPageNum})"/>
+        <apex:pageMessages id="pMessage" />
+    </apex:form>
+
+    <div id="tabs">
+        <ul id="tabSelection">
+            <li><a href="#tabs-1">Account Selection</a></li>
+            
+            <li><a href="#tabs-2" style="{!productSelectionTabVisibility}">Product Selection</a></li>
+
+            <li><a href="#tabs-3" style="{!targetManagementTabVisibility}">Target Management</a></li>
+
+            <li><a href="#tabs-4" style="{!targetManagementSpyderTabVisibility}">Target Management</a></li>
+
+            <li><a href="#tabs-5" style="{!targetManagementPromoKitTabVisibility}">Target Management(Promo Kits)</a></li>
+        </ul>
+        <div id="tabs-1">
+            <apex:pageBlock title="{!$Label.EUR_CRM_Step_1} : Select Account Selection Method">
+                <apex:form >
+                    <apex:selectList value="{!selectedSelectionMethod}" size="1">
+                        <apex:actionSupport event="onchange" rerender="accountSelection"
+                            status="loadingStatus"></apex:actionSupport>
+                        <apex:selectOption itemLabel="--None--" itemValue="none"></apex:selectOption>
+                        <apex:selectOption itemLabel="Account List View" itemValue="listView" rendered="{!isListViewOptionRendered}"></apex:selectOption>
+                        <apex:selectOption itemLabel="Customer Taxonomy" itemValue="cTax" rendered="{!isCTaxOptionRendered}"></apex:selectOption>
+                        <apex:selectOption itemLabel="PRS" itemValue="pros" rendered="{!isPRSOptionRendered}"></apex:selectOption>
+                    </apex:selectList>
+                </apex:form>
+            </apex:pageBlock>
+
+            <apex:outputPanel id="accountSelection">
+                <apex:pageBlock title="{!$Label.EUR_CRM_Step_2} : Select Accounts" rendered="{!isAccountListView}">
+                    <apex:form >
+                        <c:EUR_CRM_AccountListViewSelector countryCodeAtt="BE"
+                            stdController="{!standardController}" objPromoAtt="{!objPromo}"
+                            opAccountMappingRecordTypeNameAtt="EUR_BE_O_P_Account_Mapping"
+                            currentURLAtt="apex/EUR_CRM_BE_ObjPromoManagePage?ObjPromoId={!objPromo.Id}"
+                            listViewFilter="{!IF(IsOnSecondPlace,'Special Cavist','')}" />
+                    </apex:form>
+                </apex:pageBlock>
+                <apex:pageBlock title="{!$Label.EUR_CRM_Step_2} : {!$Label.EUR_CRM_Select_Customer_Taxonomy}"
+                    rendered="{!isCustomerTaxonomy}">
+                    <c:EUR_CRM_SelectCustTaxComponentExt objPromoId="{!objPromo.Id}" objPromoAtt="{!objPromo}"
+                        countryCodeAtt="BE" limitFields="true"
+                        isSelectorRenderedAtt="true"
+                        fields="EUR_CRM_Group__c,EUR_CRM_Banner__c,EUR_CRM_Chain__c"
+                        stdController="{!standardController}"
+                        custTaxRecordType="EUR_BE_Customer_Taxonomy"
+                        opAccountMappingRecordTypeNameAtt="EUR_BE_O_P_Account_Mapping"
+                        isMultiSelectEnabledAtt="false"
+                        currentURL="apex/EUR_CRM_BE_ObjPromoManagePage?ObjPromoId={!objPromo.Id}" />
+                </apex:pageBlock>
+                <apex:pageBlock title="{!$Label.EUR_CRM_Step_2} : Select PRS Segmentation"
+                    rendered="{!isPRS}">
+                    <c:EUR_CRM_SelectOPPRSSegment objPromoAtt="{!objPromo}"
+                        countryCodeAtt="BE" 
+                        groupOutletTypeAtt="EUR_BE_PRS_On_Trade_Group_Outlet_Type"
+                        stdController="{!standardController}"
+                        opAccountMappingRecordTypeNameAtt="EUR_BE_O_P_Account_Mapping"
+                        currentURL="apex/EUR_CRM_BE_ObjPromoManagePage?ObjPromoId={!objPromo.Id}"
+                        isSelectorRenderedAtt="true" />
+                </apex:pageBlock>
+            </apex:outputPanel>
+            <apex:outputPanel id="selectedAccounts">
+                <apex:pageBlock title="Saved Accounts"
+                    rendered="{!isAccountSelectionDone}">
+
+                    <div style="float:right; display: inline-flex;">
+                    <span class='previousSpan' onmouseover="" style="cursor: pointer; float:left; display: inline-flex; padding-right: 6px;"> 
+                         <span onclick="firstPage();" class="ui-icon ui-icon-seek-prev" style="margin-top: -3px; margin-right: -2px"> </span>
+                         <span onclick="previousPage();" class="ui-icon ui-icon-triangle-1-w" style="margin-top: -3px; margin-right: -4px"> </span>
+                         <span onclick="previousPage();"> Previous </span>
+                     </span>
+                     <span style="float:center; display: inline-flex;">
+                         <span> Page: </span>
+                         <span class="PageNumberSpan" style="width:15px; text-align:center;"></span>
+                     </span>
+                     <span class='nextSpan' onmouseover="" style="cursor: pointer; float: right; display: inline-flex; padding-left: 6px;">
+                         <span onclick="nextPage();"> Next </span>
+                         <span onclick="nextPage();" class="ui-icon ui-icon-triangle-1-e" style="margin-top: -3px; margin-left: -4px"> </span>
+                         <span onclick="lastPage();" class="ui-icon ui-icon-seek-next" style="margin-top: -3px; margin-left: -2px"> </span>
+                     </span>
+                     </div>
+
+                    <apex:pageBlockSection columns="1">
+                        <apex:pageBlockTable value="{!pagedEUAccounts}" var="account"
+                            id="accountTable">
+                            <apex:column width="30%">
+                                <apex:facet name="header">{!$ObjectType.EUR_CRM_Account__c.fields.name.Label}</apex:facet>
+                                <apex:outputField value="{!account.Name}" />
+                            </apex:column>
+                            <apex:column width="30%">
+                                <apex:facet name="header">{!$ObjectType.EUR_CRM_Region__c.fields.name.label}</apex:facet>
+                                <apex:outputField value="{!account.EUR_CRM_Territory__r.EUR_CRM_Region__r.Name}" />
+                            </apex:column>
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.EUR_CRM_Account__c.fields.EUR_CRM_Account_Owner_Formula__c.label}</apex:facet>
+                                <apex:outputField value="{!account.owner.name}" />
+                            </apex:column>
+                        </apex:pageBlockTable>
+                    </apex:pageBlockSection>
+
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </div>
+        <div id="tabs-2" rendered="false">
+            <apex:form >
+                <apex:pageBlock title="{!$Label.EUR_CRM_Step_1} : Select Product Selection Level">
+                    <apex:selectList value="{!selectedProductSelection}" size="1">
+                        <apex:actionSupport event="onchange"
+                            rerender="productSelection, objectiveTargetTable, regionalTargetTable, srTargetBlock"
+                            action="{!initializeTargets}" status="loadingStatus"></apex:actionSupport>
+                        <apex:selectOption itemLabel="--None--" itemValue="none"></apex:selectOption>
+                        <apex:selectOption itemLabel="Brand Quality" itemValue="quality" rendered="{!IsBrandQualityRendered}"></apex:selectOption><!-- rendered="{!isBrandQualityRendered}"-->
+                        <apex:selectOption itemLabel="Brand Quality Size" itemValue="size" rendered="{!isBrandSizeRendered}"></apex:selectOption>
+                        <apex:selectOption itemLabel="SKU" itemValue="sku" rendered="{!isSKURendered}"></apex:selectOption>
+                    </apex:selectList>
+                </apex:pageBlock>
+            </apex:form>
+            <apex:outputPanel id="productSelection">
+                <apex:outputPanel rendered="{!isProductSelectionSelected}">
+                    <apex:form >
+                        <apex:pageBlock title="{!$Label.EUR_CRM_SelectedProducts}">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveProducts}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }"
+                                    reRender="targetTable, selectedProducts, tabSelection"
+                                    status="loadingStatus" disabled="{!!isDraft }"/>
+                                <apex:commandButton action="{!saveProducts}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft }"/>
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!targetsInSelectedProductLevel}"
+                                    var="target" id="targetTable">
+                                    <apex:variable var="i" value="{!0}" />
+                                    <apex:column width="15%" rendered="{!!isActive}">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Action }</apex:facet>
+                                        <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                            action="{!removeProduct}"
+                                            reRender="targetTable,productSelection" status="loadingStatus">
+                                            <apex:param name="rowIndex" assignTo="{!rowIndex}"
+                                                value="{!i}" />
+                                        </apex:commandLink>
+                                        <apex:variable var="i" value="{!i+1}" />
+                                    </apex:column>
+                                    <apex:column width="30%" rendered="{!isBrandSize}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_Size__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_BQS__c }" />
+                                    </apex:column>
+                                    <apex:column width="30%" rendered="{!IsBrandQuality}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_Size__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_BQ__c }" />
+                                    </apex:column>
+                                    <apex:column width="30%" rendered="{!isSKU}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_SKU__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_SKU__c }" />
+                                    </apex:column>
+                                    <apex:column width="30%" rendered="{!isSKU}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_SKU__c.fields.EUR_CRM_Unit_Type__c.Label}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c }" />
+                                    </apex:column>
+                                    <apex:column >
+                                        <apex:facet name="header"> {!$ObjectType.EUR_CRM_ObjPromo_Target__c.fields.EUR_CRM_Comments__c.Label}</apex:facet>
+                                        <apex:inputTextarea value="{!target.EUR_CRM_Comments__c}" />
+                                    </apex:column>
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                    </apex:form>
+                    <apex:outputPanel rendered="{!isSKU && isDraft}">
+                        <c:EUR_CRM_ItemSelectionComponent stat="loadingStatus"
+                            targetTable="targetTable" pageController="{!sCon}"
+                            itemLabel="{!$ObjectType.EUR_CRM_SKU__c.fields.Name.Label}"
+                            pageSize="10" pageBlockTitle="{!$Label.EUR_CRM_Products}"
+                            sObjectType="EUR_CRM_SKU__c" fields="name,EUR_CRM_Unit_Type__c" searchFields="name"
+                            recordTypes="EUR_BE_SKU" />
+                    </apex:outputPanel>
+                    <apex:outputPanel rendered="{!isBrandSize && isDraft}">
+                        <c:EUR_CRM_ItemSelectionComponent stat="loadingStatus"
+                            targetTable="targetTable" pageController="{!sCon}"
+                            itemLabel="{!$ObjectType.EUR_CRM_Size__c.fields.Name.Label}"
+                            pageSize="10" pageBlockTitle="{!$Label.EUR_CRM_Products}"
+                            sObjectType="EUR_CRM_Size__c" fields="name"
+                            searchFields="name" recordTypes="EUR_BE_Size" />
+                    </apex:outputPanel>
+                    <apex:outputPanel rendered="{!isBrandQuality && isDraft}">
+                        <c:EUR_CRM_ItemSelectionComponent stat="loadingStatus"
+                            targetTable="targetTable" pageController="{!sCon}"
+                            itemLabel="{!$ObjectType.EUR_CRM_Quality__c.fields.Name.Label}"
+                            pageSize="10" pageBlockTitle="{!$Label.EUR_CRM_Products}"
+                            sObjectType="EUR_CRM_Quality__c" fields="name,EUR_CRM_External_ID__c"
+                            searchFields="name" recordTypes="EUR_BE_Quality" soqlFilter=""/>
+                    </apex:outputPanel>
+                </apex:outputPanel>
+            </apex:outputPanel>
+            <apex:outputPanel id="selectedProducts">
+                <apex:pageBlock title="Saved Products"
+                    rendered="{!isProductSelectionDone}">
+
+                    <apex:pageBlockSection columns="1">
+                        <apex:pageBlockTable value="{!targets}" var="target"
+                            id="selectedProductsTable">
+                            <apex:column width="30%">
+                                <apex:facet name="header">{!$Label.EUR_CRM_Products}</apex:facet>
+                                <apex:outputField rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Quality__c'}"
+                                    value="{!target.EUR_CRM_BQ__r.Name}" />
+                                <apex:outputField rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Brand__c'}"
+                                    value="{!target.EUR_CRM_Brand__r.Name}" />
+                                <apex:outputField rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Size__c'}"
+                                    value="{!target.EUR_CRM_BQS__r.Name}" />
+                                <apex:outputField rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_SKU__c'}"
+                                    value="{!target.EUR_CRM_SKU__r.Name}" />
+                            </apex:column>
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.EUR_CRM_ObjPromo_Target__c.fields.EUR_CRM_Comments__c.Label}</apex:facet>
+                                <apex:outputField value="{!target.EUR_CRM_Comments__c}" />
+                            </apex:column>
+                        </apex:pageBlockTable>
+                    </apex:pageBlockSection>
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </div>
+
+        <!--Sales Drive Target Management-->
+        <div id="tabs-3">
+            <div id="target-tabs">
+                <ul>
+                    <li><a href="#tabs-objective">Objective Level</a></li>
+                    <li><a href="#tabs-manager" style="{!TargetManagerTabVisibility}">Manager Level</a></li>
+                    <li><a href="#tabs-salesRep">Sales Rep Level</a></li>
+                </ul>
+                <div id="tabs-objective">
+                    <apex:form rendered="{!isTargetManagementRendered}">
+                        <apex:pageBlock title="{!$Label.EUR_CRM_SelectedProducts}">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" disabled="{!!isDraft}"
+                                    reRender="objectiveTargetTable,regionalTargetTable,srTargetTable"
+                                    status="loadingStatus" />
+                                <apex:commandButton action="{!saveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!targetsInSelectedProductLevel}" var="target" id="objectiveTargetTable">
+
+                                    <apex:column width="30%">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_SelectedProducts}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_BQS__c }"
+                                            rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Size__c'}" />
+                                        <apex:outputField value="{!target.EUR_CRM_SKU__c }"
+                                            rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_SKU__c'}" />
+                                        <apex:outputField value="{!target.EUR_CRM_BQ__c }"
+                                            rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Quality__c'}" />
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_SKU__c.fields.EUR_CRM_Unit_Type__c.Label}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c }"/>
+                                    </apex:column>  
+
+                                    <apex:column rendered="True" >
+                                        <apex:facet name="header" >Bottles Per Case</apex:facet>
+                                        <apex:outputField id="targetBottlePSKU" 
+                                            rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_SKU__c'}"   
+                                            value="{!target.EUR_CRM_SKU__r.EUR_CRM_Bottles_per_Case__c}" />
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Displays}</apex:facet>
+                                        <!--apex:inputField id="targetQtyDisplay"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Display__c}"
+                                            style="text-align:right" 
+                                            onchange="updateBottles('{!$Component.targetBottlePSKU}','{!$Component.targetQtyDisplay}','{!$Component.targetQtyBottlesDisabled}')"
+                                            rendered="{!!(target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}"
+                                            >
+                                        </apex:inputField-->
+                                        <apex:inputField id="targetQtyDisplay"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Display__c}"
+                                            style="text-align:right" 
+                                            rendered="{!!(target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}"
+                                            >
+                                        </apex:inputField>
+                                        <apex:outputField id="targetQtyDisplayDisabled"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Display__c}"
+                                            style="text-align:right" 
+                                            rendered="{!(target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}">
+                                        </apex:outputField>
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</apex:facet>
+                                        <apex:inputField id="targetQtyBottles"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                            style="text-align:right"
+                                            rendered="{!(target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}">
+                                        </apex:inputField>
+                                        <apex:outputField id="targetQtyBottlesDisabled"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                            style="text-align:right"
+                                            rendered="{!!(target.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}">
+                                        </apex:outputField>
+                                    </apex:column>
+
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+                <div id="tabs-manager">
+                    <apex:form rendered="{!isTargetManagementRendered}">
+                        <apex:pageBlock title="{!$Label.EUR_CRM_Regional_Targets}">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveRegionalTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" disabled="{!!isDraft}"
+                                    reRender="pMessage,srTargetTable,regionalTargetTable" status="loadingStatus" />
+                                <apex:commandButton action="{!saveRegionalTargets}"
+                                    disabled="{!!isDraft}"
+                                    value="{!$Label.EUR_CRM_Save }" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!regionalAndSalesAgencyTargetWraps}" var="srTargetWrap"
+                                    id="regionalTargetTable">
+                                    <apex:column width="30%" rendered="{!isBrandSize}" styleClass="{!IF(srTargetWrap.volumeBottleMatchedExactly,'warning','')}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_Size__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_BQS__c }" />
+                                    </apex:column>
+                                    <apex:column width="30%" rendered="{!isSKU}" styleClass="{!IF(srTargetWrap.volumeBottleMatchedExactly,'warning','')}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_SKU__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_SKU__c }" />
+                                    </apex:column>
+                                    <apex:column styleClass="{!IF(srTargetWrap.volumeBottleMatchedExactly,'warning','')}">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity}</apex:facet>
+                                        <apex:outputText value="{!srTargetWrap.target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}" style="text-align:right" />
+                                    </apex:column>
+                                    <apex:column styleClass="{!IF(srTargetWrap.volumeBottleMatchedExactly,'warning','')}">
+                                        <apex:facet name="header">
+                                            <table width="100%">
+                                                <tr>
+                                                    <td width="60%">{!$Label.EUR_CRM_Regional_Manager}</td>
+                                                    <td width="40%">{!$Label.EUR_CRM_Target_Quantity}</td>
+                                                </tr>
+                                            </table>
+                                        </apex:facet>
+                                        <table width="100%">
+                                            <apex:repeat value="{!srTargetWrap.srTargets}" var="srTarget">
+                                                <tr>
+                                                    <td width="60%" style="border-width: 0 0 0 0;">
+                                                        <apex:outputField value="{!srTarget.EUR_CRM_Target_Owner__c}" />
+                                                    </td>
+                                                    <td width="40%" style="text-align: right; border-width: 0 0 0 0;">
+                                                        <apex:inputField value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}" style="text-align:right" />
+                                                    </td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+                                    </apex:column>
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+                <div id="tabs-salesRep">
+                    <apex:form id="salesRepForm" rendered="{!isTargetManagementRendered}">
+                        <apex:pageBlock title="{!$Label.EUR_CRM_Sales_Representative_Targets}"
+                            id="srTargetBlock">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" reRender="salesRepForm,pMessage"
+                                    disabled="{!!isDraft}" status="loadingStatus" />
+                                <apex:commandButton action="{!saveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!salesRepTargetWrap}" var="srTargetWrap"
+                                    id="srTargetTable">
+                                    <apex:column width="20%" rendered="{!isBrandSize}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_Size__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_BQS__c }" />
+                                    </apex:column>
+                                    <apex:column width="20%" rendered="{!isSKU}">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_SKU__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_SKU__c }" />
+                                    </apex:column>
+                                    <apex:column width="10%" style="text-align:right;">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Displays}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_Qty_Sell_in_Amount_Display__c}" />
+                                    </apex:column>
+                                    <apex:column width="10%" style="text-align:right;">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}" />
+                                    </apex:column>
+                                    <apex:column width="60%">
+                                        <apex:facet name="header">
+                                            <table width="100%">
+                                                <tr>
+                                                    <td width="50%" >{!$Label.EUR_CRM_Sales_Representative}</td>
+                                                    <td width="0%" style="display:none;" >Bottles Per Case</td>
+                                                    <td width="25%" >{!$Label.EUR_CRM_Target_Quantity_in_Displays}</td>
+                                                    <td width="25%" >{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</td>
+                                                </tr>
+                                            </table>
+                                        </apex:facet>
+                                        <table width="100%">
+                                            <apex:repeat value="{!srTargetWrap.srTargets}" var="srTarget">
+                                                <tr>
+                                                    <td width="50%" class="{!IF(OR(srTargetWrap.volumeBottleMatchedExactly, srTargetWrap.volumeDisplayMatchedExactly), 'warning','')}">
+                                                        <apex:outputField value="{!srTarget.EUR_CRM_Target_Owner__c}" />
+                                                    </td>
+                                                    <td width="0%"  style="display:none;" class="{!IF(OR(srTargetWrap.volumeBottleMatchedExactly, srTargetWrap.volumeDisplayMatchedExactly), 'warning','')}">
+                                                        <apex:outputField id="srTargetBottlePSKU"
+                                                            value="{!srTarget.EUR_CRM_SKU__r.EUR_CRM_Bottles_per_Case__c}" />
+                                                    </td>
+                                                    <td  width="25%" 
+                                                        class="{!IF(srTargetWrap.volumeDisplayMatchedExactly,'warning','')}">
+                                                        <apex:inputField id="srTargetDisplay"
+                                                            styleClass="srTarget"
+                                                            value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Display__c}"
+                                                            style="text-align:right"
+                                                            onchange="updateBottles('{!$Component.srTargetBottlePSKU}','{!$Component.srTargetDisplay}','{!$Component.srTargetBottleDisable}') "
+                                                            rendered="{!!(srTarget.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}"
+                                                            />
+                                                        <apex:outputField id="srTargetDisplayDisable"
+                                                            styleClass="srTarget"
+                                                            value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Display__c}"
+                                                            style="text-align:right"
+                                                            rendered="{!srTarget.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle'}"
+                                                            />
+                                                    </td>
+                                                    <td width="25%" 
+                                                        class="{!IF(srTargetWrap.volumeBottleMatchedExactly,'warning','')}">
+                                                        <apex:inputField id="srTargetBottle"
+                                                            styleClass="srTarget"
+                                                            value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                                            style="text-align:right"
+                                                            rendered="{!srTarget.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle'}"
+                                                            />
+                                                        <apex:outputField id="srTargetBottleDisable"
+                                                            styleClass="srTarget"
+                                                            value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                                            style="text-align:right"
+                                                            rendered="{!!(srTarget.EUR_CRM_SKU__r.EUR_CRM_Unit_Type__c == 'Bottle')}"
+                                                            />
+                                                    </td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+                                    </apex:column>
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+            </div>
+        </div>
+
+        <!--Spyder Target Management-->
+        <div id="tabs-4">
+            <div id="targetspy-tabs">
+                <ul>
+                    <li><a href="#tabs-objective-spy">Objective Level</a></li>
+                    <li><a href="#tabs-salesRep-spy">Sales Rep Level</a></li>
+                </ul>
+                <div id="tabs-objective-spy">
+                    <apex:form >
+                        <apex:pageBlock title="Target Qty">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" disabled="{!!isDraft}"
+                                    reRender="objectiveTargetTable,regionalTargetTable,srTargetTable"
+                                    status="loadingStatus" />
+                                <apex:commandButton action="{!saveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!targetsInSpyderObjectiveLevel}" var="target" id="objectiveTargetTable">
+
+                                    <apex:column >
+                                        <apex:facet name="header"></apex:facet>
+                                        <apex:outputPanel layout="none">Target Qty (In Spdyer)</apex:outputPanel>
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header"></apex:facet>
+                                        <apex:inputField id="targetQtySpyder"
+                                            value="{!target.EUR_CRM_Target_Quantity_Spyders__c}"
+                                            style="text-align:right"></apex:inputField>
+                                    </apex:column>
+
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+                <div id="tabs-salesRep-spy">
+                    <apex:form id="salesRepSpyForm">
+                        <apex:pageBlock title="{!$Label.EUR_CRM_Sales_Representative_Targets}" id="srTargetSpyderBlock">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" reRender="salesRepForm,pMessage"
+                                    disabled="{!!isDraft}" status="loadingStatus" />
+                                <apex:commandButton action="{!saveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!salesRepTargetWrap}" var="srTargetWrap" id="srTargetspyderTable">
+                                    <apex:column width="40%">
+                                        <apex:facet name="header">Objective Level Target Qty</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_Target_Quantity_Spyders__c }" />
+                                    </apex:column>
+                                    <apex:column width="60%">
+                                        <apex:facet name="header">
+                                            <table width="100%">
+                                                <tr>
+                                                    <td width="50%" >Sales Repersentative</td>
+                                                    <td width="50%" >Target Qty</td>
+                                                </tr>
+                                            </table>
+                                        </apex:facet>
+                                        <table width="100%">
+                                            <apex:repeat value="{!srTargetWrap.srTargets}" var="srTarget">
+                                                <tr>
+                                                    <td width="50%" class="{!IF(OR(srTargetWrap.volumeSpyderMatchedExactly), 'warning','')}">
+                                                        <apex:outputField value="{!srTarget.EUR_CRM_Target_Owner__c}" />
+                                                    </td>
+                                                    <td width="50%" 
+                                                        class="{!IF(srTargetWrap.volumeSpyderMatchedExactly,'warning','')}">
+                                                        <apex:inputField id="srTargetSpyder"
+                                                            styleClass="srTarget"
+                                                            value="{!srTarget.EUR_CRM_Target_Quantity_Spyders__c}"
+                                                            style="text-align:right"/>
+                                                    </td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+                                    </apex:column>
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+            </div>
+        </div>
+
+
+        <!--PromoKits Target Management-->
+        <div id="tabs-5">
+            <div id="targetPromoKit-tabs">
+                <ul>
+                    <li><a href="#tabs-objective-pro">Objective Level</a></li>
+                    <li><a href="#tabs-salesRep-pro">Sales Rep Level</a></li>
+                </ul>
+                <div id="tabs-objective-pro">
+                    <apex:form >
+                        <apex:pageBlock title="{!$Label.EUR_CRM_SelectedProducts}">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" disabled="{!!isDraft}"
+                                    reRender="objectiveTargetTable,regionalTargetTable,srTargetTable,pMessage"
+                                    status="loadingStatus" />
+                                <apex:commandButton action="{!saveObjectiveTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            <apex:pageBlockSection columns="1">
+                                <apex:outputLabel value="Target Qty Unit" />
+                                <apex:selectList value="{!PromoKitTargetUnitOpt}" Size="1" OnChange="changePromoKitTargetUnit(this.options[this.selectedIndex].value,true)" id="promoKitUnit">
+                                    <apex:selectOptions value="{!PromoKitUnits}"/>
+                                </apex:selectList><br/>
+                            </apex:pageBlockSection>
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!targetsInSelectedProductLevel}" var="target" id="objectiveTargetTable">
+
+                                    <apex:column width="30%">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_SelectedProducts}</apex:facet>
+                                        <apex:outputField value="{!target.EUR_CRM_BQ__c }" 
+                                        rendered="{!target.EUR_CRM_Product_Level__c == 'EUR_CRM_Quality__c'}" />
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header">Target Quantity (Promo Kits)</apex:facet><!--Label-->
+                                        <apex:inputField id="targetQtyPromokit"
+                                            value="{!target.EUR_CRM_Target_Quantity_Promo_Kits__c}"
+                                            styleClass="targetPromoKit" ></apex:inputField>
+                                    </apex:column>
+
+                                    <apex:column >
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</apex:facet>
+                                        <apex:inputField id="targetQtyBottles"
+                                            value="{!target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                            styleClass="targetBottle"></apex:inputField>
+                                    </apex:column>
+
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+                <div id="tabs-salesRep-pro">
+                    <apex:form id="salesRepProForm">
+                        <apex:pageBlock title="{!$Label.EUR_CRM_Sales_Representative_Targets}"
+                            id="srTargetProBlock">
+                            <apex:pageBlockButtons >
+                                <apex:commandButton action="{!quickSaveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Quick_Save }" reRender="salesRepForm,pMessage"
+                                    disabled="{!!isDraft}" status="loadingStatus" />
+                                <apex:commandButton action="{!saveSRTargets}"
+                                    value="{!$Label.EUR_CRM_Save }" disabled="{!!isDraft}" />
+                                <apex:commandButton action="{!cancel}"
+                                    value="{!$Label.EUR_CRM_Cancel }" />
+                            </apex:pageBlockButtons>
+                            
+                            <apex:pageBlockSection columns="1">
+                                <apex:pageblockTable value="{!salesRepTargetWrap}" var="srTargetWrap"
+                                    id="srTargetProTable">
+                                    <apex:column width="20%">
+                                        <apex:facet name="header">{!$ObjectType.EUR_CRM_Size__c.fields.name.Label}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_BQ__c }" />
+                                    </apex:column>
+                                    <apex:column width="10%" style="text-align:right;">
+                                        <apex:facet name="header">Target Quantity (Promo Kit)</apex:facet><!--Label-->
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_Target_Quantity_Promo_Kits__c}" />
+                                    </apex:column>
+                                    <apex:column width="10%" style="text-align:right;">
+                                        <apex:facet name="header">{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</apex:facet>
+                                        <apex:outputField value="{!srTargetWrap.target.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}" />
+                                    </apex:column>
+                                    <apex:column width="60%">
+                                        <apex:facet name="header">
+                                            <table width="100%">
+                                                <tr>
+                                                    <td width="50%" >{!$Label.EUR_CRM_Sales_Representative}</td>
+                                                    <td width="25%" >Target Quantity (Promo Kits)</td><!--Label-->
+                                                    <td width="25%" >{!$Label.EUR_CRM_Target_Quantity_in_Bottles}</td>
+                                                </tr>
+                                            </table>
+                                        </apex:facet>
+                                        <table width="100%">
+                                            <apex:repeat value="{!srTargetWrap.srTargets}" var="srTarget">
+                                                <tr>
+                                                    <td width="50%" class="{!IF(srTargetWrap.QtyPromoKitMatchedExactly, 'warning','')}">
+                                                        <apex:outputField value="{!srTarget.EUR_CRM_Target_Owner__c}" />
+                                                    </td>
+                                                    <td width="25%" 
+                                                        class="{!IF(srTargetWrap.QtyPromoKitMatchedExactly,'warning','')}">
+                                                        <apex:inputField id="srTargetPromoKit"
+                                                            value="{!srTarget.EUR_CRM_Target_Quantity_Promo_Kits__c}"
+                                                            styleClass="targetPromoKit"/>
+                                                    </td>
+                                                    <td width="25%" 
+                                                        class="{!IF(srTargetWrap.QtyPromoKitMatchedExactly,'warning','')}">
+                                                        <apex:inputField id="srTargetBottle"
+                                                            value="{!srTarget.EUR_CRM_Qty_Sell_in_Amount_Bottle__c}"
+                                                            styleClass="targetBottle"/>
+                                                    </td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </table>
+                                    </apex:column>
+                                </apex:pageblockTable>
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                    </apex:form>
+                </div>
+            </div>
+        </div>
+    </div>
+</apex:page>

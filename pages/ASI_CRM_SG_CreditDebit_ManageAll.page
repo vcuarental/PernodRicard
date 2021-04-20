@@ -1,0 +1,948 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_SG_CreditDebit_ManageAll
+* Description: Manage Credit/Debit Note Page
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 14/03/2017       Vincent Lam             Created
+ * 2017-01-19		Vincent Lam				[VL 1.0] P4.1B
+-->
+<apex:page standardController="ASI_CRM_Credit_Debit_Note__c" extensions="ASI_CRM_SG_CreditDebit_ManageAll_Ctrl">
+    
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    
+	<!-- Style -->
+    <style>
+        .link-button {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        .error {
+            border: 2px solid red;
+        }
+        
+        th, td {
+                padding-top    : 5px;
+                padding-bottom : 5px;
+                padding-right  : 10px;
+                padding-left   : 10px;
+            }
+            
+        table { 
+        }
+        
+        <!-- Datatable Styling -->
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+		
+		.inputField_short {
+			width: 50px;
+		}
+
+		.inputField_medium {
+			width: 75px;
+		}
+
+		.inputField_long {
+			width: 250px;
+		}
+
+		.alignRight {
+			text-align: right;
+		}
+
+    </style>
+    
+    <!-- JavaScript -->
+    <script>
+        /****************
+        Define Variable
+        ****************/
+        const ACTION_LABEL                = 'Action';
+        const NEW_LINE_ITEM_PREFIX  = 'LINE_ITEM_';
+        
+        const CONST_DATA_TABLE_PROPERTIES    = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : false,
+        	"aLengthMenu":[10,25,50],
+        	"iDisplayLength":25,
+            "bSort" : false,
+            "bPaginate": true,
+            "bScrollCollapse": true,
+            "bJQueryUI": false
+        };
+        
+        const HEADER_ID = '{!header.Id}';
+        const HEADER_RT = '{!header.recordtype.developername}';
+        const HEADER_SYSGEN = '{!header.ASI_CRM_SYS_System_Generated__c}';
+        
+        
+        const LINE_ITEM_RECORD_TYPE_ID  = '{!lineItemRecordTypeId}';
+        
+        var NEW_LINE_ITEM_INDEX = 1;
+        var NEW_PAYMENT_SCHEDULE_INDEX = 1;
+        
+        var deleteLineIdList  = [];
+		
+		var addedSubBrandIdList = [];
+        
+        /*****************
+        Datatable Field Config
+        *****************/
+        const FIELD_CONFIG_MAPPING = {
+        	"ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                            	    	return "<a class='link-button' onClick='deleteLineRow(this.parentNode.parentNode)'>Delete</a>";  
+                                                                  }
+                                                },
+            "Sub-brand"                       : {"title"          : "Sub-brand",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Sub_brand__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Sub_brand__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Sub_brand__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Sub_brand__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+            "Type"                            : {"title"          : "Type",
+                                                 "data"           : "ASI_CRM_Type__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Type__c"
+                                                },
+            "Volume (9L)"                     : {"title"          : "Volume (9L)",
+                                                 "data"           : "ASI_CRM_Volume_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Volume_9L__c"
+                                                },
+            "Contracted Rate (9L)"            : {"title"          : "Contracted Rate (9L)",
+                                                 "data"           : "ASI_CRM_Contracted_Rate_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Contracted_Rate_9L__c"
+                                                },
+            "Wholesaler Rate (9L)"            : {"title"          : "Wholesaler Rate (9L)",
+                                                 "data"           : "ASI_CRM_Wholesaler_Rate_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Wholesaler_Rate_9L__c"
+                                                },
+            "Amount"                          : {"title"          : "Amount",
+                                                 "data"           : "ASI_CRM_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Amount__c"
+                                                },
+        	"Actual Amount"                   : {"title"          : "Actual Amount",
+                                                 "data"           : "ASI_CRM_Actual_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Actual_Amount__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+            "Adjustment Remark"               : {"title"          : "Adjustment Remark",
+                                                 "data"           : "ASI_CRM_Adjustment_Remark__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Adjustment_Remark__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<input class='" + fieldAPIName + "' type='text' value='" + data + "'/>";
+                                                                    } 
+                                                },
+            "Adjusted Difference"             : {"title"          : "Adjusted Difference",
+                                                 "data"           : "ASI_CRM_Adjusted_Difference__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Adjusted_Difference__c"
+                                                }
+        };
+		
+        const SYS_CM_FIELD_CONFIG_MAPPING = {
+			/*
+        	"ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+												 "defaultContent" : ""
+                                                },
+			*/
+			/* [VL 1.0] BEGIN */
+            "SKU"       	                : {"title"          : "SKU",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_SKU__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_SKU__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_SKU__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_SKU__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+			/* [VL 1.0] END */
+            "Sub-brand"                       : {"title"          : "Sub-brand",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Sub_brand__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Sub_brand__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Sub_brand__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Sub_brand__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+			/* [VL 1.0] BEGIN */
+            "Offtake Outlet"       	          : {"title"          : "Offtake Outlet",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Customer__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Customer__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Customer__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Customer__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+			/* [VL 1.0] END */
+            "Type"                            : {"title"          : "Type",
+                                                 "data"           : "ASI_CRM_Type__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Type__c"
+                                                },
+			/* [VL 1.0] BEGIN */
+			/*
+            "Volume (9L)"                     : {"title"          : "Volume (9L)",
+                                                 "data"           : "ASI_CRM_Volume_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Volume_9L__c",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Contracted Rate (9L)"            : {"title"          : "Contracted Rate<br/>(S$/9L)",
+                                                 "data"           : "ASI_CRM_Contracted_Rate_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Contracted_Rate_9L__c",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Wholesaler Rate (9L)"            : {"title"          : "Wholesaler Rate<br/>(S$/9L)",
+                                                 "data"           : "ASI_CRM_Wholesaler_Rate_9L__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Wholesaler_Rate_9L__c",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+			*/
+            "Volume (Bottle)"                 : {"title"          : "Offtake Qty<br/>(Bottle)",
+                                                 "data"           : "ASI_CRM_Volume_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Volume_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? full.ASI_CRM_Offtake_Qty_Sign__c + ' ' + data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Consumer Price Offer"            : {"title"          : "Consumer Price<br/>Offer ($/Bottle)",
+                                                 "data"           : "ASI_CRM_Consumer_Price_Offer_per_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Consumer_Price_Offer_per_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "PRS-WS Price"                    : {"title"          : "PRS-WS Price<br/>($/Bottle)",
+                                                 "data"           : "ASI_CRM_PRS_WS_Price_per_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_PRS_WS_Price_per_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Contracted Rate (Bottle)"        : {"title"          : "Compensation for WS<br/>– Price Difference<br/>(S$/Bottle)",
+                                                 "data"           : "ASI_CRM_Contracted_Rate_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Contracted_Rate_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Wholesaler Rate (Bottle)"        : {"title"          : "Wholesaler Rate<br/>(S$/Bottle)",
+                                                 "data"           : "ASI_CRM_Wholesaler_Rate_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Wholesaler_Rate_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+			/* [VL 1.0] END */
+            "Amount"                          : {"title"          : "Total<br/>Amount",
+                                                 "data"           : "ASI_CRM_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Amount__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+        	"Actual Amount"                   : {"title"          : "Total Actual<br/>Amount",
+                                                 "data"           : "ASI_CRM_Actual_Amount__c",
+                                                 "defaultContent" : "",
+												 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Actual_Amount__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<input class='" + fieldAPIName + " inputField_medium alignRight' type='text' value='" + data + "' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+            "Adjustment Remark"               : {"title"          : "Adjustment Remark",
+                                                 "data"           : "ASI_CRM_Adjustment_Remark__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Adjustment_Remark__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<textArea class='" + fieldAPIName + "' type='text' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'>" + data + "</textArea>";
+                                                                    } 
+                                                },
+            "Adjusted Difference"             : {"title"          : "Adjusted<br/>Difference",
+                                                 "data"           : "ASI_CRM_Adjusted_Difference__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Adjusted_Difference__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                }
+        };
+		
+        const SYS_PP_FIELD_CONFIG_MAPPING = {
+        	"ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+												 "defaultContent" : ""
+                                                },
+            "Sub-brand"                       : {"title"          : "Sub-brand",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Sub_brand__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Sub_brand__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Sub_brand__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Sub_brand__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+            "Type"                            : {"title"          : "Type",
+                                                 "data"           : "ASI_CRM_Type__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Type__c"
+                                                },
+            "Invoice Amount"                  : {"title"          : "Invoice Amount",
+                                                 "data"           : "ASI_CRM_Invoice_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Invoice_Amount__c alignRight",
+                                                 "render"         : function(data, type, full) {
+                                                     					return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+            "Amount"                          : {"title"          : "Amount",
+                                                 "data"           : "ASI_CRM_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Amount__c alignRight",
+                                                 "render"         : function(data, type, full) {
+                                                     					return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                },
+        	"Actual Amount"                   : {"title"          : "Actual Amount",
+                                                 "data"           : "ASI_CRM_Actual_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Actual_Amount__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+            "Adjustment Remark"               : {"title"          : "Adjustment Remark",
+                                                 "data"           : "ASI_CRM_Adjustment_Remark__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Adjustment_Remark__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<textArea class='" + fieldAPIName + "' type='text' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'>" + data + "</textArea>";
+                                                                    } 
+                                                },
+            "Adjusted Difference"             : {"title"          : "Adjusted Difference",
+                                                 "data"           : "ASI_CRM_Adjusted_Difference__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Adjusted_Difference__c alignRight",
+                                                 "render"         : function(data, type, full) {
+                                                     					return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                }
+        };
+		
+        const SYS_BR_FIELD_CONFIG_MAPPING = {
+            "SKU"       	                : {"title"          : "SKU",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_SKU__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_SKU__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_SKU__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_SKU__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+            "Sub-brand"                       : {"title"          : "Sub-brand",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Sub_brand__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Sub_brand__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Sub_brand__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Sub_brand__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+            "Offtake Outlet"       	          : {"title"          : "Offtake Outlet",
+                                                 "data"           : "",
+												 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Customer__c';
+                                                     					var fieldStr = ""; 
+                                                     					if(full.ASI_CRM_Customer__c) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.ASI_CRM_Customer__c + "' class='link-button " + fieldAPIName + "'>" + full.ASI_CRM_Customer__r.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                },
+            "Type"                            : {"title"          : "Type",
+                                                 "data"           : "ASI_CRM_Type__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Type__c"
+                                                },
+            "Volume (Bottle)"                 : {"title"          : "Offtake Qty<br/>(Bottle)",
+                                                 "data"           : "ASI_CRM_Volume_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Volume_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     return data != null ? /*full.ASI_CRM_Offtake_Qty_Sign__c + ' ' +*/ data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Back Rebate (Bottle)"            : {"title"          : "Back Rebate<br/>(S$/Bottle)",
+                                                 "data"           : "ASI_CRM_Back_Rebate_per_Bottle__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Back_Rebate_per_Bottle__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },
+            "Amount"                          : {"title"          : "Total<br/>Amount",
+                                                 "data"           : "ASI_CRM_Amount__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Amount__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return data != null ? data.toLocaleString('en-US', {minimumFractionDigits: 2}) : 0;
+                                                                    }
+                                                },/*
+        	"Actual Amount"                   : {"title"          : "Total Actual<br/>Amount",
+                                                 "data"           : "ASI_CRM_Actual_Amount__c",
+                                                 "defaultContent" : "",
+												 "className"      : "text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Actual_Amount__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<input class='" + fieldAPIName + " inputField_medium alignRight' type='text' value='" + data + "' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                                    }
+                                                },
+            "Adjustment Remark"               : {"title"          : "Adjustment Remark",
+                                                 "data"           : "ASI_CRM_Adjustment_Remark__c",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldAPIName = 'ASI_CRM_Adjustment_Remark__c';
+                                                                    	if(!data) {
+                                                                            data = "";
+                                                                        }
+                                                     					return "<textArea class='" + fieldAPIName + "' type='text' onChange='updateLineItemValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'>" + data + "</textArea>";
+                                                                    } 
+                                                },
+            "Adjusted Difference"             : {"title"          : "Adjusted<br/>Difference",
+                                                 "data"           : "ASI_CRM_Adjusted_Difference__c",
+                                                 "defaultContent" : "",
+                                                 "className"      : "ASI_CRM_Adjusted_Difference__c text-right",
+                                                 "render"         : function(data, type, full) {
+                                                     					return !data ? '' : data.toLocaleString('en-US', {minimumFractionDigits: 2});
+                                                                    }
+                                                }*/
+        };
+		
+		const SKU_FIELD_CONFIG_MAPPING = {
+        	"ACTION"                          : {"title"          : ACTION_LABEL, 
+                                                 "data"           : "",
+                                                 "render"         : function(data, type, full) {
+                                                            	    	return "<a class='link-button' onClick='addLineItem(this.parentNode.parentNode)'>Add</a>";  
+                                                                  }
+                                                },
+            "Sub-Brand"                       : {"title"          : "Sub-Brand",
+                                                 "data"           : "",
+                                                 "defaultContent" : "",
+                                                 "render"         : function(data, type, full) {
+                                                     					var fieldStr = ""; 
+                                                     					if(full.name) {
+                                                                        	fieldStr += "<span>"; 
+                                                                            fieldStr += "<a href='/" + full.id + "' class='link-button'>" + full.Name + "</a>";
+                                                                            fieldStr += "</span>";
+                                                                        }
+                                                            	    	return fieldStr;
+                                                                    }
+                                                }
+        }
+        
+		const MASTER_CONFIG = {
+			"ASI_CRM_SG_Contract_Margin_Credit_Note" : {
+				"SYS_GENERATED": {
+					"true": {
+						"DISPLAY" : false,
+						"TABLE_COLUMNS" : SYS_CM_FIELD_CONFIG_MAPPING
+					}
+				}
+			},
+			"ASI_CRM_SG_Contract_Margin_Debit_Note" : {
+				"SYS_GENERATED": {
+					"true": {
+						"DISPLAY" : false,
+						"TABLE_COLUMNS" : SYS_CM_FIELD_CONFIG_MAPPING
+					}
+				}
+			},
+			"ASI_CRM_SG_Back_Rebate_Credit_Note" : {
+				"SYS_GENERATED": {
+					"true": {
+						"DISPLAY" : false,
+						"TABLE_COLUMNS" : SYS_BR_FIELD_CONFIG_MAPPING
+					}
+				}
+			},
+			"ASI_CRM_SG_Back_Rebate_Debit_Note" : {
+				"SYS_GENERATED": {
+					"true": {
+						"DISPLAY" : false,
+						"TABLE_COLUMNS" : SYS_BR_FIELD_CONFIG_MAPPING
+					}
+				}
+			},
+			"ASI_CRM_SG_Prompt_Payment_Credit_Note" : {
+				"SYS_GENERATED": {
+					"true": {
+						"DISPLAY" : false,
+						"TABLE_COLUMNS" : SYS_PP_FIELD_CONFIG_MAPPING
+					}
+				}
+			}
+		}
+		
+        /****************
+        Define Standard Function
+        ****************/
+        
+        /****************
+        Init Function
+        ****************/
+        $(document).ready(
+            function() {
+                setTable(jQuery.parseJSON('{!JSENCODE(lineItemListJson)}'));
+                setSubBrandSearchTable(null);
+				showHideSearch();
+            }
+        );
+		
+		function showHideSearch(){
+			if(!MASTER_CONFIG[HEADER_RT]["SYS_GENERATED"][HEADER_SYSGEN]["DISPLAY"]){
+				$("#searchSection").hide();
+			}
+		}
+        
+        function setTable(lineItemList) {
+            var skuTableProperties = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            skuTableProperties["aaData"] = lineItemList;
+            skuTableProperties["rowId"]  = "Id";
+            
+            var skuColumns = [];
+			var columnMap = MASTER_CONFIG[HEADER_RT]["SYS_GENERATED"][HEADER_SYSGEN]["TABLE_COLUMNS"];
+			for (key in columnMap){
+				skuColumns.push(columnMap[key]);
+			}
+			/*
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["ACTION"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Sub-brand"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Type"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Volume (9L)"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Contracted Rate (9L)"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Wholesaler Rate (9L)"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Amount"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Actual Amount"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Adjustment Remark"]);
+            skuColumns.push(SYS_CM_FIELD_CONFIG_MAPPING["Adjusted Difference"]);
+			*/
+            skuTableProperties["aoColumns"] = skuColumns;
+            
+            $("#skuDataTable").dataTable(skuTableProperties);
+        }
+        
+        function setSubBrandSearchTable(searchSubBrandList) {
+            var subBrandSearchTableProperties       = jQuery.extend({}, CONST_DATA_TABLE_PROPERTIES);
+            subBrandSearchTableProperties["aaData"] = searchSubBrandList;
+            subBrandSearchTableProperties["rowId"]  = "Id";
+            
+            var subBrandSearchColumns = [];
+            subBrandSearchColumns.push(SKU_FIELD_CONFIG_MAPPING["ACTION"]);
+            subBrandSearchColumns.push(SKU_FIELD_CONFIG_MAPPING["Sub-Brand"]);
+            subBrandSearchTableProperties["aoColumns"] = subBrandSearchColumns;
+            
+            $(".addSKUTable").dataTable(subBrandSearchTableProperties);
+        }
+        
+        /****************
+        Table Event Function
+        ****************/
+        function addLineItem(row) {
+            var searchSubBrand = $(".addSKUTable").DataTable().row(row).data();
+            
+            //Create new contract target record
+            var newLineItem = {};
+            newLineItem["Id"]                                          = NEW_LINE_ITEM_PREFIX + NEW_LINE_ITEM_INDEX;
+            newLineItem["ASI_CRM_Credit_Debit_Note__c"]                         = HEADER_ID;
+            newLineItem["RecordTypeId"]                                = LINE_ITEM_RECORD_TYPE_ID;
+            newLineItem["ASI_CRM_Sub_brand__c"]                              = searchSubBrand.Id;
+            newLineItem["ASI_CRM_Sub_brand__r"]                              = {"Name" : searchSubBrand.Name};
+            
+            //Add new contract target record to data table and redraw
+            $("#skuDataTable").DataTable().row.add(newLineItem).draw();
+            
+            $("#skuDataTable").DataTable().page('last').draw('page');
+            
+            //Remove sku in search sku table
+            $(".addSKUTable").DataTable().row("#" + sku.Id).remove().draw();
+			
+			addedSubBrandIdList.push(searchSubBrand.Id);
+            
+            //Add index
+            NEW_LINE_ITEM_INDEX++;
+            
+        }
+        
+        function updateLineItemValue(row, fieldAPIName, newValue) {
+            //Update all contract target data table
+            //Update one table will auto update all table, coz data is linked to same source
+            var lineItemData = $("#skuDataTable").DataTable().row(row).data();
+            lineItemData[fieldAPIName] = newValue;
+            
+            recalculateLineItemValue(row.id, lineItemData);
+        }
+        
+        function deleteLineRow(row) {
+            var rowId = row.id;
+            if(!rowId.startsWith(NEW_LINE_ITEM_PREFIX)) {
+                deleteLineIdList.push(rowId);
+            } else {
+                var lineItemData = $("#skuDataTable").DataTable().row(row).data();
+            	var index = addedSubBrandIdList.indexOf(lineItemData["ASI_CRM_SKU__c"]);
+				addedSubBrandIdList.splice(index, 1);
+            }
+            
+            
+            $("#skuDataTable").DataTable().row(row).remove().draw();
+        }
+        
+        /****************
+        Execute Controller Function
+        ****************/
+        function searchSubBrandJS(inputField) {
+            if(inputField.val()) {
+            	//Show loading gif
+            	$("body").addClass("savingRecord");
+                searchSubBrand(inputField.val(), JSON.stringify(addedSubBrandIdList));
+            }
+        }
+        
+        function searchSubBrandComplete(searchSubBrandListJson) {
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+            setSubBrandSearchTable(jQuery.parseJSON(searchSubBrandListJson));
+        }
+        
+        function saveRecord(isQuickSave) {
+            if($('.error').length > 0) {
+            	return;
+            }
+            
+            //Show loading gif
+        	$("body").addClass("savingRecord");
+            
+            //Hide the error message
+            $('.saveErrorPanel').css("display","none");
+            $('.infoPanel').css("display","none");
+            	
+            var upsertlineItemList  = [];
+            
+            var lineItemList = $("#skuDataTable").DataTable().rows().data();
+            for(var i = 0 ; i < lineItemList.data().length ; i++) {
+            	var cloneContractTarget = jQuery.extend({}, lineItemList[i]);
+                if(cloneContractTarget.Id.startsWith(NEW_LINE_ITEM_PREFIX)) {
+                	delete cloneContractTarget["Id"];
+                }
+                upsertlineItemList.push(cloneContractTarget);
+				console.log(cloneContractTarget);
+            }
+            
+            saveRecordToDB(isQuickSave, JSON.stringify(upsertlineItemList), JSON.stringify(deleteLineIdList));
+            
+        }
+        
+        function saveRecordComplete(lineItemListJson, hasError, exceptionListJson) {
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+            
+            if(!hasError) {
+                //Clear search sku data table
+                $(".addSKUTable").DataTable().clear();
+
+                setTable(jQuery.parseJSON(lineItemListJson));
+                
+                //Reset the prefix index
+                NEW_LINE_ITEM_INDEX = 1;
+
+                //Clear the delete id list
+                deleteLineIdList  = [];
+				
+				//Clear the added sku id list
+                addedSubBrandIdList = [];
+            } else {
+            	showError(exceptionListJson);
+            }
+        }
+        
+        /****************
+        Other Function
+        ****************/
+        //Display error when error occur in save process
+        function showError(exceptionListJson) {
+            //Display the error message
+            $('.saveErrorPanel').css("display","block");
+            
+            var errorMessage = '';
+            
+            var exceptionList = jQuery.parseJSON(exceptionListJson);
+            for(var errorIndex = 0 ; errorIndex < exceptionList.length ; errorIndex++) {
+            	var exceptionObj = exceptionList[errorIndex];
+                errorMessage += exceptionObj['errorMessage'] + '<br />';
+            }
+            
+            //Assign the error message to page
+            $('.errorMessage').html(errorMessage);
+        }
+        
+        //Update data table field display value
+        function updateValue(rowId, className, newValue) {
+            $("#" + rowId + " ." + className).text(newValue.toLocaleString('en-US', {minimumFractionDigits: 2}));
+        }
+        
+        /****************
+        Business Logic Function
+        ****************/
+        function recalculateLineItemValue(rowId, lineItemData) {
+            
+            lineItemData["ASI_CRM_Adjusted_Difference__c"] = parseFloat(lineItemData["ASI_CRM_Actual_Amount__c"] ? lineItemData["ASI_CRM_Actual_Amount__c"] : 0)
+                                                           - parseFloat(lineItemData["ASI_CRM_Amount__c"] ? lineItemData["ASI_CRM_Amount__c"] : 0);
+
+            //Update the data table value
+        	updateValue(rowId, 'ASI_CRM_Adjusted_Difference__c', lineItemData["ASI_CRM_Adjusted_Difference__c"]);	
+            
+        }
+		
+		function redirectToReport(){
+			window.open("/{!ReportLink}?pv0={!LEFT(ASI_CRM_Credit_Debit_Note__c.Id,15)}","_target");
+		}
+    </script>
+    
+    <body>
+        <div class="fullScreenLoading"></div>
+        
+        <div align="center" draggable="false"
+            style="color:#ffffff; padding:10px;{! IF(CONTAINS(ASI_CRM_Credit_Debit_Note__c.recordtype.developername, 'Credit_Note') , 'background-color:#449d44;', 'background-color:#f0ad4e;')}"
+        >
+            <apex:outputtext value="{! IF(CONTAINS(ASI_CRM_Credit_Debit_Note__c.recordtype.developername, 'Credit_Note') , 'Credit Note', 'Debit Note')}" 
+                style="font-size:48px; "
+            />
+    	</div>
+        
+        <!-- Error Message Dialog -->
+        <div class="saveErrorPanel alert alert-danger" style="display: none;">
+            <strong>Error</strong> 
+            <br />
+            <p class="errorMessage"></p>
+        </div>
+        
+        <div class="infoPanel alert alert-info" style="display: none;">
+            <strong>Info</strong>
+            <br />
+            <p class="infoMessage"></p>
+        </div>
+        
+        <!-- Defind Action Function -->
+        <apex:form >
+            <apex:actionFunction name="searchSubBrand" action="{!searchSubBrand}" reRender="pageMsg" onComplete="searchSubBrandComplete('{!JSENCODE(searchSubBrandListJson)}')">
+                <apex:param name="skuName" value="" />
+				<apex:param name="filterOutSKUIdListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="saveRecordToDB" action="{!saveRecord}" reRender="pageMsg" 
+                                 onComplete="saveRecordComplete('{!JSENCODE(lineItemListJson)}', {!hasError}, '{!JSENCODE(exceptionListJson)}');">
+                <apex:param name="IS_QUICK_SAVE" value="" />
+                <apex:param name="updatelineItemListJson" value="" />
+                <apex:param name="deletelineItemListJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="cancel" action="{!cancel}"/>
+        </apex:form>
+        
+        <!-- Body -->
+        <apex:pageBlock id="detail_pageBlock">
+            <apex:pageblockButtons >
+				<span style="{! if((CONTAINS(header.recordtype.developername, 'ASI_CRM_SG_Back_Rebate')),'display:none','') }">
+					<input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="Save" />
+					<input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="Quick Save" />
+				</span>
+                <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel" />
+				<span style="{! if((CONTAINS(header.recordtype.developername, 'ASI_CRM_SG_Contract_Margin') || CONTAINS(header.recordtype.developername, 'ASI_CRM_SG_Back_Rebate')),'','display:none') }">
+					<input type="button" class="btn" onclick="redirectToReport()" value="Report" />
+				</span>
+            </apex:pageblockButtons>
+			
+			<div>
+				<b>Credit/Debit Note No.:</b> {!headerNo}<br/>
+				<span style="{! if((header.recordtype.developername == 'ASI_CRM_SG_Contract_Margin_Credit_Note' || header.recordtype.developername == 'ASI_CRM_SG_Contract_Margin_Debit_Note'),'','display:none') }"><b>Contract No.:</b> {!contractNo}<br/></span>
+				<b>Wholesaler Name:</b> {!wholesalerName}<br/>
+				<span style="{! if((header.recordtype.developername == 'ASI_CRM_SG_Contract_Margin_Credit_Note' || header.recordtype.developername == 'ASI_CRM_SG_Contract_Margin_Debit_Note'),'','display:none') }"><b>Outlet Name:</b> {!outletName}<br/></span>
+			</div>
+            
+            <!-- Nav bar -->
+            <div class="row">
+                <div class="container-fluid">
+                    <div class="panel with-nav-tabs panel-primary">
+                        <!-- Nav bar header -->
+                        <div class="panel-heading">
+                            <ul class="nav nav-tabs">
+                                <li class="active"><a href="#skuDiv" data-toggle="tab">Sub-brand</a></li>
+                            </ul>
+                        </div>
+    
+                        <!-- Nav bar body -->
+                        <div class="panel-body">
+                            <div class="tab-content">
+                                <!-- SKU Data Table -->
+                                <div class="tab-pane fade in active" id="skuDiv">
+                                    <div>
+                                		<table id="skuDataTable" width="100%"/>
+                                    </div>
+                                    <hr />
+									<div id="searchSection">
+                                        <label for="skuDivsearchSubBrand">SKU</label>
+                                        <input type="text" id="skuDivsearchSubBrand"/>
+                                        <input type="button" class="btn" value="Search" onClick="searchSubBrandJS($('#skuDivsearchSubBrand'))"/>
+                                        <br />
+                                        <br />
+                                    	<table class="addSKUTable" width="100%"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </apex:pageBlock>
+    </body>
+    
+</apex:page>

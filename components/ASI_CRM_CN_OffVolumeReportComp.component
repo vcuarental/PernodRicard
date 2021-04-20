@@ -1,0 +1,1045 @@
+<apex:component controller="ASI_CRM_CN_OffVolumeReportPDFCtrl" access="global" >
+    
+    <apex:attribute name="headerId" type="String" description=" " assignTo="{!currentHeaderId}"/>
+    <apex:attribute name="StartDateString" description="Start Date String" type="String" assignto="{!StartDateStr}"/>
+    <apex:attribute name="EndDateString" description="End Date String" type="String" assignto="{!EndDateStr}"/>
+    
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_PDF_Landscape_CSS)}"/>
+    
+    <head>        
+        
+        
+    </head>
+    <!-- Header -->
+    <div class="header" >
+        <table width="100%" border="0" cellspacing="0" cellpadding="2">
+            <tr>
+                <td colspan="8" align="center"><apex:image height="2cm" width="7cm" url="{!URLFOR($Resource.ASI_MFM_CN_Logo)}"/></td>
+            </tr>
+            <tr>
+                <td colspan="8" align="center"><h1>Volume Report</h1></td>
+            </tr>
+            
+            <tr>
+                <td width="16%" ><Strong>Salesman:</Strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!ContractSelected.Owner.Name}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><Strong>Region:</Strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_Region__c}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><strong>Refresh Date:</strong></td>
+                <td width="16%"  style="border-bottom: 1px solid black;">
+                    <apex:outputText value="{!Day(TODAY())}/{!MONTH(TODAY())}/{!YEAR(TODAY())}" />
+                </td>
+                <td width="2%">&nbsp;</td>
+            </tr>
+            <tr>
+                <td width="16%"><Strong>Outlet:</Strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_Outlet_WS__r.Name}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><strong>{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,'PO Province:','Area/City:')}</strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,ContractSelected.ASI_CRM_PO_Province__r.Name,IF(ContractSelected.ASI_CRM_PO_City__c != null,ContractSelected.ASI_CRM_PO_City__r.Name,ContractSelected.ASI_CRM_CN_Outlet_WS__r.ASI_CRM_CN_CCity__r.Name))}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><Strong>PO No.:</Strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!ContractSelected.ASI_CRM_CN_PO_No__c}" rendered="{!ContractSelected.ASI_CRM_CN_PO_No__c!=null}" /></td>
+                <td width="2%">&nbsp;</td>
+            </tr>
+            <tr>
+                <td width="16%"><Strong>{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,'PO Channel:','')}</Strong></td>
+                <td width="16%" style="{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,'border-bottom: 1px solid black;','')}"><apex:outputText value="{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,ContractSelected.ASI_CRM_PO_Channel__r.Name,'')}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><strong>{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,'Area/City:','')}</strong></td>
+                <td width="16%" style="{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,'border-bottom: 1px solid black;','')}"><apex:outputText value="{!IF(ContractSelected.ASI_CRM_New_FY_PO__c,IF(ContractSelected.ASI_CRM_PO_City__c != null,ContractSelected.ASI_CRM_PO_City__r.Name,ContractSelected.ASI_CRM_CN_Outlet_WS__r.ASI_CRM_CN_CCity__r.Name),'')}" /></td>
+                <td width="2%">&nbsp;</td>
+                <td width="16%"><Strong>PO Period:</Strong></td>
+                <td width="16%" style="border-bottom: 1px solid black;"><apex:outputText value="{!POPeriodStr}" /></td>
+                <td width="2%">&nbsp;</td>
+            </tr>
+        </table>
+    </div>
+    <!-- Body -->
+    <body>
+        <apex:outputPanel rendered="{!noData}" id="noData">
+            <table width="100%" cellspacing="0" cellpadding="2">
+                <tr><td align="center">Sorry, no data to show.</td></tr>
+            </table>
+        </apex:outputPanel>
+        
+        <apex:outputPanel rendered="{!noData!=true}" id="table">
+        	<!-- Define Variable for Total -->
+            <apex:variable value="{!0}" var="TotalTargetVol"/>
+            <apex:variable value="{!0}" var="TotalIntakeVol"/>
+            <apex:variable value="{!0}" var="TotalOfftakeVol"/>
+            
+            <apex:variable value="{!0}" var="TotalTargetValue"/>
+            <apex:variable value="{!0}" var="TotalIntakeValue"/>
+            <apex:variable value="{!0}" var="TotalOfftakeValue"/>
+            
+            <apex:variable value="{!0}" var="TotalTargetVol_ExclPremium"/>
+            <apex:variable value="{!0}" var="TotalIntakeVol_ExclPremium"/>
+            <apex:variable value="{!0}" var="TotalOfftakeVol_ExclPremium"/>
+            
+            <apex:variable value="{!0}" var="TotalTargetValue_ExclPremium"/>
+            <apex:variable value="{!0}" var="TotalIntakeValue_ExclPremium"/>
+            <apex:variable value="{!0}" var="TotalOfftakeValue_ExclPremium"/>
+            
+            <!-- By Subbrand Detail -->
+            <table width="100%" cellspacing="0" cellpadding="2">
+                <thead>
+                    <tr>
+                        <th colspan="11" bgcolor="#FFFF66" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Calendar Period: {!SelectedPeriodStr}" />
+                        </th>
+                    </tr>
+                    <tr>
+                    	<th style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">  
+                        </th>
+                     	<th colspan="5" style="border-top: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Vol/Std btl" />
+                        </th>
+                        <th colspan="5" style="border-top: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Value/RMB" />
+                        </th>
+                    </tr>
+                    
+                    <tr>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="28%">
+                        </th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Vol. Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Intake</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Intake vs Reception Scan%','Intake vs Contract%')}</th>
+                        <th style="{!IF(isPOS, 'display:none; ','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Outlet Reception Scan','Outlet Offtake')}</th>
+                        <th style="{!IF(isPOS, '','display:none; ')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet POS</th>
+                        <th style="{!IF(isPOS, 'display:none; ','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan vs Contract%','Offtake vs Intake%')}</th>
+                        <th style="{!IF(isPOS, '','display:none; ')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS vs Intake%</th>
+                        
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Value Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Purchase Value</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Purchase Value vs Reception Scan%','Purchase Value vs Contract%')}</th>
+                        <th style="{!IF(isPOS, 'display:none;','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan Value','Offtake Value')}</th>
+                        <th style="{!IF(isPOS, '','display:none;')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS Value</th>
+                        <th style="{!IF(isPOS, 'display:none;','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan vs Contract%','Offtake vs Purchase value%')}</th>
+                        <th style="{!IF(isPOS, '','display:none;')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS vs Purchase value%</th>
+                    </tr>
+                </thead>
+                
+                
+                <apex:variable value="{!0}" var="CategoryTotalTargetVol"/>
+                <apex:variable value="{!0}" var="CategoryTotalIntakeVol"/>
+                <apex:variable value="{!0}" var="CategoryTotalOfftakeVol"/>
+                
+                <apex:variable value="{!0}" var="CategoryTotalTargetValue"/>
+                <apex:variable value="{!0}" var="CategoryTotalIntakeValue"/>
+                <apex:variable value="{!0}" var="CategoryTotalOfftakeValue"/>
+                <!-- 
+                <apex:variable value="{!0}" var="CategoryWhiskyTargetVol_ExclPremium"/>
+                <apex:variable value="{!0}" var="CategoryWhiskyIntakeVol_ExclPremium"/>
+                <apex:variable value="{!0}" var="CategoryWhiskyOfftakeVol_ExclPremium"/>
+                
+                <apex:variable value="{!0}" var="CategoryWhiskyTargetValue_ExclPremium"/>
+                <apex:variable value="{!0}" var="CategoryWhiskyIntakeValue_ExclPremium"/>
+                <apex:variable value="{!0}" var="CategoryWhiskyOfftakeValue_ExclPremium"/>
+			 	-->
+                <apex:repeat value="{!CategoryVolumeMap}" var="CategoryName">
+                    <apex:repeat value="{!CategoryVolumeMap[CategoryName].SubBrandLine}" var="SubBrand">
+                        <tr>
+                            <td style="border-right: 1px solid black; border-left: 1px solid black; border-bottom: 1px solid black;" align="left">
+                                {!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].sbname}
+                            </td>
+                            <!-- Vol / 9L -->
+                            <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVol!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVol!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVol}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVol=null||CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVol=0}" />
+                            </td>
+                            <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVol!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVol!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVol}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVol=null||CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVol=0}" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractVolPercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractVolPercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractVolPercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractVolPercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractVolPercentage==0 }" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeVolPercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeVolPercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeVolPercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeVolPercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeVolPercentage==0 }" />
+                            </td>
+
+                             <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVol!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVol!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVol}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVol==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVol==0}" />
+                            </td>
+                            
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeVolPercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeVolPercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeVolPercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeVolPercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeVolPercentage ==0}" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractVolPercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractVolPercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractVolPercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractVolPercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractVolPercentage==0 }" />
+                            </td>
+
+                            <!-- Value / RMB -->
+                            <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetValue!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetValue!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetValue}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetValue=null||CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetValue=0}" />
+                            </td>
+                            <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeValue!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeValue!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeValue}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeValue=null||CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeValue=0}" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractValuePercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractValuePercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractValuePercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractValuePercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSContractValuePercentage==0 }" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeValuePercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeValuePercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeValuePercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeValuePercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVSOffTakeValuePercentage==0 }" />
+                            </td>
+
+                             <td style="border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeValue!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeValue!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeValue}" />
+                                </apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeValue==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeValue==0}" />
+                            </td>
+                            
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeValuePercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeValuePercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeValuePercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeValuePercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVSIntakeValuePercentage ==0}" />
+                            </td>
+                            <td style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-right: 1px solid black; border-bottom: 1px solid black;" align="right">
+                                <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractValuePercentage!=null && CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractValuePercentage!=0}">
+                                    <apex:param value="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractValuePercentage}" /></apex:outputText>
+                                <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractValuePercentage==null || CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OffTakeVSContractValuePercentage ==0}" />
+                            </td>
+
+                        </tr>
+                    </apex:repeat>
+                    
+                    
+                    <apex:variable var="CategoryTotalTargetVol" value="{!CategoryTotalTargetVol+CategoryVolumeMap[CategoryName].FullData.TargetVol}"/>
+                    <apex:variable var="CategoryTotalIntakeVol" value="{!CategoryTotalIntakeVol+CategoryVolumeMap[CategoryName].FullData.IntakeVol}"/>
+                    <apex:variable var="CategoryTotalOfftakeVol" value="{!CategoryTotalOfftakeVol+CategoryVolumeMap[CategoryName].FullData.OfftakeVol}"/>
+                    
+                    <apex:variable var="CategoryTotalTargetValue" value="{!CategoryTotalTargetValue+CategoryVolumeMap[CategoryName].FullData.TargetValue}"/>
+                    <apex:variable var="CategoryTotalIntakeValue" value="{!CategoryTotalIntakeValue+CategoryVolumeMap[CategoryName].FullData.IntakeValue}"/>
+                    <apex:variable var="CategoryTotalOfftakeValue" value="{!CategoryTotalOfftakeValue+CategoryVolumeMap[CategoryName].FullData.OfftakeValue}"/>
+                </apex:repeat>
+                
+                
+                <tr>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">Total All Products</td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalTargetVol!=null&&CategoryTotalTargetVol!=0}">
+                            <apex:param value="{!CategoryTotalTargetVol}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetVol==null||CategoryTotalTargetVol==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalIntakeVol!=null && CategoryTotalIntakeVol!=0}">
+                            <apex:param value="{!CategoryTotalIntakeVol}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeVol==null||CategoryTotalIntakeVol==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetVol!=null && CategoryTotalTargetVol!=0 && CategoryTotalIntakeVol!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeVol/CategoryTotalTargetVol)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetVol==null || CategoryTotalTargetVol==0 || CategoryTotalIntakeVol ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalOfftakeVol!=null && CategoryTotalOfftakeVol!=0 && CategoryTotalIntakeVol!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeVol/CategoryTotalOfftakeVol)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeVol==null || CategoryTotalOfftakeVol==0 || CategoryTotalIntakeVol ==0 }" />
+                    </td>
+
+                        
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalOfftakeVol!=null && CategoryTotalOfftakeVol!=0}">
+                            <apex:param value="{!CategoryTotalOfftakeVol}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeVol==null || CategoryTotalOfftakeVol==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalIntakeVol!=null && CategoryTotalIntakeVol!=0 && CategoryTotalOfftakeVol!=0 }">
+                            <apex:param value="{!(CategoryTotalOfftakeVol/CategoryTotalIntakeVol)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeVol==null || CategoryTotalIntakeVol==0 || CategoryTotalOfftakeVol==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetVol!=null && CategoryTotalTargetVol!=0 && CategoryTotalOfftakeVol!=0  }">
+                            <apex:param value="{!(CategoryTotalOfftakeVol/CategoryTotalTargetVol)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetVol==null || CategoryTotalTargetVol==0 || CategoryTotalOfftakeVol ==0 }" />
+                    </td>
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalTargetValue!=null&&CategoryTotalTargetValue!=0}">
+                            <apex:param value="{!CategoryTotalTargetValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null||CategoryTotalTargetValue==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalIntakeValue!=null && CategoryTotalIntakeValue!=0}">
+                            <apex:param value="{!CategoryTotalIntakeValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeValue==null||CategoryTotalIntakeValue==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetValue!=null && CategoryTotalTargetValue!=0 && CategoryTotalIntakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeValue/CategoryTotalTargetValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null || CategoryTotalTargetValue==0 || CategoryTotalIntakeValue ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalOfftakeValue!=null && CategoryTotalOfftakeValue!=0 && CategoryTotalIntakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeValue/CategoryTotalOfftakeValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeValue==null || CategoryTotalOfftakeValue==0 || CategoryTotalIntakeValue ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalOfftakeValue!=null && CategoryTotalOfftakeValue!=0}">
+                            <apex:param value="{!CategoryTotalOfftakeValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeValue==null || CategoryTotalOfftakeValue==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalIntakeValue!=null && CategoryTotalIntakeValue!=0 && CategoryTotalOfftakeValue!=0 }">
+                            <apex:param value="{!(CategoryTotalOfftakeValue/CategoryTotalIntakeValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeValue==null || CategoryTotalIntakeValue==0 || CategoryTotalOfftakeValue==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetValue!=null && CategoryTotalTargetValue!=0 && CategoryTotalOfftakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalOfftakeValue/CategoryTotalTargetValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null || CategoryTotalTargetValue==0 || CategoryTotalOfftakeValue ==0 }" />
+                    </td>
+
+                    
+                </tr>
+                <!-- 
+                <tr>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+                        Total All Products <br/>  (Excl. Premium and below)
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalTargetVol_ExclPremium!=null && TotalTargetVol_ExclPremium!=0}">
+                            <apex:param value="{!TotalTargetVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVol_ExclPremium==null || TotalTargetVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalIntakeVol_ExclPremium!=null && TotalIntakeVol_ExclPremium!=0}">
+                            <apex:param value="{!TotalIntakeVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVol_ExclPremium==null || TotalIntakeVol_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetVol_ExclPremium!=null && TotalTargetVol_ExclPremium!=0 && TotalIntakeVol_ExclPremium !=0}">
+                            <apex:param value="{!(TotalIntakeVol_ExclPremium/TotalTargetVol_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVol_ExclPremium==null || TotalTargetVol_ExclPremium==0 || TotalIntakeVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalOfftakeVol_ExclPremium!=null && TotalOfftakeVol_ExclPremium!=0}">
+                            <apex:param value="{!TotalOfftakeVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeVol_ExclPremium==null||TotalOfftakeVol_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalIntakeVol_ExclPremium!=null && TotalIntakeVol_ExclPremium!=0}">
+                            <apex:param value="{!(TotalOfftakeVol_ExclPremium/TotalIntakeVol_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVol_ExclPremium==null || TotalIntakeVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalTargetValue_ExclPremium!=null && TotalTargetValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalTargetValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetValue_ExclPremium==null || TotalTargetValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalIntakeValue_ExclPremium!=null && TotalIntakeValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalIntakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeValue_ExclPremium==null || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetValue_ExclPremium!=null && TotalTargetValue_ExclPremium!=0 && TotalIntakeValue_ExclPremium !=0}">
+                            <apex:param value="{!(TotalIntakeValue_ExclPremium/TotalTargetValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetValue_ExclPremium==null || TotalTargetValue_ExclPremium==0 || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalOfftakeValue_ExclPremium!=null && TotalOfftakeValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalOfftakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeValue_ExclPremium==null||TotalOfftakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalIntakeValue_ExclPremium!=null && TotalIntakeValue_ExclPremium!=0}">
+                            <apex:param value="{!(TotalOfftakeValue_ExclPremium/TotalIntakeValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeValue_ExclPremium==null || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                </tr>
+                      
+                <tr>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+                        Total Whisky<br/>(Excl. Premium and below)
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyTargetVol_ExclPremium!=null && CategoryWhiskyTargetVol_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyTargetVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyTargetVol_ExclPremium==null || CategoryWhiskyTargetVol_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyIntakeVol_ExclPremium!=null && CategoryWhiskyIntakeVol_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyIntakeVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyIntakeVol_ExclPremium==null || CategoryWhiskyIntakeVol_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryWhiskyTargetVol_ExclPremium!=null && CategoryWhiskyTargetVol_ExclPremium!=0 && CategoryWhiskyIntakeVol_ExclPremium !=0}">
+                            <apex:param value="{!(CategoryWhiskyIntakeVol_ExclPremium/CategoryWhiskyTargetVol_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyTargetVol_ExclPremium==null || CategoryWhiskyTargetVol_ExclPremium==0 || CategoryWhiskyIntakeVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyOfftakeVol_ExclPremium!=null && CategoryWhiskyOfftakeVol_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyOfftakeVol_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyOfftakeVol_ExclPremium==null || CategoryWhiskyOfftakeVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryWhiskyIntakeVol_ExclPremium!=null && CategoryWhiskyIntakeVol_ExclPremium!=0 && CategoryWhiskyOfftakeVol_ExclPremium!=0 }">
+                            <apex:param value="{!(CategoryWhiskyOfftakeVol_ExclPremium/CategoryWhiskyIntakeVol_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyIntakeVol_ExclPremium==null || CategoryWhiskyIntakeVol_ExclPremium==0 || CategoryWhiskyOfftakeVol_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyTargetValue_ExclPremium!=null && CategoryWhiskyTargetValue_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyTargetValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyTargetValue_ExclPremium==null || CategoryWhiskyTargetValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyIntakeValue_ExclPremium!=null && CategoryWhiskyIntakeValue_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyIntakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyIntakeValue_ExclPremium==null || CategoryWhiskyIntakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryWhiskyTargetValue_ExclPremium!=null && CategoryWhiskyTargetValue_ExclPremium!=0 && CategoryWhiskyIntakeValue_ExclPremium !=0}">
+                            <apex:param value="{!(CategoryWhiskyIntakeValue_ExclPremium/CategoryWhiskyTargetValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyTargetValue_ExclPremium==null || CategoryWhiskyTargetValue_ExclPremium==0 || CategoryWhiskyIntakeValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryWhiskyOfftakeValue_ExclPremium!=null && CategoryWhiskyOfftakeValue_ExclPremium!=0}">
+                            <apex:param value="{!CategoryWhiskyOfftakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyOfftakeValue_ExclPremium==null || CategoryWhiskyOfftakeValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-top:1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryWhiskyIntakeValue_ExclPremium!=null && CategoryWhiskyIntakeValue_ExclPremium!=0 && CategoryWhiskyOfftakeValue_ExclPremium!=0 }">
+                            <apex:param value="{!(CategoryWhiskyOfftakeValue_ExclPremium/CategoryWhiskyIntakeValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryWhiskyIntakeValue_ExclPremium==null || CategoryWhiskyIntakeValue_ExclPremium==0 || CategoryWhiskyOfftakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                </tr>
+                -->
+            </table>
+            
+            <div style="page-break-after:always;"/>
+            
+            <table width="100%" cellspacing="0" cellpadding="2">
+                <thead>
+                	<tr>
+                        <th colspan="11" bgcolor="#FFFF66" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Calendar Period: {!SelectedPeriodStr}" />
+                        </th>
+                    </tr>
+                    <tr>
+                    	<th style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">  
+                        </th>
+                     	<th colspan="5" style="border-top: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Vol /CR12" />
+                        </th>
+                        <th colspan="5" style="border-top: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Value/RMB" />
+                        </th>
+                    </tr>
+                    
+                    <tr>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="28%">
+                        </th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Vol. Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Intake</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Intake vs Reception Scan%','Intake vs Contract%')}</th>
+                        <th style="{!IF(isPOS, 'display:none; ','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Outlet Reception Scan','Outlet Offtake')}</th>
+                        <th style="{!IF(isPOS, '','display:none; ')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet POS</th>
+                        <th style="{!IF(isPOS, 'display:none; ','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan vs Contract%','Offtake vs Intake%')}</th>
+                        <th style="{!IF(isPOS, '','display:none; ')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS vs Intake%</th>
+                        
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Value Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Purchase Value</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Purchase Value vs Reception Scan%','Purchase Value vs Contract%')}</th>
+                        <th style="{!IF(isPOS, 'display:none;','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan Value','Offtake Value')}</th>
+                        <th style="{!IF(isPOS, '','display:none;')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS Value</th>
+                        <th style="{!IF(isPOS, 'display:none;','')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c,'Reception Scan vs Contract%','Offtake vs Purchase value%')}</th>
+                        <th style="{!IF(isPOS, '','display:none;')} border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">POS vs Purchase value%</th>
+                    </tr>
+                </thead>
+                
+                <apex:variable var="TotalTargetVolCR12" value="{!0}" />
+	            <apex:variable var="TotalIntakeVolCR12" value="{!0}" />
+	            <apex:variable var="TotalOfftakeVolCR12" value="{!0}" />
+	            
+	            <apex:variable var="TotalTargetVolCR12ExcludePrem" value="{!0}" />
+	            <apex:variable var="TotalIntakeVolCR12ExcludePrem" value="{!0}" />
+	            <apex:variable var="TotalOfftakeVolCR12ExcludePrem" value="{!0}" />
+	            
+                <apex:repeat value="{!GradeVolumeMap}" var="SubBrandGrade">
+                	<apex:variable var="GradeSubtotalTargetVolCR12" value="{!0}" />
+	                <apex:variable var="GradeSubtotalIntakeVolCR12" value="{!0}" />
+	                <apex:variable var="GradeSubtotalOfftakeVolCR12" value="{!0}" />
+	                
+	                <apex:variable var="GradeSubtotalTargetValue" value="{!0}" />
+	                <apex:variable var="GradeSubtotalIntakeValue" value="{!0}" />
+	                <apex:variable var="GradeSubtotalOfftakeValue" value="{!0}" />
+	                
+                    <apex:repeat value="{!GradeVolumeMap[SubBrandGrade].SubBrandLine}" var="SubBrand">
+                    	<apex:variable var="GradeSubtotalTargetVolCR12" value="{!GradeSubtotalTargetVolCR12 + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].TargetVolCR12}" />
+		                <apex:variable var="GradeSubtotalIntakeVolCR12" value="{!GradeSubtotalIntakeVolCR12 + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].IntakeVolCR12}" />
+		                <apex:variable var="GradeSubtotalOfftakeVolCR12" value="{!GradeSubtotalOfftakeVolCR12 + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].OfftakeVolCR12}" />
+		                
+		                <apex:variable var="GradeSubtotalTargetValue" value="{!GradeSubtotalTargetValue + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].TargetValue}" />
+		                <apex:variable var="GradeSubtotalIntakeValue" value="{!GradeSubtotalIntakeValue + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].IntakeValue}" />
+		                <apex:variable var="GradeSubtotalOfftakeValue" value="{!GradeSubtotalOfftakeValue + GradeVolumeMap[SubBrandGrade].SubBrandLine[SubBrand].OfftakeValue}" />
+                    </apex:repeat>
+                    
+                    <apex:variable var="TotalTargetVolCR12" value="{!TotalTargetVolCR12 + GradeSubtotalTargetVolCR12}" />
+			        <apex:variable var="TotalIntakeVolCR12" value="{!TotalIntakeVolCR12 + GradeSubtotalIntakeVolCR12}" />
+			        <apex:variable var="TotalOfftakeVolCR12" value="{!TotalOfftakeVolCR12 + GradeSubtotalOfftakeVolCR12}" />
+	            		
+	            	<apex:variable var="TotalTargetVolCR12ExcludePrem" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalTargetVolCR12ExcludePrem + GradeSubtotalTargetVolCR12}" />
+	                <apex:variable var="TotalIntakeVolCR12ExcludePrem" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalIntakeVolCR12ExcludePrem + GradeSubtotalIntakeVolCR12}"/>
+	                <apex:variable var="TotalOfftakeVolCR12ExcludePrem" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalOfftakeVolCR12ExcludePrem + GradeSubtotalOfftakeVolCR12}"/>
+                    
+                    <apex:variable var="TotalTargetValue_ExclPremium" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalTargetValue_ExclPremium + GradeSubtotalTargetValue}" />
+                    <apex:variable var="TotalIntakeValue_ExclPremium" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalIntakeValue_ExclPremium + GradeSubtotalIntakeValue}" />
+                    <apex:variable var="TotalOfftakeValue_ExclPremium" rendered="{!GradeVolumeMap[SubBrandGrade].SequenceNum<=4}" value="{!TotalOfftakeValue_ExclPremium + GradeSubtotalOfftakeValue}" />
+                    
+                    <tr>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+                            {!GradeVolumeMap[SubBrandGrade].SubBrandGradeName}
+                        </td>
+                        
+                        <!-- Vol / 9L -->
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeSubtotalTargetVolCR12!=null&&GradeSubtotalTargetVolCR12!=0}">
+                                <apex:param value="{!GradeSubtotalTargetVolCR12}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalTargetVolCR12==null || GradeSubtotalTargetVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeSubtotalIntakeVolCR12!=null&& GradeSubtotalIntakeVolCR12!=0}">
+                                <apex:param value="{!GradeSubtotalIntakeVolCR12}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalIntakeVolCR12==null || GradeSubtotalIntakeVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{! GradeSubtotalTargetVolCR12 != null && GradeSubtotalTargetVolCR12!=0 && GradeSubtotalIntakeVolCR12 != 0}">
+                                <apex:param value="{! GradeSubtotalIntakeVolCR12 / GradeSubtotalTargetVolCR12 *100}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalTargetVolCR12==null || GradeSubtotalTargetVolCR12 ==0 || GradeSubtotalIntakeVolCR12 == 0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{! GradeSubtotalOfftakeVolCR12 != null && GradeSubtotalOfftakeVolCR12!=0 && GradeSubtotalIntakeVolCR12 != 0}">
+                                <apex:param value="{! GradeSubtotalIntakeVolCR12 / GradeSubtotalOfftakeVolCR12 *100}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalOfftakeVolCR12==null || GradeSubtotalOfftakeVolCR12 ==0 || GradeSubtotalIntakeVolCR12 == 0}" />
+                        </td>
+
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeSubtotalOfftakeVolCR12!=null&&GradeSubtotalOfftakeVolCR12!=0}">
+                                <apex:param value="{!GradeSubtotalOfftakeVolCR12}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalOfftakeVolCR12==null || GradeSubtotalOfftakeVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeSubtotalIntakeVolCR12!=null && GradeSubtotalIntakeVolCR12!=0 && GradeSubtotalOfftakeVolCR12 != 0}">
+                                <apex:param value="{! GradeSubtotalOfftakeVolCR12 / GradeSubtotalIntakeVolCR12 * 100}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalIntakeVolCR12==null || GradeSubtotalIntakeVolCR12 ==0 || GradeSubtotalOfftakeVolCR12 == 0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeSubtotalTargetVolCR12!=null && GradeSubtotalTargetVolCR12!=0 && GradeSubtotalOfftakeVolCR12 != 0}">
+                                <apex:param value="{! GradeSubtotalOfftakeVolCR12 / GradeSubtotalTargetVolCR12 * 100}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeSubtotalTargetVolCR12==null || GradeSubtotalTargetVolCR12 ==0 || GradeSubtotalOfftakeVolCR12 == 0}" />
+                        </td>                        
+                        <!-- Value / RMB -->
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.TargetValue!=null && GradeVolumeMap[SubBrandGrade].FullData.TargetValue!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.TargetValue}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.TargetValue==null || GradeVolumeMap[SubBrandGrade].FullData.TargetValue ==0 }" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeValue!=null&&GradeVolumeMap[SubBrandGrade].FullData.IntakeValue!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeValue}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeValue==null || GradeVolumeMap[SubBrandGrade].FullData.IntakeValue==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSContractValuePercentage!=null && GradeVolumeMap[SubBrandGrade].FullData.IntakeVSContractValuePercentage!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSContractValuePercentage}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSContractValuePercentage==null || GradeVolumeMap[SubBrandGrade].FullData.IntakeVSContractValuePercentage==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSOffTakeValuePercentage!=null && GradeVolumeMap[SubBrandGrade].FullData.IntakeVSOffTakeValuePercentage!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSOffTakeValuePercentage}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.IntakeVSOffTakeValuePercentage==null || GradeVolumeMap[SubBrandGrade].FullData.IntakeVSOffTakeValuePercentage==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeValue!=null && GradeVolumeMap[SubBrandGrade].FullData.OfftakeValue!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeValue}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeValue==null || GradeVolumeMap[SubBrandGrade].FullData.OfftakeValue==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeVSIntakeValuePercentage!=null&&GradeVolumeMap[SubBrandGrade].FullData.OfftakeVSIntakeValuePercentage!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeVSIntakeValuePercentage}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OfftakeVSIntakeValuePercentage==null || GradeVolumeMap[SubBrandGrade].FullData.OfftakeVSIntakeValuePercentage==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OffTakeVSContractValuePercentage!=null&&GradeVolumeMap[SubBrandGrade].FullData.OffTakeVSContractValuePercentage!=0}">
+                                <apex:param value="{!GradeVolumeMap[SubBrandGrade].FullData.OffTakeVSContractValuePercentage}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!GradeVolumeMap[SubBrandGrade].FullData.OffTakeVSContractValuePercentage==null || GradeVolumeMap[SubBrandGrade].FullData.OffTakeVSContractValuePercentage==0}" />
+                        </td>
+                    </tr>
+                </apex:repeat>
+                
+                <tr>
+                    <td style="border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                    <td style="border-bottom: 1px solid black; border-right: 1px solid black;" >&nbsp;</td>
+                </tr>
+                
+                <apex:repeat value="{!CategoryVolumeMap}" var="CategoryName">
+                	<apex:variable var="CategorySubtotalTargetVolCR12" value="{!0}" />
+	                <apex:variable var="CategorySubtotalIntakeVolCR12" value="{!0}" />
+	                <apex:variable var="CategorySubtotalOfftakeVolCR12" value="{!0}" />
+                    <apex:repeat value="{!CategoryVolumeMap[CategoryName].SubBrandLine}" var="SubBrand">
+                    	<apex:variable var="CategorySubtotalTargetVolCR12" value="{!CategorySubtotalTargetVolCR12 + CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].TargetVolCR12}" />
+		                <apex:variable var="CategorySubtotalIntakeVolCR12" value="{!CategorySubtotalIntakeVolCR12 + CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].IntakeVolCR12}" />
+		                <apex:variable var="CategorySubtotalOfftakeVolCR12" value="{!CategorySubtotalOfftakeVolCR12 + CategoryVolumeMap[CategoryName].SubBrandLine[SubBrand].OfftakeVolCR12}" />
+                    </apex:repeat>
+                	<tr>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+                            {!CategoryVolumeMap[CategoryName].CategoryName}
+                        </td>
+                        
+                        <!-- Vol / CR12 -->
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategorySubtotalTargetVolCR12!=null&&CategorySubtotalTargetVolCR12!=0}">
+                                <apex:param value="{!CategorySubtotalTargetVolCR12}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalTargetVolCR12==null || CategorySubtotalTargetVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategorySubtotalIntakeVolCR12!=null&& CategorySubtotalIntakeVolCR12!=0}">
+                                <apex:param value="{!CategorySubtotalIntakeVolCR12}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalIntakeVolCR12==null || CategorySubtotalIntakeVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategorySubtotalTargetVolCR12!=null&&CategorySubtotalTargetVolCR12!=0 && CategorySubtotalIntakeVolCR12 != 0}">
+                                <apex:param value="{!CategorySubtotalIntakeVolCR12/CategorySubtotalTargetVolCR12*100}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalTargetVolCR12==null || CategorySubtotalTargetVolCR12 ==0 || CategorySubtotalIntakeVolCR12 == 0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategorySubtotalOfftakeVolCR12!=null&&CategorySubtotalOfftakeVolCR12!=0 && CategorySubtotalIntakeVolCR12 != 0}">
+                                <apex:param value="{!CategorySubtotalIntakeVolCR12/CategorySubtotalOfftakeVolCR12*100}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalOfftakeVolCR12==null || CategorySubtotalOfftakeVolCR12 ==0 || CategorySubtotalIntakeVolCR12 == 0}" />
+                        </td>
+
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategorySubtotalOfftakeVolCR12!=null&&CategorySubtotalOfftakeVolCR12!=0}">
+                                <apex:param value="{!CategorySubtotalOfftakeVolCR12}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalOfftakeVolCR12==null || CategorySubtotalOfftakeVolCR12==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategorySubtotalIntakeVolCR12!=null && CategorySubtotalIntakeVolCR12!=0 && CategorySubtotalOfftakeVolCR12 != 0}">
+                                <apex:param value="{!CategorySubtotalOfftakeVolCR12/CategorySubtotalIntakeVolCR12*100}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalIntakeVolCR12==null || CategorySubtotalIntakeVolCR12 ==0 || CategorySubtotalOfftakeVolCR12 == 0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategorySubtotalTargetVolCR12!=null && CategorySubtotalTargetVolCR12!=0 && CategorySubtotalOfftakeVolCR12 != 0}">
+                                <apex:param value="{!CategorySubtotalOfftakeVolCR12/CategorySubtotalTargetVolCR12*100}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategorySubtotalTargetVolCR12==null || CategorySubtotalTargetVolCR12 ==0 || CategorySubtotalOfftakeVolCR12 == 0}" />
+                        </td>                        
+                        <!-- Value / RMB -->
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].FullData.TargetValue!=null && CategoryVolumeMap[CategoryName].FullData.TargetValue!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.TargetValue}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.TargetValue==null || CategoryVolumeMap[CategoryName].FullData.TargetValue ==0 }" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeValue!=null&&CategoryVolumeMap[CategoryName].FullData.IntakeValue!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.IntakeValue}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeValue==null || CategoryVolumeMap[CategoryName].FullData.IntakeValue==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSContractValuePercentage!=null && CategoryVolumeMap[CategoryName].FullData.IntakeVSContractValuePercentage!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSContractValuePercentage}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSContractValuePercentage==null || CategoryVolumeMap[CategoryName].FullData.IntakeVSContractValuePercentage==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSOffTakeValuePercentage!=null && CategoryVolumeMap[CategoryName].FullData.IntakeVSOffTakeValuePercentage!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSOffTakeValuePercentage}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.IntakeVSOffTakeValuePercentage==null || CategoryVolumeMap[CategoryName].FullData.IntakeVSOffTakeValuePercentage==0}" />
+                        </td>
+
+
+                        <td bgcolor="#E6E6E6" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryVolumeMap[CategoryName].FullData.OfftakeValue!=null && CategoryVolumeMap[CategoryName].FullData.OfftakeValue!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.OfftakeValue}" /></apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.OfftakeValue==null || CategoryVolumeMap[CategoryName].FullData.OfftakeValue==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].FullData.OfftakeVSIntakeValuePercentage!=null&&CategoryVolumeMap[CategoryName].FullData.OfftakeVSIntakeValuePercentage!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.OfftakeVSIntakeValuePercentage}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.OfftakeVSIntakeValuePercentage==null || CategoryVolumeMap[CategoryName].FullData.OfftakeVSIntakeValuePercentage==0}" />
+                        </td>
+                        <td bgcolor="#E6E6E6" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                            <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryVolumeMap[CategoryName].FullData.OffTakeVSContractValuePercentage!=null&&CategoryVolumeMap[CategoryName].FullData.OffTakeVSContractValuePercentage!=0}">
+                                <apex:param value="{!CategoryVolumeMap[CategoryName].FullData.OffTakeVSContractValuePercentage}" />
+                            </apex:outputText>
+                            <apex:outputText value=" - " rendered="{!CategoryVolumeMap[CategoryName].FullData.OffTakeVSContractValuePercentage==null || CategoryVolumeMap[CategoryName].FullData.OffTakeVSContractValuePercentage==0}" />
+                        </td>
+
+                    </tr>
+                </apex:repeat>
+                
+                <tr>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black;  border-left: 1px solid black; border-right: 1px solid black;" align="left">Total All Products</td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black;  border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalTargetVolCR12!=null&&TotalTargetVolCR12!=0}">
+                            <apex:param value="{!TotalTargetVolCR12}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12==null||TotalTargetVolCR12==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalIntakeVolCR12!=null && TotalIntakeVolCR12!=0}">
+                            <apex:param value="{!TotalIntakeVolCR12}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVolCR12==null||TotalIntakeVolCR12==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black;  border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetVolCR12!=null && TotalTargetVolCR12!=0 && TotalIntakeVolCR12!=0  }">
+                            <apex:param value="{!(TotalIntakeVolCR12/TotalTargetVolCR12)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12==null || TotalTargetVolCR12==0 || TotalIntakeVolCR12 ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black;  border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalOfftakeVolCR12!=null && TotalOfftakeVolCR12!=0 && TotalIntakeVolCR12!=0  }">
+                            <apex:param value="{!(TotalIntakeVolCR12/TotalOfftakeVolCR12)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeVolCR12==null || TotalOfftakeVolCR12==0 || TotalIntakeVolCR12 ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black;  border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalOfftakeVolCR12!=null && TotalOfftakeVolCR12!=0}">
+                            <apex:param value="{!TotalOfftakeVolCR12}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeVolCR12==null || TotalOfftakeVolCR12==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalIntakeVolCR12!=null && TotalIntakeVolCR12!=0 && TotalOfftakeVolCR12!=0 }">
+                            <apex:param value="{!(TotalOfftakeVolCR12/TotalIntakeVolCR12)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVolCR12==null || TotalIntakeVolCR12==0 || TotalOfftakeVolCR12==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetVolCR12!=null && TotalTargetVolCR12!=0 && TotalOfftakeVolCR12!=0 }">
+                            <apex:param value="{!(TotalOfftakeVolCR12/TotalTargetVolCR12)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12==null || TotalTargetVolCR12==0 || TotalOfftakeVolCR12==0 }" />
+                    </td>
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black;  border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalTargetValue!=null&&CategoryTotalTargetValue!=0}">
+                            <apex:param value="{!CategoryTotalTargetValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null||CategoryTotalTargetValue==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalIntakeValue!=null && CategoryTotalIntakeValue!=0}">
+                            <apex:param value="{!CategoryTotalIntakeValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeValue==null||CategoryTotalIntakeValue==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetValue!=null && CategoryTotalTargetValue!=0 && CategoryTotalIntakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeValue/CategoryTotalTargetValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null || CategoryTotalTargetValue==0 || CategoryTotalIntakeValue ==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalOfftakeValue!=null && CategoryTotalOfftakeValue!=0 && CategoryTotalIntakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalIntakeValue/CategoryTotalOfftakeValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeValue==null || CategoryTotalOfftakeValue==0 || CategoryTotalIntakeValue ==0 }" />
+                    </td>
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!CategoryTotalOfftakeValue!=null && CategoryTotalOfftakeValue!=0}">
+                            <apex:param value="{!CategoryTotalOfftakeValue}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalOfftakeValue==null || CategoryTotalOfftakeValue==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalIntakeValue!=null && CategoryTotalIntakeValue!=0 && CategoryTotalOfftakeValue!=0 }">
+                            <apex:param value="{!(CategoryTotalOfftakeValue/CategoryTotalIntakeValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalIntakeValue==null || CategoryTotalIntakeValue==0 || CategoryTotalOfftakeValue==0 }" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!CategoryTotalTargetValue!=null && CategoryTotalTargetValue!=0 && CategoryTotalOfftakeValue!=0  }">
+                            <apex:param value="{!(CategoryTotalOfftakeValue/CategoryTotalTargetValue)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!CategoryTotalTargetValue==null || CategoryTotalTargetValue==0 || CategoryTotalOfftakeValue ==0 }" />
+                    </td>                    
+                </tr>
+                
+                
+                
+                
+                <tr>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+                        Total All Products <br/>  (Excl. Premium and below)
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalTargetVolCR12ExcludePrem!=null && TotalTargetVolCR12ExcludePrem!=0}">
+                            <apex:param value="{!TotalTargetVolCR12ExcludePrem}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12ExcludePrem==null || TotalTargetVolCR12ExcludePrem==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalIntakeVolCR12ExcludePrem!=null && TotalIntakeVolCR12ExcludePrem!=0}">
+                            <apex:param value="{!TotalIntakeVolCR12ExcludePrem}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVolCR12ExcludePrem==null || TotalIntakeVolCR12ExcludePrem==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetVolCR12ExcludePrem!=null && TotalTargetVolCR12ExcludePrem!=0 && TotalIntakeVolCR12ExcludePrem !=0}">
+                            <apex:param value="{!(TotalIntakeVolCR12ExcludePrem/TotalTargetVolCR12ExcludePrem)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12ExcludePrem==null || TotalTargetVolCR12ExcludePrem==0 || TotalIntakeVolCR12ExcludePrem==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalOfftakeVolCR12ExcludePrem!=null && TotalOfftakeVolCR12ExcludePrem!=0 && TotalIntakeVolCR12ExcludePrem !=0}">
+                            <apex:param value="{!(TotalIntakeVolCR12ExcludePrem/TotalOfftakeVolCR12ExcludePrem)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeVolCR12ExcludePrem==null || TotalOfftakeVolCR12ExcludePrem==0 || TotalIntakeVolCR12ExcludePrem==0}" />
+                    </td>
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalOfftakeVolCR12ExcludePrem!=null && TotalOfftakeVolCR12ExcludePrem!=0}">
+                            <apex:param value="{!TotalOfftakeVolCR12ExcludePrem}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeVolCR12ExcludePrem==null||TotalOfftakeVolCR12ExcludePrem==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalIntakeVolCR12ExcludePrem!=null && TotalIntakeVolCR12ExcludePrem!=0 && TotalOfftakeVolCR12ExcludePrem != 0}">
+                            <apex:param value="{!(TotalOfftakeVolCR12ExcludePrem/TotalIntakeVolCR12ExcludePrem)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeVolCR12ExcludePrem==null || TotalIntakeVolCR12ExcludePrem==0 || TotalOfftakeVolCR12ExcludePrem == 0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetVolCR12ExcludePrem!=null && TotalTargetVolCR12ExcludePrem!=0 && TotalOfftakeVolCR12ExcludePrem != 0}">
+                            <apex:param value="{!(TotalOfftakeVolCR12ExcludePrem/TotalTargetVolCR12ExcludePrem)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetVolCR12ExcludePrem==null || TotalTargetVolCR12ExcludePrem==0 || TotalOfftakeVolCR12ExcludePrem == 0}" />
+                    </td>                    
+                    <!-- Value/RMB -->
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalTargetValue_ExclPremium!=null && TotalTargetValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalTargetValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetValue_ExclPremium==null || TotalTargetValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style=" border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalIntakeValue_ExclPremium!=null && TotalIntakeValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalIntakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeValue_ExclPremium==null || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetValue_ExclPremium!=null && TotalTargetValue_ExclPremium!=0 && TotalIntakeValue_ExclPremium !=0}">
+                            <apex:param value="{!(TotalIntakeValue_ExclPremium/TotalTargetValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetValue_ExclPremium==null || TotalTargetValue_ExclPremium==0 || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalOfftakeValue_ExclPremium!=null && TotalOfftakeValue_ExclPremium!=0 && TotalIntakeValue_ExclPremium !=0}">
+                            <apex:param value="{!(TotalIntakeValue_ExclPremium/TotalOfftakeValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeValue_ExclPremium==null || TotalOfftakeValue_ExclPremium==0 || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+
+
+                    <td bgcolor="#CCFFFF" style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###}" rendered="{!TotalOfftakeValue_ExclPremium!=null && TotalOfftakeValue_ExclPremium!=0}">
+                            <apex:param value="{!TotalOfftakeValue_ExclPremium}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalOfftakeValue_ExclPremium==null||TotalOfftakeValue_ExclPremium==0}" />
+                    </td>
+                    
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, 'display:none;','')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalIntakeValue_ExclPremium!=null && TotalIntakeValue_ExclPremium!=0}">
+                            <apex:param value="{!(TotalOfftakeValue_ExclPremium/TotalIntakeValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalIntakeValue_ExclPremium==null || TotalIntakeValue_ExclPremium==0}" />
+                    </td>
+                    <td bgcolor="#CCFFFF" style="{!IF(ContractSelected.ASI_CRM_CN_Is_Dolphin__c, '','display:none;')} border-bottom: 1px solid black; border-right: 1px solid black;" align="right">
+                        <apex:outputText value="{0,number,#,###,###.##}%" rendered="{!TotalTargetValue_ExclPremium!=null && TotalTargetValue_ExclPremium!=0}">
+                            <apex:param value="{!(TotalOfftakeValue_ExclPremium/TotalTargetValue_ExclPremium)*100}" />
+                        </apex:outputText>
+                        <apex:outputText value=" - " rendered="{!TotalTargetValue_ExclPremium==null || TotalTargetValue_ExclPremium==0}" />
+                    </td>
+
+                </tr>
+            </table>
+            	
+            <br/>
+            
+            <br/>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            <!-- No need for now -->
+            <table width="100%" cellspacing="0" cellpadding="2" style="display:none;">
+            	<thead>
+                    <tr>
+                        <th colspan="11" bgcolor="#FFFF66" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Calendar Period: {!SelectedPeriodStr}" />
+                        </th>
+                    </tr>
+                    <tr>
+                    	<th style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left" width="8%">
+                    		(Display only when <br/>1. For MOT only <br/> 2. The covered outlet is cross region)
+                        </th>
+                     	<th colspan="5" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Vol /9L" />
+                        </th>
+                        <th colspan="5" style="border-top: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="8%">
+                            <apex:outputText value="Value/RMB" />
+                        </th>
+                    </tr>
+                    
+                    <tr>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="center" width="28%">
+                            By Region
+                        </th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Vol. Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Intake</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Intake vs Contract%</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Offtake</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Offtake vs Intake%</th>
+                        
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Contract Value Target</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Outlet Purchase Value</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Purchase Value vs Contract%</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Offtake Value</th>
+                        <th style="border-top: 1px solid black; border-bottom: 1px solid black; border-right: 1px solid black;" align="center" width="7%">Offtake vs purchase value%</th>
+                    </tr>
+                </thead>
+                <tbody>
+	                <apex:repeat value="{!districtList}" var="districtName">
+	                	<tr>
+	                        <td style="border-bottom: 1px solid black; border-left: 1px solid black; border-right: 1px solid black;" align="left">
+	                            {!districtName}
+	                        </td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        <td style="border-bottom: 1px solid black; border-right: 1px solid black;" align="right">-</td>
+	                        
+	                    </tr>
+	                </apex:repeat>
+                </tbody>
+            </table>
+        </apex:outputPanel>
+    </body>
+</apex:component>

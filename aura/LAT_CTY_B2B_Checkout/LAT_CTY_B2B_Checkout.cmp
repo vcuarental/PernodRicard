@@ -1,0 +1,292 @@
+<aura:component implements="forceCommunity:availableForAllPageTypes" controller="LAT_CTY_B2B_OrderController"
+    access="global">
+    <aura:handler name="init" value="{!this}" action="{!c.initCart}" />
+    <aura:attribute name="order" type="Map" />
+    <aura:attribute name="baseUrl" type="String" />
+
+    <aura:attribute name="orderProducts" type="List" default="[]" />
+    <aura:attribute name="price" type="Double" default="0" />
+    <aura:attribute name="iibbPrice" type="Double" default="0" />
+    <aura:attribute name="availableCredit" type="Double" default="1000000" />
+    <aura:attribute name="ivaPrice" type="Double" default="0" />
+    <aura:attribute name="orderMin" type="Double" default="5000" />
+    <aura:attribute name="isLoading" type="Boolean" default="true" />
+    <aura:attribute name="isCheckingStock" type="Boolean" default="false" />
+    <aura:attribute name="accName" type="String" default="" />
+    <aura:attribute name="accCNPJ" type="String" default="" />
+    <aura:attribute name="accCorporateName" type="String" default="" />
+    <aura:attribute name="accAddress" type="String" default="" />
+    <aura:attribute name="comments" type="String" default="" />
+    <aura:attribute name="stockIssues" type="Boolean" default="false" />
+    <aura:attribute name="currentItemId" type="String" default="" />
+    <aura:attribute name="openOverlay" type="Boolean" default="false" />
+    <aura:attribute name="overlayProdName" type="String" default="" />
+    <aura:attribute name="timer" type="Integer" />
+    <aura:attribute name="commentsChanged" type="Boolean" default="false" />
+    <aura:attribute name="showQuantInputs" type="Boolean" default="false" />
+    <aura:attribute name="showModalBlockedClient" type="Boolean" default="false" />
+    <aura:attribute name="blockedClient" type="Boolean" default="false" />
+
+    <div>
+        <c:LAT_CTY_B2B_Checkout_Status />
+
+        <div class="{!v.isLoading ? 'custom-loader' : 'custom-loader slds-hide'}">
+            <span class="sync">Sincronizando pedido...</span>
+            <div class="backgroundInverse">
+                <lightning:spinner alternativeText="Loading" variant="" />
+            </div>
+        </div>
+
+        <div class="{!v.isCheckingStock ? 'custom-loader' : 'custom-loader slds-hide'}">
+            <span class="spinner-stock-text">Verificando Stock Disponible...</span>
+            <div class="backgroundInverse">
+                <lightning:spinner variant="inverse" alternativeText="Calculando Stock" size="medium" class="{!v.isCheckingStock ? 'spinner-stock' : 'slds-hide'}" />
+            </div>
+        </div>
+
+        <div class="product-list">
+            <div class="p-list">
+                <aura:iteration var="item" items="{!v.orderProducts}">
+                    <div class="{! item.isOverStock ? 'my-row stock' : 'my-row' }">
+                        <div onclick="{!c.clickDivEntero}" class="img-cont">
+                            <img src="{#item.LAT_Product__r.LAT_B2B_Thumbnail_URL__c}" alt="" />
+                        </div>  
+        
+                        <div class="prod-detail">
+                            <div onclick="{!c.clickDivEntero}"  class="price">
+                                Precio final: $ <ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!item.LAT_QTTotal__c * (item.LAT_UnitPrice__c + item.LAT_UnitIva__c +item.LAT_UnitIibb__c)}"/>
+                            </div>
+                            <h3 onclick="{!c.clickDivEntero}"  class="{#item.LAT_Product__r.LAT_B2B_Product_Name__c==null?'':'slds-hide'}">
+                                {#item.LAT_Product__r.Name}
+                            </h3>
+                            
+                            <h3 onclick="{!c.clickDivEntero}"  class="{#item.LAT_Product__r.LAT_B2B_Product_Name__c==null?'slds-hide':''}">
+                                {#item.LAT_Product__r.LAT_B2B_Product_Name__c}
+                            </h3>
+                            <div class="slds-grid slds-gutters">
+                                <div onclick="{!c.clickDivEntero}"  class="price price-detail slds-max-small-size_2-of-2  slds-col slds-size_5-of-12">
+                                    Unitario: <span class="dark">$ <ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!item.LAT_UnitPrice__c}"/></span><br/>
+                                    Subtotal: <span class="dark">$ <ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!item.LAT_QTTotal__c * item.LAT_UnitPrice__c}"/></span><br/>
+                                    IVA: <span class="dark">$ <ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!item.LAT_QTTotal__c * item.LAT_UnitIva__c}"/></span><br/>
+                                    Imp. Internos:  <span class="dark">$ <ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!item.LAT_QTTotal__c * item.LAT_UnitIibb__c}"/></span><br/>
+                                </div>
+        
+                                <div class="quantity-price slds-col slds-size_4-of-12 slds-max-small-size_2-of-2">
+                                    <div onclick="{!c.clickDivEntero}"  style="padding-left:10px;" class="info-pr"> 
+                                        Tipo: {# item.LAT_UnitCode__c == 'CA' ? 'CAJA' : 'BOTELLA'}
+                                    </div>
+                                    <div class="act act-div">
+                                        <a href="javascript:void();" onclick="{!c.subtractQty}" data-item="{#item.Id}" data-pid="{#item.LAT_Product__c}" data-unit="{#item.LAT_UnitCode__c}" data-isfirst="{!item.LAT_QTTotal__c == 1}" class="{! item.LAT_QTTotal__c == 1 ? 'disabled' : ''}">-</a>
+                                                <div  class="{!v.showQuantInputs?'number':'number slds-hide'}">
+                                                    <input onchange="{!c.assignQuant}" data-unit="{#item.LAT_UnitCode__c}" data-item="{#item.Id}" data-pid="{#item.LAT_Product__c}" data-qty="{!item.LAT_QTTotal__c}" class="inqty" type="number" min="1" value="{!item.LAT_QTTotal__c}" placeholder="Cant." label="Enter a number" />                                                    
+                                                </div>
+                                                <div onclick="{!c.hayUnClick}" class="{!v.showQuantInputs?'number slds-hide':'number'}">
+                                                    {!item.LAT_QTTotal__c}
+                                                </div>
+                                                <a href="javascript:void();" class="add-qty" onclick="{!c.sumQTY}" data-item="{#item.Id}" data-pid="{#item.LAT_Product__c}" data-unit="{#item.LAT_UnitCode__c}" >+</a>                                        
+                                            </div>
+                                            <div class="stock-qty">
+                                                Stock Disponible: {!item.LAT_UnitCode__c == 'CA' ? item.LAT_Product__r.LAT_MX_ClientStock__c : item.LAT_Product__r.LAT_MX_StockPRM__c}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="clear"></div>
+                                    <div class="delete-item">  <a href="javascript:;" onclick="{!c.removeItem}" data-item="{#item.Id}" data-nombreProd="{#item.LAT_Product__r.LAT_B2B_Product_Name__c}"><lightning:icon iconName="utility:close" size="xx-small" alternativeText="Close" /></a></div>
+                                </div>
+                                <div class="clear"></div>
+                            </div>
+                        </aura:iteration>
+                    </div>
+                <div  class="{!v.orderProducts.length == 0 ? 'cart-empty' : 'slds-hide' }">
+                    No hay productos en tu cesta.
+                </div>
+            </div>
+
+        <div class="order-info">
+            <div class="totals">
+                <div class="total">
+                    <h2>Nuevo Pedido - {!v.accName} </h2>
+                </div>
+                <div class="sub title">
+                    Datos Cliente:
+                </div>
+                <div class="sub">
+                    <div class="datosCliente">
+                    	Razón Social :  <span>{!v.accCorporateName }</span>
+                    </div>
+                    <div class="datosCliente">
+                    	CUIT : <span>{!v.accCNPJ}</span>
+                    </div>
+                    <div class="datosCliente">
+                    	Dirección de Entrega : <span>{!v.accAddress}</span>
+                    </div>
+                </div>
+                <div class="sub title">
+                    Comentarios / Aclaraciones:
+                    
+                </div>
+                <div class="text">
+                    <lightning:textarea onchange="{!c.setComments}" name="input3" value="{!v.comments}" label="" placeholder="Ingresar aclaraciones..."/>
+                </div>
+                
+                <div class="sub title">
+                    Resumen:
+                </div>  
+            </div>
+            
+            <div  class="{! greaterthanorequal(v.price + v.ivaPrice + v.iibbPrice, v.orderMin) ? 'slds-hide' : 'order-control' }">
+                Te faltan $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!sub(v.orderMin, v.price + v.ivaPrice + v.iibbPrice)}"/>
+               para poder realizar tu pedido.
+            </div>
+            <div class="totals">
+                <div class="sub">
+                    Subtotal <span>
+                                    <aura:if isTrue="{!v.isLoading}">
+                                            calculando...
+                                    <aura:set attribute="else">
+                                           
+                                            $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.price}"/>
+                                    </aura:set>
+                                  </aura:if> 
+                            </span>
+                </div>
+                <div class="sub">
+                    Impuestos Internos <span>
+                                    <aura:if isTrue="{!v.isLoading}">
+                                            calculando...
+                                    <aura:set attribute="else">
+                                           
+                                            $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.iibbPrice}"/>
+                                    </aura:set>
+                                  </aura:if> 
+                            </span>
+                </div>
+				<div class="sub">
+                    IVA <span>
+                                    <aura:if isTrue="{!v.isLoading}">
+                                            calculando...
+                                    <aura:set attribute="else">
+                                           
+                                        $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.ivaPrice}"/>
+                                    </aura:set>
+                                  </aura:if> 
+                            </span>
+                </div>
+
+                <div class="total">
+                    Total <span><lightning:helptext class="colorIndianRed"
+                        content="Este importe puede verse modificado en la factura ya que Pernod Ricard es agente de percepción de IVA y de IIBB, las cuales se calcularán de acuerdo a la condición del cliente."
+                    />  <aura:if isTrue="{!v.isLoading}">
+                            calculando...
+                    <aura:set attribute="else">
+                        $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.price + v.ivaPrice + v.iibbPrice}"/>
+                    </aura:set>
+                  </aura:if> </span> 
+                </div>
+            </div>
+            <div style="color:firebrick;" class="{! greaterthanorequal(v.availableCredit, v.price + v.ivaPrice + v.iibbPrice) ? 'slds-hide' : 'order-control stock-error' }">
+                LÍMITE EXCEDIDO: El pedido tiene un valor de $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.price + v.ivaPrice + v.iibbPrice}"/>
+                lo cual excede el crédito disponible de $<ui:outPutNumber aura:id="myNumberFormat" format="#,###,##0.00" value="{!v.availableCredit}"/>
+               ,por favor corregir.
+            </div>
+            <div class="actionSuccess">
+                <a href="javascript:void();" class="{! greaterthanorequal(v.orderMin, v.price + v.ivaPrice + v.iibbPrice) ? 'actionSuccess disabled' : 'slds-hide' }">Confirmar Pedido</a>
+                <!-- onclick="{!c.sendToJDE}" -->
+                <div class="{! greaterthanorequal(v.price + v.ivaPrice + v.iibbPrice, v.orderMin)&amp;&amp;greaterthanorequal(v.availableCredit, v.price + v.ivaPrice + v.iibbPrice) ? 'actionSuccess' : 'slds-hide' }">
+                        <aura:if isTrue="{!v.stockIssues}">
+                                <a href="javascript:;" class="actionSuccess stock-issues">Confirmar Pedido
+                            </a>
+                                <small class="stock-error">Este pedido no puede ser integrado, no todos los productos tienen suficiente stock.</small>
+
+                                <aura:set attribute="else">
+                                    <!-- User can Submit -->
+                                     
+                                    <a href="javascript:;" class="{! greaterthanorequal(v.price + v.ivaPrice + v.iibbPrice, v.orderMin)&amp;&amp;!v.blockedClient ? 'actionSuccess' : 'actionSuccess slds-hide' }" onclick="{!c.sendToJDE}">Confirmar Pedido
+                                    <lightning:icon variant="inverse" style="margin-left:15px;" iconName="utility:check" size="medium"/></a>
+                                </aura:set>
+                              </aura:if> 
+                   
+                </div>
+            </div>
+            <div class="action">
+                <div style="margin-top:25px;">
+                    <a href="{! v.baseUrl + 'nuevo-pedido?opencart=1' }"  onclick="javascript:void();">Continuar Comprando 
+                    <lightning:icon variant="inverse" style="margin-left:15px;" iconName="utility:forward" size="medium"/></a>
+               </div>
+               
+               
+                <!-- <a href="javascript:void();" onclick="{!c.validateStock}"    class="{! greaterthanorequal(v.price, v.orderMin) ? '' : 'slds-hide' }">Validate Pirate Stock</a> -->
+            </div>
+        </div>
+        <div class="clear"></div>
+    </div>
+    <div style="height: 640px;" class="{! v.openOverlay ? 'order-info' : 'order-info slds-hide' }">
+        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1"
+                 class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                
+                
+                <!-- Header -->
+                <header class="slds-modal__header ">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" onclick="{! c.cancelOverlay }"
+                            title="Close">
+                        <lightning:icon iconName="utility:close" variant="inverse" alternativeText="close" />
+                    </button>
+                    <h1 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate overlayHeader">Pernod Ricard:</h1>
+                    <h2 >
+                        Confirma que desea remover el siguiente Producto?
+                        
+                    </h2>
+                    <h2 style="font-weight: bold;">{!v.overlayProdName}</h2>
+                </header>
+                
+                <!-- Body -->
+                <div class="slds-modal__content " id="modal-content-id-1">
+                    
+                    
+                    
+                </div>
+                
+                <!-- Footer -->
+                <footer  class="slds-modal__footer">
+                    
+                    <button class="slds-button slds-button" onclick="{! c.cancelOverlay }">Cancelar</button>
+                    <button style="color:white;" class="slds-button slds-button_success" onclick="{!c.confirmOverlay}">Confirmar</button>
+                    
+                </footer>
+                
+            </div>
+        </section>
+        
+        <!-- Backdrop -->
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </div>
+    <div style="height: 640px;" class="{! v.showModalBlockedClient ? 'new-order-modal' : 'new-order-modal slds-hide' }">
+        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true"
+                 aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header blocked-client-header">
+                    <span>HAY FACTURAS VENCIDAS
+                    </span>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            onclick="{! c.closeModalOrderBlocked }" title="Close">
+                        <lightning:icon iconName="utility:close" variant="inverse" alternativeText="close" />
+                    </button>
+                </header>
+                <div class="slds-modal__content blocked-client-body" id="modal-content-id-1">
+                    <span>
+                        Tienes facturas vencidas, por lo que no podrás finalizar el pedido hasta que las mismas hayan sido canceladas.
+                        <br/>Por más detalles de las facturas puedes ir a <a href="{! v.baseUrl + 'mi-cuenta' }">Mi Cuenta</a>.
+                    </span>
+                </div>
+                <footer class="slds-modal__footer">
+                    <button class="slds-button slds-button_brand btn-ok" onclick="{!c.closeModalOrderBlocked}">Ok</button>
+                </footer>
+                
+            </div>
+        </section>
+        
+        <!-- Backdrop -->
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </div>
+</aura:component>

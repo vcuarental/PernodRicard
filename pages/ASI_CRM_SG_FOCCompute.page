@@ -1,0 +1,910 @@
+<!--
+	**********************************************************************************
+	 * Name : ASI_CRM_SG_FOCCompute
+	 * Created : ?
+	 * Revision History:
+	 * 1. ? - Created
+	 * 2. 5 Jan 2016 - [Vincent Lam] Added Revision History
+	 * 3. 5 Jan 2016 - [Vincent Lam] Edit the selectable options for year, from this year - 2 to this year + 5
+	 * 4. 28 Dec 2016 - [Hugo Cheung] SG CRM P3 #A18 (Add new interface that allow user reset the FOC by submitting the contract number, month, year)
+	 * 5. 23 Jan 2017 - [Hugo Cheung] SG CRM P3 #A15 (Add new interface that allow user generate bottle incentive Payment Request by submitting the month and year)
+     * 6. 2017-03-30 - [VL 2.0] SG CRM P3 #113 (Add new interface that allow user generate Contract Margin Credit/Debit Note by submitting the month and year)
+     * 6. 2017-05-09 - [VL 3.0] SG CRM P3 #114 (Add new interface that allow user generate Prompt Payment Credit Note)
+     * 6. 2017-07-13 - [VL 4.0] SG CRM CR CHM115008046 
+	 * 7. 2018-01-11 - [WL 5.0] Phase 4.1B Add Regenerate Contract Margin Credit Note
+	 * 8. 2018-02-01 - [VL 6.0] Phase 4.1B prevent generate credit note in before go-live period
+	 * 9. 2018-02-06 - [WL 7.0] Allow regenerate FOC to generate for previous month
+	 * 9. 2018-03-16 - [WL 8.0] Add Wholesaler Back Rebate generation section
+	 * 10. 2018-03-27- [WL 9.0] Change Contract Margin Credit Note to allow generate from Jan 2018 onwards
+	 * 11. 2018-05-04- [WL 10.0] Add Promotion Incentive module
+	 **********************************************************************************
+	-->
+	<apex:page controller="ASI_CRM_SG_FOCComputeController">
+		<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+		<head>
+			<script src="//ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.js"></script>
+			<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/jquery-ui.min.js"></script>
+			<link rel="stylesheet" type="text/css" media="screen" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/themes/base/jquery-ui.css"/>
+			<script type="text/javascript">
+				
+				/***********************************************
+				* Drop Down Date select script- by JavaScriptKit.com
+				* This notice MUST stay intact for use
+				* Visit JavaScript Kit at http://www.javascriptkit.com/ for this script and morea
+				***********************************************/
+
+				var monthtext=['1','2','3','4','5','6','7','8','9','10','11','12'];
+				function populatedropdown(monthfield, yearfield){
+					var today=new Date();
+					var monthfield=document.getElementById(monthfield);
+					var yearfield=document.getElementById(yearfield);
+					for (var m=0; m<12; m++){
+						monthfield.options[m]=new Option(monthtext[m], monthtext[m]);
+						monthfield.options[today.getMonth()]=new Option(monthtext[today.getMonth()], monthtext[today.getMonth()], true, true); //select today's month   
+					}
+						
+					// edited by Vincent 20160105
+					// request by Aaron
+					// Select option of FOC generation year
+					/***************************************
+					var thisyear=today.getFullYear()-1;
+					//alert(thisyear);
+					for (var y=0; y<20; y++){
+						yearfield.options[y]=new Option(thisyear, thisyear);
+						thisyear+=1;
+					}
+					//yearfield.options[20]=new Option(2014, 2014);
+					yearfield.options[1]=new Option(today.getFullYear(), today.getFullYear(), true, true); //select today's year
+					***************************************/
+					
+					// edited by Vincent 20160105
+					// request by Aaron
+					// Select option of FOC generation year
+					// The selectable year = this year - 2 to this year + 5
+					var thisyear=today.getFullYear()-2;
+					for (var y=0; y<8; y++){
+						yearfield.options[y]=new Option(thisyear, thisyear);
+						thisyear+=1;
+					}
+					yearfield.options[2]=new Option(today.getFullYear(), today.getFullYear(), true, true); //select today's year
+				}
+
+				window.onload=function(){
+					populatedropdown("monthdropdown", "yeardropdown");
+					populatedropdown("monthdropdown_admin", "yeardropdown_admin");
+					populatedropdown("fromMonthSelectForBottleIncentive", "fromYearSelectForBottleIncentive");
+					populatedropdown("toMonthSelectForBottleIncentive", "toYearSelectForBottleIncentive");
+                    /* [VL 2.0] BEGIN */
+					populatedropdown("monthSelectForContractMargin", "yearSelectForContractMargin");
+                    /* [VL 2.0] END */
+					
+					/* [WL 5.0] BEGIN */
+					populatedropdown("monthdropdown_admin_CM", "yeardropdown_admin_CM");
+                    /* [WL 5.0] END */
+					
+					/* [WL 8.0] BEGIN */
+					
+					
+					var backRebateType=document.getElementById("WSBackRebateType");
+					var backRebateTypeReGen=document.getElementById("WSBackRebateTypeReGen");
+					
+					if (backRebateType != null){				
+							backRebateType.options[0]=new Option("Payment Request", "Payment Request");
+							backRebateType.options[1]=new Option("Credit Note", "Credit Note");	
+							
+							backRebateTypeReGen.options[0]=new Option("Payment Request", "Payment Request");
+							backRebateTypeReGen.options[1]=new Option("Credit Note", "Credit Note");		
+							
+							populatedropdown("monthSelectForWSBackRebate", "yearSelectForWSBackRebate");
+							populatedropdown("monthSelectForWSBackRebateReGen", "yearSelectForWSBackRebateReGen");
+					}
+                    /* [WL 8.0] END */
+					
+					/* [WL 10.0] BEGIN */
+					populatedropdown("monthSelectForPromotion", "yearSelectForPromotion");
+					populatedropdown("monthSelectForPromotionReGen", "yearSelectForPromotionReGen");
+					/* [WL 10.0] END */
+					
+					$('#btnCalc').show();  
+					$('#btnDelete').show(); 
+					
+				}
+				
+					/* [VL 3.0] BEGIN */
+				$(document).ready(
+					function() {
+						$("#dateInputForPromptPayment").datepicker({
+							dateFormat: "yy-mm-dd",
+							minDate: new Date("{!lastPromptPaymentReceiptDate}")
+						});
+					}
+				);
+					/* [VL 3.0] END */
+				
+				function callFOC(){
+					var monthDate = document.getElementById('monthdropdown').value;
+					var yearDate = document.getElementById('yeardropdown').value;    
+					$('#btnCalc').hide();   
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.checkCurrentFOCComputation}',
+						monthDate,yearDate, 
+						function(result, event){
+							/* [VL 4.0] BEGIN */
+							/*
+							if(result){
+								alert('There is already an existing FOC Computed for: '+monthDate+'/'+yearDate+' To create a new FOC delete the FOC for '+monthDate+'/'+yearDate+' first.');
+							}
+							*/
+							if(result!='OK'){
+								alert(result);
+							}
+							/* [VL 4.0] END */
+							else{
+								Visualforce.remoting.Manager.invokeAction(
+									'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computeFOC}',
+									monthDate,yearDate, 
+									function(result, event){
+										if(result){
+											alert('The Free Goods Request generation from offtake for '+monthDate+'/'+yearDate+' is in progress. You will receive an email notification when it is completed.');  
+										}     
+									}, 
+									{escape: true}
+								);
+							}
+						}, 
+						{escape: true}
+					);      
+				}
+
+				function callFOCAdminRegen(){
+					var monthDate_admin = document.getElementById('monthdropdown_admin').value;
+					var yearDate_admin = document.getElementById('yeardropdown_admin').value;    
+					var contractNum = document.getElementById('contractNum').value;    
+                    
+                    console.log(yearDate_admin+' '+monthDate_admin);
+
+					$('#btnCalc_admin').hide();   
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.checkBeforeDeleteFOC}',
+						monthDate_admin,yearDate_admin, contractNum,
+						function(result, event){
+							if(result=='OK'){
+
+								var confirmMsg = 'There is already a draft FOC Request for ';
+								confirmMsg += monthDate_admin + '/' + yearDate_admin;
+								confirmMsg += ' in this contract. Are you sure to regenerate it?';
+
+								if (confirm(confirmMsg)) {
+									Visualforce.remoting.Manager.invokeAction(
+										'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.recomputeFOC}',
+										monthDate_admin,yearDate_admin, contractNum,
+										function(result, event){
+											if(result=='OK'){
+												alert('The Free Goods Request has been regenerated.');
+											} 
+											else {
+												alert(result);
+											}						
+										}, 
+										{escape: true}
+									);
+								}
+							} else if(result=='noFOC') {
+                                var confirmMsg = 'System detect you have deleted the generated FOC Request for ';
+								confirmMsg += monthDate_admin + '/' + yearDate_admin;
+								confirmMsg += ' in this contract. Are you sure to regenerate it?';
+
+								if (confirm(confirmMsg)) {
+									Visualforce.remoting.Manager.invokeAction(
+										'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.recomputeFOC}',
+										monthDate_admin,yearDate_admin, contractNum,
+										function(result, event){
+											if(result=='OK'){
+												alert('The Free Goods Request has been regenerated.');
+											} 
+											else {
+												alert(result);
+											}						
+										}, 
+										{escape: true}
+									);
+								}
+                            } 
+							/*[WL 7.0] BEGIN*/
+							else if(result=='HasLaterMonthFOC'){
+
+								var confirmMsg = 'There is already a FOC Request that is later than ';
+								confirmMsg += monthDate_admin + '/' + yearDate_admin;
+								confirmMsg += ' in this contract. If you choose to generate for this selected month, its FOC Carry Over will not be brought forward. Are you sure ?';
+
+								if (confirm(confirmMsg)) {
+									Visualforce.remoting.Manager.invokeAction(
+										'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.recomputeFOC}',
+										monthDate_admin,yearDate_admin, contractNum,
+										function(result, event){
+											if(result=='OK'){
+												alert('The Free Goods Request has been regenerated.');
+											} 
+											else {
+												alert(result);
+											}						
+										}, 
+										{escape: true}
+									);
+								}
+							}
+							/*[WL 7.0] END*/
+							else {
+								alert(result);
+							}						
+						}, 
+						{escape: true}
+					);
+					
+				}
+				
+				/*[WL 4.0] BEGIN*/
+				function callCMAdminRegen(){
+					var monthDate_admin = document.getElementById('monthdropdown_admin_CM').value;
+					var yearDate_admin = document.getElementById('yeardropdown_admin_CM').value;    
+					var contractNum = document.getElementById('contractNum_CM').value;    
+                    
+                    console.log(yearDate_admin+' '+monthDate_admin);
+
+					$('#btnCalc_admin_CM').hide();   
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.checkBeforeDeleteCM}',
+						monthDate_admin,yearDate_admin, contractNum,
+						function(result, event){
+							if(result=='DraftOrRejectedCM'){
+
+								var confirmMsg = 'There is already a draft or rejected Contract Margin Credit/Debit Note for ';
+								confirmMsg += monthDate_admin + '/' + yearDate_admin;
+								confirmMsg += ' in this contract. Are you sure to regenerate it?';
+
+								if (confirm(confirmMsg)) {
+									Visualforce.remoting.Manager.invokeAction(
+										'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.recomputeCM}',
+										monthDate_admin,yearDate_admin, contractNum,
+										function(result, event){
+											if(result=='OK'){
+												alert('The Contract Margin Credit/Debit Note is being regenerated.');
+											} 
+											else {
+												alert(result);
+											}						
+										}, 
+										{escape: true}
+									);
+								}
+							} else if(result=='OKNoExistingCMForThisContract') {
+									Visualforce.remoting.Manager.invokeAction(
+										'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.recomputeCM}',
+										monthDate_admin,yearDate_admin, contractNum,
+										function(result, event){
+											if(result=='OK'){
+												alert('The Contract Margin Credit/Debit Note has been regenerated.');
+											} 
+											else {
+												alert(result);
+											}						
+										}, 
+										{escape: true}
+									);
+								
+                            } else {
+								alert(result);
+							}						
+						}, 
+						{escape: true}
+					);
+				}
+				/*[WL 4.0] END*/
+				
+				function deleteFOCandFOCRequest(){ 
+					var monthDate = document.getElementById('monthdropdown').value;
+					var yearDate = document.getElementById('yeardropdown').value;   
+					$('#btnDelete').hide(); 
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.deleteFOCComputationAndFOCRequest}',
+						monthDate,yearDate, 
+						function(result, event){
+							if(result=='Deleted'){
+								alert('The latest FOC Computed were already deleted.');
+							}
+							else if(result=='Cant Delete. There are existing Approved/Submitted/Final FOC '){
+							   alert(result);
+							}
+							else if(result=='There are no FOC to delete '){
+								alert(result);
+							}
+							else if(result.indexOf('You must delete first')!=-1){
+								alert(result);
+							} else {
+                             	alert(result);   
+                            }
+						}, 
+						{escape: true}
+					);      
+				}
+
+            
+				function callBottleIncentive() {
+					var fromMonth = document.getElementById('fromMonthSelectForBottleIncentive').value;
+					var fromYear = document.getElementById('fromYearSelectForBottleIncentive').value;
+
+					var toMonth = document.getElementById('toMonthSelectForBottleIncentive').value;
+					var toYear = document.getElementById('toYearSelectForBottleIncentive').value;
+
+                    var checkFromDate = new Date(Number(fromYear), Number(fromMonth),1);
+                    var checkToDate = new Date(Number(toYear), Number(toMonth),1);
+                    if (checkFromDate>checkToDate){
+                        alert('End month must NOT be earlier than the start month.');
+                        return null;
+                    }
+                    
+					$('#btnCallBottleIncentive').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computeBottleIncentive}',
+						fromMonth, fromYear, toMonth, toYear,
+						function(result, event){
+							if(result == 'OK') {
+								alert('The Bottle Incentive Payment Request has been generated.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);
+				}
+
+				function deleteBottleIncentive() {
+					var fromMonth = document.getElementById('fromMonthSelectForBottleIncentive').value;
+					var fromYear = document.getElementById('fromYearSelectForBottleIncentive').value;
+
+					var toMonth = document.getElementById('toMonthSelectForBottleIncentive').value;
+					var toYear = document.getElementById('toYearSelectForBottleIncentive').value;
+
+                    var checkFromDate = new Date(Number(fromYear), Number(fromMonth),1);
+                    var checkToDate = new Date(Number(toYear), Number(toMonth),1);
+                    if (checkFromDate>checkToDate){
+                        alert('End month must NOT be earlier than the start month.');
+                        return null;
+                    }
+                    
+					$('#btnCallDeleteBottleIncentive').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.deleteBottleIncentive}',
+						fromMonth, fromYear, toMonth, toYear,
+						function(result, event){
+							if(result == 'Deleted') {
+								alert('The latest Bottle Incentive Payment Request were already deleted.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);
+				}
+            
+			/* [WL 8.0] BEGIN */
+            function callWSBackRebate(){
+					var monthDate = document.getElementById('monthSelectForWSBackRebate').value;
+					var yearDate = document.getElementById('yearSelectForWSBackRebate').value;  
+					var backRebatetype = document.getElementById('WSBackRebateType').value;  
+					
+					if (parseInt(yearDate)<2018 || (parseInt(yearDate)==2018 && parseInt(monthDate) < 4)){
+						alert('The Wholesaler Back Rebate is effective from April 2018. Please select from 4/2018.');
+                        //return;
+					}					
+					
+					$('#btnCallWSBackRebate').hide();
+			
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computeWSBackRebate}',
+						yearDate, monthDate, backRebatetype, 
+						function(result, event){
+							if(result == 'OK') {
+                                alert('The Back Rebate ' + backRebatetype + ' is being generated.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					); 
+			}
+			
+			function deleteWSBackRebate() {
+					var monthDate = document.getElementById('monthSelectForWSBackRebate').value;
+					var yearDate = document.getElementById('yearSelectForWSBackRebate').value;  
+
+					$('#btnCallWSBackRebateDelete').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.deleteWSBackRebate}',
+						monthDate, yearDate,
+						function(result, event){
+							if(result == 'Deleted') {
+								alert('The Wholesaler Back Rebate Credit/Debit Note and Payment Request of '+monthDate+'/'+yearDate+' have been deleted.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);
+			}
+			
+			function callWSBackRebateReGen(){
+					var monthDate = document.getElementById('monthSelectForWSBackRebateReGen').value;
+					var yearDate = document.getElementById('yearSelectForWSBackRebateReGen').value;  
+					var backRebatetype = document.getElementById('WSBackRebateTypeReGen').value;  
+					
+					var custName= document.getElementById('{!$Component.theForm.theBlock.theWSSection.theWSSectionItem.lookupWSBackRebateWS}').value;
+					
+					if (parseInt(yearDate)<2018 || (parseInt(yearDate)==2018 && parseInt(monthDate) < 4)){
+						alert('The Wholesaler Back Rebate is effective from April 2018. Please select from 4/2018.');
+                        //return;
+					}					
+					
+					$('#btnCallWSBackRebateReGen').hide();
+			
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computeWSBackRebateReGen}',
+						yearDate, monthDate, backRebatetype, custName,
+						function(result, event){
+							if(result == 'OK') {
+                                alert('The Back Rebate ' + backRebatetype + ' is being generated.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					); 
+			}
+			/*[WL 8.0] END*/
+			
+			/*[WL 10.0] BEGIN*/
+			function callPromotion(){
+					var monthDate = document.getElementById('monthSelectForPromotion').value;
+					var yearDate = document.getElementById('yearSelectForPromotion').value;  
+										
+					$('#btnCallPromotion').hide();
+			
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computePromotion}',
+						yearDate, monthDate,
+						function(result, event){
+							if(result == 'OK') {
+                                alert('The Promotion Incentive is being generated.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					); 
+			}
+			
+			function deletePromotion() {
+					var monthDate = document.getElementById('monthSelectForPromotion').value;
+					var yearDate = document.getElementById('yearSelectForPromotion').value;  
+
+					$('#btnCallPromotionDelete').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.deletePromotion}',
+						monthDate, yearDate,
+						function(result, event){
+							if(result == 'Deleted') {
+								alert('The Promotion Incentive for '+monthDate+'/'+yearDate+' have been deleted.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);
+			}
+			
+			function callPromotionReGen(){
+					
+					var monthDate_regen = document.getElementById('monthSelectForPromotionReGen').value;
+					var yearDate_regen = document.getElementById('yearSelectForPromotionReGen').value;    
+					
+					var custName= document.getElementById('{!$Component.theForm.theBlock.theSection.theItem.lookupPromotionCustomer}').value;
+					
+                    
+                    //alert(monthDate_regen+' '+yearDate_regen+ ' '+custId);
+
+					$('#btnCallPromotionReGen').hide();   
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.checkBeforePromotionReGen}',
+						monthDate_regen,yearDate_regen, custName,
+						function(result, event){
+							if(result=='OK'){
+								Visualforce.remoting.Manager.invokeAction(
+									'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computePromotionReGen}',
+									yearDate_regen, monthDate_regen, custName,
+									function(result, event){
+										if(result=='OK'){
+											alert('The Promotion incentive for specific Outlet/Wholesaler is being regenerated.');
+										} 
+										else {
+											alert(result);
+										}						
+									}, 
+									{escape: true}
+								);								
+							} 
+							else {
+								alert(result);
+							}						
+						}, 
+						{escape: true}
+					);
+				}
+			/*[WL 10.0] END*/
+			
+            /* [VL 2.0] BEGIN */
+            function callContractMargin(){
+					var monthDate = document.getElementById('monthSelectForContractMargin').value;
+					var yearDate = document.getElementById('yearSelectForContractMargin').value;  
+					
+					/* [VL 6.0] BEGIN */
+					/*[WL 9.0] BEGIN*/
+					/*if (parseInt(yearDate)<2018 || (parseInt(yearDate)==2018 && parseInt(monthDate) < 2)){
+						alert('The credit / debit note has been proceeded manually in '+monthDate+'/'+yearDate+'. Please select from 3/2018.');
+                        return;
+					}*/
+					if (parseInt(yearDate)<2018){
+						alert('The credit / debit note has been proceeded manually in '+monthDate+'/'+yearDate+'. Please select from 1/2018.');
+                        return;
+					}
+					/*[WL 9.0] BEGIN*/
+					/* [VL 6.0] END */
+					
+					$('#btnCallContractMargin').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computeContractMargin}',
+						monthDate, yearDate,
+						function(result, event){
+							if(result == 'OK') {
+                                alert('The Contract Margin Credit / Debit Note is being generated.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);  
+			}
+			
+			function deleteContractMargin() {
+					var monthDate = document.getElementById('monthSelectForContractMargin').value;
+					var yearDate = document.getElementById('yearSelectForContractMargin').value;  
+
+					$('#btnCallDeleteContractMargin').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.deleteContractMargin}',
+						monthDate, yearDate,
+						function(result, event){
+							if(result == 'Deleted') {
+								alert('The Contract Margin Credit/Debit Note(s) of '+monthDate+'/'+yearDate+' have already been deleted.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);
+			}
+            /* [VL 2.0] END */
+			
+            /* [VL 3.0] BEGIN */
+            function callPromptPayment(){
+					var invoiceEndDate = $("#dateInputForPromptPayment").val();
+					var invoiceStartDate = "{!lastPromptPaymentReceiptDate}";
+					
+					if (Date.parse(invoiceStartDate) > Date.parse(invoiceEndDate)){
+						alert("Receipt Date ")
+						return;
+					}
+					
+					$('#btnCallPromptPayment').hide();
+
+					Visualforce.remoting.Manager.invokeAction(
+						'{!$RemoteAction.ASI_CRM_SG_FOCComputeController.computePromptPayment}',
+						invoiceStartDate, invoiceEndDate,
+						function(result, event){
+							if(result == 'OK') {
+                                alert('The Prompt Payment Credit Note is being generated. There will be email notification once it is completed.');
+							} else {
+								alert(result);
+							}
+						}, 
+						{escape: true}
+					);  
+				}
+            /* [VL 3.0] END */
+			
+			</script>
+            
+			<style>
+				body .bPageBlock .pbBody .orange .pbSubheader{
+					background-color:#D4AC0D;
+				}
+				body .bPageBlock .pbBody .green .pbSubheader{
+					background-color:#117864;
+				}
+				body .bPageBlock .pbBody .blue .pbSubheader{
+					background-color:#1A5276;
+				}
+				body .bPageBlock .pbBody .purple .pbSubheader{
+					background-color:#4A235A;
+				}
+				body .bPageBlock .pbBody .grey .pbSubheader{
+					background-color:#4D5656;
+				}
+				body .bPageBlock .pbBody .red .pbSubheader{
+					background-color:#641E16;
+				}
+				
+				
+			</style>
+		</head>
+		<body>
+		  
+		</body>
+		</html>
+        
+		<apex:form id="theForm">
+		<apex:pageBlock id="theBlock" >
+			<apex:outputPanel styleClass="orange" layout="block">
+				<apex:pageblockSection columns="2" title="Free Goods Requests">
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Generate Free Goods Request</span>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Re-Generate FOC Request for Specific Contract</span>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<label for="startDate">{!$Label.ASI_CRM_SG_Month} :</label>
+						<select id="monthdropdown">
+						</select> 
+						<label for="startDate">{!$Label.ASI_CRM_SG_Year} :</label>
+						<select id="yeardropdown">
+						</select> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label for="startDate_admin">Month :</label>
+						<select id="monthdropdown_admin">
+						</select> 
+							
+						<label for="startDate_admin">Year :</label>
+						<select id="yeardropdown_admin">
+						</select> 
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+					   <input type="button" value="{!$Label.ASI_CRM_SG_Calculate_FOC}" onclick="callFOC();" Id="btnCalc"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label >Contract Number :</label>
+						<input type="text" id="contractNum" value=""/>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="{!$Label.ASI_CRM_SG_Delete_Generate_FOC_Requests}" onclick="deleteFOCandFOCRequest();" Id="btnDelete"/>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate FOC for Specific Contract" onclick="callFOCAdminRegen();" Id="btnCalc_admin"/> 
+					</apex:pageBlockSectionItem>
+				</apex:pageblockSection>    
+			
+			</apex:outputPanel>
+			
+			
+            <apex:outputPanel styleClass="green" layout="block">
+				<apex:pageBlockSection columns="1" title="Bottle Incentive">
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Generate Bottle Incentive</span>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						From &nbsp;<label>Month :</label>
+						<select id="fromMonthSelectForBottleIncentive"></select>
+
+						<label>Year :</label>
+						<select id="fromYearSelectForBottleIncentive"></select>
+
+						To
+						&nbsp;
+						<label>Month :</label>
+						<select id="toMonthSelectForBottleIncentive"></select>
+
+						<label>Year :</label>
+						<select id="toYearSelectForBottleIncentive"></select>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Bottle Incentive" onclick="callBottleIncentive();" id="btnCallBottleIncentive"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Delete Generated Bottle Incentive" onclick="deleteBottleIncentive();" id="btnCallDeleteBottleIncentive"/> 
+					</apex:pageBlockSectionItem>
+				</apex:pageBlockSection>
+			</apex:outputPanel>
+            
+            <!-- [VL 2.0] BEGIN -->
+			
+			<apex:outputPanel styleClass="blue" layout="block">
+				<apex:pageBlockSection columns="2" title="Contract Margin Credit / Debit Note">
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Generate Contract Margin Credit / Debit Note</span>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Re-Generate Contract Margin Credit/Debit Note for Specific Contract</span>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<label>Month :</label>
+						<select id="monthSelectForContractMargin"></select>
+						<label>Year :</label>
+						<select id="yearSelectForContractMargin"></select>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label for="startDate_admin">Month :</label>
+						<select id="monthdropdown_admin_CM">
+						</select> 
+							
+						<label for="startDate_admin">Year :</label>
+						<select id="yeardropdown_admin_CM">
+						</select> 
+					</apex:pageBlockSectionItem>
+					
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Contract Margin Credit / Debit Note" onclick="callContractMargin();" id="btnCallContractMargin"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label >Contract Number :</label>
+						<input type="text" id="contractNum_CM" value=""/>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Delete Generated CM Credit / Debit Note" onclick="deleteContractMargin();" id="btnCallDeleteContractMargin"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Contract Margin Credit/Debit Note for Specific Contract" onclick="callCMAdminRegen();" Id="btnCalc_admin_CM"/> 
+					</apex:pageBlockSectionItem>
+					
+					
+				</apex:pageBlockSection>
+			</apex:outputPanel>
+			
+            <!-- [VL 2.0] END -->
+            
+            <!-- [VL 3.0] BEGIN -->
+			<apex:outputPanel styleClass="purple" layout="block">
+				<apex:pageBlockSection columns="1" title="Generate Prompt Payment Credit Note" rendered="{!canGenPromptPayment}">
+					<apex:pageBlockSectionItem >
+						<label>Receipt Date :</label>
+						<span id="lastReceiptDate">{!lastPromptPaymentReceiptDate}</span>
+
+						<label>To </label>
+						<input id="dateInputForPromptPayment" type='text' value="{!lastPromptPaymentReceiptDate}"/>
+
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Prompt Payment Credit Note" onclick="callPromptPayment();" id="btnCallPromptPayment"/> 
+					</apex:pageBlockSectionItem>
+				</apex:pageBlockSection>
+			</apex:outputPanel>
+            <!-- [VL 3.0] END -->
+			
+			<!-- [WL 8.0] BEGIN -->
+			<apex:outputPanel styleClass="grey" layout="block">
+				<apex:pageBlockSection columns="2" title="Wholesaler Back Rebate" rendered="{!canGenWSBackRebate}" id="theWSSection">
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Generate Wholesaler Back Rebate</span>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Re-Generate Wholesaler Back Rebate for Specific Wholesaler</span>
+					</apex:pageBlockSectionItem>					
+					
+					<apex:pageBlockSectionItem >
+						<label>Month :</label>
+						<select id="monthSelectForWSBackRebate"></select>
+
+						<label>Year: </label>
+						<select id="yearSelectForWSBackRebate"></select>
+
+						<label>Back Rebate Type: </label>
+						<select id="WSBackRebateType"></select>
+						
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label>Month :</label>
+						<select id="monthSelectForWSBackRebateReGen"></select>
+
+						<label>Year: </label>
+						<select id="yearSelectForWSBackRebateReGen"></select>
+
+						<label>Back Rebate Type: </label>
+						<select id="WSBackRebateTypeReGen"></select>
+					</apex:pageBlockSectionItem>
+
+					
+					<apex:pageBlockSectionItem />
+					<apex:pageBlockSectionItem id="theWSSectionItem">
+					Wholesaler:<apex:inputField value="{!wholesaler.ASI_CRM_SG_Customer__c}" id="lookupWSBackRebateWS" label=""/>
+					</apex:pageBlockSectionItem>
+					
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Wholesaler Back Rebate" onclick="callWSBackRebate();" id="btnCallWSBackRebate"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Re-Generate Wholesaler Back Rebate for Specific Wholesaler" onclick="callWSBackRebateReGen();" id="btnCallWSBackRebateReGen"/> 
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Delete Generated Wholesaler Back Rebate" onclick="deleteWSBackRebate();" id="btnCallWSBackRebateDelete"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem />
+				</apex:pageBlockSection>
+			</apex:outputPanel>
+            <!-- [WL 8.0] END -->
+			
+			<!-- [WL 10.0] BEGIN -->
+			<apex:outputPanel styleClass="red" layout="block" id="thePanel">
+				<apex:pageBlockSection columns="2" title="Promotion Incentive" id="theSection">
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Generate Promotion Incentive</span>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<span style="font-weight: bold;">Re-Generate Promotion Incentive for Specific Outlet/Wholesaler</span>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem >
+						<label>Month :</label>
+						<select id="monthSelectForPromotion"></select>
+
+						<label>Year: </label>
+						<select id="yearSelectForPromotion"></select>
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<label>Month :</label>
+						<select id="monthSelectForPromotionReGen"></select>
+
+						<label>Year: </label>
+						<select id="yearSelectForPromotionReGen"></select>
+					</apex:pageBlockSectionItem>
+					
+					<apex:pageBlockSectionItem />
+					<apex:pageBlockSectionItem id="theItem">
+						<label>Outlet/Wholesaler: </label>						
+						<apex:inputField value="{!customer.ASI_CRM_SG_Customer__c}" id="lookupPromotionCustomer"/>
+					</apex:pageBlockSectionItem>
+					
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Promotion Incentive" onclick="callPromotion();" id="btnCallPromotion"/> 
+					</apex:pageBlockSectionItem>
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Generate Promotion Incentive for specific Outlet/Wholesaler" onclick="callPromotionReGen();" id="btnCallPromotionReGen"/> 
+					</apex:pageBlockSectionItem>
+					
+					
+					<apex:pageBlockSectionItem >
+						<input type="button" value="Delete Generated Promotion Incentive" onclick="deletePromotion();" id="btnCallPromotionDelete"/> 
+					</apex:pageBlockSectionItem>
+				</apex:pageBlockSection>
+			</apex:outputPanel>
+			<!-- [WL 10.0] END -->
+			
+		</apex:pageBlock> 
+		</apex:form>	
+	</apex:page>

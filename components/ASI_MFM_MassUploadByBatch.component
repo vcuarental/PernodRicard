@@ -1,0 +1,96 @@
+<apex:component controller="ASI_MFM_MassUploadByBatchController" allowDML="true">
+    <apex:includeScript value="{!$Resource.ASI_MFM_jquery}"/>
+    <apex:includeScript value="{!$Resource.ASI_MFM_json2}"/>
+    <apex:includeScript value="{!$Resource.ASI_MFM_cometd}"/>
+    <apex:includeScript value="{!$Resource.ASI_MFM_jquery_cometd}"/>
+    <script type="text/javascript">
+        (function($){
+            $(document).ready(function() {
+                // Connect to the CometD endpoint
+                $.cometd.init({
+                        url: window.location.protocol+'//'+window.location.hostname+'/cometd/24.0/',
+                        requestHeaders: { Authorization: 'OAuth {!$Api.Session_ID}'}
+                    });
+                // Subscribe to a topic. JSON-encoded update will be returned
+                // in the callback
+                $.cometd.subscribe('/topic/EventOutletUpload', function(message) {
+                    $('#content').append('<p>'+JSON.stringify(message.data.sobject.ASI_MFM_Event_Outlet_Msg__c ) +
+                    '</p>');
+                });
+            });
+        })(jQuery)
+    </script>  
+    <style type="text/css">
+        .colA{
+            width:30%;
+        }
+    </style>
+    <apex:attribute name="ObjectAPINameAtt" description="API Name of object using mass upload component" type="String" assignTo="{!ObjAPIName}"/>
+    <apex:attribute name="ParentIDAtt" description="ID of parent record" type="String" assignTo="{!parentID}"/>
+    <apex:attribute name="recordtypeAtt" description="" type="String" assignTo="{!recordtypeName}"/>
+    <apex:attribute name="ParentFieldAtt" description="API Name of lookup fields to parent record" type="String" assignTo="{!parentField}"/>
+    <apex:attribute name="FieldsAtt" description="API Name of fields to be included in csv upload (separated by comma)" type="String" assignTo="{!fields}"/>
+    <apex:attribute name="FieldsLabelAtt" description="Label of fields to be included in csv upload (separated by comma)" type="String" assignTo="{!fieldsLabel}"/>
+    <apex:attribute name="EXIDAtt" description="fields for mapping lookup field (format: object/field name: field A label & field A api name, field B label & field B api name;)" type="String" assignTo="{!lookupEXID}"/>
+    <apex:attribute name="templateAtt" description="static resource name for template" type="String" assignTo="{!template}"/>
+    <apex:attribute name="reportAtt" description="static resource name for template" type="String" assignTo="{!report}"/>
+    <apex:attribute name="optAllNoneAtt" description="set true will Fail if either one row is fail" type="boolean" assignTo="{!opt_allOrNone}"/>
+    <apex:attribute name="urlAtt" description="url" type="String" assignTo="{!currentPageURL}"/>
+    <apex:attribute name="inlineVFAtt" description="indicate if it is inline VF page" type="boolean" assignTo="{!inlineVF}"/>
+    <apex:attribute name="DefaultValuesAtt" description="default values, labels must be defined in fields, fieldsLabel (format: label A:value A;label B : value B;)" type="String" assignTo="{!defaultValues}"/>
+    <apex:attribute name="recEXIDAtt" description="columns to make up EXID field for upsert (format: column label A; column label B)" type="String" assignTo="{!recEXID}"/>
+    <apex:attribute name="recEXIDColAtt" description="field for EXID for upsert" type="String" assignTo="{!recEXIDcol}"/>
+    <apex:attribute name="ParentObjectAPINameAtt" description="API Name of parent object" type="String" assignTo="{!parentObjectAPIName}"/>
+    <apex:attribute name="ParentObjectUploadMsgAtt" description="API Name of parent object upload msg field to be displayed in component with streaming api" type="String" assignTo="{!ParentObjectUploadMsg}"/>
+    <apex:attribute name="UpsertModeAtt" description="Upsert mode or insert mode?" type="boolean" assignTo="{!upsertmode}"/>
+    <apex:attribute name="BatchModeAtt" description="Upsert mode or insert mode?" type="boolean" assignTo="{!batchMode}"/>
+    <apex:attribute name="EmailNotificationAtt" description="Upsert mode or insert mode?" type="boolean" assignTo="{!emailNotification}"/>
+    
+    <apex:variable var="dummyV" value="{!dummyVar}" id="dummyVar"/>
+    <apex:outputPanel id="reloadPanel" rendered="{!reloadNeeded}" >
+        <script type="text/javascript">
+            // redirect the top level window
+            window.top.location.href = '{!currentPageURLOutput}';
+        </script>   
+    </apex:outputPanel>
+    <!--<apex:form >-->
+        <apex:pageBlock title="Import by CSV">
+            <apex:panelGrid columns="3" columnClasses="colA" width="100%">
+                <apex:outputText value="Step 1:" style="font-weight:bold;"/>
+                <apex:outputText value="Step 2: Save as csv format" style="font-weight:bold;"/>
+                <apex:outputText value="Step 3: Click 'Upload'" style="font-weight:bold;"/>
+                <apex:outputLink value="{!$Resource[template]}" target="_blank" rendered="{!ISNULL(reportAtt) || reportAtt==''}">Download Template</apex:outputLink>  
+                <apex:outputLink value="/{!reportAtt}" target="_blank" rendered="{!NOT(ISNULL(reportAtt) || reportAtt=='')}">Download Report</apex:outputLink>  
+                              
+                <apex:inputFile value="{!contentFile}" filename="{!nameFile}" accept=".csv" fileSize="{!fileSize}"/>
+                <apex:commandButton value="Upload" id="theButton" action="{!uploadCSVByBatch}" rendered="{!batchMode}" />                
+                <apex:commandButton value="Upload" id="theButtonNonBatch" action="{!uploadCSV}" rendered="{!!batchMode}" />
+            </apex:panelGrid>
+        </apex:pageBlock>
+        <div id="content">{!msgEmail}</div>
+        
+        <apex:pageBlock title="Row(s) with Error" rendered="{!hasError}">
+        <apex:pageblocktable value="{!LErrorRows}" var="r">
+            <apex:column style="width:10px">
+                <apex:facet name="header">Row Number</apex:facet>
+                <apex:outputtext value="{!r.rowNumber}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">ErrorMsg</apex:facet>
+                <apex:outputtext value="{!r.errormsg}"/>
+            </apex:column>
+        </apex:pageblocktable>
+        </apex:pageBlock>
+    
+    <apex:actionRegion >
+        <apex:actionPoller rerender="statusPanel" interval="5"/>
+        <apex:outputPanel id="statusPanel">
+            <apex:repeat value="{!statusMsgs}" var="statusMsg">
+                <apex:outputText style="color:red;" value="{!statusMsg}" /><br />
+            </apex:repeat>
+        </apex:outputPanel>
+    </apex:actionRegion>
+
+    
+    <!--</apex:form>-->
+</apex:component>

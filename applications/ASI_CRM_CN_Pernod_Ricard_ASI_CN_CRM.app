@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <defaultLandingTab>standard-home</defaultLandingTab>
+    <description>China CRM</description>
+    <formFactors>Large</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <label>Pernod Ricard ASI CN CRM</label>
+    <tabs>ASI_CRM_AccountsAdditionalField__c</tabs>
+    <tabs>ASI_CRM_Pre_Contract_Evaluation</tabs>
+    <tabs>ASI_TH_CRM_Contract__c</tabs>
+    <tabs>ASI_TH_CRM_PaymentRequest__c</tabs>
+    <tabs>ASI_CRM_WS_Evaluation__c</tabs>
+    <tabs>ASI_CRM_Call_Log__c</tabs>
+    <tabs>standard-Dashboard</tabs>
+    <tabs>standard-report</tabs>
+    <tabs>ASI_CRM_Issue_Zone__c</tabs>
+    <tabs>ASI_CRM_Anti_Bribery__c</tabs>
+    <tabs>ASI_CRM_Competitor_Contract__c</tabs>
+    <tabs>ASI_CRM_CN_Channel_Strategy__c</tabs>
+    <tabs>ASI_CRM_Image_Outlet_Request__c</tabs>
+    <tabs>ASI_CRM_Visual_Application__c</tabs>
+    <tabs>ASI_CRM_Event_Evaluation__c</tabs>
+    <tabs>ASI_CRM_Trade_A_P_Plan__c</tabs>
+    <tabs>ASI_CRM_Greater_Region__c</tabs>
+    <tabs>ASI_CRM_Region__c</tabs>
+    <tabs>ASI_CRM_Division__c</tabs>
+    <tabs>ASI_CRM_CN_Area__c</tabs>
+    <tabs>ASI_CRM_City__c</tabs>
+    <tabs>ASI_CRM_Province__c</tabs>
+    <tabs>ASI_CRM_CN_Channel__c</tabs>
+    <tabs>ASI_MFM_Sub_Channel__c</tabs>
+    <tabs>ASI_MFM_Sub_brand__c</tabs>
+    <tabs>ASI_CRM_Sub_brand_group__c</tabs>
+    <tabs>ASI_CRM_Sub_Brand_Grade__c</tabs>
+    <tabs>ASI_MFM_Brand__c</tabs>
+    <tabs>ASI_CRM_CN_Brand_Group__c</tabs>
+    <tabs>ASI_CRM_CN_Brand_T1_Group__c</tabs>
+    <tabs>ASI_HK_CRM_Product_Category__c</tabs>
+    <tabs>ASI_TH_CRM_Sub_category__c</tabs>
+    <tabs>ASI_MFM_Item_Group__c</tabs>
+    <tabs>ASI_CRM_CN_Issue_Sharing_Admin__c</tabs>
+    <tabs>ASI_CRM_CN_AccountGradingSetting__c</tabs>
+    <tabs>ASI_CRM_Call_Log_Suggestion_Setting__c</tabs>
+    <tabs>ASI_CRM_Contract_Cost_Setting__c</tabs>
+    <tabs>ASI_CRM_Dynamic_Approval_Route__c</tabs>
+    <tabs>ASI_CRM_Fix_Approval_Route__c</tabs>
+    <tabs>ASI_CRM_CM_GS__c</tabs>
+    <tabs>ASI_CRM_CN_RunningNumber__c</tabs>
+    <tabs>ASI_CRM_CN_PreContract_AlignSetting__c</tabs>
+    <tabs>ASI_CRM_Effective_supplier__c</tabs>
+    <tabs>ASI_CRM_CN_PH_Payee_Line_Item__c</tabs>
+    <tabs>ASI_CRM_Application_Parameter__c</tabs>
+    <tabs>BMCServiceDesk__SRM_FulfillmentInputs__c</tabs>
+</CustomApplication>

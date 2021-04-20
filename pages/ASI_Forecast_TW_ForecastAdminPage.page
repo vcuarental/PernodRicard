@@ -1,0 +1,196 @@
+<apex:page controller="ASI_Forecast_TW_ForecastAdminController"  docType="html-5.0">
+    <head>
+        <apex:includescript value="{!URLFOR($Resource.ASI_CRM_TW_jQuery, '/jquery-1.11.1.min.js')}"/>
+        <apex:includescript value="{!URLFOR($Resource.ASI_CRM_TW_DataTables, '/datatables.min.js')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_TW_DataTables, '/datatables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_TW_jQuery_ui, 'jquery-ui-1.12.1/jquery-ui.css')}" />
+        <apex:includescript value="{!URLFOR($Resource.ASI_CRM_TW_jQuery_ui, 'jquery-ui-1.12.1/jquery-ui.js')}"/>
+    </head>
+    
+    <apex:form >
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        
+        <apex:sectionHeader title="Forecast Admin"/>
+        <apex:pageMessages id="pageMsg"></apex:pageMessages>
+        <apex:pageBlock title="Details">
+            <apex:pageBlockSection >
+                <apex:outputText value="Current Period"/>
+                <apex:outputText id="currPeriod" value="--"/>
+            </apex:pageBlockSection>
+            <apex:pageBlockSection >
+                <apex:outputText value="Next Period"/>
+                <apex:outputText id="nextPeriod" value="--"/>
+            </apex:pageBlockSection>            
+            <apex:pageblockButtons >
+                <apex:commandButton value="Confirm Freeze" onclick="freezeForecast(); return false;"/>
+                <apex:commandButton value="Create New" onclick="createForecast(); return false;"/>
+            </apex:pageBlockButtons>
+        </apex:pageBlock>
+        
+        <apex:pageBlock id="main_pageBlock" title="Current Forecast">
+            <table id="currsummary" class="display compact"></table>
+        </apex:pageBlock>
+<!--        <apex:pageBlock id="sub_pageBlock" title="Next Forecast">
+            <table id="nextsummary" class="display compact"></table>
+        </apex:pageBlock> -->
+        <apex:pageBlock title="Export Report">
+            <input type="text" name="date_export_report" id="date_export_report" />
+            <apex:commandButton value="Report" onclick="generateCSVByJS(); return false;"/>
+        </apex:pageBlock>
+    </apex:form>
+    
+    <script>
+    j$ = jQuery.noConflict();
+    j$(document).ready( function () {
+        var retriveData = {!dataSet};
+        console.log(retriveData.current);
+        constructTbl('#currsummary',retriveData.current);
+        constructTbl('#nextsummary',retriveData.next);
+        j$('.waitingSearchDiv').hide();
+        var cutoffDay = '{!getCutoffDay}';
+        var defDate = new Date('{!defDate}');
+        var today = new Date('{!defDate}');
+        j$('[id$=currPeriod]').text(today.getFullYear()+'-'+(today.getMonth()+1));
+        today.setMonth(today.getMonth() + 1);
+        j$('[id$=nextPeriod]').text(today.getFullYear()+'-'+(today.getMonth()+1));
+        
+        var defDate = new Date('{!defDate}');
+        j$( "#date_export_report" ).datepicker(
+            {
+                constrainInput: false,
+                dateFormat: 'yy-m',
+                changeMonth: true,
+                changeYear: true,
+                showButtonPanel: true,
+                defaultDate: defDate,
+                onClose: function(dateText, inst) {  
+                    var month = j$("#ui-datepicker-div .ui-datepicker-month :selected").val(); 
+                    var year = j$("#ui-datepicker-div .ui-datepicker-year :selected").val(); 
+                    j$(this).val(j$.datepicker.formatDate('yy-m', new Date(year, month, 1)));
+                }
+            })
+        
+        j$("#date_export_report").focus(function () {
+            j$(".ui-datepicker-calendar").hide();
+			j$(".ui-datepicker-current").hide();
+            j$("#ui-datepicker-div").position({
+                my: "center top",
+                at: "center bottom",
+                of: j$(this)
+            });
+        });
+        j$( "#date_export_report" ).val(defDate.getFullYear()+'-'+(defDate.getMonth()+1));
+
+    });	
+    
+    function constructTbl(tblId, dataSet) {
+        var columns = [
+            { title: "Channel",		"data": "channel", 	 "sortable": true, "searchable":true },
+            { title: "Sub-Channel",	"data": "subchannel","sortable": true, "searchable":true },
+            { title: "Region", 		"data": "region", 	 "sortable": true, "searchable":true },
+            { title: "Customer", 	"data": "customer",  "sortable": true, "searchable":true },
+            { title: "Status", 		"data": "status", 	 "sortable": true, "searchable":true },
+            { title: "Period", 		"data": "period", 	 "sortable": false, "searchable":false }
+        ];
+        
+        var oTable = j$(tblId).DataTable({
+            aLengthMenu: [
+                [10, 25, 50, -1],
+                [10, 25, 50, "All"]
+            ],
+            data: dataSet,
+            columns: columns,
+            "order": [[ 0, "desc" ]]
+        });
+    }
+	function createForecast() {
+        j$('.waitingSearchDiv').show();
+        var retriveData = {!dataSet};
+        var recordList = [];
+        for(var i=0; i<retriveData.current.length; i++) {
+            var record = retriveData.current[i];
+            if(record.status!='Freezed') {
+                recordList.push(record);
+            }
+        }
+        if(recordList.length>0) {
+            var message = 'Following Channel is not in Freeze: \n';
+            for(var i=0; i<recordList.length; i++) {
+                var record = recordList[i];
+                message+= 'Ch: '+record.channel + ' Sub-Ch: ' + record.subchannel + ' Region: ' + record.region + ' Period: ' + record.period + '\n';
+            }
+            alert(message);
+            j$('.waitingSearchDiv').hide();
+        } else if(retriveData.next.length>0) {
+            alert('Forecast is Already Create');
+            j$('.waitingSearchDiv').hide();
+        } else {
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_Forecast_TW_ForecastAdminController.createForecast}',
+                'test', 
+                function(result, event){
+                    if (event.status) {
+                        //console.log(result);//print the log and inspect console to see result returned in form of JS object.You can generate string from JSON object using stringify
+                        console.log(JSON.stringify(result));
+                    } else if (event.type === 'exception') {
+                    } else {
+                    }
+                    location.reload();
+                }, 
+                {escape: true}
+            );
+        }
+    }
+    function freezeForecast() {
+        j$('.waitingSearchDiv').show();
+        var retriveData = JSON.parse('{!dataSet}');
+        var recordList = [];
+        for(var i=0; i<retriveData.current.length; i++) {
+            var record = retriveData.current[i];
+            if(record.status!='Final') {
+                recordList.push(record);
+            }
+        }
+        if(recordList.length>0) {
+            var message = 'Following Channel is not in Final: \n';
+            for(var i=0; i<recordList.length; i++) {
+                var record = recordList[i];
+                message+= 'Ch: '+record.channel + ' Sub-Ch: ' + record.subchannel + ' Region: ' + record.region + ' Period: ' + record.period + '\n';
+            }
+            alert(message);
+            j$('.waitingSearchDiv').hide();
+        } else if(retriveData.next.length>0) {
+            alert('Forecast is Already Create');
+            j$('.waitingSearchDiv').hide();
+        } else {
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_Forecast_TW_ForecastAdminController.freezeForecast}',
+                'test', 
+                function(result, event){
+                    if (event.status) {
+                        //console.log(result);//print the log and inspect console to see result returned in form of JS object.You can generate string from JSON object using stringify
+                        console.log(JSON.stringify(result));
+                    } else if (event.type === 'exception') {
+                    } else {
+                    }
+                    location.reload();
+                }, 
+                {escape: true}
+            );
+        }
+    }
+    
+    function generateCSVByJS(){
+        var url='/apex/ASI_Forecast_TW_ForecastExportPage';
+        var dateSelect = j$('#date_export_report');
+        url += '?dateperiod=' + dateSelect.val();
+        url += '&type=Forecast';
+        window.open(url);
+    }
+    </script>
+</apex:page>

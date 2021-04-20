@@ -1,0 +1,1199 @@
+<apex:page standardStylesheets="true"  standardcontroller="ASI_MFM_Purchase_Request_Line__c" extensions="ASI_CTY_CN_Vendor_PR_PurLineController"  docType="html-5.0">
+
+	<head>
+		<!--遮罩层-->
+		<div class="shadow"></div>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+		<title>PR Line List</title>
+		<meta name="description" content=""/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<meta name="google" content="notranslate"/>
+
+		<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/papaparse.js')}" />
+
+		<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-3.4.1.min.js')}" />
+		<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/jquery-ui.min.js')}" />
+		<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_TP_UploadCSV, '/JSPackage/angular.min.js')}" />
+		<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+		<apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+		<apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>
+		<apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}"/>
+
+		<apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+	</head>
+	<style>
+	.bodyDiv {
+	    position: relative;
+    }
+	.DetailInfo {
+		/* display: none; */
+		position: fixed;
+		/* border-radius: 8px; */
+		border-top: 4px solid transparent;
+		z-index: 999;
+		overflow: auto !important;
+		background-color: #ffffff;
+		background-size: 100% 100%;
+		top: 15%;
+		right: 10%;
+		width: 80%;
+		height: 70%;
+		/* border: blue; */
+		-webkit-box-shadow: #e0e3e5 0px 0px 20px;
+		-moz-box-shadow: #666 0px 0px 20px;
+		/* -webkit-border-radius: 8px; */
+		-moz-border-radius: 8px;
+		margin-top: 2px;
+		padding: 10px;
+	}
+
+	.DetailInfo input[type='text'] {
+		width: 50px;
+		height:25px;
+	}
+	.DetailInfo select{
+		width: 80px;
+		height:25px;
+	}
+
+	.updatetime {
+		/* display: none; */
+		position: fixed;
+		/* border-radius: 8px; */
+		border-top: 4px solid transparent;
+		z-index: 999;
+		overflow: auto !important;
+		background-color: #ffffff;
+		background-size: 100% 100%;
+		top: 30%;
+		right: 33%;
+		width: 30%;
+		height: 10%;
+		/* border: blue; */
+		-webkit-box-shadow: #e0e3e5 0px 0px 20px;
+		-moz-box-shadow: #666 0px 0px 20px;
+		/* -webkit-border-radius: 8px; */
+		-moz-border-radius: 8px;
+		margin-top: 2px;
+		padding: 10px;
+	}
+
+	.updatetime input[type='text'] {
+		width: 50px;
+		height:25px;
+	}
+	.updatetime select{
+		width: 80px;
+		height:25px;
+	}
+
+	.shadow{
+		width:100%;
+		height:100%;
+		position:absolute;
+		left:0;
+		top:0;
+		z-index:998;
+		background-color:rgba(8, 7, 7, 0.6);
+		opacity:0.6;
+		display:none;
+	}
+	.addBox{
+		z-index:999;
+	}
+
+	button:disabled {
+        color: #bcbec2;
+        background: #f4f4f5 !important;
+        border-color: #e9e9eb;
+        cursor: not-allowed;
+    }
+
+</style>
+<apex:form >
+	<body style="height: 450px">
+		<div ng-app="myapp" ng-controller="myCtrl" ng-init="initPage()">
+			<div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb ;
+			height: 2000px;opacity :0.65;width:100%;z-index: 9999;" ng-show="reloading" >
+				<div class="waitingHolder" style="position: fixed;top : 30%; right:50%;width: 91px;" >
+					<img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+					<span class="waitingDescription" >Waiting ...</span >
+				</div>
+			</div>
+
+			<div class="content" style="margin-bottom: 20px">
+				<img src="/img/s.gif" alt="Purchase Request Line" class="pageTitleIcon" title="Purchase Request Line"/>
+				<select class="title" ng-change="selectStatus()" ng-model="selStatusObj" ng-options="item.label for item in statusLists" ng-init="selStatusObj = statusLists[0]">
+				</select>
+			</div>
+
+			<apex:pageblock mode="New" id="purchaseOrder">    
+				<div style="margin-bottom: 6px">
+					<button type="button" class="btn" ng-click="assignSupplier()" ng-show="selStatusObj.value =='In Distribution' || selStatusObj.value =='Reject'" ng-disabled="{{isReadPriv ? '' : 'true'}}">Assign Supplier</button>
+					<!-- <button type="button" class="btn" ng-click="reAssign()" ng-show="selStatusObj.value =='In Distribution' || selStatusObj.value =='Reject'" ng-disabled="{{isReadPriv ? '' : 'true'}}">Re-Assign</button> -->
+					<button type="button" class="btn" ng-click="reAssign()" ng-show="selStatusObj.value !='All' && selStatusObj.value !='Submitted'" ng-disabled="{{isReadPriv ? '' : 'true'}}">Re-Assign</button>
+				</div>
+				<div id="a2">
+					<table border="0" cellpadding="0" cellspacing="0" class="list" id="dt_itemgroup">
+						
+						<thead class="">
+							<tr class="headerRow">
+								<th class="headerRow" colspan="1" scope="col">
+									<div >
+										
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div>
+										<label>
+											Purchase Request Line
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div>
+										<label>
+											Purchase Request
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col" style="width: 37px !important;">
+									<div>
+										<label>
+											MkT
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div>
+										<label>
+											Item Group
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1" scope="col">
+									<div >
+										<label>
+											Sample Required
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col" style="width: 140px;">
+									<div >
+										<label>
+											Total Quantity Required
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Status
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Bidding Deadline
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Win Suppiler
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Unit Price
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Total Price
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Buyer
+										</label>
+									</div>
+								</th>
+								<th class="headerRow" colspan="1"  scope="col">
+									<div >
+										<label>
+											Create Date
+										</label>
+									</div>
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr class="dataRow even first" ng-repeat='item in selperiodInfos' id="{{item.proId}}" reloadcasetable="generateTable">
+								<td class="dataCell " colspan="1" >
+									<input type="checkbox" ng-checked="item.check" ng-model="item.check" ng-click="isSameSelected()"/>
+								</td>
+								<td class="dataCell " colspan="1" id="ceshi">
+									<a ng-click="jumpLineDeatail(item.Id)" href="#">{{item.Name}}</a>
+								</td>
+								<td class="dataCell " colspan="1" id="ceshi">
+									<a ng-click="jumpLineDeatail(item.ASI_MFM_Purchase_Request__r.Id)" href="#">{{item.ASI_MFM_Purchase_Request__r.Name}}</a>
+								</td>
+								<td class="dataCell " colspan="1" id="ceshi">
+									{{item.ASI_MFM_Purchase_Request__r.CreatedBy.Name}}
+								</td>
+								<td class="dataCell " colspan="1" id="ceshi">
+									<a ng-click="jumpLineDeatail(item.ASI_CTY_CN_Vendor_Item_Group_Code__r.Id)" href="#">{{item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c}}</a>
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.ASI_CTY_CN_Vendor_Sample_Required__c}}
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.ASI_CTY_CN_Vendor_Total_Quantity__c}}
+								</td>
+								<td class="dataCell " colspan="1" ng-model="item.status">
+									{{item.StatusLabel}}
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.ASI_CTY_CN_Vendor_Bidding_Deadline__c}}
+								</td>
+								<td class="dataCell " colspan="1" ng-model="item.status">
+									<a href="#" ng-click="jumpLineDeatail(item.ASI_CTY_CN_Vendor_Select_Quotation__r.ASI_CTY_CN_Vendor_Supplier__c)">{{item.ASI_CTY_CN_Vendor_Select_Quotation__r.ASI_CTY_CN_Vendor_Supplier__r.Name}}
+									</a>
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.ASI_CTY_CN_Vendor_Unit_Price__c}}
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.ASI_CTY_CN_Vendor_Total_Price__c}}
+								</td>
+								<td class="dataCell " colspan="1" >
+									<a ng-click="jumpLineDeatail(item.ASI_CTY_CN_Vendor_Approval_Buyer__c)" href="#">{{item.ASI_CTY_CN_Vendor_Approval_Buyer__r.Name}}</a>
+								</td>
+								<td class="dataCell " colspan="1" >
+									{{item.CreatedDate}}
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</apex:pageblock>
+
+			<div id="supplierList" style="display: none;" class="DetailInfo">
+				<apex:pageblock mode="New" id="purchaseOrder1" title="Assign Suppliers">
+					<center>
+						<input type="button" class="btn"  ng-click ="cancelAssignSupplier()" value="取消"/>
+						<input type="button" class="btn"  ng-click ="submitAssignSupplier()" value="确认"/>
+					</center>
+					<apex:pageBlockSection title="Suppliers Information" columns="1"> 
+						<div class="pbBody">
+							<table border="0" cellpadding="0" cellspacing="0" class="list" style="width: 100%" id="dt_itemgroup1" >
+								<colgroup span="6"></colgroup>
+								<thead class="">
+									<tr class="headerRow">
+										<th class="headerRow" colspan="1" scope="col">
+											<div >
+												<label></label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div>
+												<label>
+													Suppliers Name
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div>
+												<label>
+													Region
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div>
+												<label>
+													City
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div>
+												<label>
+													Phone
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div >
+												<label>
+													Recent Cooperation Date
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div >
+												<label>
+													Sample Required
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1"  scope="col">
+											<div >
+												<label>
+													Model Required
+												</label>
+											</div>
+										</th>
+										<th class="headerRow" colspan="1" scope="col">
+											<div >
+												<label>
+													Deadline Time
+												</label>
+											</div>
+										</th> 
+									</tr>
+								</thead>
+								<tbody>
+									<tr class="dataRow even first" ng-repeat="item in supplierList" reloadcasetable1="generateTable1">
+										<td class="dataCell " colspan="1" >
+											<input type="checkbox" ng-model="item.check" ng-checked="item.check" />
+										</td>
+										<td class="dataCell " colspan="1">
+											<a href="#" ng-click="jumpLineDeatail(item.acc.Id)">{{item.acc.Name}}</a>
+										</td>
+
+										<td class="dataCell " colspan="1" >
+											{{item.acc.ASI_KOR_Addr_Region__c}}
+										</td>
+										<td class="dataCell " colspan="1" >
+											{{item.acc.ASI_MFM_City__c}}
+										</td>
+										<td class="dataCell " colspan="1" >
+											{{item.acc.Phone}} 
+										</td>
+										<td class="dataCell " colspan="1" >
+											{{item.createdDate}} 
+										</td>
+										<td class="dataCell " colspan="1" >
+											<input type="checkbox" value="{{item.SampleRequired}}" ng-model="item.SampleRequired" />
+										</td>
+										<td class="dataCell " colspan="1" >
+											<input type="checkbox" value="{{item.ModelRequired}}" ng-model="item.ModelRequired" />
+										</td>
+										<td class="dataCell " colspan="1" >
+											<input type="Date" value="{{item.DeadLineDate}}
+											" ng-model="item.DeadLineDate" />
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						<br/>
+					</apex:pageBlockSection>
+					<center>
+						<input type="button" class="btn"  ng-click ="cancelAssignSupplier()" value="取消"/>
+						<input type="button" class="btn"  ng-click ="submitAssignSupplier()" value="确认"/>
+					</center>
+				</apex:pageblock>
+			</div>
+
+			<div id="BuyersList" style="display: none;" class="DetailInfo">
+				<apex:pageblock mode="suppliersListMode" id="suppliersMode" title="Choose Buyer">
+        			<center>
+			        	<input type="button" value="取消" class="btn" ng-click="cancelReAssign()" />
+			            <input type="button" value="确认" class="btn" ng-click="submitReAssign()" />
+			        </center>
+			        <apex:pageBlockSection title="Buyer List" columns="1">
+			            <div class="pbBody">
+			                <table border="0" cellpadding="0" cellspacing="0" class="list" >
+			                    <colgroup span="6"></colgroup>
+			                    <thead class="">
+			                        <tr class="headerRow">
+			                            <th class="headerRow" colspan="1" scope="col" style="width: 3%">
+			                                <div>
+			                                    <label>
+			                                    	
+			                                    </label>
+			                                </div>
+			                            </th>
+			                            <th class="headerRow" colspan="1"  scope="col">
+			                                <div >
+			                                    <label>
+			                                        Name
+			                                    </label>
+			                                </div>
+			                            </th>
+			                            <th class="headerRow" colspan="1"  scope="col">
+			                                <div >
+			                                    <label>
+			                                        Buyer
+			                                    </label>
+			                                </div>
+			                            </th>
+			                        </tr>
+			                    </thead>
+			                   
+			                    <tbody>
+			                        <tr class="dataRow even first" ng-repeat='item in buyerLists track by $index'>
+			                            <td class="dataCell" colspan="1" width="3%">
+			                                <input type="radio" ng-value="$index" ng-model="$parent.isSelectBuyerIndex" name="IsSelectBuyer" />
+			                            </td>
+			                            <td class="dataCell " colspan="1" id="ceshi">
+			                            	<a href="#" ng-click="jumpLineDeatail(item.Id)">{{item.Name}}</a>
+			                            </td>
+			                            <td class="dataCell " colspan="1" id="ceshi">
+			                            	<a href="#" ng-click="jumpLineDeatail(item.ASI_MFM_Buyer__r.Id)">{{item.ASI_MFM_Buyer__r.Name}}</a>
+			                            </td>
+			                        </tr>
+			                    </tbody>
+			                </table>
+			            </div>
+			        </apex:pageBlockSection>   
+			        <center>
+			        	<input type="button" value="取消" class="btn" ng-click="cancelReAssign()" />
+			            <input type="button" value="确认" class="btn" ng-click="submitReAssign()" />
+			        </center>
+			    </apex:pageblock>
+			</div>
+		</div>
+	</body>
+</apex:form>
+
+<script type="text/javascript">
+	var myApp = angular.module('myapp',[]);
+	myApp.controller('myCtrl', function($scope, $filter, $location) {
+		$scope.initPage = function() {
+			$scope.reloading = false;
+			$scope.periodInfos=[];
+			$scope.selperiodInfos=[];
+			$scope.seSupplierInfoS = [];
+			$scope.buyerLists = [];
+			$scope.allPRLCheckStatus = false;
+
+			var purLineList = {!purLineList};
+
+			if (purLineList != null && purLineList.length > 0) {
+            	purLineList.forEach(function(item, index) {
+            		var itemGroup = item.ASI_CTY_CN_Vendor_Item_Group_Code__r;
+        			if (typeof(itemGroup) == 'undefined') {
+        				item.ASI_CTY_CN_Vendor_Item_Group_Code__r = {};
+        			}
+        			var chinaeseName = item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c;
+        			if (typeof(chinaeseName) == 'undefined') {
+        				item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c = '暂无中文名称';
+        			}
+        			var engName = item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Eng_Name__c;
+        			if (typeof(engName) == 'undefined') {
+        				item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Eng_Name__c = '暂无英文名称';
+        			}
+        			var code = item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_MFM_Item_Group_Code__c;
+        			if (typeof(code) == 'undefined') {
+        				item.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_MFM_Item_Group_Code__c = '暂无编号';
+        			}
+        			var id = item.ASI_CTY_CN_Vendor_Item_Group_Code__r.Id;
+        			if (typeof(id) == 'undefined') {
+        				item.ASI_CTY_CN_Vendor_Item_Group_Code__r.Id = '';
+        			}
+
+        			var date = item.CreatedDate;
+        			if (item.CreatedDate.indexOf('T') != -1) {
+        				item.CreatedDate = date.split('T')[0];
+        			}
+            	});
+            }
+            console.info("----purLineList----");
+            console.info(purLineList);
+            $scope.periodInfos = purLineList;
+            $scope.periodInfos.forEach(function(item, index) {
+            	item.check = false;
+            });
+
+			var statusList = {!statusList};
+            var prlStatusList = [];
+            statusList.forEach(function(item) {
+            	if (item.value == 'Allocated' || item.value == 'In Distribution' || item.value == 'Reject' || item.value == 'Submitted') {
+            		if (item.value == 'Submitted') {
+            			item.label = 'Pending for CoA';
+            		}
+            		prlStatusList.push(item);
+            	}
+            });
+            prlStatusList.push({"label" : "All", "value": "All"});
+            $scope.statusLists = prlStatusList;
+            $scope.selStatusObj = prlStatusList[0];
+
+            var itemGroupNameList = {!itemGroupNameList};
+            var itemGroupList = [];
+            itemGroupNameList.forEach(function(item) {
+            	if (typeof(item.ASI_CRM_CN_Chinese_Name__c) != "undefined") {
+            		itemGroupList.push(item);
+            	}
+            });
+            itemGroupList.push({"ASI_CRM_CN_Chinese_Name__c" : "All"});
+            $scope.itemGroupNameList = itemGroupList;
+            $scope.itemGroupObj = itemGroupList[itemGroupList.length - 1];
+
+            $scope.isReadPriv = {!isReadPriv};
+            $scope.openSupplierList = false;
+            $scope.openBuyerList = false;
+            $scope.isIllegalSelectedPRLine = false;
+			$scope.selectStatus();
+		}
+
+		// 获取AddDayCount天后的日期 
+		$scope.getDateStr = function(AddDayCount) {
+            var _date = new Date();
+            var currentWeek = _date.getDay();
+            _date.setDate(_date.getDate() + AddDayCount);  
+            var years = _date.getFullYear();
+            var months = (_date.getMonth() + 1) < 10 ? "0" + (_date.getMonth() + 1) : (_date.getMonth() + 1); //获取当前月份的日期，不足10补0  
+            var days = _date.getDate() < 10 ? "0" + _date.getDate() : _date.getDate(); //获取当前几号，不足10补0  
+            var dates = new Date(years, months - 1, days);
+            var _week;
+            if(dates.getDay() == 0) _week = "周日";
+            if(dates.getDay() == 1) _week = "周一";
+            if(dates.getDay() == 2) _week = "周二";
+            if(dates.getDay() == 3) _week = "周三";
+            if(dates.getDay() == 4) _week = "周四";
+            if(dates.getDay() == 5) _week = "周五";
+            if(dates.getDay() == 6) _week = "周六";
+            return years + "-" + months + "-" + days;
+        }  
+
+        // 当PR Line的过滤条件改变时,重新刷新PR Line List
+		$scope.selectStatus = function() {
+			$scope.clearSelectList($scope.periodInfos);
+			var selStatusObj = $scope.selStatusObj;
+			var statusValue = selStatusObj.value;
+			var itemGroupObj = $scope.itemGroupObj;
+			var itemGroupValue = itemGroupObj.ASI_CRM_CN_Chinese_Name__c;
+			$scope.reloadtable();
+			var tempArray =[];
+			var timestamp = new Date().getTime();
+			$scope.periodInfos.forEach(function(index, $index) {
+				index.$$hashKey = timestamp + $index;
+				index.check = false;
+				if (index.ASI_CTY_CN_Vendor_Status__c == null || typeof(index.ASI_CTY_CN_Vendor_Status__c) == 'undefined') {
+					index.ASI_CTY_CN_Vendor_Status__c = '';
+				}
+
+				if (index.ASI_CTY_CN_Vendor_Item_Group_Code__r == null || typeof(index.ASI_CTY_CN_Vendor_Item_Group_Code__r) == 'undefined') {
+					index.ASI_CTY_CN_Vendor_Item_Group_Code__r = {};
+				}
+
+				if (index.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c == null || typeof(index.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c) == 'undefined') {
+					index.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c = '';
+				}
+
+				if(index.ASI_CTY_CN_Vendor_Status__c == statusValue && index.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c ==itemGroupValue && statusValue != 'All' && itemGroupValue != 'All') {
+					tempArray.push(index);
+				}
+				if(statusValue == 'All' && index.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c ==itemGroupValue && itemGroupValue != 'All') {
+					tempArray.push(index);
+				}
+
+				if(itemGroupValue == 'All' && index.ASI_CTY_CN_Vendor_Status__c == statusValue && statusValue != 'All') {
+					if (statusValue == 'Reject') {
+						if (!index.ASI_CTY_CN_Vendor_Is_MKT_Submit__c) {
+							tempArray.push(index);
+						}
+					} else {
+						tempArray.push(index);
+					}
+				}
+
+				if(itemGroupValue == 'All' && statusValue == 'All') {
+					tempArray.push(index);
+				}
+			});
+			$scope.selperiodInfos = tempArray;
+			console.info('---$scope.selperiodInfos---');
+			console.info($scope.selperiodInfos);
+		}
+
+		// 选择PR Line 给供应商报价
+		$scope.assignSupplier = function() {
+			if ($scope.prLineSeletedStatus()) {
+				var selectPRList = $scope.selectPRList;
+				if ($scope.mergePRLineCount != selectPRList.length && $scope.mergePRLineCount > 0) {
+					alert('当前选择的报价行包含合并的报价行,两种状态的报价行不能同时选择供应商,请重新选择...');
+					$scope.clearSelectList($scope.selperiodInfos);
+					return;
+				}
+
+				var selectPRListIds = $scope.selectPRListIds;
+				var itemGroupId = $scope.selectPRList[0].ASI_CTY_CN_Vendor_Item_Group_Code__r.Id;
+
+				$scope.reloading = true;
+				Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.ASI_CTY_CN_Vendor_PR_PurLineController.initSupplierList}',itemGroupId,JSON.stringify(selectPRListIds),
+                    function(result, event){
+                        console.log(event.status);
+                        if (event.status) {
+                            console.log(result);
+
+                            if (result.status == 1) {
+                            	var data = result.message;
+
+                            	$scope.reloadtable1();
+					            var supplierList = data;
+					            var timestamp = new Date().getTime();
+					            if (supplierList != null && supplierList.length > 0) {
+					            	supplierList.forEach(function(item, $index) {
+					            		item.$$hashKey = timestamp + $index;
+					            		item.DeadLineDate = new Date($scope.biddingDeadLine);
+					            		item.SampleRequired = $scope.selectPRList[0].ASI_CTY_CN_Vendor_Sample_Required__c;
+					            		item.ModelRequired = $scope.selectPRList[0].ASI_CTY_CN_Vendor_Model_Required__c;
+					              		item.check = false;
+					              	});
+					            }
+								console.info("----supplierList----");
+					            console.info(supplierList);
+								$scope.supplierList = supplierList;
+								$scope.openSupplierList = true;
+								
+								$(".shadow").css({'display':'block'});
+								$("#supplierList").slideDown('slow');
+                            } else {
+                            	alert(result.message);
+                            }
+                            $scope.reloading = false;
+                        } else if (event.type === 'exception') {
+                            alert(event.message + event.where);
+                        } else {
+                            alert(event.message);
+                        }
+                        $scope.$apply(function(){
+                            $scope.reloading = false;
+                        });
+                    }, 
+                    {escape: false}
+                );
+			}
+		};
+
+		// 取消供应商分配
+		$scope.cancelAssignSupplier = function() {
+			$scope.clearSeleted($scope.supplierList);
+			$(".shadow").css({'display':'none'});
+			$("#supplierList").hide();
+		};
+
+		// 提交供应商分配
+		$scope.submitAssignSupplier = function() {
+			var selectedSupplier = [];
+			var supplierDeadLineDate = new Map();
+			var sampleRequired = new Map();
+			var modelRequired = new Map();
+			$scope.supplierList.forEach(function(ind) {
+				if (ind.check) {
+                   selectedSupplier.push(ind.acc.Id);
+                   supplierDeadLineDate.set(ind.acc.Id, new Date(ind.DeadLineDate).format("yyyy-MM-dd"));
+                   sampleRequired.set(ind.acc.Id, ind.SampleRequired);
+                   modelRequired.set(ind.acc.Id, ind.ModelRequired);
+				}
+			});
+
+			if (selectedSupplier.length == 0) {
+                alert('请至少选择一个供应商...');
+                return false;
+			}
+
+			var selectPRList = $scope.selectPRList;
+			var flag = false;
+			if (selectPRList.length === 1) {
+				flag = window.confirm('采购行提交后将会通知相应供应商,您确认要继续提交吗?');
+			} else if (selectPRList.length > 1) {
+				flag = window.confirm('当前是合并的报价采购,提交后将会通知相应供应商,您确认要继续提交吗?');
+			}
+
+			if(flag) {
+				var selectPRList = JSON.parse(JSON.stringify($scope.selectPRList));
+				selectPRList.forEach(function(item, index) {
+					delete item.StatusLabel;
+				});
+				var purLineListJson = JSON.stringify(selectPRList);
+				var supplierIds = JSON.stringify(selectedSupplier);
+				var obj = Object.create(null);
+				for (let[k,v] of supplierDeadLineDate) {
+				    obj[k] = v;
+				}
+				var supplierDeadLineDateJson = JSON.stringify(obj);
+
+				obj = Object.create(null);
+				for (let[k,v] of sampleRequired) {
+				    obj[k] = v;
+				}
+				var sampleRequiredJson = JSON.stringify(obj);
+
+				obj = Object.create(null);
+				for (let[k,v] of modelRequired) {
+				    obj[k] = v;
+				}
+				var modelRequiredJson = JSON.stringify(obj);
+
+				$scope.reloading = true;
+				Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.ASI_CTY_CN_Vendor_PR_PurLineController.assignSupplier}',
+                            purLineListJson,supplierIds,supplierDeadLineDateJson,sampleRequiredJson,modelRequiredJson,
+                    function(result, event){
+                        console.log(event.status);
+                        if (event.status) {
+                            console.log(result);
+
+                            if (result.status == 1) {
+                            	var data = result.message;
+                            	var temp = [];
+                            	if (data != null && data.length > 0) {
+                            		for (var item of data) {
+                        				if (item.ASI_CTY_CN_Vendor_Bidding_Deadline__c != null) {
+                        					item.ASI_CTY_CN_Vendor_Bidding_Deadline__c = new Date(item.ASI_CTY_CN_Vendor_Bidding_Deadline__c).format("yyyy-MM-dd");
+                        				}
+                        				item.CreatedDate = new Date(item.CreatedDate).format("yyyy-MM-dd");
+                        				temp.push(item);
+                        			}
+
+                        			$scope.periodInfos.forEach(function(ind) {
+                        				if (!isHas(data, 'Id', ind.Id)) {
+                        					temp.push(ind);
+                        				}
+                        			});
+
+                            		$scope.cancelAssignSupplier();
+                            		$scope.periodInfos = temp;
+	                            	$scope.selectStatus();
+	                            	window.alert('您的招标信息已经通知给对应的供应商,请等待供应商的报价');
+	                            	window.open('{!$Label.ASI_CTY_CN_Vendor_BaseUrl}' + '/' + data[0].Id, '_blank');
+                            	}
+                            } else {
+                            	alert(result.message);
+                            }
+                            $scope.reloading = false;
+                        } else if (event.type === 'exception') {
+                            alert(event.message + event.where);
+                        } else {
+                            alert(event.message);
+                        }
+                        $scope.$apply(function(){
+                            $scope.reloading = false;
+                        });
+                    }, 
+                    {escape: false}
+                );
+			}
+		};
+
+		// select all PR Line
+		$scope.selectAllPRL = function() {
+			var flag = $scope.allPRLCheckStatus;
+			$scope.selperiodInfos.forEach(function(ind) {
+				if (ind) {
+                    ind.check = flag;
+				}
+			});
+		};
+
+		// 判断是否选中所有PR Line
+		$scope.isSameSelected = function() {
+			var ischeck = 0;
+			$scope.selperiodInfos.forEach(function(ind) {
+				if (ind.check) {
+                    ischeck = ischeck + 1;
+				}
+			});
+
+			if (ischeck == $scope.selperiodInfos.length) {
+				$scope.allPRLCheckStatus = true;
+			} else {
+				$scope.allPRLCheckStatus = false;
+			}
+		};
+
+		// buyer选择PR Line转给其他的供应商
+		$scope.reAssign = function() {
+			var checkFlag = false;
+			$scope.selectPRList = [];
+			$scope.noSelectPRList = [];
+			$scope.selperiodInfos.forEach(function(ind) {
+				if (ind.check) {
+                    checkFlag = true;
+                    $scope.selectPRList.push(ind);
+				} else {
+					$scope.noSelectPRList.push(ind);
+				}
+			})
+
+			if (!checkFlag) {
+                alert('请至少选择一条PR Line Item记录！');
+                return false;
+			}
+
+			if (!$scope.openBuyerList) {
+				$scope.reloading = true;
+				Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.ASI_CTY_CN_Vendor_PR_PurLineController.initBuyerList}',
+                    function(result, event){
+                        console.log(event.status);
+                        if (event.status) {
+                            console.log(result);
+
+                            if (result.status == 1) {
+                            	var data = result.message;
+					            console.info("----buyerList----");
+					            console.info(data);
+								$scope.buyerLists = data;
+								$scope.buyerLists.forEach(function(item, index) {
+					            	item.check = false;
+					            });
+								$scope.openBuyerList = true;
+								$(".shadow").css({'display':'block'});
+								$("#BuyersList").slideDown('slow');
+                            } else {
+                            	alert(result.message);
+                            }
+                            $scope.reloading = false;
+                        } else if (event.type === 'exception') {
+                            alert(event.message + event.where);
+                        } else {
+                            alert(event.message);
+                        }
+                        $scope.$apply(function(){
+                            $scope.reloading = false;
+                        });
+                    }, 
+                    {escape: false}
+                );
+			} else {
+				$(".shadow").css({'display':'block'});
+				$("#BuyersList").slideDown('slow');
+			}
+		};
+
+		// 提交PR Line的转发
+		$scope.submitReAssign = function() {
+			var isSelectBuyerIndex = $scope.isSelectBuyerIndex;
+			console.info('---isSelectBuyerIndex---');
+			console.info(isSelectBuyerIndex);
+
+			if (typeof(isSelectBuyerIndex) === 'undefined' || isSelectBuyerIndex == -1) {
+                alert('请选择一个buyer...');
+                return false;
+			} else {
+				var selectPRList = JSON.parse(JSON.stringify($scope.selectPRList));
+				selectPRList.forEach(function(item, index) {
+					delete item.StatusLabel;
+				});
+				var purLineListJson = JSON.stringify(selectPRList);
+				var buyer = $scope.buyerLists[isSelectBuyerIndex];
+				var buyerId = buyer.Id;
+				$scope.reloading = true;
+				Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.ASI_CTY_CN_Vendor_PR_PurLineController.reAssignBuyer}',
+                            purLineListJson,buyerId,
+                    function(result, event){
+                        console.log(event.status);
+                        if (event.status) {
+                            console.log(result);
+                            if (result.status > 0) {
+                            	var resultData = result.message;
+                            	var temp = [];
+                            	if (resultData != null && resultData.length > 0) {
+                            		alert('选中的报价行已经成功分配给其他Buyer');
+                            		$scope.periodInfos.forEach(function(ind) {
+                        				if (!isHas(resultData, 'Id', ind.Id)) {
+                        					temp.push(ind);
+                        				}
+                        			});
+
+                        			$scope.cancelReAssign();
+	                            	$scope.periodInfos = temp;
+	                            	$scope.clearSeleted($scope.periodInfos);
+	                            	$scope.selectStatus();
+	                            }
+                            } else {
+                            	alert(result.message);
+                            }
+                            $scope.reloading = false;
+                        } else if (event.type === 'exception') {
+                            alert(event.message + event.where);
+                        } else {
+                            alert(event.message);
+                        }
+                        $scope.$apply(function(){
+                            $scope.reloading=false;
+                        });
+                    }, 
+                    {escape: false}
+                );
+			}
+
+			$(".shadow").css({'display':'none'});
+		};
+
+		// buyer取消PR Line的转发
+		$scope.cancelReAssign = function() {
+			$scope.isSelectBuyerIndex = -1;
+			$(".shadow").css({'display':'none'});
+			$("#BuyersList").hide();
+		};
+
+		// 清空选中
+		$scope.clearSeleted = function(obj) {
+			obj.forEach(function(ind) {
+				if (ind) {
+                    ind.check = false;
+				}
+			});
+		};
+
+		// 处理PR Line的选择的公共方法
+		$scope.prLineSeletedStatus = function() {
+			var checkFlag = false;
+			$scope.selectPRList = [];
+			$scope.noSelectPRList = [];
+			$scope.selectPRListIds = [];
+			$scope.selperiodInfos.forEach(function(ind) {
+				if (ind.check) {
+                    checkFlag = true;
+                    $scope.selectPRList.push(ind);
+                    $scope.selectPRListIds.push(ind.Id);
+				} else {
+					$scope.noSelectPRList.push(ind);
+				}
+			});
+
+			$scope.mergePRLineCount = 0;
+			$scope.selectPRList.forEach(function(ind) {
+				if (ind.ASI_CTY_CN_Vendor_IsMerged__c) {
+					$scope.mergePRLineCount = $scope.mergePRLineCount + 1;
+				}
+			});
+
+			if (!checkFlag) {
+                alert('请至少选择一条PR Line Item记录！');
+                return false;
+			}
+
+			if (!isAllEqual($scope.selectPRList)) {
+				alert('选择的PR Line Item记录必须属于同一个产品,请重新选择...');
+				$scope.clearSelectList($scope.selperiodInfos);
+				$scope.allPRLCheckStatus = false;
+                return false;
+			}
+
+			if ($scope.selectPRList.length > 1) {
+				var flag = window.confirm('合并报价的报价行需要等到所有报价行审批完成之后才能自动生成合同,只要有一个拒绝,所有合并的报价行都会拒绝,您确认要继续吗?');
+
+				if (!flag) {
+					return false;
+				}
+			}
+
+			var prList = $scope.selectPRList;
+			var sortFiled = 'ASI_CTY_CN_Vendor_Bidding_Deadline__c';
+	        prList.sort(function(a,b){
+	            return a[sortFiled] > b[sortFiled] ? 1 : -1;
+	        });
+	        $scope.biddingDeadLine = prList[0].ASI_CTY_CN_Vendor_Bidding_Deadline__c;
+
+			return true;
+		};
+
+		// 清空所有选中的复选框
+		$scope.clearSelectList = function(obj) {
+			obj.forEach(function(item) {
+				if (item.check) {
+                    item.check = false;
+				}
+			});
+		};
+
+		// 跳转到对象详情页面
+		$scope.jumpLineDeatail = function(id) {
+			//window.location = '/'+result.objId;
+			var url = '../../' + id;
+			window.open(url);
+		};
+
+		// 重新加载pr line列表,默认选中第一页
+		$scope.reloadtable = function() {
+            var table=$('#dt_itemgroup').DataTable();
+            //table.page(0).draw(false);
+            table.destroy(false);
+        };
+
+        // 重新加载Suppliers列表,默认选中第一页
+        $scope.reloadtable1 = function() {
+            var table=$('#dt_itemgroup1').DataTable();
+            table.destroy(false);
+        };
+
+		// pr line记录分页
+        $scope.$on('generateTable', function() {
+	        $("table[id $='dt_itemgroup']").DataTable({
+	            "sDom": 'WRC<"clear">lftipr', 
+	            retrieve: true,
+	            searching: true,
+	            "paging": true,
+	            stateSave: false,//页面重载后保持当前页
+	            "sPaginationType": "full_numbers",
+	            "aLengthMenu" : [5,10,25],//更改显示记录数选项 
+	            "iDisplayLength" : 5, //默认显示的记录数
+	            "aoColumnDefs": [{"bVisible": false,"aTargets": []}],
+	            "language": { //设置页面各个文字的显示
+	                "sProcessing": "处理中...",
+	                "sLengthMenu": "显示 _MENU_ 项结果",
+	                "sZeroRecords": "没有匹配结果",
+	                "sInfo": "显示第 _START_ 至 _END_ 项结果，共 _TOTAL_ 项",
+	                "sInfoEmpty": "显示第 0 至 0 项结果，共 0 项",
+	                "sInfoFiltered": "从_MAX_条记录中获取",
+	                "sInfoPostFix": "",
+	                "sSearch": "搜索:",
+	                "sUrl": "",
+	                "sEmptyTable": "表中数据为空",
+	                "sLoadingRecords": "载入中...",
+	                "sInfoThousands": ",",
+	                'oPaginate': {
+	                'sFirst': '首页',
+	                'sPrevious': '上一页',
+	                'sNext': '下一页',
+	                'sLast': '末页'
+	                }
+	            },
+	        });
+	    });
+
+	    // 供应商记录分页
+        $scope.$on('generateTable1', function() {
+	        $("table[id $='dt_itemgroup1']").DataTable({
+	            "sDom": 'WRC<"clear">lftipr', 
+	            retrieve: true,
+	            searching: true,
+	            "paging": true,
+	            stateSave: false,//页面重载后保持当前页
+	            "sPaginationType": "full_numbers",
+	            "aLengthMenu" : [2,5,10,25,50],//更改显示记录数选项 
+	            "iDisplayLength" : 10, //默认显示的记录数 
+	            "aoColumnDefs": [{"bVisible": false,"aTargets": []}],
+	            "language": { //设置页面各个文字的显示
+	                "sProcessing": "处理中...",
+	                "sLengthMenu": "显示 _MENU_ 项结果",
+	                "sZeroRecords": "没有匹配结果",
+	                "sInfo": "显示第 _START_ 至 _END_ 项结果，共 _TOTAL_ 项",
+	                "sInfoEmpty": "显示第 0 至 0 项结果，共 0 项",
+	                "sInfoFiltered": "从_MAX_条记录中获取",
+	                "sInfoPostFix": "",
+	                "sSearch": "搜索:",
+	                "sUrl": "",
+	                "sEmptyTable": "表中数据为空",
+	                "sLoadingRecords": "载入中...",
+	                "sInfoThousands": ",",
+	                'oPaginate': {
+	                'sFirst': '首页',
+	                'sPrevious': '上一页',
+	                'sNext': '下一页',
+	                'sLast': '末页'
+	                }
+	            },
+	        });
+	    });
+	});
+
+	// 初始化datatable
+	myApp.directive('reloadcasetable', function($timeout){
+        return {
+	        restrict: 'A',
+	        link: function($scope, $element, $attr){
+	            if($scope.$last == true){
+	                console.log('product执行完毕');
+	                $timeout(function() {
+	                    $scope.$emit('generateTable');
+	                });
+	            }
+	        }
+        }
+    });
+
+    // 初始化datatable
+	myApp.directive('reloadcasetable1', function($timeout){
+        return {
+	        restrict: 'A',
+	        link: function($scope, $element, $attr){
+	            if($scope.$last == true){
+	                console.log('product执行完毕');
+	                $timeout(function() {
+	                    $scope.$emit('generateTable1');
+	                });
+	            }
+	        }
+        }
+    });
+
+	// 判断选中的PR Line是否属于同一个产品
+    function isAllEqual(array) {
+        if (array.length > 0) {
+            return !array.some(function (value, index) {
+                return value.ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c !== array[0].ASI_CTY_CN_Vendor_Item_Group_Code__r.ASI_CRM_CN_Chinese_Name__c;
+            });
+        } else {
+            return true;
+        }
+  	}
+
+  	// 判断集合对象的filed字段中是否包含value值
+    function isHas(arr, filed, value) {
+    	if (isEmpty(arr) || isEmpty(filed) || isEmpty(value) || arr == '' || filed == ''  || value == '') {
+    		return false;
+    	}
+        if (arr.length > 0) {
+    		for (var item of arr) {
+            	if (item[filed] == value) {
+            		return true;
+            	}
+            }
+        }
+
+        return false;
+  	}
+
+  	// 判断对象是否为空
+    function isEmpty(obj) {
+    	if (obj == null || typeof(obj) == 'undefined' || JSON.stringify(obj) === '{}') {
+    		return true;
+    	}
+
+    	return false;
+  	}
+
+  	// 日期格式化
+  	Date.prototype.format = function(fmt) { 
+	    var o = { 
+	        "M+" : this.getMonth()+1,                 //月份 
+	        "d+" : this.getDate(),                    //日 
+	        "h+" : this.getHours(),                   //小时 
+	        "m+" : this.getMinutes(),                 //分 
+	        "s+" : this.getSeconds(),                 //秒 
+	        "q+" : Math.floor((this.getMonth()+3)/3), //季度 
+	        "S"  : this.getMilliseconds()             //毫秒 
+	    }; 
+	    if(/(y+)/.test(fmt)) {
+	        fmt=fmt.replace(RegExp.$1, (this.getFullYear()+"").substr(4 - RegExp.$1.length)); 
+	    }
+	    for(var k in o) {
+	        if(new RegExp("("+ k +")").test(fmt)){
+	            fmt = fmt.replace(RegExp.$1, (RegExp.$1.length==1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length)));
+	        }
+	    }
+	    return fmt; 
+	} 
+</script>
+</apex:page>

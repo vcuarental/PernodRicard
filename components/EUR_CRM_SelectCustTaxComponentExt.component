@@ -1,0 +1,485 @@
+<apex:component controller="EUR_CRM_SelectCustTaxComponentExtCtrller"
+	allowDML="true">
+	<style>
+.tableLabel {
+	text-align: right;
+	color: #4a4a56;
+	font-weight: bold;
+	padding-left: 2px;
+	padding-right: 15px;
+	padding-top: 3px;
+}
+.multiselect-picklist {
+	height: 75px;
+}
+</style>
+
+	<apex:attribute name="objPromoId" type="String" description=""
+		assignTo="{!objPromoIdStr}" />
+	<apex:attribute name="currentURL" type="String" description=""
+		assignTo="{!currentURLStr}" />
+	<apex:attribute name="limitFields" type="Boolean" description=""
+		assignTo="{!limitFieldsBool}" />
+	<apex:attribute name="fields" type="String" description=""
+		assignTo="{!fieldsStr}" />
+	<apex:attribute name="custMappingRecordType" type="String"
+		description="" assignTo="{!custMappingRecordTypeStr}" />
+	<apex:attribute name="custTaxRecordType" type="String" description=""
+		assignTo="{!custTaxRecordTypeStr}" />
+	<apex:attribute name="removeOldOPAccountMapping" type="Boolean"
+		description="" assignTo="{!isRemoveOldOPAccountMapping}" />
+	<apex:attribute name="stdController"
+		description="The Standard controller"
+		type="ApexPages.StandardController" assignTo="{!standardController}" />
+	<apex:attribute name="countryCodeAtt" type="String" description=""
+		required="true" assignTo="{!countryCode}" />
+    <apex:attribute name="opAccountMappingRecordTypeNameAtt" type="String" description=""
+        assignTo="{!opAccountMappingRecordTypeName}" />
+    <apex:attribute name="isMultiSelectEnabledAtt" type="Boolean" description=""
+    	assignTo="{!isMultiSelectEnabled}" />
+
+	<apex:attribute name="isSelectorRenderedAtt" type="Boolean"
+		description="The cherry picker" assignTo="{!isSelectorRendered}" />
+	<apex:attribute name="objPromoAtt" type="EUR_CRM_ObjPromo__c"
+		description="" assignTo="{!objPromo}" />
+
+	<script> 
+	    $x = jQuery.noConflict();
+	    
+	    //Calling the same publish apex method, but passing quicksave as a parameter
+	    function confirmQuickSave(){ 
+	        xquicksave();  
+	    }
+	    
+	    function confirmSave() {
+	        xsave();
+	    }
+	    
+	    function checkAll(cbH,cbId){
+	        var inputElem = document.getElementsByTagName("input");                    
+	        for(var i=0; i<inputElem.length; i++)
+	        {            
+	             if(inputElem[i].id.indexOf(cbId)!=-1){                                       
+	                inputElem[i].checked = cbH.checked; 
+	            }
+	        }
+	        aSelectAllItem();
+
+	    }
+	    function unCheckAll(cbH,cbId){
+	        var inputElem = document.getElementsByTagName("input");                    
+	        for(var i=0; i<inputElem.length; i++)
+	        {    
+	             if(inputElem[i].id != cbH.id){                                      
+	                inputElem[i].checked = null; 
+	            }
+	        }
+	    }
+	    function doCheckboxChange(cb,itemId){
+	        if(cb.checked==true){
+	            console.log('cb true');
+	            aSelectItem(itemId);
+	        }
+	        else{
+	            console.log('cb false');
+	            aDeselectItem(itemId);
+	        }
+	        
+	    }
+	</script>
+
+	<apex:form >
+		<apex:inputHidden value="{!initDummyVar}" id="initVar" />
+		<apex:actionStatus id="idStatus">
+			<apex:facet name="start">
+				<c:EUR_CRM_LoadingStatus BackColor="#ffffff" borderColor="#6B6B6B"
+					borderSize="1" height="50px" width="160px" margintop="-25px"
+					marginleft="-60px" ImageUrl="{!$Resource.loadingStatus}"
+					Message="{!$Label.EUR_CRM_Please_wait}..." />
+			</apex:facet>
+		</apex:actionStatus>
+
+		<apex:actionregion >
+		    <apex:actionFunction name="aSelectItem" action="{!doSelectItem}"
+		        rerender="checkSelect, pMessage" status="loadingStatus">
+		        <apex:param name="contextItem" value="" assignTo="{!contextItem}" />
+		    </apex:actionFunction>
+		    <!-- handle deselected item -->
+		    <apex:actionFunction name="aDeselectItem" action="{!doDeselectItem}"
+		        rerender="checkSelect, pMessage" status="loadingStatus">
+		        <apex:param name="contextItem" value="" assignTo="{!contextItem}" />
+		    </apex:actionFunction>
+		    <!-- handle deselected item -->
+		    <apex:actionFunction name="aSelectAllItem" action="{!selectAll}"
+		        rerender="checkSelect" status="loadingStatus" />
+		    <apex:actionFunction name="xquicksave" action="{!quickSaveAccounts}"
+		        rerender="accountsTable, pMessage, tabs" status="loadingStatus" />
+		    <apex:actionFunction name="xsave" action="{!saveAccounts}"
+		        rerender="none" status="loadingStatus" />
+		</apex:actionregion>
+
+		<table>
+			<apex:variable var="groupVar" value="" rendered="{!isGroupIncluded}">
+				<tr>
+					<td class="tableLabel">
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Group__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!groupValue}" size="1" id="group"
+								rendered="{!groupOptions!= null && isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!groupOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="chain,banner,subChain,level1,level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!groupMultiValue}" size="1" id="groupMulti" multiselect="true" styleClass="multiselect-picklist"
+								rendered="{!groupOptions!= null && isMultiSelectEnabled}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!groupOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="chainMulti,bannerMulti,subChainMulti,level1Multi,level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+
+			<apex:variable var="chainVar" value="" rendered="true">
+				<tr>
+					<td class="tableLabel">
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Chain__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!chainValue}" size="1" id="chain"
+								rendered="{!chainOptions!= null && isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!chainOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="banner,subChain,level1,level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!chainMultiValue}" size="1" id="chainMulti" multiselect="true" styleClass="multiselect-picklist"
+								rendered="{!chainOptions!= null && isMultiSelectEnabled}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!chainOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="bannerVar,subChainMulti,level1Multi,level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+
+			<apex:variable var="bannerVar" value="" rendered="{!isBannerIncluded}">
+				<tr>
+					<td class="tableLabel">
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Banner__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!bannerValue}" size="1" id="banner"
+								rendered="{!bannerOptions!= null && isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!bannerOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="subChain,level1,level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!bannerMultiValue}" size="1" id="bannerMulti" multiselect="true" styleClass="multiselect-picklist"
+								rendered="{!bannerOptions!= null && isMultiSelectEnabled}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!bannerOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="subChainMulti,level1Multi,level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+
+
+			<apex:variable var="subChainVar" value=""
+				rendered="{!isSubChainIncluded}">
+				<tr>
+					<td class="tableLabel">
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Sub_Chain__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!subChainValue}" size="1" id="subChain"
+								rendered="{!isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!subChainOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="level1,level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!subChainMultiValue}" size="1" id="subChainMulti" multiselect="true"
+								rendered="{!isMultiSelectEnabled}" disabled="{!saveDisabled}" styleClass="multiselect-picklist">
+								<apex:selectOptions value="{!subChainOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="level1Multi,level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+			<apex:variable var="regionVar" value=""
+				rendered="{!isRegionIncluded}">
+				<tr>
+					<td class="tableLabel">
+
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Region__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!regionValue}" size="1" id="region"
+								rendered="{!isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!regionOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="level1,level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!regionMultiValue}" size="1" id="regionMulti" multiselect="true"
+								rendered="{!isMultiSelectEnabled}" disabled="{!saveDisabled}" styleClass="multiselect-picklist">
+								<apex:selectOptions value="{!regionOptions}" />
+								<apex:actionSupport event="onchange"
+									reRender="level1Multi,level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+			<apex:variable var="level1Var" value=""
+				rendered="{!islevel1Included}">
+				<tr>
+					<td class="tableLabel">
+
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Level_1__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!level1Value}" size="1" id="level1"
+								rendered="{!isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!level1Options}" />
+								<apex:actionSupport event="onchange"
+									reRender="level2,level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!level1MultiValue}" size="1" id="level1Multi" multiselect="true"
+								rendered="{!isMultiSelectEnabled}" disabled="{!saveDisabled}" styleClass="multiselect-picklist">
+								<apex:selectOptions value="{!level1Options}" />
+								<apex:actionSupport event="onchange"
+									reRender="level2Multi,level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+			<apex:variable var="level2Var" value=""
+				rendered="{!isLevel2Included}">
+				<tr>
+					<td class="tableLabel">
+
+						{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Fields.EUR_CRM_Level_2__c.Label}
+					</td>
+					<td><apex:actionRegion >
+							<apex:selectList value="{!level2Value}" size="1" id="level2"
+								rendered="{!isMultiSelectEnabled == false}" disabled="{!saveDisabled}">
+								<apex:selectOptions value="{!level2Options}" />
+								<apex:actionSupport event="onchange"
+									reRender="level3,level4,level5,level6,level7,level8"
+									status="idStatus" />
+							</apex:selectList>
+							<apex:selectList value="{!level2MultiValue}" size="1" id="level2Multi" multiselect="true"
+								rendered="{!isMultiSelectEnabled}" disabled="{!saveDisabled}" styleClass="multiselect-picklist">
+								<apex:selectOptions value="{!level2Options}" />
+								<apex:actionSupport event="onchange"
+									reRender="level3Multi,level4Multi,level5Multi,level6Multi,level7Multi,level8Multi"
+									status="idStatus" />
+							</apex:selectList>
+						</apex:actionRegion></td>
+				</tr>
+			</apex:variable>
+			<tr>
+				<td class="tableLabel"></td>
+				<td><apex:commandButton value="{!$Label.EUR_CRM_Search}"
+						action="{!filter}"
+						reRender="customerTaxonomyTable, filteredAccountsTable"
+						status="idStatus" disabled="{!saveDisabled}" /></td>
+			</tr>
+		</table>
+
+		<br />
+		<apex:pageBlock title="{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.Label} {!$Label.EUR_CRM_List}"
+			id="customerTaxonomyTable">
+
+			<apex:outputPanel rendered="{!isDraft && !saveDisabled}">
+				<apex:pageMessages />
+			</apex:outputPanel>
+			<apex:outputPanel layout="none" rendered="{!recordSize > 0 }"
+				style="margin:0 auto; text-align:center; width:100%">
+				<div style="float: left">{!((pageNumber-1) * pageSize) +1} -
+					{! if((pageNumber * pageSize) > recordSize, recordSize ,
+					(pageNumber * pageSize))} of {!recordSize}</div>
+				<div style="padding-left: 33%">
+					<apex:commandLink action="{!first}" rendered="{!hasPrevious}"
+						title="{!$Label.EUR_CRM_Beginning}" value="<<">
+						</apex:commandlink>
+						<apex:outputText rendered="{!!hasPrevious}" style="color:grey"
+							value="<<"></apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!previous}"
+							rendered="{!hasPrevious}" value="<{!$Label.EUR_CRM_Previous} ">
+							</apex:commandlink>
+							<apex:outputText rendered="{!!hasPrevious}" style="color:grey"
+								value="<{!$Label.EUR_CRM_Previous}">
+							</apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!next}" rendered="{!hasNext}"
+								title="{!$Label.EUR_CRM_Next}" value=" {!$Label.EUR_CRM_Next}>">
+								</apex:commandlink>
+								<apex:outputText rendered="{!!hasNext}" style="color:grey"
+									value="{!$Label.EUR_CRM_Next}>"></apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!last}" rendered="{!hasNext}"
+									title="{!$Label.EUR_CRM_End}" value=">>">
+									</apex:commandlink>
+									<apex:outputText rendered="{!!hasNext}" value=">>">
+									</apex:outputText>
+				</div>
+			</apex:outputPanel>
+			<apex:pageBlockTable value="{!taxList}" var="c" id="newTable">
+				<apex:column value="{!c.name}"
+					headerValue="{!$ObjectType.EUR_CRM_Customer_Taxonomy__c.fields.Name.Label}" />
+			</apex:pageBlockTable>
+			<apex:outputPanel layout="none" rendered="{!recordSize > 0 }">
+				<div style="float: left">{!((pageNumber-1) * pageSize) +1} -
+					{! if((pageNumber * pageSize) > recordSize, recordSize ,
+					(pageNumber * pageSize))} of {!recordSize}</div>
+				<div style="padding-left: 33%">
+					<apex:commandLink action="{!first}" rendered="{!hasPrevious}"
+						title="{!$Label.EUR_CRM_Beginning}" value="<<">
+						</apex:commandlink>
+						<apex:outputText rendered="{!!hasPrevious}" style="color:grey"
+							value="<<"></apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!previous}"
+							rendered="{!hasPrevious}" value="<{!$Label.EUR_CRM_Previous} ">
+							</apex:commandlink>
+							<apex:outputText rendered="{!!hasPrevious}" style="color:grey"
+								value="<{!$Label.EUR_CRM_Previous}">
+							</apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!next}" rendered="{!hasNext}"
+								title="{!$Label.EUR_CRM_Next}" value=" {!$Label.EUR_CRM_Next}>">
+								</apex:commandlink>
+								<apex:outputText rendered="{!!hasNext}" style="color:grey"
+									value="{!$Label.EUR_CRM_Next}>"></apex:outputText>
+                &nbsp;
+                <apex:commandLink action="{!last}" rendered="{!hasNext}"
+									title="{!$Label.EUR_CRM_End}" value=">>">
+									</apex:commandlink>
+									<apex:outputText rendered="{!!hasNext}" value=">>">
+									</apex:outputText>
+				</div>
+				<div style="float: right">Page {!pageNumber} of {!pages}</div>
+			</apex:outputPanel>
+		</apex:pageBlock>
+		<apex:outputPanel rendered="{!isSelectorRendered}">
+			<apex:outputPanel id="filteredAccountsTable">
+				<apex:pageBlock title="{!$Label.EUR_CRM_Filtered_Accounts}">
+				    <apex:pageBlockButtons >
+				        <apex:actionRegion >
+				            <apex:commandButton value="Quick Save"
+				                disabled="{!isDeactivated}"
+				                onclick="confirmQuickSave(); return false;" />
+				            <apex:commandButton value="Save" onclick="confirmSave(); return false;"
+				                status="loadingStatus" disabled="{!isDeactivated}"/>
+				        </apex:actionRegion>
+
+				        <apex:commandButton value="{!$Label.EUR_CRM_Cancel}"
+				            action="{!standardController.cancel}" />
+				    </apex:pageBlockButtons>
+				    <apex:outputPanel id="accountsTable">
+				        <apex:pageBlockTable value="{!wrapAccounts}" var="acc" id="mpb">
+				            <apex:column >
+				                <apex:facet name="header">
+				                    <apex:inputCheckbox onclick="checkAll(this,'checkSelect');"
+				                        selected="{!isAllSelected}" />
+				                </apex:facet>
+				                <apex:inputCheckbox value="{!acc.isSelected}" id="checkSelect"
+				                    styleClass="inputCheckBox"
+				                    onchange="doCheckboxChange(this,'{!acc.euAccount.Id}'); return false;" />
+				            </apex:column>
+				            <apex:column >
+				
+				                <apex:facet name="header">
+				                    <apex:actionRegion >
+				                        <apex:commandLink value="{!$ObjectType.EUR_CRM_Account__c.fields.Name.Label}   "
+				                            action="{!sort}" reRender="accountsTable" status="loadingStatus">
+				                            <apex:param assignTo="{!sortFieldName}" value="name" />
+				                            <apex:image url="{!URLFOR($Resource.EUR_CRM_sortArrows_sprite, 'sortArrow'+ if(sortOrder =='DESC', 'Down','Up') +'_sprite.png')}"
+				                                rendered="{!IF(sortFieldName == 'name' , true,false)}" />
+				                        </apex:commandLink>
+				                    </apex:actionRegion>
+				                </apex:facet>
+				                <apex:outputLink value="/{!acc.euAccount.id}">{!acc.euAccount.name}</apex:outputLink>
+				            </apex:column>
+				            <apex:column >
+				
+				                <apex:facet name="header">
+				                    <apex:actionRegion >
+				                        <apex:commandLink value="{!$ObjectType.EUR_CRM_Account__c.fields.EUR_CRM_City__c.Label} {!if(sortFieldName == 'EUR_CRM_City__c', '(' + sortOrder +')', '')}  "
+				                            action="{!sort}" reRender="accountsTable" status="loadingStatus">
+				                            <apex:param assignTo="{!sortFieldName}" value="EUR_CRM_City__c" />
+				                            <apex:image url="{!URLFOR($Resource.EUR_CRM_sortArrows_sprite, 'sortArrow'+ if(sortOrder =='DESC', 'Down','Up') +'_sprite.png')}"
+				                                rendered="{!IF(sortFieldName == 'EUR_CRM_City__c' , true,false)}" />
+				                        </apex:commandLink>
+				                    </apex:actionRegion>
+				                </apex:facet>
+				                <apex:outputField value="{!acc.euAccount.EUR_CRM_City__c}" />
+				            </apex:column>
+				            <apex:column >
+				
+				                <apex:facet name="header">{!$ObjectType.User.fields.Name.Label}
+				                            <apex:actionRegion >
+				                        <apex:commandLink value="{!$ObjectType.User.fields.Name.Label}"
+				                            action="{!sort}" reRender="accountsTable" status="loadingStatus">
+				                            <apex:param assignTo="{!sortFieldName}" value="owner.name" />
+				                            <apex:image url="{!URLFOR($Resource.EUR_CRM_sortArrows_sprite, 'sortArrow'+ if(sortOrder =='DESC', 'Down','Up') +'_sprite.png')}"
+				                                rendered="{!IF(sortFieldName == 'owner.name' , true,false)}" />
+				                        </apex:commandLink>
+				                    </apex:actionRegion>
+				                </apex:facet>
+				                <apex:outputtext value="{!acc.euAccount.Owner.name}"></apex:outputtext>
+				            </apex:column>
+				        </apex:pageBlockTable>
+				    </apex:outputPanel>
+				    <apex:outputPanel id="accountSelectorcommandLinksPagination">
+				        <apex:outputPanel layout="none"
+				            rendered="{!accConRecordSize != null && accConRecordSize> 0 }">
+				            <div style="float: left">{!((accConPageNumber-1) * accConPageSize) +1} -
+				                {! if((accConPageNumber * accConPageSize) > accConRecordSize, accConRecordSize ,
+				                (accConPageNumber * accConPageSize))} {!$Label.EUR_CRM_PaginationCtrlLabel_Of}
+				                {!accConRecordSize}</div>
+				            <div style="padding-left: 33%">
+				                    <apex:commandLink action="{!accConFirst}"
+				                        title="{!$Label.EUR_CRM_Beginning}" value="<<"
+				                        rerender="accountsTable,accountSelectorcommandLinksPagination" status="loadingStatus" />
+				                    &nbsp;
+				                    <apex:commandLink action="{!doPrevious}"
+				                        value="<{!$Label.EUR_CRM_Previous} "
+				                        rerender="accountsTable,accountSelectorcommandLinksPagination" status="loadingStatus" />
+				                    &nbsp;
+				                    <apex:commandLink action="{!doNext}" title="{!$Label.EUR_CRM_Next}"
+				                        value=" {!$Label.EUR_CRM_Next}>"
+				                        rerender="accountsTable,accountSelectorcommandLinksPagination" status="loadingStatus" />
+				                    <!-- <apex:commandButton onclick="next(); return false;" title="{!$Label.EUR_CRM_Next}"
+				                        value=" {!$Label.EUR_CRM_Next}>" /> -->
+				                    &nbsp;
+				                    <apex:commandLink action="{!accConLast}" title="{!$Label.EUR_CRM_End}"
+				                        value=">>" rerender="accountsTable,accountSelectorcommandLinksPagination"
+				                        status="loadingStatus" />
+				            </div>
+				            <div style="float: right">
+				                {!$Label.EUR_CRM_PaginationCtrlLabel_Page} {!accConPageNumber}
+				                {!$Label.EUR_CRM_PaginationCtrlLabel_Of} {!totalPages}</div>
+				        </apex:outputPanel>
+				    </apex:outputPanel>
+				</apex:pageBlock>
+			</apex:outputPanel>
+		</apex:outputPanel>
+	</apex:form>
+
+</apex:component>

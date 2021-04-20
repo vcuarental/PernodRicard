@@ -1,0 +1,207 @@
+<apex:page standardcontroller="clm__Application__c" extensions="clm.HelperClass" showHeader="false" sidebar="false" >
+
+<apex:relatedList list="CombinedAttachments" />
+<apex:form >
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script type="text/javascript" src="{!URLFOR($Resource.jQueryBase64,'jquery.base64.js')}"></script>
+    <script src="https://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+    
+    <apex:includeScript value="/soap/ajax/32.0/connection.js" />
+    <apex:includeScript value="/soap/ajax/32.0/apex.js" />
+    
+    <style>
+        .ui-dialog {z-index:1}
+    </style>
+    
+    <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/jquery-ui-1-9-git.css"/>
+    
+    <script>
+        sforce.connection.sessionId = "{!$Api.Session_ID}";
+        var parentid = '{!clm__Application__c.id}';
+        
+        var sizeLim = 25000000;
+        
+        $(document).ready(function() {
+            $('#file').change(function(event){
+                console.log('size >>> ' + $("#file")[0].files[0].size);
+                console.log('filename >> ' + $("#file")[0].files[0].name);
+                //attach();
+            });
+        });
+        
+        function attach(){
+            var name = $("#file")[0].files[0].name;
+            var body = $("#file")[0].files[0];
+            
+            var file_cont;
+            
+            var r = new FileReader();
+            r.readAsBinaryString($("#file")[0].files[0]);
+            r.onload = function(){
+                var att = new sforce.SObject("Attachment");
+                att.ParentId = parentid;
+                att.ContentType = $("#file").prop('files')[0].type;
+                att.Name = $("#file")[0].files[0].name;
+                att.body = base64_encode(r.result);
+                // Assign all medotery fields for the Attachment record
+                var result = sforce.connection.create([att]);
+                //if(endsWith(att.ContentType, '.zip')){
+                    sendToAzure();
+                /*}else{
+                    var name = $('#file').val(null);
+                    $( "#attachDialog" ).dialog( "close" );
+                    //hideDialog();
+                    rerenderTable();
+                }*/
+            };
+        }
+        
+        function base64_encode( data ) {    // Encodes data with MIME base64
+            // 
+            // +   original by: Tyler Akins (http://rumkin.com)
+            // +   improved by: Bayron Guevara
+        
+            var b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            var o1, o2, o3, h1, h2, h3, h4, bits, i=0, enc='';
+        
+            do { // pack three octets into four hexets
+                o1 = data.charCodeAt(i++);
+                o2 = data.charCodeAt(i++);
+                o3 = data.charCodeAt(i++);
+        
+                bits = o1<<16 | o2<<8 | o3;
+        
+                h1 = bits>>18 & 0x3f;
+                h2 = bits>>12 & 0x3f;
+                h3 = bits>>6 & 0x3f;
+                h4 = bits & 0x3f;
+        
+                // use hexets to index into b64, and append result to encoded string
+                enc += b64.charAt(h1) + b64.charAt(h2) + b64.charAt(h3) + b64.charAt(h4);
+            } while (i < data.length);
+        
+            switch( data.length % 3 ){
+                case 1:
+                    enc = enc.slice(0, -2) + '==';
+                break;
+                case 2:
+                    enc = enc.slice(0, -1) + '=';
+                break;
+            }
+        
+            return enc;
+        }
+        
+        function deleteAttachment(att_id){
+            sforce.connection.deleteIds([att_id]);
+        }
+        
+        function showConfirm(att_id){
+            var del = window.confirm('Proceed deleting?');
+            if (del) {
+                deleteAttachment(att_id);
+            } else {
+                return;
+            }
+        }
+        
+        function initDialog(){
+            $("#attachDialog").dialog({
+                autoOpen: false,
+                modal: true,
+                buttons: {
+                    "{!$Label.Attach}": function(){
+                        if(sizeLim <= $("#file")[0].files[0].size){
+                            alert('File size limit is 25MB!');
+                            return;
+                        }
+                        if(null == $("#file")[0].files[0]){
+                            alert('No file selected!');
+                        }else{
+                            //.attr('disabled','disabled');
+                            $("#dialog-container ui-button").attr('disabled','disabled');
+                            $("#uploader").css('display','none');
+                            $("#progress-bar").css('display','block');
+                            attach();
+                            //$( this ).dialog( "close" );
+                        }
+                    },
+                    "{!$Label.MS_Cancel}": function(){
+                        if(null != $('#file').val()){
+                            var name = $('#file').val(null);
+                        }
+                        $( this ).dialog( "close" );
+                    }
+                }
+            });
+            $('#dialog-container').css('display','block');
+        }
+        
+        $(document).ready(function(){
+            initDialog();
+            var button = '<button onclick="openAttDial()" >{!$Label.AttachFile}</button>';
+            $(".pbButton").html(button);
+            //window.parent.document.getElementsByClassName('parentPrice').innerHTML
+        });
+        
+        function openAttDial(){
+            $("#uploader").css('display','block');
+            $("#progress-bar").css('display','none');
+            $( "#attachDialog" ).dialog( "open" );
+        }
+        
+        function sendToAzure(){
+            console.log('azure sending');
+            var data = new FormData();
+            data.append("file", $("#file")[0].files[0]);
+            //data.append("submit", "Upload");
+            //data.append("cloud_token", "12345");
+            
+            data.append("cloud_token", '{!CLOUD_TOKEN}');
+            data.append("org_id", '{!CASESAFEID($Organization.Id)}');
+            data.append("app_id", '{!CASESAFEID(clm__Application__c.Id)}');
+            data.append("action", 'upload-sources');
+            
+            data.append("empty_id", "end");
+
+            console.log(data);
+        
+            $.ajax({
+                type: 'POST',
+                url: "{!CLOUD_UPLOADURL}",
+                context: document.body,
+                cache: false,
+                contentType: false,
+                processData: false,
+                crossDomain: true,
+                data: data
+            }).done(function() {
+                //hideDialog();
+                $( "#attachDialog" ).dialog( "close" );
+                var name = $('#file').val(null);
+                console.log('azure sent');
+                rerenderTable();
+            });
+        }
+        
+        function endsWith(str, suffix) {
+            return str.indexOf(suffix, str.length - suffix.length) !== -1;
+        }
+                
+    </script>
+    <div id="dialog-container" style="display:none">
+        <div id="attachDialog" >
+            <div id="uploader" >
+                {!$Label.SelectFile}
+                <input id="file" type="file" name="file" />
+            </div>
+            <div id="progress-bar" >
+                <p align='center'><img src='{!$Resource.LoaderIcon}' style='margin:0 5px;'/></p><p align='center'>{!$Label.PleaseWait}</p>
+            </div>
+        </div>
+    </div>
+    
+    <apex:actionFunction name="rerenderTable" />
+    
+</apex:form>
+</apex:page>

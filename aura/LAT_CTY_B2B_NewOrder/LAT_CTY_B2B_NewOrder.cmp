@@ -1,0 +1,388 @@
+<aura:component controller="LAT_CTY_B2B_OrderController"
+    implements="flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes"
+    access="global">
+    <lightning:overlayLibrary aura:id="overlayLib" />
+
+    <aura:attribute name="brandList" type="List" />
+    <aura:attribute name="cart" type="List" default="[]" />
+    <aura:attribute name="categories" type="List" />
+    <aura:attribute name="filtersMap" type="Map" />
+    <aura:attribute name="categoriesMap" type="Map" />
+    <aura:attribute name="filters" type="List" default="[]" />
+    <aura:attribute name="isListView" type="Boolean" default="false" />
+    <aura:attribute name="productsBase" type="List" />
+    <aura:attribute name="productsFiltered" type="List" />
+    <aura:attribute name="selectedCategory" type="String" default="" />
+    <aura:attribute name="showModal" type="Boolean" />
+    <aura:attribute name="showModalBlockedClient" type="Boolean" default="false"/>
+    <aura:attribute name="showFilterList" type="Boolean" default="false" />
+    <aura:attribute name="orderTakingBlocked" type="Boolean" default="false" />
+    <aura:attribute name="blockedMessage" type="String" default="" />
+    <aura:attribute name="offSet" type="Integer" default="0" />
+    
+
+    <!-- Pirate filter implemenetation -->
+    <aura:attribute name="timer" type="Integer" />
+    <aura:attribute name="filterSelectedBrand" type="List" default="[]" />
+    <aura:attribute name="searchTerm" type="String" default="" />
+
+    <!-- Handler -->
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+
+    <aura:registerEvent name="addProductEvent" type="c:LAT_CTY_B2B_AddToCart" />
+
+    <div>
+		<div class="{!v.orderTakingBlocked ? 'orderBlocked' : 'slds-hide'}">
+            <div style="margin-top:150px;"> 
+                <H1 >No es posible cargar pedidos.</H1>
+                <h3 >{!v.blockedMessage}</h3>
+                <p style="text-align:center;margin-top:30px;">
+                	<a href="/s" style="font-size: 12px;color: #FFF;text-decoration: none;border: 1px solid #FFF;border-radius: 4px;padding: 6px;">Volver</a>
+				</p>
+            </div>
+        </div> 		
+        <div class="header">
+            <div id="filter-brand" class="filter-block">
+                <div class="header-btn">
+                    MARCAS        
+                </div>
+                <div class="brand-list append-to">
+                    <h3><span style="float:left;margin-right: 200px;">Compra por Marca</span> 
+                        <span style="float:rigth;font-size: smaller;"><a href="javascript:void(0);" onclick="{!c.clearFilter}">VER TODO</a></span></h3>
+                    <ul>
+                        <aura:iteration var="brand" items="{!v.brandList}">
+                            <li><a data-brand="{!brand}" href="javascript:void(0);"
+                                    onclick="{!c.setBrandFilter}">{!brand}</a></li>
+                        </aura:iteration>
+                    </ul>
+                </div>
+            </div>
+            <div id="filter-brand" class="filter-block">
+                <div class="header-btn">
+                    CATEGORÍAS
+                </div>
+                <div class="brand-list append-to append-to-category">
+                    <h3><span style="float:left;margin-right: 180px;">Compra por Categoría</span>
+                        <span style="float:rigth;font-size: smaller;"><a onclick="{!c.clearFilter}">VER TODO</a></span></h3>
+                    <ul>
+                        <aura:iteration var="brand" items="{!v.categories}">
+                            <li><a data-category="{!brand}" href="javascript:void(0);"
+                                    onclick="{!c.setCategoryFilter}">{!brand}</a></li>
+                        </aura:iteration>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="f-right search-cart">
+                <div class="slds-form-element">
+                    <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_left">
+                        <lightning:icon class="slds-icon slds-input__icon slds-input__icon_left slds-icon-text-default"
+                            size="small" iconName="utility:search" alternativeText="Search Icon" />
+                        <input id="text-input-id-1" placeholder="Filtrar Productos" class="slds-input f-left" type="text" value=""
+                            onkeyup="{! c.searchTerm }" onchange="{! c.searchTerm }" />
+                    </div>
+                </div>
+                <div class="shopping">
+                    <c:LAT_CTY_B2B_ShoppingCart />
+                    <!-- <lightning:button variant="neutral" class="" label=" $ 5000" iconName="utility:shopping_bag" onclick="{!c.showCart}" />
+                                <div id="cart-section" class="shopping-cart hidden"></div> -->
+                </div>
+            </div>
+
+        </div>
+
+        <div class="body">
+            <div class="main-content slds-grid slds-wrap">
+                <div class="navbar slds-col slds-size_1-of-1 slds-grid">
+                    <div class="filter-list-container">
+                        <div class="filter-list-button" onclick="{!c.toggleFilterList}">
+                            <lightning:icon class="slds-icon filter-icon" size="small" iconName="utility:rating"
+                                alternativeText="Search Icon" />
+                            <span>Filtros ({! v.filterSelectedBrand.length })</span>
+                        </div>
+                    </div>
+                    <div>
+                        {!v.selectedCategory}
+                    </div>
+                    <!-- <div class="button-group">
+                        <lightning:button name="grid-view" variant="neutral" class="{!(v.isListView ? '' : 'selected') + ' btn-view-type'}" label="" 
+                                                iconName="utility:tile_card_list" iconPosition="left" onclick="{!c.selectView}" />
+
+                        <lightning:button name="list-view" variant="neutral" class="{!(v.isListView ? 'selected' : '') + ' btn-view-type'}" label="" 
+                                                iconName="utility:rows" iconPosition="left" onclick="{!c.selectView}" />
+                        
+                    </div> -->
+                </div>
+                <aura:if isTrue="{!v.showFilterList}">
+                    <div class="filter-list">
+                        <div>
+                            <a class="delete-filter" onclick="{! c.clearFilter}" href="javascript:void(0)">
+                                <lightning:icon class="slds-icon" size="small" iconName="utility:delete"
+                                    alternativeText="Borrar" />
+                                <span>Borrar Filtros</span>
+                            </a>
+                        </div>
+                        <div class="filter-container">
+                            <h3>Marcas</h3>
+                            <ul>
+                                <aura:iteration var="brand" items="{!v.filterSelectedBrand}">
+                                    <li><a data-brand="{!brand}" href="javascript:void(0);"
+                                            onclick="{!c.setBrandFilter}">{!brand}</a></li>
+                                </aura:iteration>
+                            </ul>
+                        </div>
+                        <!-- <div class="filter-container filter-size">
+                            <h3>Tamanos</h3>
+                            <ul>
+                                <aura:iteration var="brand" items="{!v.brandList}">
+                                    <li><button class="filter-size-button">{!brand}</button></li>       
+                                </aura:iteration>
+                            </ul>
+                        </div> -->
+                        <!-- <div class="filter-container">
+                            <h3>Calidad</h3>
+                            <ul>
+                                <aura:iteration var="brand" items="{!v.brandList}">
+                                    <li><a href="javascript:void(0)">{!brand}</a></li>    
+                                </aura:iteration>
+                            </ul>
+                        </div> -->
+                    </div>
+                </aura:if>
+                <div class="{!(v.isListView ? 'list-view ' : '') + 'product-list slds-grid slds-wrap'}">
+                    <aura:iteration var="product" items="{!v.productsFiltered}">
+                        <div class="{!(product.LAT_IsActive__c ? '' : 'disabled-product ') + 'product'}">
+                            
+                            <div class="product-image">
+                                <aura:if isTrue="{! !v.isListView}">
+
+                                    <img onclick="{!c.irAlProd}" data-prodid="{!product.Id}" class="{! (product.LAT_B2B_Thumbnail_URL__c == null ) ? 'no-image' : ''}" src="{! (product.LAT_B2B_Thumbnail_URL__c != null ) ? product.LAT_B2B_Thumbnail_URL__c : $Resource.LogoPernod4}"
+                                        alt="product image" />
+                                    <div class="not-stock">
+                                        Sin Stock
+                                    </div>
+                                    <div class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'product-image-opt border-red':'product-image-opt'}">
+
+                                        <fieldset class="slds-form-element">
+                                            <div class="slds-form-element__control">
+                                                <div class="slds-radio_button-group">
+                                                    <span class="slds-button slds-radio_button">
+                                                    <div class="quantity">
+                                                        <lightning:input class="inqty" type="number" min="1" variant="label-hidden"   name="qty" value="{! product.qty }" placeholder="Cant." label="Enter a number" />
+                                                    </div>
+                                                    </span>
+                                                    <span class="{!if(equals(product.LAT_B2B_Visibility__c,'Visible Botella'),'slds-hide','slds-button slds-radio_button')}">
+                                                        <input type="radio" onclick="{!c.setUnit}"
+                                                            data-pid="{!product.Id}" data-unit="CAJA"
+                                                            checked="{!product.unit == 'CAJA'}"
+                                                            name="{!product.Id + 'radio'}" id="{!product.Id}"
+                                                            value="{!product.Id}" 
+                                                            disabled="{!product.LAT_B2B_Visibility__c == 'Visible Botella'}"/>
+                                                        <label class="{!if(equals(product.LAT_B2B_Visibility__c,'Visible Caja'),'slds-radio_button__label fullwidth','slds-radio_button__label')}" for="{!product.Id}">
+                                                            <span class="slds-radio_faux">CAJA</span>
+                                                        </label>
+                                                    </span>
+                                                    <span class="{!if(equals(product.LAT_B2B_Visibility__c,'Visible Caja'),'slds-hide','slds-button slds-radio_button ')}">
+                                                        <input type="radio" onclick="{!c.setUnit}"
+                                                            data-pid="{!product.Id}" data-unit="BOTELLA"
+                                                            checked="{!product.unit == 'BOTELLA'}"
+                                                            name="{!product.Id + 'radio'}" id="{!product.Id + 'BT'}"
+                                                            value="{!product.Id + 'BT'}"
+                                                            
+                                                            disabled="{!product.LAT_B2B_Visibility__c == 'Visible Caja'}"/>
+                                                        <label class="{!if(equals(product.LAT_B2B_Visibility__c,'Visible Botella'),'slds-radio_button__label fullwidth','slds-radio_button__label')}"
+                                                            for="{!product.Id + 'BT'}">
+                                                            <span class="slds-radio_faux fullwidth">BOTELLA</span>
+                                                        </label>
+                                                    </span>
+
+                                                </div>
+                                            </div>
+                                        </fieldset>
+                                        <button class="btn-add" onclick="{!c.addToCart}"
+                                            data-qty="{!product.qty}"
+                                            data-sku="{!product.LAT_Sku__c}"
+                                            data-title="{!product.LAT_B2B_Product_Name__c}"
+                                            data-image="{!product.LAT_B2B_Image_URL__c}"
+                                            data-price="{! product.unit == 'CAJA' ? product.Precios_Productos_B2B__r.records[0].LAT_Price__c :  product.Precios_Productos_B2B__r.records[1].LAT_Price__c}"
+                                            data-iva="{! product.unit == 'CAJA' ? product.Precios_Productos_B2B__r.records[0].LAT_Iva__c  :  product.Precios_Productos_B2B__r.records[1].LAT_Iva__c }"
+                                            data-iibb="{! product.unit == 'CAJA' ? product.Precios_Productos_B2B__r.records[0].LAT_Iibb__c  :  product.Precios_Productos_B2B__r.records[1].LAT_Iibb__c }"
+                                            data-pid="{!product.Id}" data-unit="{!product.unit == 'CAJA' ? 'CA' : 'BT'}"
+                                            data-stockDisponible="{!product.Lat_StocksList__r.records[0].LAT_Stock__c}"
+                                            data-bottlesperbox="{!product.LAT_BottlesPerBox__c}"
+                                            data-subtitle="{!product.LAT_B2B_Product_Name__c}">
+                                            <lightning:icon class="slds-icon" size="small"
+                                                iconName="utility:cart" alternativeText="Connected" />
+                                            ANADIR AL CARRITO
+                                        </button>
+                                        
+                                    </div>
+                                </aura:if>
+                                <aura:if isTrue="{!v.isListView}">
+                                    <img src="{!product.LAT_B2B_Image_URL__c}" alt="product image" />
+                                </aura:if>
+                                <div class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'new-ribbon-red':'slds-hide'}">
+                                        <span >OFERTA</span>
+                            	</div>
+                            </div>
+                             <div class="product-info slds-float_left">
+                                <div class="{!product.LAT_B2B_Product_Name__c!=null?'product-name':'slds-hide'}"><a
+                                        href="{! '/s/detalle-producto?pid=' + product.Id}">{!product.Name}</a></div>
+                                <div class="{!product.LAT_B2B_Product_Name__c!=null?'slds-hide':'product-name'}"><a
+                                        href="{! '/s/detalle-producto?pid=' + product.Id}">{!product.Name}</a></div>
+                                <!-- <div class="product-price list-view-hide"> -->
+								<div class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'new-ribbon':'slds-hide'}">
+                                	<div > 
+                                    <span >
+                                        <span class="{!product.unit == 'CAJA' ? 'float-left' : 'slds-hide'}">
+                                    		<span >
+                                            <ui:outPutNumber class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'tachado':''}" 
+                                                     aura:id="myNumberFormat" format="$#,###,##0.00" 
+                                                     value="{! product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c + product.Precios_Productos_B2B__r.records[0].LAT_OfferIva__c + product.Precios_Productos_B2B__r.records[0].LAT_OfferIibb__c}"/>
+                                            </span>
+                                            <span>
+                                                <ui:outPutNumber class="color-red" aura:id="myNumberFormat" format="$#,###,##0.00" value="{! product.Precios_Productos_B2B__r.records[0].LAT_Price__c  + product.Precios_Productos_B2B__r.records[0].LAT_Iva__c + product.Precios_Productos_B2B__r.records[0].LAT_Iibb__c}"/>
+                                        	</span>
+                                
+                                        </span>
+                                        <span class="{!product.unit == 'BOTELLA' ? 'float-left' : 'slds-hide'}">
+                                            <span >
+                                            <ui:outPutNumber class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[1].LAT_Price__c, product.Precios_Productos_B2B__r.records[1].LAT_PriceWithoutOffer__c)? 'tachado':''}" 
+                                                     aura:id="myNumberFormat" format="$#,###,##0.00" value="{! product.Precios_Productos_B2B__r.records[1].LAT_PriceWithoutOffer__c  + product.Precios_Productos_B2B__r.records[1].LAT_OfferIva__c + product.Precios_Productos_B2B__r.records[1].LAT_OfferIibb__c}"/>
+                                            </span>
+                                            <span>
+                                                <ui:outPutNumber class="color-red" aura:id="myNumberFormat" format="$#,###,##0.00" value="{! product.Precios_Productos_B2B__r.records[1].LAT_Price__c  + product.Precios_Productos_B2B__r.records[1].LAT_Iva__c + product.Precios_Productos_B2B__r.records[1].LAT_Iibb__c}"/>
+                                        	</span>
+                                        </span>
+                                    </span>
+                                </div>
+                            	</div>
+                           		<div class="{! greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? '':'slds-hide'}">
+                                    <div class="{!product.unit == 'CAJA' ? 'product-price list-view-hide' : 'product-price slds-hide'}">
+                                        <ui:outPutNumber class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'tachado':''}" 
+                                                         aura:id="myNumberFormat" format="$#,###,##0.00" value="{! product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c  + product.Precios_Productos_B2B__r.records[0].LAT_Iva__c + product.Precios_Productos_B2B__r.records[0].LAT_Iibb__c}"/>
+                                        
+                                    </div>
+                                    <div class="{!product.unit == 'BOTELLA' ? 'product-price list-view-hide' : 'product-price slds-hide'}">
+                                        <ui:outPutNumber class="{! !greaterthanorequal(product.Precios_Productos_B2B__r.records[0].LAT_Price__c, product.Precios_Productos_B2B__r.records[0].LAT_PriceWithoutOffer__c)? 'tachado':''}"
+                                                         aura:id="myNumberFormat" format="$#,###,##0.00" value="{! product.Precios_Productos_B2B__r.records[1].LAT_PriceWithoutOffer__c  + product.Precios_Productos_B2B__r.records[1].LAT_Iva__c + product.Precios_Productos_B2B__r.records[1].LAT_Iibb__c}"/>
+                                        
+                                    </div>
+                                </div>
+                                <!-- $ {! product.Precios_Productos_B2B__r.records[0].LAT_Price__c}</div> -->
+                            </div>
+                            <div class="shop-options slds-float_right list-view-show">
+
+                                <div class="{!product.unit == 'CAJA' ? 'product-price' : 'product-price slds-hide'}">$
+                                    {! product.Precios_Productos_B2B__r.records[0].LAT_Price__c  + product.Precios_Productos_B2B__r.records[0].LAT_Iva__c + product.Precios_Productos_B2B__r.records[0].LAT_Iibb__c}</div>
+                                <div class="{!product.unit == 'BOTELLA' ? 'product-price' : 'product-price slds-hide'}">
+                                    $ {! product.Precios_Productos_B2B__r.records[1].LAT_Price__c  + product.Precios_Productos_B2B__r.records[1].LAT_Iva__c + product.Precios_Productos_B2B__r.records[1].LAT_Iibb__c}</div>
+                                <div class="product-image-opt">
+                                    <!-- <button class="btn-box">
+                                        CAJA
+                                    </button>
+                                    <button class="btn-bottle">
+                                        BOTELLA
+                                    </button> -->
+                                    <!-- <fieldset class="slds-form-element">
+                                            <div class="slds-form-element__control">
+                                        <div class="slds-radio_button-group">
+                                        <span class="slds-button slds-radio_button">
+                                        <input type="radio" onclick="{!c.setUnit}" data-pid="{!product.Id}" data-unit="CAJA" checked="{!product.unit == 'CAJA'}" name="{!product.Id + 'radio'}" id="{!product.Id}" value="{!product.Id}" />
+                                        <label class="slds-radio_button__label" for="{!product.Id}">
+                                        <span class="slds-radio_faux">CAJA</span>
+                                        </label>
+                                        </span>
+                                        <span class="slds-button slds-radio_button">
+                                        <input type="radio" onclick="{!c.setUnit}" data-pid="{!product.Id}" data-unit="BOTELLA" checked="{!product.unit == 'BOTELLA'}" name="{!product.Id + 'radio'}" id="{!product.Id + 'BT'}" value="{!product.Id + 'BT'}" />
+                                        <label class="slds-radio_button__label" for="{!product.Id + 'BT'}">
+                                        <span class="slds-radio_faux">BOTELLA</span>
+                                        </label>
+                                        </span>
+                                        
+                                        </div>
+                                        </div>
+                                        </fieldset> -->
+                                    <button class="btn-add" data-sku="{!product.LAT_Sku__c}" onclick="{!c.addToCart}"
+                                        data-title="{!product.LAT_B2B_Product_Name__c}"
+                                        data-image="{!product.LAT_B2B_Image_URL__c}"
+                                        data-price="{! product.unit == 'CAJA' ? product.Precios_Productos_B2B__r.records[0].LAT_Price__c :  product.Precios_Productos_B2B__r.records[1].LAT_Price__c}"
+                                        data-pid="{!product.Id}" data-unit="{!product.unit == 'CAJA' ? 'CA' : 'BT'}"
+                                        data-subtitle="{!product.LAT_B2B_Product_Name__c}">
+                                        <lightning:icon class="slds-icon" size="small" iconName="utility:cart"
+                                            alternativeText="Connected" />
+                                        ANADIR AL CARRITO
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </aura:iteration>
+                </div>
+            </div>
+        </div>
+
+
+        <div style="height: 640px;" class="{! v.showModal ? 'new-order-modal' : 'new-order-modal slds-hide' }">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true"
+                aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+
+
+                    <!-- Header -->
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            onclick="{! c.closeModal }" title="Close">
+                            <lightning:icon iconName="utility:close" variant="inverse" alternativeText="close" />
+                        </button>
+                    </header>
+
+                    <!-- Body -->
+                    <div class="slds-modal__content " id="modal-content-id-1">
+
+                    </div>
+
+                    <!-- Footer -->
+                    <footer class="slds-modal__footer">
+
+                        <button class="slds-button btn-cancel" onclick="{! c.closeModal }">Cancelar Cambios</button>
+                        <button class="slds-button slds-button_brand btn-confirm"
+                            onclick="{! c.addToCart }">Confirmar</button>
+
+                    </footer>
+
+                </div>
+            </section>
+
+            <!-- Backdrop -->
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </div>
+        <div style="height: 640px;" class="{! v.showModalBlockedClient ? 'new-order-modal' : 'new-order-modal slds-hide' }">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true"
+                aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header blocked-client-header">
+                        <span>HAY FACTURAS VENCIDAS
+                        </span>
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            onclick="{! c.closeModalOrderBlocked }" title="Close">
+                            <lightning:icon iconName="utility:close" variant="inverse" alternativeText="close" />
+                        </button>
+                    </header>
+                    <div class="slds-modal__content blocked-client-body" id="modal-content-id-1">
+                        <span>
+                            Tienes facturas vencidas, por lo que no podrás finalizar el pedido hasta que las mismas hayan sido canceladas.
+                            <br/>Por más detalles de las facturas puedes ir a <a href="/s/mi-cuenta">Mi Cuenta</a>.
+                        </span>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <button class="slds-button slds-button_brand btn-confirm" onclick="{!c.closeModalOrderBlocked}">Ok</button>
+                    </footer>
+
+                </div>
+            </section>
+
+            <!-- Backdrop -->
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </div>
+    </div>
+</aura:component>

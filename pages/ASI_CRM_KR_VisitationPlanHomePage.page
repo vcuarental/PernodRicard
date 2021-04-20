@@ -1,0 +1,732 @@
+<apex:page controller="ASI_CRM_KR_VisitationPlanHomeCtrl" docType="html-5.0"  standardStylesheets="false" showHeader="false" sidebar="false" cache="false" >
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap-theme.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_KR_CalendarLibrary, 'fullcalendar-2.6.0/fullcalendar.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" /> 
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_KR_CalendarLibrary, 'fullcalendar-2.6.0/lib/moment.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_KR_CalendarLibrary, 'fullcalendar-2.6.0/fullcalendar.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_KR_CalendarLibrary, 'fullcalendar-2.6.0/fullcalendar.min.js')}" /> 
+        <script type='text/javascript'>
+        var visitEvents=[];
+        var CurrentUserId;
+        var HolidayTypeName;
+        var SQLPlanDetail;
+        var limitnum=1000;
+        var Offsetnum;
+        var ColorObject;
+        var ViewfirstDate;
+        
+        //Weekend List exist in Calendar
+        var WeekendList=[];
+        var PlanList=[]; //Put Month/Year in PlanList 
+        var AddOn='';
+        
+        function isTouchDevice(){
+            return typeof window.ontouchstart !== 'undefined';
+        }
+        
+        $(document).ready(function() { 
+            //Everytime change month --> retrieve Weekend
+            $('body').on('click', 'button.fc-prev-button', function() {
+                var view = $('#calendar').fullCalendar('getView');
+                var datatemp= new Date(' 1 '+view.title);
+                changemonth(formatDate(datatemp),datatemp.getFullYear(),datatemp.getMonth());
+            });
+            
+            $('body').on('click', 'button.fc-next-button', function() {
+                var view = $('#calendar').fullCalendar('getView');
+                var datatemp= new Date(' 1 '+view.title);
+                changemonth(formatDate(datatemp),datatemp.getFullYear(),datatemp.getMonth());
+            });
+            
+            initKRCalendarPage({
+                
+            });  
+        });
+        
+        
+        //When clicking changing month : retrieve Event Plan and Weekend
+        function changemonth(InputDate,yy,mm){
+                    
+            //Plan Event
+            if (typeof FindValue(mm,yy,PlanList) == 'undefined'){
+                var firstDay = new Date(Number(yy),Number(mm), 1);
+                var lastDay = new Date(yy, Number(mm)+ 1, 0);
+                
+                $('#calendarDiv').hide();
+                $('#InfoMeg').html('<br/> <div style="margin: auto;width: 60%;padding: 10px;" > <i class="fa fa-refresh fa-spin" style="font-size: 84px ;color: '+ColorObject['NewEventColor']+' " ></i><span style="font-weight:bold; font-size: 50px ;">   Loading...</span></div>');
+                var whereClause =   ' WHERE ASI_KOR_Visitation_Plan__r.OwnerId = \''+ CurrentUserId+ '\' and ASI_KOR_Wholesaler__c != null ';
+                var Laststatement = '  and (ASI_KOR_Visit_Date__c <= ' + formatDate(lastDay) + ' ) AND ( ASI_KOR_Visit_Date__c >='+formatDate(firstDay)+') '; 
+                AddOn = 'include';
+                //Save current month/Year to avoid duplicate
+                PlanList.push(new MonthObject(Number(mm),Number(yy)));
+                
+            
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ASI_CRM_KR_VisitationPlanHomeCtrl.findVisitationPlanDetail}',whereClause,Laststatement,AddOn
+                    , callbackVisitationPlanDetail
+                    , {escape: true}
+                ); 
+            }
+             
+            
+            
+            
+            //If this year and month have not find weekend --> retrieve 
+            if (typeof FindValue(mm,yy,WeekendList) == 'undefined'){
+                var eventList=retrieveInitWeekend(new Date(InputDate),daysInMonth(Number(mm)+1,Number(yy))-1);   
+                $('#calendar').fullCalendar('addEventSource', eventList);
+                WeekendList.push(new MonthObject(Number(mm),Number(yy)));
+            }
+        }
+        
+        //Find a value in an array (WeekendList) of objects (MonthObject)
+        function FindValue(SearchMM,SearchYear,InputList){
+            var result = InputList.filter(function(v) {
+                return (v.Inmonth === Number(SearchMM) && v.InYear==Number(SearchYear)); // Filter out the appropriate one
+            })[0];
+            return result;
+        }
+        
+        
+        //Get Weekend from current month 
+        function retrieveInitWeekend(tempdate,NumberOfDay){
+            var TempEventsArr=[];
+            
+            for (var i = 0; i <NumberOfDay; i++) {// array will start 0
+                if(tempdate.getDay()==0 || tempdate.getDay()==6){ //iF this day is Weekend create events: 
+                    TempEventsArr.push(addCalanderEvent( String(tempdate),'Holidays',formatDate(tempdate),  formatDate(nextday(tempdate)),'Weekend', ColorObject['holidayColor'], ColorObject['holidayTextColor'], false,'Weekend','Weekend_Holidays',''));
+                }
+                
+                tempdate=nextday(tempdate);
+            }
+            
+            return TempEventsArr;
+        }//End of function: retrieveInitWeekend
+        
+        
+        
+        //Get Color From custom setting
+        function RetrieveColor(){
+            ColorObject= new Object();
+            var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(ColorListJSON)}');
+            for(var i=0;i<$mapParentChildren.length;i++){  
+                ColorObject[$mapParentChildren[i].Name]=$mapParentChildren[i].ASI_CRM_Color__c;
+            }
+        }
+        
+        function initKRCalendarPage(config) {
+            if (config) {
+                ViewfirstDate='{!firstDate}';
+                
+                //Get Color Code From Custom setting
+                RetrieveColor();
+                var firstDate= new Date(ViewfirstDate);// getMonth  getFullYear  
+                
+                //Current Weekend
+                WeekendList.push(new MonthObject(firstDate.getMonth(),firstDate.getFullYear()));
+                PlanList.push(new MonthObject(firstDate.getMonth(),firstDate.getFullYear()));
+                var eventList=retrieveInitWeekend(firstDate,daysInMonth(firstDate.getMonth()+1,firstDate.getFullYear()));
+                
+                visitEvents.push.apply(visitEvents, eventList);
+                
+                HolidayTypeName='ASI_CRM_KR_Holiday';
+                CurrentUserId= GetUerInfo();
+                retrieveInitData();
+            }
+        }    
+        
+        function GetUerInfo(){//return user ID
+            var selectSection= document.getElementById("selectDiv").children[0];
+            var selectOpt = selectSection.options; //console.log(selectOpt[selectSection.selectedIndex].value);
+            return selectOpt[selectSection.selectedIndex].value;
+        }     
+        
+        //changing user 
+        function ChangeUser(){
+            //Get Current Day
+            var view = $('#calendar').fullCalendar('getView');
+            var datatemp= new Date(' 1 '+view.title);
+            
+            //showing message
+            $('#calendarDiv').hide();
+            $('#InfoMeg').html('<br/> <div style="margin: auto;width: 60%;padding: 10px;" > <i class="fa fa-refresh fa-spin" style="font-size: 84px ;color: '+ColorObject['NewEventColor']+' " ></i><span style="font-weight:bold; font-size: 50px ;">   Loading...</span></div>');
+            
+            //Get Current User events 
+            var array = $('#calendar').fullCalendar('clientEvents');
+            var TempEventsArr=[];
+            
+            $.each( array, function( key, value ) { 
+                var tempdate = new Date(value.start["_d"] );
+                if(value.type=='Holidays' || value.type=='Weekend' ){ // holiday & weekend event
+                //console.log(value.information); formatDate(nextday(tempdate))
+                    TempEventsArr.push(addCalanderEvent( value.id,'Holidays',formatDate(tempdate), value.end ,value.title, ColorObject['holidayColor'], ColorObject['holidayTextColor'], false,value.type,'Weekend_Holidays',value.information));
+                }
+            });  
+            
+            //Clear current calendar 
+            $('#calendar').fullCalendar('removeEvents');
+            // add holiday & weekend event
+            $('#calendar').fullCalendar('addEventSource', TempEventsArr);
+            
+            //get current user ID
+            CurrentUserId=GetUerInfo();
+            
+            //Get current user's event
+            PlanList=[];
+            AddOn = 'include';
+            
+            
+            var firstDay = new Date(datatemp.getFullYear(),datatemp.getMonth(), 1);
+            var lastDay = new Date(datatemp.getFullYear(), datatemp.getMonth()+ 1, 0);
+            
+            var whereClause =   ' WHERE ASI_KOR_Visitation_Plan__r.OwnerId = \''+ CurrentUserId+ '\' and ASI_KOR_Wholesaler__c != null ';
+            var Laststatement = '  and (ASI_KOR_Visit_Date__c <= ' + formatDate(lastDay) + ' ) AND ( ASI_KOR_Visit_Date__c >='+formatDate(firstDay)+') '; 
+            AddOn = 'include';
+            
+            //Save current month/Year to avoid duplicate
+            PlanList.push(new MonthObject(datatemp.getMonth(),datatemp.getFullYear()));
+            
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_KR_VisitationPlanHomeCtrl.findVisitationPlanDetail}',whereClause,Laststatement,AddOn
+                , callbackVisitationPlanDetail
+                , {escape: true}
+            ); 
+            
+            
+            
+        }//function of changing user End 
+        
+        //Create INFO Object from event, use for display 
+        function createInfoObject(InputResult){
+        	var Info = new Object();
+            Info.Customer_Code=InputResult.ASI_KOR_Customer_Code__c;
+            Info.Account_Address=InputResult.ASI_KOR_Account_Address__c;
+            Info.Status=InputResult.ASI_KOR_Status__c;
+            Info.Grade=InputResult.ASI_KOR_Wholesaler__r.ASI_KOR_Grade__c;
+            Info.Pillar=InputResult.ASI_KOR_Wholesaler__r.ASI_KOR_Venue_Pillar__c;
+            if (typeof InputResult.ASI_CRM_KR_Visit_Date_Time_From__c != 'undefined'){
+                Info.FromTime=InputResult.ASI_CRM_KR_Visit_Date_Time_From__c;
+            }
+            if (typeof InputResult.ASI_CRM_KR_Visit_Date_Time_To__c != 'undefined'){
+            	Info.EndTime=InputResult.ASI_CRM_KR_Visit_Date_Time_To__c; //ASI_CRM_KR_Visit_Date_Time_From__c,ASI_CRM_KR_Visit_Date_Time_To__c,
+            }
+            return Info;
+            
+        }
+        
+        //Get Init data
+        function retrieveInitData(){
+            localStorage.clear();
+            //Get event dtails from this month
+            var colourcss;
+            var textColorcss;
+            var PlanType='';        
+            var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(DetailLineJSON)}');
+            
+            //Put event details to visitEvents List
+            for(var i=0;i<$mapParentChildren.length;i++){
+                if (typeof $mapParentChildren[i].ASI_KOR_Wholesaler__c != 'undefined'){
+                    
+                    //Event Information
+                    var Info =createInfoObject($mapParentChildren[i]);
+                    if($mapParentChildren[i].ASI_KOR_Status__c=='Achieved'){
+                        colourcss=ColorObject['FinishedPlanColor'];//'#006b37';
+                        textColorcss=ColorObject['FinishedPlanTextColor'];//'#FFFFFF';
+                        PlanType='PlanDetail-Achieved';
+                    }else if($mapParentChildren[i].ASI_KOR_Status__c=='Cancelled'){
+                        colourcss=ColorObject['CancelledPlanColor'];//'#f0f000';
+                        textColorcss=ColorObject['CancelledPlanTextColor'];//'#000000';
+                        PlanType='PlanDetail-Cancelled';
+                        Info.Cancellation_Reason=$mapParentChildren[i].ASI_KOR_Cancellation_Reason__c;
+                        Info.Cancel_Type=$mapParentChildren[i].ASI_CRM_KR_Cancel_Type__c;
+                    }else if($mapParentChildren[i].ASI_KOR_Status__c=='Planned'){
+                        colourcss=ColorObject['PlannedPlanColor'];//'#FFFFFF';
+                        textColorcss=ColorObject['PlannedPlanTextColor'];//'#000000';
+                        PlanType='PlanDetail-Planned';
+                    }else{
+                        colourcss=ColorObject['NewEventColor'];
+                        textColorcss=ColorObject['NewEventTextColor'];
+                        PlanType='PlanDetail-NewEvent';
+                    }
+                    var tempstart  = new Date ($mapParentChildren[i].ASI_KOR_Visit_Date__c);
+                    visitEvents.push(addCalanderEvent($mapParentChildren[i].Id,$mapParentChildren[i].ASI_KOR_Wholesaler__c,formatDate(tempstart),formatDate(nextday(tempstart)),$mapParentChildren[i].ASI_KOR_Wholesaler__r.Name,colourcss,textColorcss,false,PlanType,$mapParentChildren[i].ASI_KOR_Wholesaler__r.RecordType.DeveloperName,Info));
+                    
+                }
+            }
+            var whereClause =   ' WHERE RecordType.DeveloperName = \''+ HolidayTypeName+ '\'';
+            
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_KR_VisitationPlanHomeCtrl.findHolidays}',whereClause
+                , callbackHolidays
+                , {escape: false}
+            );  
+            
+        }
+        
+        
+        
+        function callbackHolidays(result, event){
+            if (event.status) {
+                if (result) { 
+                    var colourcss=ColorObject['holidayColor']; // '#980000';
+                    var textColorcss=ColorObject['holidayTextColor'];//'#000000'; 
+                    
+                    for (var i = 0; i < result.length; i++) { //console.log(result[i].publicHoliday.ASI_CRM_Holiday_Type__c);
+                        //console.log(result[i].startStr+' || '+ formatDate(result[i].endStr));
+                        var Enddate;
+                        if(result[i].endStr!=result[i].startStr){
+                            Enddate=(new Date(result[i].endStr));
+                            //console.log(nextday(Enddate));
+                            Enddate=nextday(Enddate);
+                        }else{
+                            Enddate=result[i].endStr;
+                        }
+                        // console.log(result[i].startStr+'   ||   '+result[i].publicHoliday.Name);
+                        //               addCalanderEvent(id,accid, start, end, title, colour, textColor, editable,type,DeveloperName,information)
+                        visitEvents.push(addCalanderEvent( result[i].publicHoliday.Id,'Holidays', result[i].startStr, Enddate,  result[i].publicHoliday.Name, colourcss, textColorcss, false,'Holidays',result[i].publicHoliday.RecordType.DeveloperName,result[i].publicHoliday.ASI_CRM_Holiday_Type__c));
+                    }//localStorage.setItem("PublicHolidayData", visitEvents);// localStorage.getItem("PublicHolidayData")
+                    DrawCalendar();
+                }
+            }
+        }
+        
+        
+        function formatDate(date) { //Format JavaScript Date to yyyy-mm-dd
+            var d = new Date(date),
+                month = '' + (d.getMonth() + 1),
+                day = '' + d.getDate(),
+                year = d.getFullYear();
+            
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+            
+            return [year, month, day].join('-');
+        }
+        
+        function nextday(Inputdate){ //retrieve next date
+            var dd = Inputdate.getDate()+ 1;
+            var mm = Inputdate.getMonth() ;
+            var yy = Inputdate.getFullYear();
+            var returndate=new Date(yy,mm,dd, 0,0,0,0);
+            return returndate;
+        }
+        
+        
+        //Get number days in a specified month , Month is 1 based
+        function daysInMonth(month,year) {
+            return new Date(year, month, 0).getDate();
+        }
+        
+        
+        //when click, show modal
+        function CalendarEventClick(event, jsEvent, view) {
+            //show 'Read More' button
+            
+            $('#modalTitle').html(event.title);
+            $('#modalBody').html(event.description);
+            var weekMap=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+            var tempdate= new Date(event.start);
+            //construct body 
+            var contentHTML='<span style="font-weight: bold;">Date: </span> &nbsp;&nbsp;'+ event.start.format('YYYY-MM-DD')+','+weekMap[tempdate.getDay()];
+            
+            if(event.type==='Weekend'){ //hide 'Read More' button
+                $('#Morebutton').html(' <button type="button" class="btn btn-default" data-dismiss="modal">Close</button> ');
+            }else{
+                //Morebutton
+                $('#Morebutton').html(' <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>  <button type="button" class="btn btn-info" ><a style="color:white" target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+event.url+'">View More</a></button>   ');
+                if(event.type=='Holidays' && event.end){
+                    var tempEnd=new Date(event.end.format('YYYY-MM-DD')) ;
+                    if(formatDate(nextday(tempdate))!=formatDate(tempEnd)){
+                        var yesterday = new Date(tempEnd - 24*60*60*1000);
+                        contentHTML='<span style="font-weight: bold;">Date From : </span>  &nbsp;&nbsp;'+ event.start.format('YYYY-MM-DD')+','+weekMap[tempdate.getDay()]+'; To :&nbsp;&nbsp; '+ formatDate(yesterday)+','+weekMap[yesterday.getDay()];
+                    }
+                }// end of Holidays
+            }
+            contentHTML +='<br/> ';
+            if(event.type.substring(0, 10)==='PlanDetail'){
+                contentHTML+='<span style="font-weight: bold;">Status: </span>&nbsp;&nbsp;'+event.type.substring(11, event.type.length);
+                contentHTML+='<br/> <span style="font-weight: bold;">Customer Code:</span>&nbsp;&nbsp;'+event.information.Customer_Code;
+                contentHTML+='<br/> <span style="font-weight: bold;">Account Address:</span> &nbsp;&nbsp;'+event.information.Account_Address;
+                if(event.type.substring(11, event.type.length)=='Cancelled'){
+                    contentHTML+='<br/><span style="font-weight: bold;"> Cancel Type:</span>&nbsp;&nbsp;'+event.information.Cancel_Type;
+                    contentHTML+='<br/><span style="font-weight: bold;"> Cancellation Reason:</span>&nbsp;&nbsp;'+event.information.Cancellation_Reason;
+                }
+            }else{
+                contentHTML+='<span style="font-weight: bold;">Type:</span>'+event.type;
+            }
+            $('.modal-body').html(contentHTML);
+            $('#fullCalModal').modal();
+            
+            
+        }
+        
+        function popitup(url) {
+            newwindow=window.open(url,'name','height=800,width=1000');
+            if (window.focus) {newwindow.focus()}
+            return false;
+        }
+        
+        function eventClickFun(event, jsEvent, view){
+            popitup(event.url);
+        }
+        
+        function DrawCalendar(){ // console.log(visitEvents);
+            
+            $('#calendar').fullCalendar({
+                header: {
+                    left: ''
+                    , center: 'title'
+                    , right: 'today prev,next'
+                }
+                , 
+                editable: true,
+                eventOrder: 'priority',
+                eventLimit: true,
+                events:visitEvents,
+                /*eventClick: function(event) {
+                    if (event.url) { // open new TaB
+                        window.open(event.url);
+                        return false;
+                    }
+                },*/
+                eventClick: function(event, jsEvent, view) {
+                    if(event.type==='Weekend' || isTouchDevice()){
+                        CalendarEventClick(event, jsEvent, view);
+                    }else{
+                        eventClickFun(event, jsEvent, view);
+                    }
+                    
+                   
+                    return false;
+                },
+                eventRender: function (event, element, view) {  //event render function
+
+                    var currentViewDate= new Date(' 1 '+$('.fc-center h2').html());
+                    var currentViewMonth = currentViewDate.getMonth();
+                    var currentMon = new Date(event.start);
+                    var currentMonth = currentMon.getMonth();
+                    if(currentViewMonth!=currentMonth && event.type!='Holidays' && event.type!='Weekend'){
+                        return false; 
+                    }
+                    
+                    
+                    if(event.type=='PlanDetail-Planned' || event.type=='PlanDetail-Cancelled'){
+                        element.css('border-color', '#000000');
+                    }
+                    /*  if(event.type=='Holidays'){var innerhtml='<spam style="color: #ffffff"><font size="2"><b> &nbsp; &nbsp;</b></font></spam>';// +event.title+
+                        element.append(innerhtml);}*/
+                    $(element).each(function () { 
+                        $(this).attr('date-num', event.start.format('YYYY-MM-DD')); 
+                    });
+                },eventMouseover: function(calEvent, jsEvent) {
+                    if(!isTouchDevice()){
+                        MouseoverEvent(calEvent, jsEvent);
+                    }
+                },
+                eventMouseout: function(calEvent, jsEvent) {
+                    $(this).css('z-index', 8);
+                    $('.tooltipevent').remove();
+                }
+            });
+            // Offsetnum=0;//AddOn = 'exclude';// retrieveVisitationPlanDetail(limitnum,Offsetnum);
+        }
+        
+        
+        // when Mouse over show information
+        function MouseoverEvent(calEvent, jsEvent){
+            
+            var statusstr='';
+            
+            if(calEvent.type.substring(0, 10)==='PlanDetail'){
+                statusstr=calEvent.type.substring(11, calEvent.type.length)
+            }else{
+                statusstr=calEvent.type;
+            }
+            
+            var tooltip = '<div class="tooltipevent" style="position:absolute;z-index:10;"><div class="container"><div class="row"><div class="col-md-4" ><div class="panel panel-default"><div class="panel-body"><span style="font-weight: bold;"> '+ calEvent.title +'</span>';
+            
+            if(calEvent.type!='Holidays' && calEvent.type!='Weekend'){
+                tooltip+= '<br/><span style="font-weight: bold;">Customer Code:</span>&nbsp;&nbsp;'+calEvent.information.Customer_Code;
+                if(typeof calEvent.information.Grade != 'undefined'){
+                    tooltip+='<br/><span style="font-weight: bold;">Venue Grade:</span>&nbsp;&nbsp;'+calEvent.information.Grade;
+                }
+                
+                if (typeof calEvent.information.Pillar != 'undefined'){
+                    tooltip+='<br/><span style="font-weight: bold;">Pillar:</span>&nbsp;&nbsp;'+calEvent.information.Pillar;
+                }
+                
+                if(typeof calEvent.information.Account_Address != 'undefined'){
+                    tooltip+='<br/><span style="font-weight: bold;">Account Address:</span> &nbsp;&nbsp;'+calEvent.information.Account_Address;
+                }
+                
+                if(calEvent.type=='PlanDetail-Cancelled' && (typeof calEvent.information.Cancel_Type != 'undefined') && (typeof calEvent.information.Cancellation_Reason != 'undefined')){
+                    tooltip+='<br/><span style="font-weight: bold;">Cancel Type:</span>&nbsp;&nbsp;'+calEvent.information.Cancel_Type
+                    +'<br/><span style="font-weight: bold;">Cancellation Reason:</span>&nbsp;&nbsp;'+calEvent.information.Cancellation_Reason;
+                }
+                
+                if(typeof calEvent.information.FromTime != 'undefined' && typeof calEvent.information.EndTime!= 'undefined'){
+                    var tempStart=new Date(calEvent.information.FromTime);  //FromTime EndTime
+                    var tempEnd=new Date(calEvent.information.EndTime);
+                    tooltip+='<br/><span style="font-weight: bold;">Actual Visit Date (From):</span>&nbsp;&nbsp;'+DateTimeformat(tempStart)+
+                        '<br/><span style="font-weight: bold;">Actual Visit Date (To):</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+DateTimeformat(tempEnd) +
+                        '<br/><span style="font-weight: bold;">Duration:</span>&nbsp;&nbsp'+calcduration(tempStart,tempEnd) ;
+                    
+                }
+                tooltip+='</div></div></div></div></div></div>';
+            }
+            
+            if(calEvent.type==='Holidays' && typeof calEvent.information != 'undefined' ){
+                
+                 tooltip+= '<br/><span style="font-weight: bold;">Holiday Type:</span>&nbsp;&nbsp;'+calEvent.information;
+            }
+            
+            $("body").append(tooltip);
+            $(this).mouseover(function(e) {//alert("mouseover");
+                $('.tooltipevent').css('z-index', 10000);
+                $('.tooltipevent').fadeIn('500');
+                $('.tooltipevent').fadeTo('10', 1.9);
+            }).mousemove(function(e) {
+                $('.tooltipevent').css('top', e.pageY + 10);
+                $('.tooltipevent').css('left', e.pageX + 20);
+            });
+        }
+        
+        
+        function retrieveVisitationPlanDetail(limitnumber,offsetNumber){
+            var whereClause =   ' WHERE ASI_KOR_Visitation_Plan__r.OwnerId = \''+ CurrentUserId+ '\' and ASI_KOR_Wholesaler__c != null ';
+            
+            var Laststatement ='';
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_CRM_KR_VisitationPlanHomeCtrl.findVisitationPlanDetail}',whereClause,Laststatement,AddOn
+                , callbackVisitationPlanDetail
+                , {escape: true}
+            );     
+        }
+        
+        function MonthObject(Inmonth,InYear) { //Object
+            this.Inmonth = Inmonth;
+            this.InYear = InYear;
+        }
+        
+        
+        
+        function  callbackVisitationPlanDetail(result, event){
+            if (event.status) {
+                if (result) {
+                    var colourcss;//= '#006b37';
+                    var textColorcss;//='#FFFFFF';
+                    var PlanType=''; 
+                    
+                    for (var i = 0; i < result.length; i++) {
+                        if (typeof result[i].VisitationDetail.Id,result[i].VisitationDetail.ASI_KOR_Wholesaler__c != 'undefined' ){
+                            var Info  =createInfoObject(result[i].VisitationDetail);
+                            if(result[i].VisitationDetail.ASI_KOR_Status__c=='Achieved'){
+                                colourcss=ColorObject['FinishedPlanColor'];//'#006b37';
+                                textColorcss=ColorObject['FinishedPlanTextColor'];//'#FFFFFF';
+                                PlanType='PlanDetail-Achieved';
+                            }else if(result[i].VisitationDetail.ASI_KOR_Status__c=='Cancelled'){
+                                colourcss=ColorObject['CancelledPlanColor'];//'#f0f000';
+                                textColorcss=ColorObject['CancelledPlanTextColor'];//'#000000';
+                                PlanType='PlanDetail-Cancelled';
+                                Info.Cancellation_Reason=result[i].VisitationDetail.ASI_KOR_Cancellation_Reason__c;
+                                Info.Cancel_Type=result[i].VisitationDetail.ASI_CRM_KR_Cancel_Type__c;
+                            }else if(result[i].VisitationDetail.ASI_KOR_Status__c=='Planned'){
+                                colourcss=ColorObject['PlannedPlanColor'];//'#FFFFFF';
+                                textColorcss=ColorObject['PlannedPlanTextColor'];//'#000000';
+                                PlanType='PlanDetail-Planned';
+                            }else{
+                                colourcss=ColorObject['NewEventColor'];
+                                textColorcss=ColorObject['NewEventTextColor'];
+                                PlanType='PlanDetail-NewEvent';
+                            }
+                            var eventObject=addCalanderEvent( result[i].VisitationDetail.Id,result[i].VisitationDetail.ASI_KOR_Wholesaler__c, result[i].startStr,  result[i].endStr,  result[i].VisitationDetail.ASI_KOR_Wholesaler__r.Name, colourcss, textColorcss, true,PlanType,'PlanDetails',Info);
+                            $('#calendar').fullCalendar('renderEvent', eventObject, true);
+                        }
+                    }
+                    
+                    SystemInfo('Get '+result.length+' Record(s).');
+                    $('#calendarDiv').show();
+                    clearalert();
+                    $('#calendar').fullCalendar( 'refetchEvents' );
+                    
+                }else{
+                    console.log('result Failed');
+                }
+                
+            }
+        }
+        
+        
+        function SystemInfo(Mesg){
+            
+            $('#SysInfo').html(''); 
+            inhtml='<div class="alert alert-info  fade in " style=" width:200px; margin-left: 50px; padding: 8px; "  id="SysInfoId"> '+Mesg+'</div>';
+            $('#SysInfo').html(inhtml);   // $("#SysInfo").fadeIn();
+            setTimeout(function(){ $('#SysInfo').html(''); }, 4000); // $("#SysInfo").fadeOut(7000);
+        }        
+        
+        //Clear message in div
+        function clearalert(){
+            var inhtml='';
+            $('#InfoMeg').html(inhtml);
+        }
+        
+        //check in & check out to calc duration 
+        function calcduration(STime,ETime){
+            var diffMs = (ETime - STime); // milliseconds between ETime & STime
+            var hh = Math.floor(diffMs / 1000 / 60 / 60);// hours
+            var mm = Math.floor(diffMs / 1000 / 60); // minutes
+            var message='';
+            if(mm>60){
+            	message=String(hh)+' hour(s) ('+String(mm)+' minutes )';
+            }else{
+            	message=String(mm)+' minutes';
+            }
+            return message;
+        } 
+        
+        //format the date to  MM/dd/yyyy HH:mm:ss format.
+        function DateTimeformat(d){
+            dformat = [ (d.getMonth()+1).padLeft(),
+                       d.getDate().padLeft(),
+                       d.getFullYear()].join('/')+
+                ' ' +
+                [ d.getHours().padLeft(),
+                 d.getMinutes().padLeft(),
+                 d.getSeconds().padLeft()].join(':');
+            return dformat;
+        }
+        
+        Number.prototype.padLeft = function(base,chr){
+            var  len = (String(base || 10).length - String(this).length)+1;
+            return len > 0? new Array(len).join(chr || '0')+this : this;
+        }
+        
+        
+        function addCalanderEvent(id,accid, start, end, title, colour, textColor, editable,type,DeveloperName,information)
+        {
+            
+            var renderingtype='';
+            var urllink='/'+id;
+            var prio=3;
+            if( type=='Weekend'){
+                prio=1;//  renderingtype='background';
+            }
+            if(type=='Holidays'){
+                prio=2;
+            }   
+            // if(type=='Holidays'){ renderingtype='background'; }
+            var eventObject = {
+                accid:accid, title: title, start: start, end: end, id: id, color: colour, textColor: textColor,  editable:  editable, rendering: renderingtype,  type:type, DeveloperName:DeveloperName,  tip:title, url:urllink, information:information, priority:prio
+            };
+            
+            return eventObject;
+        }
+        
+        
+        </script>
+        <style>
+            .fc-time{
+            display : none;
+            }
+            .searchcss {
+            height:29px !important; // width:100% !important;
+            }
+            
+            .vertical-alignment-helper {
+            display:table;
+            height: 100%;
+            width: 100%;
+            
+            pointer-events:none;
+            }
+            
+            .vertical-align-center {
+            /* To center vertically */
+            top:-20%;
+            display: table-cell;
+            vertical-align: middle;
+            }
+            
+            .modal-content {
+            /* Bootstrap sets the size of the modal in the modal-dialog class, we need to inherit it */
+            width:inherit;
+            height:inherit;
+            /* To center horizontally */
+            margin: 0 auto;
+            pointer-events:all;
+            }
+            
+            .RowHeader{
+            display: table;
+            table-layout: fixed;
+            }
+            .HeaderColumn{
+            	display:inline;
+            	display: table-cell;	
+            }
+        </style>
+        
+        
+    </head>
+    <body class="bs">
+        <apex:outputPanel id="calPanel">
+            <apex:form id="CalForm">
+                <div class="RowHeader">
+                    
+                    <div id="selectDiv" class="HeaderColumn" >
+                        <apex:selectList id="selectUser" value="{!users}" multiselect="false" size="1" onChange="ChangeUser();" style="padding: 5px 10px;border-radius: 3px;line-height: 1.5;" >
+                            <apex:selectOptions value="{!UserItems}"  />
+                        </apex:selectList>
+                    </div>
+                    
+                    
+                    <div class="HeaderColumn" >                     
+                        
+                        <span>&nbsp;&nbsp;&nbsp;<i class="fa fa-square-o" style="color: {!ColorMap['PlannedPlanBorder']}; font-size: 20px;"></i><font style="color: {!ColorMap['PlannedPlanColor']}; font-size: 20px;"></font>&nbsp;  Planned &nbsp; &nbsp; &nbsp; </span>
+                        <span><i class="fa fa-square" style="color: {!ColorMap['FinishedPlanColor']}; font-size: 20px;"></i><font style="color: {!ColorMap['FinishedPlanColor']}; font-size: 20px;"></font>&nbsp;  Achieved &nbsp; &nbsp; &nbsp;</span>
+                        <span><i class="fa fa-square" style="color: {!ColorMap['CancelledPlanColor']}; font-size: 20px;"></i><font style="color: {!ColorMap['CancelledPlanColor']}; font-size: 20px;"></font>&nbsp;  Cancelled &nbsp; &nbsp; &nbsp;</span>
+                        <span><i class="fa fa-square" style="color: {!ColorMap['holidayColor']}; font-size: 20px;"> </i><font style="color: {!ColorMap['holidayColor']}; font-size: 20px;"></font>&nbsp;  Holiday &nbsp; &nbsp; &nbsp;</span> 
+                        <span><i class="fa fa-square" style="color: #5bc0de; font-size: 20px;"></i><font style="color: #5bc0de; font-size: 20px;"></font>&nbsp;  New Event</span>
+                        
+                        
+                    </div>  
+                    
+                    <div class="HeaderColumn" id='SysInfo' >  </div>
+                </div> 
+                
+                <br/>
+                <div id="InfoMeg" ></div> 
+                <div  id="calendarDiv"  ><div id="calendar" ></div>  </div>
+                
+                
+                <div id="fullCalModal" class="modal fade">
+                    <div class="vertical-alignment-helper">
+                        <div class="modal-dialog vertical-align-center">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span> <span class="sr-only">close</span></button>
+                                    <h4 id="modalTitle" class="modal-title"></h4>
+                                </div>
+                                <div id="modalBody" class="modal-body"></div>
+                                <div class="modal-footer">
+                                    <div id="Morebutton"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </apex:form>
+        </apex:outputPanel>   
+    </body>
+</apex:page>

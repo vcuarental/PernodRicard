@@ -1,0 +1,121 @@
+<apex:page Controller="ASI_MFM_CN_POSM_VendorMailSelectCtrl">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    <apex:includeScript value="{!$Resource.ASI_CN_Datatable_Helper}"/>
+
+    <meta charset="UTF-8" />
+    <head>
+        <script>
+        var posmlines;
+        var table;
+        $(document).ready(function(){ 
+            $('.waitingSearchDiv').hide();
+            posmlines = {!posmLineListJson};
+            for(line in posmlines) {
+                posmlines[line].editable = true;
+                posmlines[line].select = true;
+            }
+            var columns = [
+                {title:"Select",			data:"select",								defaultContent:false, fieldType:TYPE_CHECK},
+                {title:"Item",				data:"ASI_MFM_Item_Group_Chinese_Name__c",	defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Item Group Code",	data:"ASI_MFM_Item_Group_Code__c",			defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Unit Price",		data:"ASI_MFM_Unit_Price__c",				defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Quantity",			data:"ASI_MFM_Quantity__c",					defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Total Price",		data:"ASI_MFM_Total_Price__c",				defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Total Price(w/VAT)",data:"ASI_MFM_Total_Price_w_VAT__c",		defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"VAT",				data:"ASI_MFM_Tax_Code__r.Name",			defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Warehouse",			data:"ASI_MFM_Delivery_Address_Warehouse__r.Name",defaultContent:"", fieldType:TYPE_DISPLAY},
+                {title:"Detail Address",	data:"ASI_MFM_Detail_Address__c",			defaultContent:"", fieldType:TYPE_DISPLAY},
+            ];
+        	var config = {
+                scrollX: false,
+                scrollY: true,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: posmlines,
+                autoWidth: false
+            };
+            var createdCell = function(nTd, oData, dataKey, iRow, iCol) {
+            };
+            var oninput = function(nTd, result) {
+                console.log(nTd);
+                console.log(result);
+                var key = result.data;
+            };
+            var onblur  = function(nTd, result, lookupObj){
+            };
+            table = new DataTableBuilder("posmLineTbl",
+                                        config,
+                                        columns,
+                                        false,
+                                        ['itemgroup'],
+                                        ['addr-exdent'],
+                                        createdCell,
+                                        oninput,
+                                        onblur);
+            table.setEditMode(true);
+            table.dataTable.column(0).visible( false );
+        });
+        
+		function cancel(){
+            window.top.location.href = '/' + '{!poid}';
+        }
+        function sendmail(){
+            var datas = table.getCurrentData();
+            var selectedPOSMLine = [];
+            for(var i=0; i<datas.length; i++) {
+                if(datas[i].Id!=null && datas[i].Id!='') {	
+                    selectedPOSMLine.push({id:datas[i].Id, select:(datas[i].select == true)});
+                }
+            }
+            console.log(selectedPOSMLine);
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_POSM_VendorMailSelectCtrl.sendMail}',
+                JSON.stringify({
+                    posmLineList:selectedPOSMLine,
+                    po:'{!poid}'
+                }), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            alert('Email Sent.');
+                            window.top.location.href = '/' + '{!poid}';
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Send Email');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+        </script>
+    </head>
+    
+    <apex:pageMessages />
+    <apex:form id="posmline">
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                <apex:commandButton id="sendMail" value="Send mail" onclick="sendmail(); return false;"/>
+                <apex:commandButton id="cancel" value="Cancel" onclick="cancel(); return false;"/>
+            </apex:pageBlockButtons>
+            <div style="width:100%"><table id="posmLineTbl" class="display compact" style="width:100%"></table></div>
+        </apex:pageBlock>
+    </apex:form>
+</apex:page>

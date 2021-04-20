@@ -1,0 +1,799 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_JP_ManageSODetailPage
+ * Description: VF Page for JP Managing Sales Order Detail(Javascript).
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 20/02/2017       Hugo Cheung             Created      
+-->
+<apex:page standardController="ASI_CRM_JP_Sales_Order__c" extensions="ASI_CRM_JP_ManageSODetailController" sidebar="false">
+    <head>
+        <title>Sales Order Detail Manage All Page</title>
+    </head>
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/jquery-ui.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/datatables.min.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/datatables.min.js')}" />
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+    <!-- Style -->
+    <style>
+        .link-button {
+            cursor          : pointer;
+            text-decoration : underline;
+        }
+        
+        .savingRecord .fullScreenLoading {
+            display: block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba(255, 255, 255, .8)
+                         url('{!URLFOR($Resource.ASI_CRM_JP_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        .error {
+            border : 2px solid red;
+        }
+
+        th, td {
+            padding-top    : 5px;
+            padding-bottom : 5px;
+            padding-right  : 10px;
+            padding-left   : 10px;
+        }
+        
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+        
+        table.dataTable .col-small {
+            width: 50px;
+        }
+        
+        table.dataTable .col-large {
+            width: 250px;
+        }
+        
+    </style>
+
+    <!-- JavaScript -->
+    <script>
+        /****************
+        Define Variable
+        ****************/
+        const NEW_SALES_ORDER_DETAIL_PREFIX  = 'New-';
+        const SKU_FIELD_PREFIX               = 'SKU-';
+        const ITEM_AVAILABILITY_FIELD_PREFIX = 'ItemAvailability-';
+        const ACTION_LABEL                   = 'Action';
+        const CONST_DATA_TABLE_PROPERTIES    = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : false,
+            "iDisplayLength":1000,
+            "bSort" : false,
+            "bPaginate": false,
+            "bScrollCollapse": true,
+            "bJQueryUI": true
+        };
+
+        //Lookup Field Parameter
+        const SKU_OBJECT_PREFIX                = "{!$ObjectType.ASI_MFM_SKU_Code__c.keyPrefix}";
+        const ITEM_AVAILABILITY_OBJECT_PREFIX  = "{!$ObjectType.ASI_CRM_JP_Item_Availability__c.keyPrefix}";
+        const SALES_ORDER_DETAIL_OBJECT_PREFIX = "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.keyPrefix}";
+
+        //Store all field id for lookup field
+        const fieldIdMap                 = jQuery.parseJSON('{!JSENCODE(fieldIdMapJson)}');
+        const SKU_FIELD_ID               = fieldIdMap["ASI_CRM_SKU__c"];
+        const ITEM_AVAILABILITY_FIELD_ID = fieldIdMap["ASI_CRM_SKU_Item__c"];
+
+        //Picklist value 
+        const uomValueMap    = jQuery.parseJSON('{!JSENCODE(uomValueMapJson)}');
+        
+        const numFormater = new Intl.NumberFormat();
+
+        /*****************
+        Datatable Field Config
+        *****************/
+        const actionField           = {"title"  : "{!$Label.ASI_CRM_JP_Action}",
+                                       "data"   : "",
+                                       "render" : function(data, type, full) {
+                                                    return "<a class='link-button' onClick='deleteRow(this.parentNode.parentNode)'>x</a>" + 
+                                                           "</br>" + 
+                                                           "<a class='link-button' onClick='cloneRow(this.parentNode.parentNode)'>{!$Label.ASI_CRM_JP_Clone}</a>";
+                                               }
+                                      };
+        const sortingNumberField    = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_Sorting_Number__c.Label}",
+                                       "data"           : "ASI_CRM_Sorting_Number__c",
+                                       "defaultContent" : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_Sorting_Number__c';
+                                                            if(!data) {
+                                                                data = "";
+                                                            }
+                                                            return "<input class='" + fieldAPIName + " col-small' type='number' value='" + data + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                          }
+                                      };
+        
+        const skuAutoCompleteField  = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_SKU__c.Label}",
+                                       "data"           : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_SKU__c';
+                                                            var relationAPIName = 'ASI_CRM_SKU__r';
+
+                                                            var relationRecordName = '';
+                                                            if(full.ASI_CRM_SKU__c) {
+                                                                relationRecordName = full.ASI_CRM_SKU__r.Name;
+                                                            }
+
+                                                            return "<input class='" + fieldAPIName + " col-large' type='text' value='" + relationRecordName + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value); updateDetailValue(this.parentNode.parentNode, \"" + relationAPIName + "\", this.value);'/>";
+                                                          }
+                                      };                              
+
+        const itemAvailAutoCompleteField = {"title"     : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_SKU__c.Label}",
+                                            "data"      : "",
+                                            "render"    : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_SKU_Item__c';
+                                                            var relationAPIName = 'ASI_CRM_SKU_Item__r';
+
+                                                            var relationRecordName = '';
+                                                            if(full.ASI_CRM_SKU_Item__c) {
+                                                                relationRecordName = full.ASI_CRM_SKU_Item__r.Name;
+                                                            }
+
+                                                            return "<input class='" + fieldAPIName + " col-large' type='text' value='" + relationRecordName + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value); updateDetailValue(this.parentNode.parentNode, \"" + relationAPIName + "\", this.value);'/>";
+                                                          }
+                                           };
+        
+        const skuLookupField        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_SKU__c.Label}",
+                                       "data"           : "",
+                                       "render"         : function (data, type, full) {
+                                                            var id           = SKU_FIELD_PREFIX + skuFieldIndex;
+                                                            var fieldAPIName = 'ASI_CRM_SKU__c';
+                                                            var relationAPIName = 'ASI_CRM_SKU__r';
+                                                            var lookupTitle  = 'SKU Lookup (New Window)';
+
+                                                            skuFieldIndex += 1;
+
+                                                            var relationRecordName = '';
+                                                            if(full.ASI_CRM_SKU__c) {
+                                                                relationRecordName = full.ASI_CRM_SKU__r.Name;
+                                                            }
+
+                                                            var fieldStr = "<span class='lookupInput'>"; 
+                                                            fieldStr += "<input class='" + fieldAPIName + " col-large' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + relationRecordName + "' />";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value);updateDetailValue(this.parentNode.parentNode, \"" + relationAPIName + "\", this.value);'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                            fieldStr += "<a href='#'>";
+                                                            fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                    "onblur='lookupButtonOnBlur(this)'" + 
+                                                                    "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                    "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                    "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                    "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + SKU_OBJECT_PREFIX + "\", \"" + SKU_FIELD_ID + "\", \"" + SALES_ORDER_DETAIL_OBJECT_PREFIX + "\")' />";
+                                                            fieldStr += "</a>";
+                                                            fieldStr += "</span>";
+                                                            return fieldStr;
+                                                         }
+                                      };
+
+        const itemAvailabilityField = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_SKU__c.Label}",
+                                       "data"           : "",
+                                       "render"         : function (data, type, full) {
+                                                            var id           = ITEM_AVAILABILITY_FIELD_PREFIX + itemAvailabilityFieldIndex;
+                                                            var fieldAPIName = 'ASI_CRM_SKU_Item__c';
+                                                            var relationAPIName = 'ASI_CRM_SKU_Item__r';
+                                                            var lookupTitle  = 'SKU Lookup (New Window)';
+
+                                                            itemAvailabilityFieldIndex += 1;
+
+                                                            var relationRecordName = '';
+                                                            if(full.ASI_CRM_SKU_Item__c) {
+                                                                relationRecordName = full.ASI_CRM_SKU_Item__r.Name;
+                                                            }
+
+                                                            var fieldStr = "<span class='lookupInput'>"; 
+                                                            fieldStr += "<input class='" + fieldAPIName + " col-large' type='text' id='" + id + "' name='" + id + "' onChange='resetLookup(\"" + id + "\");' value='" + relationRecordName + "'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkid' name='" + id + "_lkid' value='' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value);'/>";
+                                                            fieldStr += "<input type='hidden' id='" + id + "_lkold' name='" + id + "_lkold' value=''/>";
+                                                            fieldStr += "<a href='#'>";
+                                                            fieldStr += "<img src='/s.gif' class='lookupIcon' title='" + lookupTitle + "'" + 
+                                                                    "onblur='lookupButtonOnBlur(this)'" + 
+                                                                    "onfocus='lookupButtonOnFocus(this)'" + 
+                                                                    "onmouseout='lookupButtonOnBlur(this)'" + 
+                                                                    "onmouseover='lookupButtonOnFocus(this)'" + 
+                                                                    "onclick='javascript&colon;showLookup(\"" + id + "\", \"" + ITEM_AVAILABILITY_OBJECT_PREFIX + "\", \"" + ITEM_AVAILABILITY_FIELD_ID + "\", \"" + SALES_ORDER_DETAIL_OBJECT_PREFIX + "\")' />";
+                                                            fieldStr += "</a>";
+                                                            fieldStr += "</span>";
+                                                            return fieldStr;
+                                                         }
+                                      };
+
+        const quantityField         = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_Quantity__c.Label}",
+                                       "data"           : "ASI_CRM_Quantity__c",
+                                       "defaultContent" : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_Quantity__c';
+                                                            if(!data) {
+                                                                data = "";
+                                                            }
+                                                            return "<input class='" + fieldAPIName + " col-small' type='number' value='" + data + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                          }
+                                      };
+
+        const uomField              = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_UOM__c.Label}",
+                                       "data"           : "ASI_CRM_UOM__c",
+                                       "defaultContent" : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_UOM__c';
+
+                                                            var selectOptionTag = "<select class='selector " + fieldAPIName + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'>";
+                                                            for(var label in uomValueMap) {
+                                                                if(uomValueMap[label] == data) {
+                                                                    selectOptionTag += "<option value='" + uomValueMap[label] + "' selected>" + label + "</option>";
+                                                                } else {
+                                                                    selectOptionTag += "<option value='" + uomValueMap[label] + "'>" + label + "</option>";
+                                                                }
+                                                            }
+                                                            selectOptionTag += "</select>";
+                                                            return selectOptionTag;
+                                                          }
+                                      };
+        
+        const unitPriceField        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_Unit_Price__c.Label}",
+                                       "data"           : "ASI_CRM_Unit_Price__c",
+                                       "defaultContent" : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_Unit_Price__c';
+                                                            if(!data && data != 0) {
+                                                                data = "";
+                                                            }
+                                                            return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                          }
+                                      };
+        
+        const remark                = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Remark__c.Label}",
+                                       "data"           : "ASI_CRM_JP_Remark__c",
+                                       "defaultContent" : "",
+                                       "render"         : function(data, type, full) {
+                                                            var fieldAPIName = 'ASI_CRM_JP_Remark__c';
+                                                            if(!data && data != 0) {
+                                                                data = "";
+                                                            }
+                                                            return "<input class='" + fieldAPIName + "' type='text' value='" + data + "' onChange='updateDetailValue(this.parentNode.parentNode, \"" + fieldAPIName + "\", this.value)'/>";
+                                                          }
+                                      };
+
+        /*****************
+        Datatable Read Only Field Config
+        *****************/ 
+        const uomReadOnlyField                  = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_UOM__c.Label}",
+                                                   "data"           : "ASI_CRM_UOM__c",
+                                                   "defaultContent" : ""
+                                                  }; 
+
+        const unitPriceReadOnlyField            = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_Unit_Price__c.Label}",
+                                                   "data"           : "ASI_CRM_Unit_Price__c",
+                                                   "defaultContent" : "",
+                                                   "render"         : function(data, type, full) {
+                                                                        if(!data && data != 0) {
+                                                                            return "";
+                                                                        } else {
+                                                                            return numFormater.format(data);
+                                                                        }
+                                                                      }
+                                                  }; 
+
+        const itemDescriptionOneReadOnlyField   = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Item_Description_1__c.Label}",
+                                                   "data"           : "ASI_CRM_JP_Item_Description_1__c",
+                                                   "defaultContent" : ""
+                                                  }; 
+
+        const itemDescriptionTwoReadOnlyField   = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Item_Description_2__c.Label}",
+                                                   "data"           : "ASI_CRM_JP_Item_Description_2__c",
+                                                   "defaultContent" : ""
+                                                  }; 
+
+        const packagingSizeReadOnlyField        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Packaging_Size__c.Label}",
+                                                   "data"           : "ASI_CRM_JP_Packaging_Size__c",
+                                                   "defaultContent" : ""
+                                                  }; 
+
+        const bottleSizeReadOnlyField           = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Bottle_Size__c.Label}",
+                                                   "data"           : "ASI_CRM_JP_Bottle_Size__c",
+                                                   "defaultContent" : ""
+                                                  }; 
+
+        const extendedPriceReadOnlyField        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_Extended_Price__c.Label}",
+                                                   "data"           : "ASI_CRM_Extended_Price__c",
+                                                   "defaultContent" : "",
+                                                   "render"         : function(data, type, full) {
+                                                                        if(!data && data != 0) {
+                                                                            return "";
+                                                                        } else {
+                                                                            return numFormater.format(data);
+                                                                        }
+                                                                      }
+                                                  }; 
+
+        const extendedWeightReadOnlyField       = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order_Item__c.fields.ASI_CRM_JP_Extended_Weight__c.Label}",
+                                                   "data"           : "ASI_CRM_JP_Extended_Weight__c",
+                                                   "defaultContent" : "",
+                                                   "render"         : function(data, type, full) {
+                                                                        if(!data && data != 0) {
+                                                                            return "";
+                                                                        } else {
+                                                                            return numFormater.format(data);
+                                                                        }
+                                                                      }
+                                                  };
+
+        const englishNameReadOnlyField      = {"title"          : "{!$ObjectType.ASI_MFM_SKU_Code__c.fields.ASI_CRM_JP_English_Name__c.Label}",
+                                                   "data"           :  "ASI_CRM_English_Name__c",
+                                                   "defaultContent" : ""
+                                                  };
+
+        const availableQuantityReadOnlyField        = {"title"          : "{!$ObjectType.ASI_MFM_SKU_Code__c.fields.ASI_HK_CRM_Available_Quantity__c.Label}",
+                                                   "data"           :  "ASI_CRM_Available_Quantity__c",
+                                                   "defaultContent" : ""
+                                                  };
+
+        //Store the lookup input field id
+        var skuFieldIndex              = 1; 
+        var itemAvailabilityFieldIndex = 1;
+
+        //Store the new so detail temp id
+        var tempSODetailId = 1;
+
+        //Store the removed claim detail id
+        var deleteSODetailIdList = [];
+
+        /****************
+        Define Standard Function
+        ****************/
+        $(document).ready(
+            function() {
+                setTable('{!JSENCODE(salesOrderDetailListJson)}');
+                if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!isCOTUser}) {
+                    setAutoComplete();
+                }
+                
+                if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO') {
+                    setItemAvailabilityAutoComplete();
+                }
+                
+                if({!isEditable} == false) {
+                    $('input').prop('readonly', true);
+                    $('.link-button').hide();
+                    $('.newRowBtn').hide();
+                    $('.saveBtn').hide();
+                    $('.quickSaveBtn').hide();
+                    $('.lookupIcon').hide();
+                }
+            }
+        );
+
+        //Set Data Table
+        function setTable(salesOrderDetailListJson) {
+            var dataTableProperties = CONST_DATA_TABLE_PROPERTIES;
+            //Convert so detail list JSON to Object format
+            console.log('Data From Apex Controller : ');
+            console.log(jQuery.parseJSON(salesOrderDetailListJson));
+            dataTableProperties["aaData"] = jQuery.parseJSON(salesOrderDetailListJson);
+            //Set data table row id = so detail id
+            dataTableProperties["rowId"] = "Id";
+
+            //Set the data table columns
+            var columns = [];
+            columns.push(actionField);
+            columns.push(sortingNumberField);
+
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!isCOTUser}) {
+                columns.push(skuAutoCompleteField);
+                columns.push(quantityField);
+                columns.push(uomReadOnlyField);
+                columns.push(unitPriceReadOnlyField);
+                columns.push(remark);
+            }
+
+            if(('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!NOT(isCOTUser)}) ||
+               '{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Employee_Sales') {
+                columns.push(skuLookupField);
+                columns.push(quantityField);
+                columns.push(uomReadOnlyField);
+                columns.push(unitPriceReadOnlyField);
+                columns.push(remark);
+            }
+
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Direct_Sales') {
+                columns.push(skuLookupField);
+                columns.push(quantityField);
+                columns.push(uomReadOnlyField);
+                //if({!isCOTUser}) {
+                    columns.push(unitPriceReadOnlyField);
+                //} else {
+                //    columns.push(unitPriceField);
+                //}
+                columns.push(remark);
+            }
+
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO') {
+                columns.push(itemAvailAutoCompleteField);
+                columns.push(quantityField);
+                columns.push(uomReadOnlyField);
+                if('{!salesOrderRecordOrderType}' == 'Normal SO') {
+                    columns.push(unitPriceReadOnlyField);
+                }
+                columns.push(remark);
+            }
+
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Marketing_FOC' || 
+               '{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Sample_Sales' || 
+               '{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Entertainment_Sales') {
+                columns.push(skuLookupField);
+                columns.push(quantityField);
+                columns.push(uomReadOnlyField);
+                columns.push(remark);
+            }
+
+            columns.push(availableQuantityReadOnlyField);
+            columns.push(englishNameReadOnlyField);
+            columns.push(itemDescriptionOneReadOnlyField);
+            columns.push(itemDescriptionTwoReadOnlyField);
+            columns.push(packagingSizeReadOnlyField);
+            columns.push(bottleSizeReadOnlyField);
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' ||
+               '{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Employee_Sales' ||
+               '{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Direct_Sales' || 
+               ('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO' && 
+                '{!salesOrderRecordOrderType}' == 'Normal SO')) {
+                columns.push(extendedPriceReadOnlyField);
+            }
+            // columns.push(extendedWeightReadOnlyField);
+            dataTableProperties["aoColumns"] = columns;
+            
+            $("#salesOrderDetailTable").dataTable(dataTableProperties);
+        }
+
+        //Set Auto Complete Field
+        function setAutoComplete() {
+            var skuNameList = Object.keys(jQuery.parseJSON('{!JSENCODE(skuNameIdMapJson)}'));
+            $(".ASI_CRM_SKU__c").each(function(index) {
+                $(this).autocomplete({
+                    source    : skuNameList,
+                    minLength : 3
+                });
+            });
+        }
+        
+        function setItemAvailabilityAutoComplete() {
+            var itemAvailabilityNameList = Object.keys(jQuery.parseJSON('{!JSENCODE(itemAvailabilityNameIdMapJson)}'));
+            $(".ASI_CRM_SKU_Item__c").each(function(index) {
+                $(this).autocomplete({
+                    source    : itemAvailabilityNameList,
+                    minLength : 3
+                });
+            });
+        }
+
+        //Data Table Event Handler(Start)
+        function updateDetailValue(row, fieldName, newValue) {
+            //Get the so detail data and update the field value
+            var soDetailData        = $("#salesOrderDetailTable").DataTable().row(row).data();
+            console.log(fieldName);
+            if(fieldName.endsWith('__r')) {
+                soDetailData[fieldName] = [];
+                soDetailData[fieldName]['Name'] = newValue;
+            console.log(soDetailData[fieldName]['Name']);
+            } else {
+                if(newValue) {
+                    soDetailData[fieldName] = newValue;
+                } else {
+                    soDetailData[fieldName] = null;
+                }
+            }
+        }
+
+        function addRow() {
+            //Create new so detail object
+            var newSODetailData   = {};
+            newSODetailData["Id"] = NEW_SALES_ORDER_DETAIL_PREFIX + tempSODetailId;
+            newSODetailData["ASI_CRM_Sales_Order__c"] = "{!salesOrder.Id}";
+            newSODetailData["ASI_CRM_Status__c"] = '520-Ready';
+            newSODetailData["ASI_CRM_Sys_Item_Availability_Filter__c"] = "{!salesOrder.ASI_CRM_Branch_Plant__c}";
+            newSODetailData["ASI_CRM_JP_Sys_Lookup_Filter__c"] = "{!salesOrder.RecordType.DeveloperName}";
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO' && 
+               '{!salesOrder.ASI_CRM_Order_Type__c}' == 'Normal SO') {
+                newSODetailData["ASI_CRM_UOM__c"] = "CASE";
+            } else if(('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO' && 
+                       '{!salesOrder.ASI_CRM_Order_Type__c}' == 'Sample Sales') || 
+                      '{!salesOrderRecordTypeAPIName}' != 'ASI_CRM_JP_Duty_Free_SO') {
+                newSODetailData["ASI_CRM_UOM__c"] = "BT";
+            } else if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO' && 
+                      '{!salesOrder.ASI_CRM_Order_Type__c}' == 'POSM') {
+                newSODetailData["ASI_CRM_UOM__c"] = "PC";
+            }
+            //Add new so detail object to date table and redraw it
+            $("#salesOrderDetailTable").DataTable().row.add(newSODetailData).draw();
+            $('#salesOrderDetailTable').DataTable().page('last').draw('page');
+
+            //Update the temp claim detail id;
+            tempSODetailId++;
+
+            //Set auto completed field
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!isCOTUser}) {
+                setAutoComplete();
+            }
+            
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO') {
+                setItemAvailabilityAutoComplete();
+            }
+        }
+
+        function cloneRow(sourceRow) {
+            //Get the source row so detail data
+            var soDetailData = $("#salesOrderDetailTable").DataTable().row(sourceRow).data();
+
+            //Create new so detail object and assign the data from source
+            var newSODetailData = {};
+            jQuery.extend(true, newSODetailData, soDetailData);
+            newSODetailData["Id"] = NEW_SALES_ORDER_DETAIL_PREFIX + tempSODetailId;
+            delete newSODetailData["CreatedById"];
+            delete newSODetailData["CreatedDate"];
+            delete newSODetailData["LastModifiedById"];
+            delete newSODetailData["LastModifiedDate"];
+            
+            //Add new so detail object to date table and redraw it
+            $("#salesOrderDetailTable").DataTable().row.add(newSODetailData).draw();
+            $('#salesOrderDetailTable').DataTable().page('last').draw('page');
+
+            //Update the temp claim detail id;
+            tempSODetailId++;
+
+            //Set auto completed field
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!isCOTUser}) {
+                setAutoComplete();
+            }
+        }
+
+        function deleteRow(row) {
+            var rowId = row.id;
+            //Check if the so detail is existing in database
+            if(!rowId.startsWith(NEW_SALES_ORDER_DETAIL_PREFIX)) {
+                //Add to delete list
+                deleteSODetailIdList.push(rowId);
+            }
+            //Remove the row and redraw it
+            $("#salesOrderDetailTable").DataTable().row(row).remove().draw();
+        }
+
+        //Save SO Detail Handler
+        function saveRecord(isQuickSave) {
+            //Find out all claim detail records
+            var upsertSODetailList = [];
+
+            var soDetailList = $("#salesOrderDetailTable").DataTable().rows().data();
+            var isFieldValueMissing = false;
+            for(var i = 0 ; i < soDetailList.data().length ; i++) {
+                var cloneSODetail = jQuery.extend({}, soDetailList[i]);
+                if((cloneSODetail.ASI_CRM_SKU__c || cloneSODetail.ASI_CRM_SKU_Item__c) && cloneSODetail.ASI_CRM_Quantity__c) {
+                    var sortingNumber = cloneSODetail.ASI_CRM_Sorting_Number__c;
+                    var quantity = cloneSODetail.ASI_CRM_Quantity__c;
+                    cloneSODetail.ASI_CRM_Quantity__c = Math.floor(quantity);
+                    cloneSODetail.ASI_CRM_Sorting_Number__c = Math.floor(sortingNumber);
+                    if(cloneSODetail.Id.startsWith(NEW_SALES_ORDER_DETAIL_PREFIX)) {
+                        delete cloneSODetail["Id"];
+                    }
+                    delete cloneSODetail['ASI_CRM_SKU__r'];
+                    delete cloneSODetail['ASI_CRM_SKU_Item__r'];
+                    upsertSODetailList.push(cloneSODetail);
+                } else {
+                    isFieldValueMissing = true;
+                }
+            }
+
+            //Pass the data to Apex Controller to handle the save process
+            console.log('Upsert SO Detail List');
+            console.log(upsertSODetailList);
+
+            console.log('Delete SO Detail Id List');
+            console.log(deleteSODetailIdList);
+            if(isFieldValueMissing) {
+                $('.saveErrorPanel').css("display","block");
+                $('.errorMessage').html('{!$Label.ASI_CRM_JP_SO_Manage_All_Missing_Infor}');
+            } else {
+                //Show loading gif
+                $("body").addClass("savingRecord");
+                save(isQuickSave, JSON.stringify(upsertSODetailList), JSON.stringify(deleteSODetailIdList));
+            }
+        }
+
+        //Execute after the save action completed *even errors occur*
+        function saveRecordComplete(salesOrderDetailListJson, hasError, exceptionListJson) {
+            //Clear and rerender the datatable if the so data save to database successfully
+            if(!hasError) {
+                $('.saveErrorPanel').css("display","none");
+                $('#salesOrderDetailTable').DataTable().clear();
+                setTable(salesOrderDetailListJson);
+
+                //Clear the delete so detail id list
+                deleteSODetailIdList = []; 
+
+                //Reset the temp so detail id to 1
+                tempSODetailId = 1;
+            }
+            //Update the record row which contain any error 
+            else {
+                showError(exceptionListJson);
+            }
+
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+
+            //Set auto completed field
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Normal_SO' && {!isCOTUser}) {
+                setAutoComplete();
+            }
+        }
+
+        //Display error when error occur in save process
+        function showError(exceptionListJson) {
+            //Clear the last error problem field
+            $('.error').removeClass('error');
+
+            //Display the error message and change the problem field to red
+            $('.saveErrorPanel').css("display","block");
+
+            var errorMessage = '';
+
+            var exceptionList = jQuery.parseJSON(exceptionListJson);
+            for(var i = 0 ; i < exceptionList.length ; i++) {
+                errorMessage += exceptionList[i].errorMessage;
+                errorMessage += "<br />";
+            }
+            
+            //Assign the error message to page
+            $('.errorMessage').html(errorMessage);
+        }
+
+        //Data Table Row Event Handler(End)
+
+        //Lookup Popup Control Function (Start)
+        function showLookup(ctrlID, objKeyPrefix, lookupFieldId, currentObjectPrefix) {
+            var encodeSearchValue = encodeURI($("#" + ctrlID).val());
+            if('{!salesOrderRecordTypeAPIName}' == 'ASI_CRM_JP_Duty_Free_SO') {
+                var branchPlantValue = "[null, '{!salesOrder.ASI_CRM_Branch_Plant__c}']";
+                openLookup("/_ui/common/data/LookupPage?lkfield=" + lookupFieldId + "&lkent=" + currentObjectPrefix + "&lknm=" + ctrlID + "&lktp=" + objKeyPrefix + "&dplp=" + branchPlantValue + "&lksrch=" + encodeSearchValue, 500);
+            } else {
+                var skuLookupFilter = "[null, '{!salesOrder.RecordType.DeveloperName}']";
+                openLookup("/_ui/common/data/LookupPage?lkfield=" + lookupFieldId + "&lkent=" + currentObjectPrefix + "&lknm=" + ctrlID + "&lktp=" + objKeyPrefix + "&dplp=" + skuLookupFilter + "&lksrch=" + encodeSearchValue, 500);
+            }
+        }
+
+        function lookupPick(formId, idInputId, nameFieldId, emptyField2, lookupId, lookupName, emtpyField3, emptyField4) {
+            closePopup();
+            $("#" + idInputId).val(lookupId);
+            $("#" + nameFieldId).val(lookupName);
+            $("#" + idInputId).trigger("change");
+            
+            var fieldID = idInputId.substring(0, idInputId.length - 5);
+            var fieldAPIName = $("#" + fieldID).attr("class");
+            var relationAPIName = fieldAPIName.slice(0, -1) + 'r';
+            console.log(fieldID);
+            console.log(fieldAPIName);
+            console.log(relationAPIName);
+            updateDetailValue($("#" + idInputId).parent().parent().parent(), relationAPIName, $("#" + nameFieldId).val());
+        }
+
+        function resetLookup(ctrlID) {
+            $("#" + ctrlID + '_lkid').val(null);
+            $("#" + ctrlID + '_lkold').val(null);
+
+            $("#" + ctrlID + '_lkid').trigger('change');
+            $("#" + ctrlID + '_lkold').trigger('change');
+        }
+
+        function lookupButtonOnFocus(lookupButton) {
+            $(lookupButton).removeClass('lookupIcon').addClass('lookupIconOn');
+        }
+    
+        function lookupButtonOnBlur(lookupButton) {
+            $(lookupButton).removeClass('lookupIconOn').addClass('lookupIcon');
+        }
+        //Lookup Popup Control Function (End)
+
+    </script>
+
+    <body>
+        <div class="fullScreenLoading"></div>
+        <div class="saveErrorPanel alert alert-danger" style="display: none;">
+        <strong>Error</strong> 
+        <br />
+        <p class="errorMessage"></p>
+        </div>
+
+        <!-- Defind Action Function -->
+        <apex:form >
+            <apex:actionFunction name="save" action="{!save}" reRender="pageMsg" oncomplete="saveRecordComplete('{!JSENCODE(salesOrderDetailListJson)}', {!hasError}, '{!JSENCODE(exceptionListJson)}')">
+                <apex:param name="isQuickSave" value="" />
+                <apex:param name="upsertDataJson" value="" />
+                <apex:param name="removeDataJson" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="cancel" action="{!cancel}"/>
+        </apex:form>
+
+        <!-- Body -->
+        <apex:pageBlock id="detail_pageBlock">
+            <apex:pageblockButtons >
+            <input type="button" class="btn saveBtn" onclick="saveRecord(false)" value="{!$Label.ASI_CRM_JP_Save}" />
+            <input type="button" class="btn quickSaveBtn" onclick="saveRecord(true)" value="{!$Label.ASI_CRM_JP_Quick_Save}" />
+            <input type="button" class="btn cancelBtn" onclick="cancel()" value="{!$Label.ASI_CRM_JP_Cancel}" />
+            </apex:pageblockButtons>
+
+            <!-- Nav bar -->
+            <div class="row">
+                <div class="container-fluid">
+                    <div class="panel with-nav-tabs panel-primary">
+                        <!-- Nav bar header -->
+                        <div class="panel-heading">
+                            <ul class="nav nav-tabs">
+                                <li class="active"><a href="#tne" data-toggle="tab">{!$Label.ASI_CRM_JP_Sales_Order_Detail}</a></li>
+                            </ul>
+                        </div>
+    
+                        <!-- Nav bar body -->
+                        <div class="panel-body">
+                            <div class="tab-content">
+                                <!-- T&E Claim Detail Body -->
+                                <div class="tab-pane fade in active" id="tne">
+                                    <form id="tneForm">
+                                        <input type="button" class="btn newRowBtn" onclick="addRow()" value="{!$Label.ASI_CRM_JP_Add_New}" />
+                                        <table id="salesOrderDetailTable" width="100%" />
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </apex:pageBlock>
+
+    </body>
+
+</apex:page>

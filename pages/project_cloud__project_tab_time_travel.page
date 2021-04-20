@@ -1,0 +1,219 @@
+<apex:page standardController="project_cloud__Project__c" id="page" extensions="project_cloud.ProjectTabTimeTravelExtension">
+<!--TODO: Ticket 262 Implement Time Travel has details about re implementing this code
+	<apex:sectionHeader title="{!Project__c.Name}" subtitle="Time Travel" />
+
+	<apex:pageMessages id="messages" />	
+
+	<c:include_jquery />
+	<c:tree projectId="{!Project__c.Id}" />
+
+	<apex:stylesheet value="{!URLFOR($Resource.ext_js, '/resources/css/ext-all-scoped.css')}"/>
+	<apex:stylesheet value="{!URLFOR($Resource.ext_js_plugins, '/bryntum/gantt/resources/css/sch-gantt-all.css')}"/>
+
+	<apex:pageBlock rendered="{!NOT(ISBLANK(snapshots)) && snapshots.size > 0}">
+		<script type="text/javascript">
+			// Here we define Ext for the first time
+			Ext = {
+				buildSettings:{
+					scopeResetCSS: true  // Thanks, but I'll do my own scoping please
+				}
+			};
+		</script>
+		<!-- We can't use apex:includeScript because then the declaration will be out of order, the snippet above declaring scoped reset MUST come before the inclusion of the ext-all.js file -!->
+		<script type="text/javascript" src="{!URLFOR($Resource.ext_js, '/ext-all.js')}"></script>
+		<script type="text/javascript" src="{!URLFOR($Resource.ext_js_plugins, '/bryntum/gantt/gnt-all-debug.js')}"></script>
+		<script type="text/javascript">
+			Ext.require([
+				'Ext.slider.*'
+			]);
+		
+			Ext.onReady(function() {
+			
+				var dateStore = new Ext.data.ArrayStore({
+					fields : ['name']
+				});
+				dateStore.loadData("{!dateData}");
+			
+				var slider = Ext.create('Ext.slider.Single', {
+					renderTo: 'custom-tip-slider',
+					hideLabel: false,
+					width: 500,
+					value:'{!selectedIndex}',
+					increment: 1,
+					minValue: 0,
+					maxValue: '{!snapshots.size}' - 1,
+					tipText: function(thumb){
+						//return Ext.String.format('{0}', dateStore.getAt(thumb.value).get('name').toString());
+						return dateStore.getAt(thumb.value).get('name');
+					}
+			   	});
+			   	
+			   	//refresh gantt when any changes on slider completed
+			   	slider.on('changecomplete', function(slider, newVal){
+			   		refreshGantt(newVal);
+			   	});
+			});
+		</script>
+		<apex:pageBlockSection title="Time Travel" columns="2">
+			<apex:pageBlockSectionItem >
+				<apex:outputLabel value="Select Time Snapshot" id="selectedDate"/>
+				<div id="custom-tip-slider"></div>
+			</apex:pageBlockSectionItem>
+			<apex:pageBlockSectionItem >
+				<apex:outputLabel value="Compare To" />
+				<apex:form >
+					<!-- get date value from slider and update controller -!->
+					<apex:actionFunction name="refreshGantt" action="{!refreshGanttByIndex}" rerender="ganttPageBlockSection" status="ganttStatus">
+						<apex:param name="selectedIndex" value=""/>
+					</apex:actionFunction>
+		 			<apex:selectRadio layout="pageDirection" value="{!compareToOption}">
+						<apex:selectOptions value="{!compareToOptions}" /> 
+						<apex:actionSupport event="onchange" action="{!refreshGantt}" rerender="ganttPageBlockSection" status="ganttStatus" />
+				  	</apex:selectRadio>
+				</apex:form>
+			</apex:pageBlockSectionItem>
+		</apex:pageBlockSection>
+		<apex:pageBlockSection columns="1">
+			<apex:actionStatus id="ganttStatus" layout="block" >
+				<apex:facet name="start">
+					<c:loading />
+				</apex:facet>
+			</apex:actionStatus>
+		</apex:pageBlockSection>
+		<apex:outputPanel id="ganttPageBlockSection">
+			<script type="text/javascript">
+
+				Ext.ns('App');
+				
+				Ext.require([
+					'Gnt.panel.Gantt',
+					'Gnt.column.PercentDone',
+					'Gnt.column.StartDate',
+					'Gnt.column.EndDate',
+					'Sch.plugin.TreeCellEditing',
+					'Sch.plugin.Pan',
+					'Ext.slider.*'
+				]);
+				
+				Ext.onReady(function() { 
+					Ext.QuickTips.init();	  
+					
+					Ext.define("TaskModelWithBaseline", {
+						extend : "Gnt.model.Task",
+							
+						// Some additional fields for baseline calculation
+						fields : [
+							{name : 'BaselineStartDate', type : 'date', dateFormat : 'Y-m-d H:i:s' },
+							{name : 'BaselineEndDate', type : 'date', dateFormat : 'Y-m-d H:i:s' },
+							{name : 'BaselinePercentDone'}
+						]
+					});
+					
+					var phasesTasksJson = '{!ganttHelper.phasesTasksJson}';
+					var dependenciesJson = '{!ganttHelper.dependenciesJson}'; 
+					
+					var phasesTasksObj = '';
+					if(phasesTasksJson != null && phasesTasksJson != ''){
+						var phasesTasksObj = Ext.JSON.decode(phasesTasksJson); 
+					}
+					
+					var dependenciesObj = '';
+					if(dependenciesJson != null && dependenciesJson != ''){
+						var dependenciesObj = Ext.JSON.decode(dependenciesJson); 
+					}
+					 
+					var taskStore = Ext.create("Gnt.data.TaskStore", {
+						model		: 'TaskModelWithBaseline',
+						autoLoad	: true,
+						proxy		: {
+							data 	: phasesTasksObj,
+							type	: 'memory',
+							reader	: {
+								type		: 'json'
+							}
+						}
+					});
+					
+					var dependencyStore = Ext.create("Ext.data.Store", {
+						autoLoad	: true,
+						model		: 'Gnt.model.Dependency',
+						proxy		: {
+							data 	: dependenciesObj,
+							type	: 'memory',
+							reader	: {
+								type	: 'json'
+							}
+					   }
+					});
+				
+					 var start = null;
+					if('{!ganttHelper.startDate}' !== '') {
+						start = new Date( <apex:outputText value="{0,date,yyyy}"><apex:param value="{!ganttHelper.startDate}" /></apex:outputText>,
+										  <apex:outputText value="{0,date,M}"><apex:param value="{!ganttHelper.startDate}" /></apex:outputText>,
+										  <apex:outputText value="{0,date,d}"><apex:param value="{!ganttHelper.startDate}" /></apex:outputText>);
+					}
+
+					var end = null;
+					if('{!ganttHelper.endDate}' !== '') {
+						end = new Date( <apex:outputText value="{0,date,yyyy}"><apex:param value="{!ganttHelper.endDate}" /></apex:outputText>,
+										<apex:outputText value="{0,date,M}"><apex:param value="{!ganttHelper.endDate}" /></apex:outputText>,
+										<apex:outputText value="{0,date,d}"><apex:param value="{!ganttHelper.endDate}" /></apex:outputText>);
+					}
+
+					var g = Ext.create('Gnt.panel.Gantt', {
+						scopeResetCSS	: true,
+						height			: 600,
+						width			: 'fit',
+						loadMask		: true,
+						viewPreset  	: 'monthAndYear',
+						renderTo		: Ext.get('display'),
+						leftLabelField	: 'Name',
+						showTodayLine	: true,
+						showBaseline	: true,
+						startDate   	: start,
+						endDate	 		: end,
+						highlightWeekends	: false,
+						enableDependencyDragDrop	: false,
+
+						// Setup your static columns
+						columns : [
+							{
+								xtype 		: 'treecolumn',
+								header 		: 'Tasks', 
+								sortable	: true, 
+								dataIndex 	: 'Name', 
+								locked 		: true,
+								width		: 250, 
+								field 		: {
+									allowBlank : false
+								}
+								
+							}
+						],
+						
+						taskStore		 : taskStore,
+						dependencyStore	 : dependencyStore,
+						plugins : [{
+							ptype : 'pan'
+						}],
+				
+						tbar : [
+							{
+								text 		: 'Show baseline',
+								enableToggle: true,
+								pressed 	: true,
+								handler 	: function() {
+									g.el.toggleCls('sch-ganttpanel-showbaseline');
+								}
+							}
+						]
+					});
+					// set gantt read only			
+						g.setReadOnly(true);
+				});		
+			</script>
+			<div id="display" ></div>
+		</apex:outputPanel>
+	</apex:pageBlock>
+ -->
+</apex:page>

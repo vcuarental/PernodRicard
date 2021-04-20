@@ -1,0 +1,131 @@
+<apex:page standardController="ASI_TH_CRM_RSP__c" extensions="ASI_CRM_MY_RSPMassEditCtl" recordSetVar="planLineItems" sideBar="true" id="aPage">
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+
+    <apex:form id="aForm">
+        <apex:pageBlock id="aPageBlock">
+        <apex:pageMessages id="ErrorMessage"/><!--style="text-decoration:none;padding:4px;"-->
+        <apex:pageBlockButtons >
+            <apex:commandButton value="Save" action="{!SAVE}" status="ActionStatus" reRender="Resultitem, ErrorMessage" oncomplete="gotoRecord('{!strPageID}')"/>
+            <apex:commandButton value="Quick Save" action="{!SAVE}" status="ActionStatus" reRender="Resultitem, ErrorMessage"/>
+            <apex:commandButton value="Cancel" action="{!cancel}"/>
+        </apex:pageBlockButtons>
+        
+        <apex:panelGrid columns="1" width="100%">         
+            <apex:pageBlockSection title="RSP Details">
+                <apex:outputField value="{!RSPHeader.Name}"/><apex:pageBlockSectionItem />
+                <apex:outputField value="{!RSPHeader.ASI_CRM_Customer__r.name}"/><apex:pageBlockSectionItem />
+                <apex:outputField value="{!RSPHeader.ASI_CRM_Date__c}"/><apex:pageBlockSectionItem />
+                <apex:outputField value="{!RSPHeader.ASI_CRM_Remark__c}"/><apex:pageBlockSectionItem />      
+            </apex:pageBlockSection>
+        </apex:panelGrid>
+        
+        <apex:panelGrid columns="1" width="100%">   
+            <apex:pageBlockSection title="RSP Results">
+                <apex:pageBlockSectionItem >
+                    <apex:outputPanel layout="block">
+                        <apex:commandButton action="{!DELETESELECTED}" status="ActionStatus" title="Delete Selected" reRender="Resultitem, ErrorMessage" value="Delete Selected"/>
+                        <apex:commandButton action="{!CLONESELECTED}"  status="ActionStatus" title="Clone Selected" reRender="Resultitem, ErrorMessage" value="Clone Selected"/>
+                        <apex:commandButton action="{!ADDNEW}" status="ActionStatus" title="Add New Row" reRender="Resultitem, ErrorMessage" value="Add New Row"/>
+                    </apex:outputPanel>
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+            
+            <apex:pageblocktable value="{!results}" var="itm" id="Resultitem">
+                <apex:column >                    
+                    <apex:facet name="header">
+                        <apex:inputCheckbox value="{!allSelected}" id="allInput" onchange="selectAllCheckboxes(this,'inputId')" />
+                    </apex:facet>
+
+                    <apex:inputCheckbox value="{!itm.selected}" id="inputId" />
+                </apex:column>
+                
+                <!--
+                It should be in the RSP Header
+                <apex:column >
+                    <apex:facet name="header">Date</apex:facet>
+                        <div class="requiredInput">
+                        <div class="requiredBlock"></div>
+                        <apex:inputfield value="{!itm.ppl.ASI_TH_CRM_Date__c}" />
+                        </div>
+                </apex:column>
+                -->
+                
+                <apex:column >
+                    <apex:facet name="header">SKU</apex:facet>
+                    <div class="requiredInput">
+                        <div class="requiredBlock"></div>
+                        <apex:inputfield value="{!itm.ppl.ASI_CRM_SKU__c}" style="width: 350px;" />
+                    </div>
+                </apex:column>
+                
+                <apex:column >
+                    <apex:facet name="header">Price</apex:facet>
+                    <div class="requiredInput">
+                        <div class="requiredBlock"></div>
+                        <apex:inputfield value="{!itm.ppl.ASI_CRM_Price_to_Consumer__c}" onchange="modiftyRecord()" style="width: 200px; text-align: right" />
+                    </div>
+                </apex:column>
+            </apex:pageblocktable>
+            
+            <!-- Hidden field to store the variable of modifiedVF-->
+            <apex:inputHidden value="{!modifiedVF}" id="hiddenModifiedField"/>
+            
+            <apex:outputPanel layout="block" id="Pageing">                          
+                <apex:commandButton action="{!Beginning}" title="Beginning" value="<<" disabled="{!disablePrevious}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+                <apex:commandButton action="{!Previous}" title="Previous" value="<" disabled="{!disablePrevious}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>        
+                <apex:commandButton action="{!Next}" title="Next" value=">" disabled="{!disableNext}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+                <apex:commandButton action="{!End}" title="End" value=">>" disabled="{!disableNext}" status="ActionStatus" reRender="Resultitem, ErrorMessage, Pageing"/>
+                <apex:outputText value="{!recordNumberDisplay}" id="recordNumberDisplay"/>                      
+            </apex:outputPanel>
+            
+        </apex:panelGrid>
+           
+        </apex:pageBlock>
+    </apex:form>
+    
+    <!------------------------------------------------ FOR LOADING ANIMATION ------------------------------------------------>
+    <apex:actionstatus id="ActionStatus">
+        <apex:facet name="start">
+            <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+               height: 1000%; width:1000%; opacity:0.65;"> 
+                <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                    &nbsp;&nbsp;&nbsp;
+                    <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                    <span class="waitingDescription">Please Wait...</span>
+                </div>
+            </div>
+        </apex:facet>
+    </apex:actionstatus>
+    
+    <script>
+        $(document).on('mousemove', function(e){
+            $('#loadtext').css({
+               left:  e.pageX,
+               top:   e.pageY
+            });
+        });
+    
+        function selectAllCheckboxes(obj,receivedInputID){
+            var inputCheckBox = document.getElementsByTagName("input");                  
+            for(var i=0; i<inputCheckBox.length; i++){          
+                if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){                                     
+                    inputCheckBox[i].checked = obj.checked;
+                }
+            }
+        }
+        
+        function gotoRecord(pageID){  
+            //alert(pageID);
+            if(pageID!='ERROR'){
+                window.open("/" + pageID, '_self');
+            }
+        }
+        
+        function modiftyRecord(){
+            document.getElementById('aPage:aForm:aPageBlock:hiddenModifiedField').value = 'Y';
+        }
+    </script>
+</apex:page>

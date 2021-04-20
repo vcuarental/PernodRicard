@@ -1,0 +1,708 @@
+<apex:page standardController="ASI_MFM_PO_Receipt__c"  sidebar="false"  docType="html-5.0" showHeader="true" extensions="ASI_MFM_JP_POReceiptManageAllCtrler" action="{!init}">
+    
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/SimpleTable.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" /> 
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/currency.js')}" /> 
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/numericInput.min.js')}" /> 
+        <script type="text/javascript">
+        
+        $j = jQuery.noConflict();
+        
+        var headerId = null;
+        var resultTable;
+        var POLTable;
+        var returnURL;
+        var datatableILength = 15;   
+        var initCurrency; 
+        var allowReceiptAmountFloat = false;
+        var totalAmountDecimalPlace = 0;
+        var api;
+        
+        function initPOReceiptPage(config) {
+            if (config) {
+                headerId = config.headerId;
+                initCurrency = config.initCurrency;
+                if(initCurrency!=="JPY") { 
+                    allowReceiptAmountFloat = true;
+                    totalAmountDecimalPlace = 2;
+                }
+                setResultTable(true);
+                setPOLineTable(true);
+            }
+        }  
+        
+        $j(document).on('mousemove', function(e){
+            $j('#loadtext').css({
+                left:  e.pageX,
+                top:   e.pageY
+            });
+        });
+        
+        
+        /*method for stop enter to submit form*/
+        function stopRKey(evt) {
+            var evt = (evt) ? evt : ((event) ? event : null);
+            var node = (evt.target) ? evt.target : ((evt.srcElement) ? evt.srcElement : null);
+            if ((evt.keyCode == 13) && (node.type=="text")) {return false;}
+        }
+        
+        document.onkeypress = stopRKey; 
+        
+        function setResultTable(newTable){
+            
+            resultTable =  $j('#dt_PaymentLineItems').on( 'init.dt', function () {
+                
+            }).DataTable({   
+                
+                "bDestroy":true,
+                "bSearch":false,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "bAutoWidth":false,		    			
+                "bSort": false, 
+                "iDisplayLength":datatableILength,
+                "sPaginationType": "full_numbers",
+                "bLengthChange": false,
+                "order": [],
+                "columnDefs": [{
+                    "targets": [ 0 ],
+                    "searchable": false,
+                    "orderable": false
+                }   
+                              ],
+                "initComplete": function(){
+                    // calculateSum();
+                },
+                "fnDrawCallback": function() {
+                    
+                    api.column(8).nodes().to$().each(function(index) { 
+                        
+                        $j(this).find('.amount').each(function() { 
+                            
+                            var columnAmount = parseFloat($j(this).val().replace(/[$,]+/g,""));//.replace(",", ".")); //$j(this).val().replace(/[$,]+/g,"");
+                            
+                            if(!allowReceiptAmountFloat){
+                                
+                                $j(this).val(columnAmount);
+                                
+                                console.log('Now:'+$j(this).val() );
+                            }
+                            
+                            
+                        });
+                        
+                    });                                                				    	    
+                    
+                    api = this.api();
+                    
+                    $j('.porline_amount input').change();
+                    
+                    $j('.amount').numericInput({ allowNegative: false ,allowFloat: allowReceiptAmountFloat });
+                    
+                    $j('.porline_amount input').on("focus", function() {
+                        
+                    }).change(function () {
+                        
+                        calculateSum();
+                    });
+                    
+                    $j('.amount').blur();
+                    $j('.amount').each(function() {
+                        
+                    }); //END .eac
+                    
+                    
+                },
+                "footerCallback": function( tfoot, data, start, end, display ) {
+                    
+                    //var api = this.api();
+                    
+                    
+                    api = this.api();
+                    calculateSum();
+                }
+                
+                
+            });
+        }
+        
+        function setPOLineTable(newTable){
+            // $j('#dt_PoLineItems').DataTable({"bAutoWidth":false,"bSort":true});
+            
+            POLTable =  $j('#dt_PoLineItems').DataTable({
+                "bDestroy":true,
+                "bSort":true,
+                "dom": '<"top">irt<"bottom"p><"clear">',
+                "iDisplayLength":datatableILength,
+                "order": [],
+                "columnDefs": [
+                    {
+                        "targets": [ 0 ], // action button
+                        "searchable": false,
+                        "orderable": false
+                    }
+                ]
+                
+                
+            });
+        }
+        
+        function formatNumber(n) {
+            return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        function calculateSum(){
+            var sum = 0;
+            
+            api.column(8).nodes().to$().each(function(index) { 
+                
+                $j(this).find('.amount').each(function() { 
+                    
+                    var columnAmount = $j(this).val().replace(/[$,]+/g,"");
+                    
+                    if(!isNaN(columnAmount) && columnAmount.length!=0) {
+                        
+                        sum += parseFloat(columnAmount);
+                    }
+                    
+                    console.log('Now:'+$j(this).val() );
+                });
+                
+            });
+            
+            console.log("Need to re-calculate the amount: " + sum);
+            
+            var totalAmountColumn = api.column( 8);
+            
+            $j( totalAmountColumn.footer() ).html(formatNumber(sum.toFixed(totalAmountDecimalPlace)));     
+            
+        }
+        
+        /*
+        function calculateSum() {
+            
+            var sum = 0;
+            
+            //function to handle outputfield - verified amount
+             $j('*[id*=outputAmount]:visible').each(function() {
+                 var text = $j(this).text();
+                 var number = parseInt(text, 10);
+                //add only if the value is number
+                 console.log(text);
+                 sum += parseFloat(number);
+    
+            });
+            
+            //iterate through each textboxes and add the values
+           $j('.amount').each(function() {
+     
+                //add only if the value is number
+                if(!isNaN(this.value) && this.value.length!=0) {
+                    $j(this).closest('tr').children('.taxamount').text((parseFloat(this.value)*0.08).toFixed(2));
+                    sum += parseFloat(this.value);
+                }else{
+                    //this.value = ("");
+                    //$j(this).closest('tr').children('.taxamount').text("");
+                    	 var val = $j(this).val();
+                         val = val.replace(/[^0-9\.]/g,'');
+                         if(val.split('.').length>2) val =val.replace(/\.+$/,"");
+            			 $j(this).val(val); 
+            			 
+                    }
+            });
+            console.log('calculate_Sum');
+            //.toFixed() method will roundoff the final sum to (totalAmountDecimalPlace) decimal places
+            $j('#total_payment_amount').html(sum.toFixed(2));//totalAmountDecimalPlace
+            
+        }   */             
+        
+        $j(document).ready(function() {
+            
+            initPOReceiptPage({
+                headerId: '{!header.Id}',
+                initCurrency: '{!Header.ASI_MFM_PO__r.ASI_MFM_Currency__c}'
+            });
+            
+            /*
+            calculateSum();
+           //iterate through each textboxes and add keyup
+            //handler to trigger sum event
+            $j('.amount').each(function() {
+    
+                $j(this).keyup(function(){
+                    calculateSum();
+                });
+            });
+            */
+            
+        } );
+        
+        function disableButton() {
+            $j('#divpaymentForm .btn').button('loading');
+        } 
+        
+        function backToManageAll(hasError) {
+            if (hasError) {
+                $j('#divpaymentForm .btn').button('reset');
+                return;
+            }
+            
+        }  
+        
+        </script>
+        
+        <style type="text/css">
+            .dateFormat{
+            display:none;
+            }
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }
+            
+            
+            .amount{
+            border-left: 3px solid darkred !important;          
+            
+            }
+            
+            .receiptDate{
+            border-left: 3px solid darkred !important;   
+            }
+            
+            .dropdownDiv {
+            border-radius: 5px;
+            margin-bottom: 5px;
+            color: #666;
+            display: inline-block;
+            padding: 10px;
+            
+            }
+            .headsUpDiv {
+            padding: 5px; 
+            border-radius: 3px; 
+            background-color: rgb(217, 237, 247); 
+            color: #31708f; 
+            border: 1px solid #9acfea; 
+            display: inline-block;
+            }
+            .div-size {
+            height: 30px;
+            }
+            .btn-round {
+            align: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 100% !important;
+            font-size: 14px !important;
+            padding: 3px !important;
+            }
+            .btn-size {
+            height: 30px;
+            }
+            
+            
+            .btn-round.btn-lg {
+            width: 48px;
+            height: 48px;
+            }
+            
+            .btn-round.btn-sm {
+            width: 34px;
+            height: 34px;
+            }
+            
+            .btn-round.btn-xs {
+            width: 24px;
+            height: 24px;
+            }
+            
+            .lookupInput a{
+            display: block;
+            position: absolute !important;
+            top:0px !important;
+            }
+            
+            .lookupInput img{
+            float: right;
+            }
+            
+            span.lookupInput {
+            position: relative !important;
+            display:inherit !important;
+            }
+            
+            .lookupInput a, .lookupInput a{
+            border:none !important;
+            border-left: 3px solid darkred !important;          
+            background: none !important;
+            }
+            
+            .bs.panel-heading.div-size {
+            border-radius: 10px;
+            }
+            
+            body {
+            font-family: Arial;
+            font-size: 9pt;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }  
+            
+            .required {
+            border-left: 3px solid darkred !important;  
+            }
+            .centerNum {
+            font-weight:bold;
+            text-align: center;
+            }
+            .rightNum {
+            font-weight:bold;
+            text-align: right;
+            padding-right:5px !important;
+            }
+            .headerCen {
+            text-align: center !important;
+            }
+        </style>
+        
+    </head>
+    
+    <apex:form id="frm_POReceiptForm" styleclass="objectFormCls" >
+        <div id="divReceiptForm" class="bs container-fluid">
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-12">  
+                    <apex:outputPanel styleclass="bs panel-primary" id="POReceiptDetailPanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title" >PO Receipt Details</h5>
+                        </div>
+                        <div class="bs panel-body">                                           
+                            <div class="bs table-responsive" > 
+                                <table class="bs table">
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO_Receipt__c.Fields.Name.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 5px;"/></td>
+                                        <td>
+                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!Header.ID}" target="_blank">
+                                                <apex:outputField value="{!Header.Name}"></apex:outputField>
+                                            </apex:outputLink>
+                                        </td>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO_Receipt__c.Fields.ASI_MFM_PO__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/>
+                                        </td>
+                                        <td>
+                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!Header.ASI_MFM_PO__c}" target="_blank">
+                                                <apex:outputField value="{!Header.ASI_MFM_PO__r.name}"></apex:outputField>
+                                            </apex:outputLink>
+                                        </td>         
+                                        
+                                    </tr>
+                                    <tr>
+                                        <td><apex:outputLabel value="PO Supplier" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_Supplier_Name__c}"></apex:outputField></td> 
+                                        <td><apex:outputLabel value="PO Currency" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_Currency__c}"></apex:outputField></td>             
+                                    </tr>
+                                    
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO__c.Fields.ASI_MFM_PO_Fiscal_Year__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_PO_Fiscal_Year__c}"></apex:outputField></td> 
+                                        
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO__c.Fields.ASI_MFM_PO_Amount__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_PO_Amount__c}"></apex:outputField></td> 
+                                    </tr>
+                                    
+                                    <tr>
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO__c.Fields.ASI_MFM_PO_Balance__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_PO_Balance__c}"></apex:outputField></td> 
+                                        
+                                        <td><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO__c.Fields.ASI_MFM_Base_Currency_Amount__c.Label}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                        <td><apex:outputField value="{!Header.ASI_MFM_PO__r.ASI_MFM_Base_Currency_Amount__c}"></apex:outputField></td> 
+                                    </tr>
+                                    
+                                    
+                                </table>
+                            </div>
+                        </div>
+                    </apex:outputPanel>
+                    
+                    
+                    
+                    <apex:outputPanel styleclass="bs panel-primary" id="LinePanel">
+                        <div class="bs panel-heading div-size" >
+                            <h5 class="bs panel-title">PO Receipt Line Items</h5>
+                        </div>  
+                        <div class="bs panel-body">
+                            
+                            <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                
+                                <strong>Error,Can not Save!</strong><br/>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>  
+                            
+                            
+                            <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                <strong>Quick Save Success!</strong>
+                                <apex:outputText escape="false" value="{!Msg}"/>
+                            </div>    
+                            
+                            <div class='bs wrapper text-center' id='bs toolbar' >
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandLink styleClass="bs btn btn-default btn-size" 
+                                                      value="Save"
+                                                      style="font-weight: bold"
+                                                      action="{!saveLinetems}"
+                                                      status="ActionStatus"
+                                                      onclick="resultTable.page.len( -1 ).draw(false);"
+                                                      oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                      reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                      rendered="{!DisplayPOL}" 
+                                                      target="_parent" >
+                                        <apex:param name="IS_QUICK_SAVE" value="false"/>
+                                    </apex:commandLink>
+                                </div>&nbsp;                                            
+                                <div class="bs btn-group " role="group" >
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Quick Save"
+                                                        action="{!onCommitted}"
+                                                        status="ActionStatus"
+                                                        onclick="resultTable.page.len( -1 ).draw(false);"
+                                                        oncomplete="console.log('Save');setResultTable(true);setPOLineTable(true);"
+                                                        reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel"
+                                                        rendered="{!DisplayPOL}" 
+                                                        html-data-loading-text="Loading..." >
+                                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                                    </apex:commandButton>
+                                </div>&nbsp;
+                                <div class="bs btn-group " role="group" >
+                                    
+                                    <apex:commandButton styleClass="bs btn btn-default btn-size"
+                                                        style="font-weight: bold"
+                                                        value="Cancel"
+                                                        action="{!cancel}" 
+                                                        html-data-loading-text="Loading..."
+                                                        html-formnovalidate="formnovalidate"/>
+                                </div>                             
+                            </div>
+                            
+                            
+                            <table id="dt_PaymentLineItems" class="hover responsive no-wrap compact" style="width: 100%;" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>Action</th>
+                                        <th>Marketing PO Delivered</th>
+                                        <th>POL</th>
+                                        <th>Sub Brand</th>
+                                        <!----  <th>AC Code</th>---->
+                                        <th>AP Code</th>
+                                        <th>Customer</th>
+                                        <th>POL Description</th>
+                                        <th>Available Amount</th>
+                                        <th class="headerCen">Receipt Amount<span class="thtitle" >*</span></th>
+                                        <th>Receipt Date<span class="thtitle" >*</span></th>
+                                        <th>Remark</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <apex:variable value="{!0}" var="i"/>
+                                    <apex:repeat value="{!allPORItemMap}" var="PolId">
+                                        <apex:variable var="i" value="{!i+1}"/>
+                                        <tr>
+                                            <td><apex:commandLink styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                  style="border: none;background-color: transparent;"
+                                                                  reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                  action="{!removeLine}"
+                                                                  onclick="resultTable.page.len( -1 ).draw(false);"
+                                                                  oncomplete="console.log('Remove Done');setResultTable(true);setPOLineTable(true);"
+                                                                  status="ActionStatus"
+                                                                  immediate="false"
+                                                                  title="Remove line {!i}"
+                                                                  html-formnovalidate="formnovalidate"
+                                                                  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),false,true)}"
+                                                                  html-data-loading-text="Loading..." >
+                                                <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;"></span>
+                                                <apex:param name="PARAM_PORLine_ID" value="{!PolId}" />
+                                                </apex:commandLink>
+                                                
+                                                <apex:outputLabel style="border: none;background-color: transparent;"
+                                                                  styleClass="bs btn btn-default btn-round pull-left btn-sm"
+                                                                  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),true,false)}">
+                                                    <span class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 20px;" > </span>
+                                                </apex:outputLabel> 
+                                                
+                                                
+                                            </td>
+                                            
+                                            <td><center><apex:outputField value="{!allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c}"></apex:outputField></center></td>
+                                            <td><apex:outputField value="{!allPORItemMap[PolId].por.ASI_MFM_PO_Line_Item__c}"></apex:outputField></td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPORItemMap[PolId].SB_CodeID}" target="_blank">
+                                                    <apex:outputText value="{!allPORItemMap[PolId].SB_Code}"></apex:outputText>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPORItemMap[PolId].AP_CodeID}" target="_blank">
+                                                <apex:outputText value="{!allPORItemMap[PolId].AP_Code}"></apex:outputText>
+                                                </apex:outputLink>
+                                                
+                                            </td>
+                                            <td><apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPORItemMap[PolId].CustomerID}" target="_blank">
+                                                <apex:outputText value="{!allPORItemMap[PolId].Customer}"></apex:outputText>
+                                                </apex:outputLink>
+                                                
+                                            </td>
+                                            <td>{!allPORItemMap[PolId].Description}</td>
+                                            <td class="centerNum">
+                                                <apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!allPORItemMap[PolId].PoRemaining}"/></apex:outputText>
+                                            </td>
+                                            
+                                            <td class="porline_amount" id="porline_amount_{!PolId}_textfield">
+                                                <apex:inputField value="{!allPORItemMap[PolId].por.ASI_MFM_Amount__c}" styleclass="bs form-control amount input-sm"  html-placeholder="PO Receipt Amount"  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),false,true)}" style="text-align: right;" ></apex:inputField>
+                                                <apex:inputtext value="{!allPORItemMap[PolId].por.ASI_MFM_Amount__c}" styleclass="bs form-control amount input-sm"  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),true,false)}"   html-readonly="true"  style="text-align: right;" ></apex:inputtext>
+                                                <!---- <apex:outputField value="{!allPORItemMap[PolId].por.ASI_MFM_Amount__c}" id="outputAmount" styleclass="amount" rendered="{!if(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,true,false)}"></apex:outputField>---->
+                                            </td>
+                                            
+                                            <td>
+                                                <apex:inputField value="{!allPORItemMap[PolId].por.ASI_MFM_Receipt_Date__c}" styleclass="bs form-control receiptDate input-sm"  html-placeholder="Receipt Date"  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),false,true)}"  ></apex:inputField>
+                                                <apex:outputField value="{!allPORItemMap[PolId].por.ASI_MFM_Receipt_Date__c}"   rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),true,false)}"></apex:outputField>
+                                                
+                                            </td>
+                                            <td>
+                                                <apex:inputField value="{!allPORItemMap[PolId].por.ASI_MFM_Remark__c}" styleclass="bs form-control input-sm"  html-placeholder="Remark"  rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),false,true)}"></apex:inputField>
+                                                <apex:outputField value="{!allPORItemMap[PolId].por.ASI_MFM_Remark__c}" rendered="{!if(or(allPORItemMap[PolId].por.ASI_MFM_Marketing_Verify__c,Header.ASI_MFM_PO__r.ASI_MFM_Status__c='Complete'),true,false)}"></apex:outputField>
+                                            </td>
+                                        </tr>
+                                    </apex:repeat> 
+                                </tbody>
+                                
+                                <tfoot>
+                                    <tr class="summary">
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th><th></th>
+                                        <th></th>
+                                        <th>Total:</th>
+                                        <th id="total_payment_amount" style="text-align: right;" ></th>
+                                        <th></th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>  
+                                
+                            </table>
+                            
+                        </div>
+                    </apex:outputPanel>
+                    
+                    <!--------------------------------------------------------- PO Line Items      ------------------------------------------------------------------->
+                    
+                    <apex:outputPanel styleclass="bs panel-primary" id="poLinePanel" rendered="{!DisplayPOL}" >
+                        <div class="bs panel-heading div-size">
+                            <h5 class="bs panel-title">PO Line Items</h5>
+                        </div>   
+                        <div class="bs panel-body">  
+                            <table id="dt_PoLineItems" class="hover responsive no-wrap compact" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Action</th>
+                                        <th>PO Line</th>
+                                        <th>Sub Brand</th>
+                                        <!-- <th>A/C code</th>--->
+                                        <th>A/P code</th>
+                                        <th>Customer</th>
+                                        <th>Amount</th>
+                                        <th><apex:outputLabel value="{!$ObjectType.ASI_MFM_PO_Line_Item__c.Fields.ASI_MFM_CN_Remaining_Receipt_Balance__c.Label}" /></th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                
+                                <tbody>
+                                    <apex:repeat value="{!allPOLineMap}" var="PolIne">
+                                        <tr>
+                                            <td> <apex:commandLink styleClass="bs btn btn-success btn-round pull-left btn-sm" 
+                                                                   style="border: none;background-color: transparent;"
+                                                                   action="{!addLineItem}"
+                                                                   reRender="SaveFailPart, SaveSuccessPart, LinePanel, poLinePanel" 
+                                                                   immediate="false"
+                                                                   status="ActionStatus"
+                                                                   onclick="resultTable.page.len( -1 ).draw(false);POLTable.page.len( -1 ).draw(false);"
+                                                                   oncomplete="console.log('Add');setResultTable(true);setPOLineTable(true);"
+                                                                   html-formnovalidate="formnovalidate">
+                                                <span class="bs glyphicon glyphicon-plus"  style="color:green;font-size: 20px;"></span>
+                                                <apex:param name="PARAM_POLINE_SOURCE_ITEM_ID" value="{!PolIne}" />
+                                                </apex:commandLink>
+                                                
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!allPOLineMap[PolIne].pol.id}" target="_blank">
+                                                    <apex:outputField value="{!allPOLineMap[PolIne].pol.name}"></apex:outputField>
+                                                </apex:outputLink>
+                                            </td>
+                                            <td><apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_Sub_brand_Code__c}"></apex:outputField></td>
+                                            <!---   <td><apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_A_C_Code__c}"></apex:outputField></td>---->
+                                            <td><apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_AP_Code__c}"></apex:outputField></td>
+                                            <td><apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_Customer_Name__c}"></apex:outputField></td>
+                                            
+                                            <td>
+                                                <apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_Amount__c}" ></apex:outputField>
+                                                
+                                            </td>
+                                            <td class="rightNum">
+                                                <apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!allPOLineMap[PolIne].RemainAmt}"/></apex:outputText></td>
+                                            <td><apex:outputField value="{!allPOLineMap[PolIne].pol.ASI_MFM_List_Item_Description__c}"></apex:outputField></td>
+                                            
+                                        </tr>
+                                    </apex:repeat>
+                                </tbody>
+                                
+                                
+                                
+                                
+                            </table>
+                            
+                            
+                        </div>
+                    </apex:outputPanel>                           
+                    
+                </div>
+            </div>
+            
+            
+            <apex:actionstatus id="ActionStatus">
+                <apex:facet name="start">
+                    <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                         height: 100%; width:100%; opacity:0.65;"> 
+                        <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                            &nbsp;&nbsp;&nbsp;
+                            <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                            <span class="waitingDescription">Please Wait...</span>
+                        </div>
+                    </div>
+                </apex:facet>
+            </apex:actionstatus>
+            
+            
+        </div>
+    </apex:form>    
+    
+</apex:page>

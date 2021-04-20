@@ -1,0 +1,634 @@
+<apex:page standardController="ASI_TH_CRM_Contract__c" extensions="ASI_CRM_CN_Contract_Controller">
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+<script type='text/javascript'>
+var addnlFldname = [];
+    $(function(){
+       ASI_CRM_CN_Contract_Controller.findSObjects('ASI_MFM_Sub_brand__c', '','', function(result, event){
+           if(event.type == 'exception') {
+               alert(event.message);
+           } else {
+               addnlFldname = result;
+               for(var i = 0, len = addnlFldname.length;i<len;i++ )
+               {
+                  addnlFldname[i] =  htmlEncode(addnlFldname[i]);
+               } 
+                 $( ".lookupInput" ).each(function(){
+
+                    $(this).find('input').autocomplete({
+                        source: addnlFldname
+                    });               
+                })                   
+           }
+       });
+        
+        //20160621 Ben @ Elufa
+        var $inputEle = $('td span.OthersEstCost span').each(function(){
+            
+        	calOthers(this);
+        });
+        //20160621
+        
+    });
+    function createBindingAction() {
+        for(var i = 0, len = addnlFldname.length;i<len;i++ )
+               {
+                  addnlFldname[i] =  htmlEncode(addnlFldname[i]);
+               }
+        $(".lookupInput").each(function(){ 
+            $(this).find('input').autocomplete({
+                source: addnlFldname
+            });             
+        });
+    }
+    function htmlEncode( input ) {
+          var e = document.createElement('div');
+          e.innerHTML = input;
+          return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+          //return String(input).replace(/\&amp;/g,'&').replace(/\&lt;/g,'<').replace(/\&rt;/g,'>');
+      };
+    function blockAllInputs(param){
+        var addNew;
+      if(!ASI_CRM_CN_Contract_Controller.showCN){
+     addNew = document.getElementById('{!$Component.theForm.contact_blk.brsfv_blk.brsfv_blksc.item.addnew}');
+     }
+     else{
+     addNew = document.getElementById('{!$Component.theForm.contact_CN_blk.brsfv_CN_blk.brsfv_CN_blksc.item.addnew}');
+     }
+      if(param){
+         addNew.style.visibility = "hidden";
+        }
+        else{
+           addNew.style.visibility = "visible";
+        }      
+    }   
+    
+    //Added by Twinkle LI - select all checkboxes
+    function selectAllCheckboxes(obj,receivedInputID){
+        var inputCheckBox = document.getElementsByTagName("input");                  
+        for(var i=0; i<inputCheckBox.length; i++){          
+            if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){                                     
+                inputCheckBox[i].checked = obj.checked;
+            }
+        }
+    }
+    
+    //20160610 Ben @ Elufa
+    
+    function calOthers(ele){
+        
+        var $tr = $(ele).closest('tr');
+        var est = currencyToFloat($tr.find('td span.TotalEstCost input:text').val());
+        var cny = currencyToFloat($tr.find('td span.CNYEstCost input:text').val());
+        var maf = currencyToFloat($tr.find('td span.MAFEstCost input:text').val());
+        est = est ? est : 0;
+        cny = cny ? cny : 0;
+        maf = maf ? maf : 0;
+        var other = (est - cny - maf).toFixed(2);
+        var $inputEle = $tr.find('td span.OthersEstCost span');
+        
+        if(other < 0)
+            $inputEle.addClass('negative');
+        else
+            $inputEle.removeClass('negative');
+        
+        $inputEle.html(numToCurrency(other));
+    }
+
+    function currencyToFloat(currencyStr) {
+        if (typeof currencyStr === 'string') {
+            var numStr = currencyStr.replace(/,/g, '');
+            if (/^-?\d+\.?\d*$/.test(numStr)) {
+                return parseFloat(numStr);
+            }
+        }
+        return null;
+    }
+    
+    function numToCurrency(num) {
+        
+        if (num !== undefined && num !== null && /^-?\d+\.?\d?\d?\d?\d?\d?\d?$/.test('' + num)) {
+            return ('' + num).replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+        }
+        return null;
+    }
+ 
+</script>
+    <style>
+    	.negative{
+        	color : red;
+        	font-weight : bold;
+        }
+    </style>
+<apex:pageMessages />
+<apex:form id="theForm">
+<apex:outputPanel id="is_EN" rendered="{!!showCN}">
+<apex:pageblock title="Contract" id="contact_blk">
+<apex:pageblockButtons >
+    <apex:commandButton value="Save" action="{!UpdateContractDetailRecord}"/>
+    <apex:commandButton value="Cancel" action="/{!ContractSelected.id}" immediate="true"/>
+</apex:pageblockButtons>
+    <apex:pageblock title="PO Summary" rendered="{!ContractSelected.ASI_CRM_CN_PO_Modification__c}">
+        <apex:pageblocktable value="{!paymentRequestSummary}" var="ps">
+            <apex:column >
+                <apex:facet name="header">Activity Code</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{!ps.feeName}"/><apex:outputText value=" / {!ps.feeChiName}" rendered="{!ps.feeChiName!=null}"/>
+                </apex:outputpanel>
+                <apex:facet name="footer">Total</apex:facet> 
+            </apex:column>
+            <!--20160726 Ben @ Elufa-->
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">CNY(Est)</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.cnyEstLast!=null&&ps.cnyEstLast!=0}"><apex:param value="{!ps.cnyEstLast}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.cnyEstLast==null||ps.cnyEstLast==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalLastEstAmtCNY!=null&&TotalLastEstAmtCNY!=0}"><apex:param value="{!TotalLastEstAmtCNY}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalLastEstAmtCNY==null||TotalLastEstAmtCNY==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">CNY Remaining</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.cnyRemaining!=null&&ps.cnyRemaining!=0}"><apex:param value="{!ps.cnyRemaining}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.cnyRemaining==null||ps.cnyRemaining==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalRemainAmtCNY!=null&&TotalRemainAmtCNY!=0}"><apex:param value="{!TotalRemainAmtCNY}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalRemainAmtCNY==null||TotalRemainAmtCNY==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">MAF(Est)</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.mafEstLast!=null&&ps.mafEstLast!=0}"><apex:param value="{!ps.mafEstLast}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.mafEstLast==null||ps.mafEstLast==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalLastEstAmtMAF!=null&&TotalLastEstAmtMAF!=0}"><apex:param value="{!TotalLastEstAmtMAF}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalLastEstAmtMAF==null||TotalLastEstAmtMAF==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">MAF Remaining</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.mafRemaining!=null&&ps.mafRemaining!=0}"><apex:param value="{!ps.mafRemaining}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.mafRemaining==null||ps.mafRemaining==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalRemainAmtMAF!=null&&TotalRemainAmtMAF!=0}"><apex:param value="{!TotalRemainAmtMAF}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalRemainAmtMAF==null||TotalRemainAmtMAF==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">Others(Est)</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.othersEstLast!=null&&ps.othersEstLast!=0}"><apex:param value="{!ps.othersEstLast}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.othersEstLast==null||ps.othersEstLast==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalLastEstAmtOthers!=null&&TotalLastEstAmtOthers!=0}"><apex:param value="{!TotalLastEstAmtOthers}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalLastEstAmtOthers==null||TotalLastEstAmtOthers==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            
+            <apex:column rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">Others Remaining</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.othersRemaining!=null&&ps.othersRemaining!=0}"><apex:param value="{!ps.othersRemaining}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!ps.othersRemaining==null||ps.othersRemaining==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!TotalRemainAmtOthers!=null&&TotalRemainAmtOthers!=0}"><apex:param value="{!TotalRemainAmtOthers}"/></apex:outputText>
+                <apex:outputText value=" - " rendered="{!TotalRemainAmtOthers==null||TotalRemainAmtOthers==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            <!--20160726 End-->
+            <apex:column >
+                <apex:facet name="header">PO Estimated Amount</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.LastPOEstimateAmt!=null&&ps.LastPOEstimateAmt!=0}"><apex:param value="{!ps.LastPOEstimateAmt}"/></apex:outputtext>
+                <apex:outputText value=" - " rendered="{!ps.LastPOEstimateAmt==null||ps.LastPOEstimateAmt==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel ><apex:outputText value="{0,number,#,###,##0.00}" rendered="{!PS_TotalLastEstAmt!=null&&PS_TotalLastEstAmt!=0}"><apex:param value="{!PS_TotalLastEstAmt}"/></apex:outputtext>
+                <apex:outputText value=" - " rendered="{!PS_TotalLastEstAmt==null||PS_TotalLastEstAmt==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">PO Remaining Amount</apex:facet> 
+                <apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!ps.PORemainAmt!=null&&ps.PORemainAmt!=0}"><apex:param value="{!ps.PORemainAmt}"/></apex:outputtext>
+                <apex:outputText value=" - " rendered="{!ps.PORemainAmt==null||ps.PORemainAmt==0}" />
+                </apex:outputpanel>
+                <apex:facet name="footer"><apex:outputpanel >
+                <apex:outputText value="{0,number,#,###,##0.00}" rendered="{!PS_TotalPORemainAmt!=null&&PS_TotalPORemainAmt!=0}"><apex:param value="{!PS_TotalPORemainAmt}"/></apex:outputtext>
+                <apex:outputText value=" - " rendered="{!PS_TotalPORemainAmt==null||PS_TotalPORemainAmt==0}" /></apex:outputpanel></apex:facet> 
+            </apex:column>
+        </apex:pageblocktable>
+    </apex:pageblock>
+    <apex:pageblock title="Fixed Cost">
+        <apex:pageblocktable value="{!LFixCost}" var="row">
+            <apex:column width="25%" >
+                <apex:outputField value="{!row.Name}"/>
+            </apex:column>
+            <apex:column width="15%" >
+                <apex:facet name="header">Estimate</apex:facet> 
+                <span class="TotalEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/></span>
+            </apex:column>
+            <!--20160608 Ben @ Elufa -->
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">CNY(Est.)</apex:facet> 
+                <span class="CNYEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_CNY_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">MAF(Est.)</apex:facet> 
+                <span class="MAFEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_MAF_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">Others(Est.)</apex:facet> 
+                <span class="OthersEstCost"><apex:outputField styleClass="{!if(row.ASI_CRM_Other_Est__c > 0, '', 'negative')}" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_Other_Est__c}"/></span>
+            </apex:column>
+            <!--20160608 End -->
+            <apex:column width="15%">
+                <apex:facet name="header">Contract</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>
+        </apex:pageblocktable>
+    </apex:pageblock>
+    
+    <apex:pageblock title="BRSF / Volume Target" id="brsfv_blk">
+        <apex:pageblocksection columns="1" id="brsfv_blksc">
+            <apex:actionRegion >
+                <apex:pageblocktable value="{!BRSF_Item_Map}" var="itm" id="item">
+                    <apex:column >                    
+                        <apex:facet name="header"><apex:commandLink value="Add New" id="addnew" action="{!AddNew_BRSF}" rerender="mainblock, item" oncomplete="createBindingAction()" style="text-decoration:underline;"/></apex:facet>
+                        <apex:commandLink value="Clone" action="{!Clone_BRSF}" oncomplete="createBindingAction()" rerender="item"><apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                        <apex:outputText value=" / "></apex:outputText>
+                        <apex:commandLink value="Remove" action="{!RemoveRow_BRSF}" immediate="true" oncomplete="createBindingAction()" rerender="item"><apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Sub Brand</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Sub_Brand__c}" required="true"/>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Estimate Monthly QTY (Std. Bottle)</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_Monthly_Qty__c}" required="true" >
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_EstTotal}"  rerender="Est_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Contract Monthly QTY (Std. Bottle)</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_Monthly_Qty__c}" required="true">
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_ContractTotal}"  rerender="Contract_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Estimate BRSF (Per Bottle)</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_BRSF_Per_Bottle__c}" required="false" >
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_EstTotal}" rerender="Est_Total" onsubmit="blockAllInputs(true)"
+                                                oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>                    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Contract BRSF (Per Bottle)</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_BRSF_Per_Bottle__c}" required="false">
+                            <apex:actionSupport event="onkeyup"  action="{!calcBRSF_ContractTotal}"  rerender="Contract_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                                <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                            </apex:actionSupport>
+                        </apex:inputField>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Estimate Total</apex:facet>
+                        <apex:outputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_Total_Dummy__c}" id="Est_Total" />
+                        <apex:actionStatus startText="loading..." id="StatusChange_Est"/>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">Contract Total</apex:facet>
+                        <apex:outputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_Total_Dummy__c}" id="Contract_Total" />
+                    </apex:column>
+                </apex:pageblocktable>
+            </apex:actionRegion>
+        </apex:pageblocksection>
+        <apex:pageblocksection rendered="{!ContractSelected.ASI_CRM_CN_PO_Modification__c}">
+            <apex:pageblocksectionitem >
+                <apex:outputText value="Expected BRSF Estimate Total:" />
+                <apex:inputField value="{!ContractSelected.ASI_CRM_CN_Expected_BRSF_Est_Total__c}" />
+            </apex:pageblocksectionitem>
+        </apex:pageblocksection>
+    </apex:pageblock>    
+ 
+    <apex:pageblock title="Other Variable Cost">
+        <apex:pageblocktable value="{!LVariableCost}" var="row">
+            <apex:column width="25%" >
+                <apex:outputField value="{!row.name}"/>
+            </apex:column>
+            <apex:column width="15%" >
+                <apex:facet name="header">Estimate</apex:facet> 
+                <span class="TotalEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/></span>
+            </apex:column>
+            <!--20160608 Ben @ Elufa -->
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">CNY(Est.)</apex:facet> 
+                <span class="CNYEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_CNY_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">MAF(Est.)</apex:facet> 
+                <span class="MAFEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_MAF_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">Others(Est.)</apex:facet> 
+                <span class="OthersEstCost"><apex:outputField styleClass="{!if(row.ASI_CRM_Other_Est__c > 0, '', 'negative')}" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_Other_Est__c}"/></span>
+            </apex:column>
+            <!--20160608 End -->
+            <apex:column width="15%" >
+                <apex:facet name="header">Contract</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>
+        </apex:pageblocktable>
+    </apex:pageblock>
+    
+    <!--apex:pageblock title="Covered Outlet">
+     <apex:pageblockButtons Location="Top">
+    <apex:commandButton value="Add all child outlet"  action="{!Addall_CoveredOutlet}" />
+    </apex:pageblockButtons>
+    <apex:dataTable value="{!ChildGrandChildId}" var="sitm" id="stm">
+            <apex:column value="{!sitm}" style="width:30%"/>
+        </apex:dataTable>   
+     </apex:pageblock>-->
+   
+	<apex:pageblock title="Volume Option" rendered="{!IF(ContractSelected.ASI_CRM_CN_Outlet_WS__r.RecordType.DeveloperName == 'ASI_CRM_CN_WS',true,false)}">
+    	<apex:inputfield value="{!ContractSelected.ASI_CRM_Volume_Option__c}" required="{!ContractSelected.ASI_TH_CRM_Promotion_Type__c == 'NCO On'}"/>   
+    </apex:pageblock>
+    
+    <apex:pageblock title="Covered Outlet" id="c_outlet">
+    <apex:pageblockButtons Location="Top">
+        <apex:commandButton value="Add New" action="{!AddNew_CoveredOutlet}" rerender="c_outlet"/>
+        <apex:commandButton value="Add All Child Outlets" action="{!Addall_CoveredOutlet}" />
+    </apex:pageblockButtons>
+        <apex:pageblocksection columns="1">
+            <apex:actionRegion >
+                <apex:pageblocktable value="{!CoveredOutlet_Item_Map}" var="itm" id="item" >
+                    <apex:column style="width:25%">                    
+                        <apex:facet name="header">
+                        <apex:outputPanel ><apex:inputCheckbox onclick="selectAllCheckboxes(this,'inputId')"/><apex:outputText >(Select All)</apex:outputText></apex:outputPanel>
+                        <!--<apex:commandLink value="Add New" action="{!AddNew_CoveredOutlet}" rerender="mainblock, item" style="text-decoration:underline;"/>--></apex:facet>                        
+                        <!--apex:commandLink value="Clone" action="{!Clone_CoveredOutlet}" rerender="item"><apex:param assignTo="{!rowidCoveredOutlet}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                        <apex:outputText value=" / "></apex:outputText>
+                        <apex:commandLink value="Remove" action="{!RemoveRow_CoveredOutlet}" immediate="true" rerender="item"><apex:param assignTo="{!rowidCoveredOutlet}" value="{!itm}" name="assignvalue" /></apex:commandLink>-->
+                        <apex:inputfield value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Selected_Covered_Outlet__c }" id="inputId"/>
+                        
+                        
+                    </apex:column>
+                    <apex:column style="width:25%">
+                        <apex:facet name="header">Outlet</apex:facet>
+                         <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Outlet__c}" />
+                        <!--apex:selectList value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Outlet__c}" size="1" required="true">
+                        <apex:selectOptions value="{!ouletPicklist}" />
+                        </apex:selectList>
+                         -->
+                         
+                    </apex:column>
+                    <apex:column style="width:25%" rendered="{!showSuggestedAmountAndTargetVolume}">
+                        <apex:facet name="header">Suggested Amount</apex:facet>
+                         <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Suggested_Amount__c}" />
+                    </apex:column>
+
+                    <apex:column style="width:25%" rendered="{!showSuggestedAmountAndTargetVolume}">
+                        <apex:facet name="header">Target Volume (Std Btl)</apex:facet>
+                         <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Target_Volume_Std_Btl__c}" />
+                    </apex:column>
+
+                    <!--<apex:column style="width:30%" rendered="{!ContractSelected.ASI_CRM_CN_Special_Promotion__c}">
+                        <apex:facet name="header">Allocated Amount</apex:facet>
+                        <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Allocated_Amount__c}" required="true" />
+                    </apex:column>-->
+                
+                </apex:pageblocktable>  
+            </apex:actionRegion>   
+        </apex:pageblocksection>
+    </apex:pageblock>
+        
+</apex:pageblock>
+
+</apex:outputPanel>
+<!-------------------------------------------------------------------------------CN------------------------lokman 27/6/2014 Ammender's Comment----------------------------------->
+<apex:outputPanel id="is_CN" rendered="{!showCN}">
+<apex:pageblock title="销售合同" id="contact_CN_blk">
+<apex:pageblockButtons >
+    <apex:commandButton value="保存" action="{!UpdateContractDetailRecord}" />
+    <apex:commandButton value="取消" action="/{!ContractSelected.id}" immediate="true"/>
+</apex:pageblockButtons>
+    <apex:pageblock title="固定成本">
+        <apex:pageblocktable value="{!LFixCost}" var="row">
+            
+            <apex:column width="25%" >
+                <apex:outputField value="{!row.ASI_CRM_CN_Chinese_Description__c}"/>
+            </apex:column>
+            <apex:column width="15%" >
+                <apex:facet name="header">预计</apex:facet> 
+                <span class="TotalEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/></span>
+            </apex:column>
+            <!--20160608 Ben @ Elufa -->
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">春节(预估)</apex:facet> 
+                <span class="CNYEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_CNY_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">中秋(预估)</apex:facet> 
+                <span class="MAFEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_MAF_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">其他(预估)</apex:facet> 
+                <span class="OthersEstCost"><apex:outputField styleClass="{!if(row.ASI_CRM_Other_Est__c > 0, '', 'negative')}" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_Other_Est__c}"/></span>
+            </apex:column>
+            <!--20160608 End -->
+            <apex:column width="15%">
+                <apex:facet name="header">合同</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>
+            
+            <!--<apex:column >
+                <apex:outputField value="{!row.ASI_CRM_CN_Chinese_Description__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">预计</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">合同</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>-->
+            
+        </apex:pageblocktable>
+    </apex:pageblock>
+    
+    <apex:pageblock title="BRSF(空瓶回收费) / 销量目标" id="brsfv_CN_blk">
+        <apex:pageblocksection columns="1" id="brsfv_CN_blksc">
+            <apex:actionRegion >
+                <apex:pageblocktable value="{!BRSF_Item_Map}" var="itm" id="CN_item">
+                    <apex:column >                    
+                        <apex:facet name="header"><apex:commandLink value="新增" id="CN_addnew" action="{!AddNew_BRSF}" rerender="mainblock, CN_item" oncomplete="createBindingAction()" style="text-decoration:underline;"/></apex:facet>
+                        <apex:commandLink value="复制" action="{!Clone_BRSF}" oncomplete="createBindingAction()" rerender="CN_item" ><apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                        <apex:outputText value=" / "></apex:outputText>
+                        <apex:commandLink value="删除" action="{!RemoveRow_BRSF}" immediate="true" oncomplete="createBindingAction()" rerender="CN_item" ><apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">子品牌</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Sub_Brand__c}" required="true"/>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">预计每月销量（标准瓶）</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_Monthly_Qty__c}" required="true">
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_EstTotal}"  rerender="CN_Est_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">合同每月销量（标准瓶）</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_Monthly_Qty__c}" required="true">
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_ContractTotal}"  rerender="CN_Contract_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">预计空瓶回收费（每瓶）</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_BRSF_Per_Bottle__c}" required="false">
+                        <apex:actionSupport event="onkeyup"  action="{!calcBRSF_EstTotal}" rerender="CN_Est_Total" onsubmit="blockAllInputs(true)"
+                                                oncomplete="blockAllInputs(false)">
+                            <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                        </apex:actionSupport> 
+                        </apex:inputField>                    
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">合同空瓶回收费（每瓶）</apex:facet>
+                        <apex:inputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_BRSF_Per_Bottle__c}" required="false">
+                            <apex:actionSupport event="onkeyup"  action="{!calcBRSF_ContractTotal}"  rerender="CN_Contract_Total" onsubmit="blockAllInputs(true)"
+                                                    oncomplete="blockAllInputs(false)">
+                                <apex:param assignTo="{!rowidBRSF}" value="{!itm}" name="assignRowNum" />
+                            </apex:actionSupport>
+                        </apex:inputField>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">预计总金额</apex:facet>
+                        <apex:outputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Est_Total_Dummy__c}" id="CN_Est_Total" />
+                        <apex:actionStatus startText="loading..." id="CN_StatusChange_Est"/>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">合同总金额</apex:facet>
+                        <apex:outputField value="{!BRSF_Item_Map[itm].ASI_CRM_CN_Contract_Total_Dummy__c}" id="CN_Contract_Total" />
+                    </apex:column>
+                </apex:pageblocktable>
+            </apex:actionRegion>
+        </apex:pageblocksection>
+        <apex:pageblocksection rendered="{!ContractSelected.ASI_CRM_CN_PO_Modification__c}">
+            <apex:pageblocksectionitem >
+                <apex:outputText value="预计空瓶回收估算合计:" />
+                <apex:inputField value="{!ContractSelected.ASI_CRM_CN_Expected_BRSF_Est_Total__c}" />
+            </apex:pageblocksectionitem>
+        </apex:pageblocksection>
+    </apex:pageblock>    
+    
+    <apex:pageblock title="其他变动成本">
+        <apex:pageblocktable value="{!LVariableCost}" var="row">
+            
+            <apex:column width="25%" >
+                <apex:outputField value="{!row.ASI_CRM_CN_Chinese_Description__c}"/>
+            </apex:column>
+            <apex:column width="15%" >
+                <apex:facet name="header">预计</apex:facet> 
+                <span class="TotalEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/></span>
+            </apex:column>
+            <!--20160608 Ben @ Elufa -->
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">春节(预估)</apex:facet> 
+                <span class="CNYEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_CNY_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">中秋(预估)</apex:facet> 
+                <span class="MAFEstCost"><apex:inputField onchange="calOthers(this)" onkeyup="calOthers(this)" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_MAF_Est__c}"/></span>
+            </apex:column>
+            <apex:column width="15%" rendered="{!ContractSelected.ASI_CRM_New_FY_PO__c}">
+                <apex:facet name="header">其他(预估)</apex:facet> 
+                <span class="OthersEstCost"><apex:outputField styleClass="{!if(row.ASI_CRM_Other_Est__c > 0, '', 'negative')}" rendered="{!festivalMap[row.id]}" value="{!row.ASI_CRM_Other_Est__c}"/></span>
+            </apex:column>
+            <!--20160608 End -->
+            <apex:column width="15%">
+                <apex:facet name="header">合同</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>
+            
+            <!--<apex:column >
+                <apex:outputField value="{!row.ASI_CRM_CN_Chinese_Description__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">预计</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Estimate_Amount__c}"/>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">合同</apex:facet> 
+                <apex:inputField value="{!row.ASI_CRM_CN_Contract_Amount__c}"/>
+            </apex:column>-->
+            
+        </apex:pageblocktable>
+    </apex:pageblock>
+    <!-- Added By Alan Wong (Elufa) 20150813 --> 
+	<apex:pageblock title="销量选择" rendered="{!IF(ContractSelected.ASI_CRM_CN_Outlet_WS__r.RecordType.DeveloperName == 'ASI_CRM_CN_WS',true,false)}">
+    	<apex:inputfield value="{!ContractSelected.ASI_CRM_Volume_Option__c}" required="{!ContractSelected.ASI_TH_CRM_Promotion_Type__c == 'NCO On'}"/>   
+    </apex:pageblock>
+    <!-- End -->
+    <apex:pageblock title="覆盖店家" id="c_outlet">
+    <apex:pageblockButtons Location="Top">
+        <apex:commandButton value="新增"  action="{!AddNew_CoveredOutlet}" rerender="c_outlet"/>
+        <apex:commandButton value="添加所有子门店"  action="{!Addall_CoveredOutlet}" />
+    </apex:pageblockButtons>
+        <apex:pageblocksection columns="1">
+            <apex:actionRegion >
+                <apex:pageblocktable value="{!CoveredOutlet_Item_Map}" var="itm" id="CN_item">
+                    <apex:column style="width:25%">                    
+                        <apex:facet name="header">
+                         <apex:outputPanel ><apex:inputCheckbox onclick="selectAllCheckboxes(this,'inputId')"/><apex:outputText >(所有)</apex:outputText></apex:outputPanel>
+                        <!--<apex:commandLink value="新增" action="{!AddNew_CoveredOutlet}" rerender="mainblock, CN_item" style="text-decoration:underline;"/>--></apex:facet>                     
+                        <!--apex:commandLink value="复制" action="{!Clone_CoveredOutlet}" rerender="CN_item"><apex:param assignTo="{!rowidCoveredOutlet}" value="{!itm}" name="assignvalue" /></apex:commandLink>
+                        <apex:outputText value=" / "></apex:outputText>
+                        <apex:commandLink value="删除" action="{!RemoveRow_CoveredOutlet}" immediate="true" rerender="CN_item"><apex:param assignTo="{!rowidCoveredOutlet}" value="{!itm}" name="assignvalue" /></apex:commandLink>-->
+                        <apex:inputfield value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Selected_Covered_Outlet__c }" id="inputId"/>
+                    </apex:column>
+                    <apex:column style="width:25%">
+                        <apex:facet name="header">店家</apex:facet>
+                        <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Outlet__c}" />
+                       
+                        <!--apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Outlet__c}" /-->
+                        <!--apex:selectList value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Outlet__c}" size="1" required="true">
+                        <apex:selectOptions value="{!ouletPicklist}" />
+                        </apex:selectList>-->
+                    </apex:column>
+                    <apex:column style="width:25%" rendered="{!showSuggestedAmountAndTargetVolume}">
+                        <apex:facet name="header">建议金额</apex:facet>
+                         <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Suggested_Amount__c}" />
+                    </apex:column>
+
+                    <apex:column style="width:25%" rendered="{!showSuggestedAmountAndTargetVolume}">
+                        <apex:facet name="header">目标销量(Std Btl)</apex:facet>
+                         <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Target_Volume_Std_Btl__c}" />
+                    </apex:column>
+                    <!--<apex:column style="width:30%" rendered="{!ContractSelected.ASI_CRM_CN_Special_Promotion__c}">
+                        <apex:facet name="header">分配金额</apex:facet>
+                        <apex:inputField value="{!CoveredOutlet_Item_Map[itm].ASI_CRM_CN_Allocated_Amount__c}"  required="true"/>
+                    </apex:column>-->
+                </apex:pageblocktable>
+            </apex:actionRegion>
+        </apex:pageblocksection>
+    </apex:pageblock>
+        
+</apex:pageblock>
+
+</apex:outputPanel>
+</apex:form>
+</apex:page>

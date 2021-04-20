@@ -1,0 +1,309 @@
+<apex:page controller="ASI_CRM_CN_EventCalendar" standardStylesheets="false" showHeader="false" sidebar="false" cache="false" >
+<head>
+<meta http-equiv="Content-type" content="text/html; charset=utf-8"/>
+
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+<script src="/resource/1384483690000/ASI_MFM_dhtmlxschedulerJS" type="text/javascript" charset="utf-8"></script>
+<script src="/resource/1384669286000/ASI_MFM_dhtmlxscheduler_tooltipJS" type="text/javascript" charset="utf-8"></script>
+<link rel="stylesheet" href="/resource/1384664718000/ASI_MFM_dhtmlxschedulerCSS" type="text/css" media="screen" title="no title" charset="utf-8"/>
+
+
+<style type="text/css" media="screen">
+    html, body{
+        margin:0px;
+        padding:0px;
+        height:100%;
+        overflow:hidden;
+    }
+
+    .callplan{
+        background-color:#279AD4 !important; 
+        color:white !important;
+        white-space:nowrap;
+    }
+    
+    .event{
+        background-color:#badff2 !important; 
+        color:black !important;
+        white-space:nowrap;
+    }   
+    
+    :lang(zh-Hant)  {font-family: PMingLiU,MingLiU, serif;}
+:lang(zh-Hans)  {font-family: SimSum-18030,SimHei, serif;}
+
+</style>
+
+
+<script type="text/javascript" charset="utf-8">
+    function init() {
+        //scheduler.config.xml_date="%Y-%m-%d %H:%i";
+        scheduler.config.xml_date="%m/%d/%Y %H:%i";
+        scheduler.config.full_day = true;
+        scheduler.config.dblclick_create = false;
+        scheduler.config.show_loading = true;
+        scheduler.config.drag_create = false;
+        scheduler.config.drag_resize = false;
+        scheduler.config.drag_move = false;
+        scheduler.config.time_step = 30;        
+        scheduler.config.update_render = true;
+        scheduler.config.mark_now = false;
+        scheduler.config.start_on_monday = false;
+        scheduler.config.hour_scale_px = 0;
+        scheduler.config.first_hour = 0;
+        scheduler.config.last_hour = 0;
+        scheduler.init('scheduler_here', new Date(),"month");
+               
+        //scheduler.templates.tooltip_date_format=scheduler.date.date_to_str("%m/%d/%Y %H:%i");
+        scheduler.templates.tooltip_text = function(start,end,event){                   
+            //return "<b><a onclick=redirect_parent(\""+event.detail+"\") style=color:blue;cursor:pointer><u>"+event.detailTitle+"</u></a></b><br/><b>Event :</b> "+event.text+"<br/>"+event.contact+"<br/><b>Start Date :</b> "+scheduler.templates.tooltip_date_format(start)+"<br/><b>End Date :</b> "+scheduler.templates.tooltip_date_format(end);
+            return event.details;        
+        };    
+        
+        scheduler.templates.event_class=function(start, end, event){                
+            if(event.css == "callplan") // if event has subject property then special class should be assigned
+            {
+               return "callplan";
+            }else if(event.css == "event") // if event has subject property then special class should be assigned
+            {
+               return "event";
+            }
+        }      
+        
+        scheduler.attachEvent("onClick", function (id, e){
+            //... some code here ...
+            var event = this.getEvent(id);
+                        
+            /*var startDate = [event.start_date.getMonth()+1, event.start_date.getDate(), event.start_date.getFullYear()].join('/');
+            var endDate = [event.end_date.getMonth()+1, event.end_date.getDate(), event.end_date.getFullYear()].join('/');*/
+                        
+            //window.open("/00OM0000000SztF?pv0=" + startDate + "&pv1=" + startDate );
+            //window.open("/" + event.outletId );
+            //sforce.one.navigateToURL("/" + event.outletId);
+            
+            if( (typeof sforce != 'undefined') && (sforce != null)) {
+                // Salesforce1 navigation
+                sforce.one.navigateToURL("/" + event.outletId);
+            }
+            else {
+                window.open("/" + event.outletId );
+            }
+        });
+             
+        $(".dhx_cal_prev_button, .dhx_cal_next_button, .dhx_cal_today_button, .dhx_cal_tab").click(function(){
+            getEventData(document.getElementById('{!$Component.main.selectBrand}').value
+                         , document.getElementById('{!$Component.main.selectSubBrand}').value
+                         , document.getElementById('{!$Component.main.selectChannel}').value
+                         , document.getElementById('{!$Component.main.selectDivision}').value
+                         , document.getElementById('{!$Component.main.selectEventType}').value
+                         , document.getElementById('{!$Component.main.selectRegion}').value
+                         , '');
+        });
+        
+        scheduler.locale.labels.section_location="Location";
+        getEventData('', '', '', '', '', '', '');
+    }
+    
+    function htmlDecode(value){
+        if(value){
+            return $('<div />').html(value).text();
+        }else{
+            return '';
+        }
+    }
+    
+    function getEventData(brandID, subBrandID, channelID, divisionID, eventType, regionID, userID){
+        var selectedUser = "All";
+        var selectedBrandID = "All";
+        var selectedSubBrandID = "All";
+        var selectedChannelID = "All";
+        var selectedDivisionID = "All";
+        var selectedEventType = "All";
+        var selectedRegionID = "All";
+        
+        if (userID != "" && userID)
+            selectedUser = userID
+        if (brandID != "" && brandID)
+            selectedBrandID = brandID
+        if (subBrandID != "" && subBrandID)
+            selectedSubBrandID = subBrandID
+        if (channelID != "" && channelID)
+            selectedChannelID = channelID
+        if (divisionID != "" && divisionID)
+            selectedDivisionID = divisionID
+        if (eventType != "" && eventType)
+            selectedEventType = eventType
+        if (regionID != "" && regionID)
+            selectedRegionID = regionID
+            
+        var convert = scheduler.date.date_to_str("%Y-%m");
+        var selectedDate = convert(scheduler.getState().date)+"-01";
+        //alert(selectedDate);
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_CRM_CN_EventCalendar.getEventData}', 
+             selectedBrandID, selectedSubBrandID, selectedChannelID, selectedDivisionID, selectedEventType, selectedRegionID, selectedUser, selectedDate, 
+             function(result, event){                       
+
+                scheduler.clearAll();
+                 
+                try { 
+                    var formatted_json_event = JSON.parse(htmlDecode(result));  
+                    scheduler.parse(formatted_json_event.Event.wholelist, "json");
+                }
+                catch(err) {
+                    //alert(err.message + '\r\n' + result);
+                }
+             }
+        );
+    }
+</script>
+
+</head>
+    
+<body onload="init();">
+    
+    <div id="scheduler_here" class="dhx_cal_container dhx_scheduler_week" style='width:100%; height:100%;'>
+        
+        <div class="dhx_cal_navline">
+            
+            <div class="dhx_cal_prev_button" style="text-align: center">Prev</div>
+            <div class="dhx_cal_next_button" style="text-align: center">Next</div>
+            <div class="dhx_cal_today_button"></div>
+            <div class="dhx_cal_date"></div>
+            
+            
+            <!--<div class="dhx_cal_tab" name="day_tab" style="right:204px;"></div>
+            <div class="dhx_cal_tab" name="week_tab" style="right:140px;"></div>
+            <div class="dhx_cal_tab" name="month_tab"></div>-->
+            <div style="margin-top:40px;margin-left:15px;">
+                <apex:form id="main">
+                    <table cellpadding="1" cellspacing="1">
+                        <tr>
+                            <!--<td>
+                                User :
+                            </td>
+                            <td>
+                                <apex:selectList id="selectUser" value="{!users}" multiselect="false" size="1" 
+                                onChange="getEventData('','','','','','','{!$Component.selectUser}');">
+                                    <apex:selectOptions value="{!UserItems}"/>
+                                </apex:selectList>  
+                            </td>-->
+                            <td>
+                                Region :
+                            </td>
+							<td>
+								<apex:selectList id="selectRegion" value="{!selectedRegion}" multiselect="false" size="1">
+                                    <apex:selectOptions value="{!fullRegion}"/>
+									<apex:actionSupport event="onchange" rerender="selectDivision" onsubmit="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');"/>
+                                </apex:selectList>
+							</td>
+							<td>
+                                Brand :
+                            </td>
+							<td>
+								<apex:selectList id="selectBrand" value="{!selectedBrand}" multiselect="false" size="1"
+                                                 onChange="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');">
+                                    <apex:selectOptions value="{!fullBrand}"/>
+                                </apex:selectList>
+							</td>
+                        </tr>
+                        <tr>
+							<td>
+                                Division :
+                            </td>
+							<td>
+								<apex:selectList id="selectDivision" value="{!selectedDivision}" multiselect="false" size="1"
+                                                 onChange="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');">
+                                    <apex:selectOptions value="{!fullDivision}"/>
+                                </apex:selectList>
+							</td>
+							<td>
+                                Sub-Brand :
+                            </td>
+							<td>
+								<apex:selectList id="selectSubBrand" value="{!selectedSubBrand}" multiselect="false" size="1"
+                                                 onChange="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');">
+                                    <apex:selectOptions value="{!SubBrandItems}"/>
+                                </apex:selectList>
+							</td>
+                            
+                        </tr>
+                        <tr>
+							<td>
+                                Channel :
+                            </td>
+							<td>
+								<apex:selectList id="selectChannel" value="{!selectedChannel}" multiselect="false" size="1"
+                                                 onChange="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');">
+                                    <apex:selectOptions value="{!Fullchannel}"/>
+                                </apex:selectList>
+							</td>
+							<td>
+                                Event Type :
+                            </td>
+							<td>
+								<apex:selectList id="selectEventType" value="{!selectedEventType}" multiselect="false" size="1"
+                                                 onChange="getEventData(document.getElementById('{!$Component.main.selectBrand}').value, document.getElementById('{!$Component.selectSubBrand}').value, document.getElementById('{!$Component.selectChannel}').value, document.getElementById('{!$Component.selectDivision}').value, document.getElementById('{!$Component.selectEventType}').value, document.getElementById('{!$Component.selectRegion}').value,'');">
+                                    <apex:selectOptions value="{!FullEventType}"/>
+                                </apex:selectList>
+							</td>
+                            
+                        </tr>
+                    </table>
+                </apex:form>
+                
+            </div>
+        </div>
+        <div class="dhx_cal_header" style="margin-top:75px;"></div>
+        
+        <div class="dhx_cal_data" style="margin-top:75px;"></div>
+        
+        <div class="dhx_multi_day" style="margin-top:156px;"></div>
+    </div>
+</body>
+</apex:page>
+<!-------------------------------------------------------------------------
+    function getEventData(brandID, subBrandID, channelID, divisionID, eventType, regionID, userID){
+        var selectedUser = "All";
+        var selectedBrandID = "All";
+        var selectedSubBrandID = "All";
+        var selectedChannelID = "All";
+        var selectedDivisionID = "All";
+        var selectedEventType = "All";
+        var selectedRegionID = "All";
+		alert(brandID);        
+        if (userID != "" && userID)  
+            selectedUser = document.getElementById(userID).options[document.getElementById(userID).selectedIndex].value;
+        if (brandID != "" && brandID)  
+            selectedBrandID = document.getElementById(brandID).options[document.getElementById(brandID).selectedIndex].value;
+        if (subBrandID != "" && subBrandID)  
+            selectedSubBrandID = document.getElementById(subBrandID).options[document.getElementById(subBrandID).selectedIndex].value;
+        if (channelID != "" && channelID)  
+            selectedChannelID = document.getElementById(channelID).options[document.getElementById(channelID).selectedIndex].value;
+        if (divisionID != "" && divisionID)  
+            selectedDivisionID = document.getElementById(divisionID).options[document.getElementById(divisionID).selectedIndex].value;
+        if (eventType != "" && eventType)  
+            selectedEventType = document.getElementById(eventType).options[document.getElementById(eventType).selectedIndex].value;
+        if (regionID != "" && regionID)  
+            selectedRegionID = document.getElementById(regionID).options[document.getElementById(regionID).selectedIndex].value;
+        
+        var convert = scheduler.date.date_to_str("%Y-%m");
+        var selectedDate = convert(scheduler.getState().date)+"-01";
+        //alert(selectedDate);
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_CRM_CN_EventCalendar.getEventData}', 
+             selectedBrandID, selectedSubBrandID, selectedChannelID, selectedDivisionID, selectedEventType, selectedRegionID, selectedUser, selectedDate, 
+             function(result, event){                       
+
+                scheduler.clearAll();
+                 
+                try { 
+                    var formatted_json_event = JSON.parse(htmlDecode(result));  
+                    scheduler.parse(formatted_json_event.Event.wholelist, "json");
+                }
+                catch(err) {
+                    //alert(err.message + '\r\n' + result);
+                }
+             }
+        );
+    } ------------------------------------------------------------------------------------------------>

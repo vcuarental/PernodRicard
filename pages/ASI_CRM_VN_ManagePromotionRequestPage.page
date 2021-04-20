@@ -1,0 +1,205 @@
+<!--
+ - Created by Jeffrey Cheung on 27/12/2017.
+ -->
+
+<apex:page id="ASI_CRM_VN_ManagePromotionRequestPage" standardController="ASI_GiftBox_Request_Header__c"
+           extensions="ASI_CRM_VN_ManagePromotionReqController" docType="html-5.0">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/styles/datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/lib/jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/lib/datatables.min.js')}"/>
+
+    <style>
+    .d-none{
+        display: none;
+    }
+    </style>
+
+    <script>
+        const numFormater = new Intl.NumberFormat();
+        
+        /****************
+         Init Function
+         ****************/
+        $(document).ready(function () {
+            let promotionRequestItems = {!PromotionRequestItemsJSON};
+            let promotionPlanItemsJSON = {!PromotionPlanItemsJSON};
+            let disabled = {!ASI_GiftBox_Request_Header__c.ASI_GiftBox_Status__c == 'Submitted'};
+            let merged = promotionPlanItemsJSON.map(function (planItem) {
+                let reqItem = promotionRequestItems.find(item => item.ASI_CRM_Promotion_Scheme__c === planItem.ASI_CRM_Promotion_Scheme__c);
+                planItem.selected = reqItem ? true : false;
+                planItem.ASI_GiftBox_Request_Quantity__c = reqItem ? reqItem.ASI_GiftBox_Request_Quantity__c : 0;
+                planItem.ASI_CRM_Amount__c = reqItem ? reqItem.ASI_CRM_Amount__c : 0;
+                planItem.ASI_CRM_Trade_A_P_Plan_Item__c = planItem.Id;
+                return planItem
+            })
+            $("#dataTable").dataTable({
+                data: merged,
+                ordering: false,
+                searching: false,
+                lengthChange: false,
+                pageLength: 25,
+                columns: [
+                    {
+                        title: "Select",
+                        data: function (row, type, set, meta) {
+                            return meta.row;
+                        },
+                        render: function (data, type, row, meta) {
+                            return `<input type="checkbox" ${row.selected ? 'checked' : ''} onchange="updateSelectedItem(${meta.row})" ${disabled ? 'disabled' : ''}/>`
+                        },
+                    },
+                    {title: "Promotion Scheme", data: 'ASI_CRM_Promotion_Scheme__c'},
+                    {title: "Balance Quantity", data: 'ASI_CRM_Balance_Quantity__c', render: function(data, type, row, meta) {return numFormater.format(data)}},
+                    {title: "Unit Price", data: 'ASI_CRM_Unit_Price__c', render: function(data, type, row, meta) {return numFormater.format(data)}},
+                    {
+                        title: "Request Quantity",
+                        data: 'ASI_GiftBox_Request_Quantity__c',
+                        render: function (data, type, row, meta) {
+                            return `<input class="numberField" type="number" min="0" value="${row.ASI_GiftBox_Request_Quantity__c}" onChange="updateLineItemValue(${meta.row}, this.value)" ${disabled ? 'disabled' : ''}/>`
+                        }
+
+                    },
+                    {
+                        title: "Total Amount",
+                        data: 'ASI_CRM_Amount__c',
+                        render: function (data, type, row, meta) {
+                            return numFormater.format(row.ASI_CRM_Unit_Price__c * row.ASI_GiftBox_Request_Quantity__c || 0);
+                        }
+                    }
+                ]
+            });
+			
+            $(".numberField").keydown(function(e) {
+                if(!((e.keyCode > 95 && e.keyCode < 106)
+                  || (e.keyCode > 47 && e.keyCode < 58) 
+                  || e.keyCode == 8)) {
+                    return false;
+                }
+            });
+            
+        });
+
+
+        /****************
+         Table Event Function
+         ****************/
+
+        function updateSelectedItem(rowIndex) {
+            let d = $("#dataTable").DataTable().row(rowIndex).data();
+            d.selected = !d.selected; // toggle boolean
+            $("#dataTable").DataTable().row(rowIndex).data(d);
+        }
+
+        function updateLineItemValue(rowIndex, requestQuantity) {
+            let d = $("#dataTable").DataTable().row(rowIndex).data();
+            d.ASI_GiftBox_Request_Quantity__c = requestQuantity;
+            d.ASI_CRM_Amount__c = d.ASI_GiftBox_Request_Quantity__c * d.ASI_CRM_Unit_Price__c;
+            $("#dataTable").DataTable().row(rowIndex).data(d).draw();
+
+        }
+
+        /****************
+         Execute Controller Function
+         ****************/
+
+        function saveRecord(isQuickSave) {
+            if ($('.error').length > 0) {
+                return;
+            }
+
+            //Show loading gif
+            $("body").addClass("savingRecord");
+
+            //Hide the error message
+            $('.saveErrorPanel').css("display", "none");
+            $('.infoPanel').css("display", "none");
+
+            let selectedItems = $("#dataTable").DataTable().data()
+                    .toArray()
+                    .filter(function (item) {
+                        return item.selected
+                    })
+                    .map(function (item) { // serialize to request item
+                        delete item.Id;
+                        delete item.recordType;
+                        item.ASI_GiftBox_Request_Item_Unit_Price__c = item.ASI_CRM_Unit_Price__c;
+                        return item;
+                    });
+
+            saveRecordToDB(isQuickSave, JSON.stringify(selectedItems), JSON.stringify({}));
+
+        }
+
+
+    </script>
+
+    <!-- Define Action Function -->
+    <apex:form >
+        <apex:actionFunction name="saveRecordToDB" action="{!saveRecord}" reRender="pageMsg">
+            <apex:param name="isQuickSave" value=""/>
+            <apex:param name="updateLineItemListJson" value=""/>
+            <apex:param name="deleteLineItemListJson" value=""/>
+        </apex:actionFunction>
+        <apex:actionFunction name="cancel" action="{!cancel}"/>
+    </apex:form>
+    
+    <apex:pageBlock title="Promotion Plan">
+        <apex:pageBlockSection columns="3">
+            <apex:pageBlockSectionItem >
+                <apex:outputPanel >
+                    <p>PP Number: {!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.Name}</p>
+                    <p>Start Date:
+                        <apex:outputtext value="{0, date, YYYY-MM-dd}">
+                            <apex:param value="{!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Start_Date__c}"/>
+                        </apex:outputtext>
+                    </p>
+                    <p>End Date:
+                        <apex:outputtext value="{0, date, YYYY-MM-dd}">
+                            <apex:param value="{!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_End_Date__c}"/>
+                        </apex:outputtext>
+                    </p>
+                    <p>Fiscal Year: {!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Fiscal_Year__c}</p>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem >
+                <apex:outputPanel >
+                    <p>Plan Amount:
+                        <apex:outputtext value="{0, number, #,###.##}">
+                            <apex:param value="{!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Sum_Plan_Amount__c}"/>
+                        </apex:outputtext>
+                    </p>
+                    <p>Committed Amount:
+                        <apex:outputtext value="{0, number, #,###.##}">
+                            <apex:param value="{!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Committed_Amount__c}"/>
+                        </apex:outputtext>
+                    </p>
+                    <p>Balance Amount:
+                        <apex:outputtext value="{0, number, #,###.##}">
+                            <apex:param value="{!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Balance_Amount__c}"/>
+                        </apex:outputtext>
+                    </p>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem >
+                <p>Total Outlet: {!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Total_Outlet__c}</p>
+                <p>Committed
+                    Outlet: {!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Committed_Outlet__c}</p>
+                <p>Outlet
+                    Balance: {!ASI_GiftBox_Request_Header__c.ASI_CRM_Trade_A_P_Plan__r.ASI_CRM_Outlet_Balance__c}</p>
+            </apex:pageBlockSectionItem>
+        </apex:pageBlockSection>
+    </apex:pageBlock>
+
+    <apex:pageBlock title="Promotion Plan Items Details">
+        <apex:pageblockButtons >
+            <input type="button" class="btn saveBtn {!IF(ASI_GiftBox_Request_Header__c.ASI_GiftBox_Status__c == 'Submitted', 'd-none', '')}" onclick="saveRecord(false)" value="Save"/>
+            <input type="button" class="btn quickSaveBtn {!IF(ASI_GiftBox_Request_Header__c.ASI_GiftBox_Status__c == 'Submitted', 'd-none', '')}" onclick="saveRecord(true)" value="Quick Save"/>
+            <input type="button" class="btn cancelBtn" onclick="cancel()" value="Cancel"/>
+        </apex:pageblockButtons>
+
+        <table id="dataTable" class="display" width="100%">
+
+        </table>
+    </apex:pageBlock>
+
+</apex:page>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_CRM_HK_EDI_Invoice_Failed_Alert</fullName>
+        <description>ASI_CRM_HK_EDI_Invoice_Failed_Alert</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>carmen.fung@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <recipients>
+            <recipient>karen.yau@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <recipients>
+            <recipient>kenneth.wong@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <recipients>
+            <recipient>olivia.yau@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_HK_CRM_SO_Email_Templates/ASI_CRM_HK_EDI_Invoice_Failed_Notification_Email</template>
+    </alerts>
+    <rules>
+        <fullName>ASI_CRM_HK_EDI_Invoice_Failed_Notification_Rule</fullName>
+        <actions>
+            <name>ASI_CRM_HK_EDI_Invoice_Failed_Alert</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_EDI_Invoice_Header__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>ASI CRM HK EDI Invoice Header</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_EDI_Invoice_Header__c.ASI_CRM_Invoice_Generation_Error__c</field>
+            <operation>notEqual</operation>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

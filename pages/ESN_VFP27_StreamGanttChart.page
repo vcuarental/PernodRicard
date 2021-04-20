@@ -1,0 +1,251 @@
+<apex:page showHeader="false" sidebar="false" standardController="ESNStream__c" extensions="ESN_VFC27_StreamGanttChart" standardStylesheets="false">
+    <apex:outputPanel >
+        <apex:form >
+            <apex:commandButton onclick="window.top.location='{!URLFOR($Action.ESNStream__c.ESN_STR_NewStream, ESNStream__c.Id)}'; return false" styleClass="button-new" style="margin-left:40%;margin-bottom:10px;" value="New Stream"/>
+            <apex:commandButton onclick="window.top.location='{!URLFOR($Action.ESNStream__c.ESN_STR_NewMilestone, ESNStream__c.Id)}'; return false" styleClass="button-new" style="margin-left:10px;margin-bottom:10px;" value="New Milestone"/>
+        </apex:form>
+        <div id="ganttChart"></div>
+        <div id="legendChart1" class="gantt-legend">
+            <div class="gantt-legend-actual">
+                <ul class="legend">
+                    <li><span class="gantt-legend-milestone-planned">▲</span> Planned Milestone </li>
+                    <li><span class="gantt-legend-milestone-actual">▲</span> Actual Milestone </li>
+                    <li><span class="gantt-legend-stream-planned"></span> Planned Stream </li>
+                    <li><span class="gantt-legend-stream-actual gantt-legend-stream-planned"><div class="ganttview-block ganttview-block-actual-start"></div><div class="ganttview-block ganttview-block-Stream-actual"></div> </span> Actual Stream </li>
+                </ul>
+            </div>
+            <div class="gantt-legend-item">
+                <ul class="legend">
+                    <li><img class="ganttview-legend-img" src="{!URLFOR($Resource.ProjectTab_Resources,'/img/project_transparent.png')}"/> Project </li>
+                    <li><img class="ganttview-legend-img" src="{!URLFOR($Resource.ProjectTab_Resources,'/img/project-plan.png')}"/> Stream </li>
+                    <li><img class="ganttview-legend-img" src="{!URLFOR($Resource.ProjectTab_Resources,'/img/milestone.png')}"/> Milestone </li>
+                    <li><img class="ganttview-legend-img" src="{!URLFOR($Resource.ProjectTab_Resources,'/img/date_task.png')}"/> Task </li>
+                    <li><img class="ganttview-legend-img" src="{!URLFOR($Resource.ProjectTab_Resources,'/img/date.png')}"/> Event </li>
+                </ul>
+            </div>
+        </div>
+        <div id="legendChart2" class="gantt-legend">
+            <div class="gantt-legend-color">
+                <ul class="legend">
+                    <li><span class="gantt-legend-color-current"> </span> Current Project </li>
+                    <li><span class="gantt-legend-color-notStarted"> </span> Not Started </li>
+                    <li><span class="gantt-legend-color-inProgress"> </span> In Progress </li>
+                    <li><span class="gantt-legend-color-lateStart"> </span> Late Start </li>
+                    <li><span class="gantt-legend-color-lateRisk"> </span> Late / At Risk </li>
+                    <li><span class="gantt-legend-color-closed"> </span> Closed </li>
+                </ul>
+            </div>
+        </div>
+        <div id="eventMessage"></div>
+    </apex:outputPanel>
+    <style>
+/* Customization of tipsy */
+.tipsy-inner {
+    text-align: left;
+    background-color: rgba(0, 0, 0, 1);
+    color: #FFF;
+    font-size: 12px;
+    font-family: Calibri;
+    opacity: 1;
+}
+div.tipsy tipsy-s {
+    opacity: 1;
+}
+.tipsy-arrow {
+    border-color: rgba(0, 0, 0, 1);
+    opacity: 1;
+}
+        .gantt-legend{
+            width: 875px;
+            margin: 10px auto;
+            height: 30px;
+        }   
+        .gantt-legend-color {
+            width: 495px;
+        }
+        div.ganttview {
+            background-color: rgb(255, 250, 242);
+        }
+        div.ganttview-vtheader-series-name {
+            background-color: rgb(255, 250, 242);
+        }       
+    </style>
+
+    <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/lib/jquery-1.4.2.js')}"></script>
+    <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/lib/jquery-ui-1.8.4.js')}"></script>
+    <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/lib/date.js')}"></script>
+    <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/jquery.ganttViewZoom.js')}"></script>
+    <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_Tooltip,'/tipsy-master/src/javascripts/jquery.tipsy.js')}"></script>
+    
+    <apex:stylesheet value="{!URLFOR($Resource.JQueryPlugins_Tooltip,'/tipsy-master/src/stylesheets/tipsy.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/example/reset.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.JQueryPlugins_GanttChart,'/jquery.ganttView-master/jquery.ganttViewCustom.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ProjectTab_Resources,'/prCustom.css')}"/>
+    
+    <script type="text/javascript">  
+        var ganttData = new Array();
+        var newDate;
+        var startDate;
+        var endDate;
+        var startDateAct;
+        var endDateAct;
+        var stream_title;
+        var event_title; 
+        
+        <!-------- Current Stream -------->
+        startDate = new Date("{!ESNStream__c.StartDate__c}").clearTime();
+        endDate = new Date("{!ESNStream__c.EndDate__c}").clearTime();         
+        stream_title = "<b>Name:</b> {!ESNStream__c.Name} <br/> <b>Status:</b> {!ESNStream__c.Status__c}<br/> <b>Situation:</b> {!ESNStream__c.ESN_SituationText__c}<br/><b>Start: </b>" + startDate.toString("d MMM yyyy") + " <br/><b>End:</b> " + endDate.toString("d MMM yyyy") + "<br/><b>Duration: </b>" + Math.floor((endDate - startDate)/86400000+1) + " Days";
+        
+        ganttData.push({id: "{!ESNStream__c.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/project-plan.png')}\"/> <a target=\"_parent\" href=\"/{!ESNStream__c.Id}\">{!ESNStream__c.Name}</a>", nameDisplay: "{!ESNStream__c.Name}", status: "{!ESNStream__c.Status__c}", start: startDate, end: endDate, color: "rgb(0,0,0)", type: "Stream", isActual: "false", type: "Stream", title: stream_title  }]});
+            
+        if("{!ESNStream__c.StartDate__c}" != "" && "{!ESNStream__c.ESN_ActualStartDate__c}" != "" && "{!ESNStream__c.ESN_ActualEndDate__c}" != "" && "{!ESNStream__c.EndDate__c}" != ""){
+            startDateAct = new Date("{!ESNStream__c.ESN_ActualStartDate__c}").clearTime();
+            endDateAct = new Date("{!ESNStream__c.ESN_ActualEndDate__c}").clearTime(); 
+            stream_title += "<br/><b>Actual Start:</b> " + startDateAct.toString("d MMM yyyy") + " <br/><b>Actual End:</b> " + endDateAct.toString("d MMM yyyy") + "<br/><b>Actual Duration: </b>" + Math.floor((endDateAct - startDateAct)/86400000+1) + " Days" ;
+                    
+            ganttData.push({id: "{!ESNStream__c.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/project-plan.png')}\"/> <a target=\"_parent\" href=\"/{!ESNStream__c.Id}\">{!ESNStream__c.Name}</a>", nameDisplay: "{!ESNStream__c.Name}", start: startDateAct, end: endDateAct, plannedStart: startDateAct, plannedEnd: endDateAct, color: "rgb(255,255,255)", plannedColor: "rgb(0,0,0)", type: "Stream", isActual: "true", type: "Stream", title: stream_title  }]});
+        }
+        
+        <!-------- Streams -------->
+        <apex:repeat value="{!currChildStreams_list}" var="stream"> 
+            if("{!stream.RecordType.Name}" == "Stream" || "{!stream.RecordType.Name}" == "") { 
+                startDate = new Date("{!stream.StartDate__c}").clearTime();
+                endDate = new Date("{!stream.EndDate__c}").clearTime();         
+                stream_title = "<b>Name:</b> {!stream.Name} <br/> <b>Status:</b> {!stream.Status__c}<br/> <b>Situation:</b> {!stream.ESN_SituationText__c}<br/><b>Start: </b>" + startDate.toString("d MMM yyyy") + " <br/><b>End:</b> " + endDate.toString("d MMM yyyy") + "<br/><b>Duration: </b>" + Math.floor((endDate - startDate)/86400000+1) + " Days";
+            
+                if("{!stream.StartDate__c}" != "" && "{!stream.ESN_ActualStartDate__c}" != "" && "{!stream.ESN_ActualEndDate__c}" != "" && "{!stream.EndDate__c}" != ""){
+                    startDateAct = new Date("{!stream.ESN_ActualStartDate__c}").clearTime();
+                    endDateAct = new Date("{!stream.ESN_ActualEndDate__c}").clearTime();    
+                    stream_title += "<br/><b>Actual Start:</b> " + startDateAct.toString("d MMM yyyy") + " <br/><b>Actual End:</b> " + endDateAct.toString("d MMM yyyy") + "<br/><b>Actual Duration: </b>" + Math.floor((endDateAct - startDateAct)/86400000+1) + " Days" ;
+                    
+                    ganttData.push({id: "{!stream.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/project-plan.png')}\"/> <a target=\"_parent\" href=\"/{!stream.Id}\">{!stream.Name}</a>", status: "{!stream.Status__c}", start: startDateAct, end: endDateAct, plannedStart: startDate, plannedEnd: endDate, color: "#000", plannedColor: "{!situation2ActColor_map[stream.ESN_SituationText__c]}", type: "Stream", isActual: "true", title: stream_title  }]});
+                }                
+                if("{!stream.StartDate__c}" != "" && "{!stream.EndDate__c}" != "")
+                    ganttData.push({id: "{!stream.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/project-plan.png')}\"/> <a target=\"_parent\" href=\"/{!stream.Id}\">{!stream.Name}</a>", nameDisplay: "{!stream.Name}", status: "{!stream.Status__c}", start: startDate, end: endDate, color: "{!situation2color_map[stream.ESN_SituationText__c]}", type: "Stream", isActual: "false", title: stream_title  }]});
+            } else if("{!stream.RecordType.Name}" == "Milestone") { 
+                startDate = new Date("{!stream.ESN_PlannedDeadline__c}").clearTime();
+                stream_title = "<b>Name:</b> {!stream.Name} <br/><b>Situation:</b> {!stream.ESN_SituationText__c}<br/><b>Deadline: </b>" + startDate.toString("d MMM yyyy");
+                
+                if( "{!stream.ESN_PlannedDeadline__c}" != "" && "{!stream.ESN_ActualDeadline__c}" != "" && "{!stream.ESN_ActualDeadline__c}" != "{!stream.ESN_PlannedDeadline__c}") {
+                    startDateAct = new Date("{!stream.ESN_ActualDeadline__c}").clearTime();
+                    stream_title += "<br/><b>Actual Deadline: </b>" + startDateAct.toString("d MMM yyyy");
+                    
+                    ganttData.push({id: "{!stream.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/milestone.png')}\"/> <a target=\"_parent\" href=\"/{!stream.Id}\">{!stream.Name}</a>", status: "{!stream.Status__c}", start: startDateAct, end: startDateAct, plannedStart: startDate, isActual: "true", type: "Milestone", title: stream_title  }]});                    
+                }  
+                if("{!stream.ESN_PlannedDeadline__c}" != "")
+                    ganttData.push({id: "{!stream.Id}", name: "", series: [{ name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/milestone.png')}\"/> <a target=\"_parent\" href=\"/{!stream.Id}\">{!stream.Name}</a>", nameDisplay: "{!stream.Name}", status: "{!stream.Status__c}", start: startDate, end: startDate, color: "rgb(17, 133, 240)", isActual: "false", type: "Milestone", title: stream_title  }]});
+             } 
+        </apex:repeat>  
+        
+        <!-------- Tasks -------->
+        <apex:repeat value="{!currStreamTasks_list}" var="task">
+            if("{!task.ActivityDate}" != ""){
+                var task_title = "<b>Subject: </b>{!task.Subject}<br/><b>Owner: </b>{!task.Owner.Name}<br/><b>Activity Date: </b>" + new Date("{!task.ActivityDate}").toString("d MMM yyyy") + "<br/><b>Type: </b>{!task.Type}<br/><b>Status: </b>{!task.Status}";
+                
+                if("{!task.RecurrenceActivityId}" != ""){
+                    ganttData.push({id: "{!task.RecurrenceActivityId}", name: "", series: [{name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/date_task.png')}\"/> <a target=\"_parent\" href=\"/{!task.Id}\">{!task.Subject}</a>", nameDisplay: "{!task.Subject}", status: "{!task.Status}", start: new Date("{!task.ActivityDate}").clearTime(), end: new Date("{!task.ActivityDate}").clearTime(), color: "rgb(17, 133, 240)", title: task_title, type: "Task"}]}); 
+                }else{
+                    ganttData.push({id: "{!task.Id}", name: "", series: [{name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/date_task.png')}\"/> <a target=\"_parent\" href=\"/{!task.Id}\">{!task.Subject}</a>", nameDisplay: "{!task.Subject}", status: "{!task.Status}", start: new Date("{!task.ActivityDate}").clearTime(), end: new Date("{!task.ActivityDate}").clearTime(), color: "rgb(17, 133, 240)", title: task_title, type: "Task"}]}); 
+                }
+            }
+        </apex:repeat>    
+                
+        <!-------- Event -------->     
+        <apex:repeat value="{!currStreamEvents_list}" var="event">                  
+            startDate = new Date("{!event.StartDateTime}");
+            endDate = new Date("{!event.EndDateTime}");
+   
+            if("{!event.StartDateTime}" != "" && "{!event.EndDateTime}" != ""){
+                event_title = "<b>Subject: </b>{!event.Subject} <br/><b>Type: </b>{!event.Type}<br/><b>Location: </b> [{!event.Location}]<br/><b>Owner: </b>{!event.Owner.Name}<br/><b>Start Date: </b>" + startDate.toString("d MMM yyyy HH:mm") + " <br/><b>End Date: </b>" + endDate.toString("d MMM yyyy HH:mm") + "<br/><b>Duration: </b>" + durationToString(endDate - startDate) ;
+                
+                if("{!event.RecurrenceActivityId}" != ""){
+                    ganttData.push({id: "{!event.RecurrenceActivityId}", name: "", series: [{name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/date.png')}\"/> <a target=\"_parent\" href=\"/{!event.Id}\">{!event.Subject}</a>", nameDisplay: "{!event.Subject}", status: "{!event.Location}", start: startDate.clearTime(), end: endDate.clearTime(), color: "rgb(17, 133, 240)", title: event_title, type: "Event" }]}); 
+                }else{
+                    ganttData.push({id: "{!event.Id}", name: "", series: [{name: "<img class=\"ganttview-vtheader-series-img\" src=\"{!URLFOR($Resource.ProjectTab_Resources,'/img/date.png')}\"/> <a target=\"_parent\" href=\"/{!event.Id}\">{!event.Subject}</a>", nameDisplay: "{!event.Subject}", status: "{!event.Location}", start: startDate.clearTime(), end: endDate.clearTime(), color: "rgb(17, 133, 240)", title: event_title, type: "Event" }]}); 
+                }
+            }
+        </apex:repeat>    
+        
+        var tooMuchLines = true;
+            
+        jQuery = jQuery.noConflict(); 
+        $ = jQuery.noConflict(); 
+        $(function () {
+            $("#ganttChart").ganttViewZoomW({
+                data: ganttData,
+                slideWidth: 600,
+                groupBySeries: true,
+                groupById: true,
+                displayText: false,
+                displayDoubleDate: tooMuchLines,
+                behavior: {
+                    clickable: false,
+                    draggable: false,
+                    resizable: false,
+                    onClick: function (data) { 
+                        var msg = "You clicked on an event: { start: " + data.start.toString("M/d/yyyy") + ", end: " + data.end.toString("M/d/yyyy") + " }";
+                        $("#eventMessage").text(msg);
+                    },
+                    onResize: function (data) { 
+                        var msg = "You resized an event: { start: " + data.start.toString("M/d/yyyy") + ", end: " + data.end.toString("M/d/yyyy") + " }";
+                        $("#eventMessage").text(msg);
+                    },
+                    onDrag: function (data) { 
+                        var msg = "You dragged an event: { start: " + data.start.toString("M/d/yyyy") + ", end: " + data.end.toString("M/d/yyyy") + " }";
+                        $("#eventMessage").text(msg);
+                    }
+                }
+            });
+            
+                     
+             $(".ganttview-block").tipsy({
+                 html: true,
+                 fade: false,
+                 opacity: 0.9,
+                 gravity: $.fn.tipsy.autoNS,
+                 follow: 'x'
+             });
+            
+            var contentWidth = jQuery(".ganttview-grid").width();
+            var bodyWidth = jQuery("body").width();
+            var vtheaderWidth = jQuery(".ganttview-vtheader").width();
+            var SlideWidth;
+            
+            if(contentWidth < (bodyWidth-vtheaderWidth-10)){
+                 $("#ganttChart").ganttViewZoomW("setSlideWidth", contentWidth);
+                 SlideWidth = contentWidth;
+            } else {
+                 $("#ganttChart").ganttViewZoomW("setSlideWidth", bodyWidth-vtheaderWidth-10);
+                 SlideWidth = bodyWidth-vtheaderWidth-10;
+            }
+            
+        });
+            
+        function durationToString(duration)
+        {
+            durationM = duration / 60000; 
+            durationH = durationM / 60;
+            durationD = Math.floor(durationH/24);
+            if(durationD >= 1){
+                msgDur = durationD + " Days";
+            } else {
+                if(durationH > 1){
+                    if(durationH != Math.floor(durationM/60) ){
+                        durationH = Math.floor(durationM/60);
+                    }
+                    durationM = durationM % 60; 
+                    if(durationH = 1)
+                        msgDur = durationH + " Hour " + durationM + " Minutes";
+                    else
+                        msgDur = durationH + " Hours " + durationM + " Minutes";
+                } else if(durationH == 0) {
+                        msgDur = durationM + " Minutes.";
+                } else {
+                msgDur = durationH + " Hour";
+                }
+            }
+            return msgDur;
+        }
+    </script>
+</apex:page>

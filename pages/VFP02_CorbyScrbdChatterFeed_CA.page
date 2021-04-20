@@ -1,0 +1,241 @@
+<apex:page controller="CorbyScrbdChatterFeedController_CA" extensions="CorbyScrbdChatterFeedExtension_CA" id="feedcontroller" sidebar="false" showHeader="false" standardStylesheets="false" >
+    <script type="text/javascript">
+        var j$ = jQuery.noConflict();
+        
+        /* Called via JS onclick to pass in the itemId. 
+         * When addLike() is called it fires the actionFunction of the same name defined below,
+         * which in turn passes the param to the apex class, sets the class variable and calls the defined apex method.
+         */
+        function likeFeedItem(itemId){
+            addLike(itemId);
+        }
+        /* Called via JS onclick to pass in the likeId. 
+         * When removeLike() is called it fires the actionFunction of the same name defined below,
+         * which in turn passes the param to the apex class, sets the class variable and calls the defined apex method.
+         */
+        function unLikeFeedItem(likeId){
+            removeLike(likeId);
+        }
+        // Displays the commentBox for adding new comments
+        function showCommentBox(itemId){
+            j$('#comBox_'+itemId).show();
+        }
+        //Displays all hidden comments - 3 most recent comments shown by default
+        function showAllComments(itemId, commentCount){
+            var i=0;
+            while(i<(commentCount-2)){
+                j$('#hidden-'+i+'-'+itemId).show();
+                i++;
+            }
+            j$('#showCmt-'+itemId).hide();
+        }
+        // Clears the text in the commentBox onFocus
+        function clearCommentToAdd(itemId){
+            j$('#comIn_'+itemId).val('');
+        }
+        /* Called via JS onclick to pass in the itemId. 
+         * When addComment() is called it fires the actionFunction of the same name defined below,
+         * which in turn passes the params to the apex class, sets the class variables and calls the defined apex method.
+        */
+        function addCommentToFeedItem(itemId){
+            var commentToAdd = j$('#comIn_'+itemId).val();
+            addComment(itemId, commentToAdd);
+        }
+    
+        function makePollChoice(itemId, position, size){
+            var i = 1;
+            var theSize = parseInt(size)+1;
+            while(i < theSize){
+                if(i != position){
+                    j$('#poll_'+itemId+'_choice_'+i).attr('checked', false);
+                }
+                i++;
+            }
+        }
+    
+        function addVoteToPoll(itemId, size){
+            var i = 1;
+            var theSize = parseInt(size)+1;
+            var choicePosition = 0;
+            while(i < theSize){
+                if(j$('#poll_'+itemId+'_choice_'+i+':checked').val() == 'on'){
+                    choicePosition = i;
+                }
+                i++;
+            }
+            if(choicePosition == 0){
+                alert('Please make a selection in order to cast your vote.');
+                return;
+            }else{
+                addVote(itemId, choicePosition);
+            }
+        }
+    </script>
+    <div id="feed-display-div" style="text-align:left;font: normal 11px Arial, Helvetica, clean, sans-serif; width:300px; height:386px; overflow:auto; padding:5px;">
+        <apex:form >
+            <apex:actionPoller action="{!refreshFeed}" rerender="feedRows" interval="300" />
+            <apex:outputPanel id="feedRows" >
+                <apex:outputPanel id="feedErr" rendered="{!ISNULL(newsFeedForDisplay)}">
+                    <div style="font: bold 14px Arial, Helvetica, clean, sans-serif; text-align:center;">
+                        <br />We're Sorry!<br /><br />The requested feed cannot<br />be displayed at this time.<br /><br />
+                        If this issue persists, please contact<br />the Group Owner for this feed.
+                    </div>
+                </apex:outputPanel>
+                <apex:repeat value="{!newsFeedForDisplay}" var="feedItemInfo" rows="10" rendered="{!NOT(ISNULL(newsFeedForDisplay))}">
+                    <div style="padding-bottom:5px;border-bottom:1px solid #BEE6FF;">
+                        <div style="display:inline-block;vertical-align:top;">
+                            <a href="/{!feedItemInfo.userId}">
+                                <apex:image style="margin:4px" width="40" url="{!feedItemInfo.feedItem.photoUrl}"/>
+                            </a>
+                        </div>
+                        
+                        <div style="display:inline-block;vertical-align:top;width:220px; color:#087bf5;word-wrap:break-word;">
+                            <apex:image url="{!feedItemInfo.feedItemParentSmallIconUrl}" />
+							<span style="vertical-align:35%;">
+								<a href="/{!feedItemInfo.feedItemParentId}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">
+									<b>{!feedItemInfo.feedItemParentName}</b>
+								</a>
+							</span>
+							<span style="vertical-align:35%;">&nbsp;-&nbsp;</span>
+                            <span style="vertical-align:35%;">
+                                <a href="/{!feedItemInfo.userId}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">
+                                    <b>{!feedItemInfo.userName}</b>
+                                </a>
+                            </span><br/>
+                            <apex:outputText style="color:#000000;" value="{!feedItemInfo.formattedText}" escape="false" />
+                            <br /><br />
+                            <apex:outputPanel layout="block" rendered="{!IF(feedItemInfo.linkUrl == null, false, true)}" >              
+                                <br />
+                                <a href="{!feedItemInfo.linkUrl}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">
+                                    <apex:image url="{!$Resource.STR001_link_image_CA}" height="15" width="15" /><span style="vertical-align:25%;"><b>{!feedItemInfo.linkTitle}</b></span>
+                                </a>
+                                <br />
+                                <div style="color:#cdcdcd;">
+                                    {!feedItemInfo.linkUrl}
+                                </div>
+                            </apex:outputPanel>
+                            
+                            <apex:outputPanel style="border:1px solid #BEE6FF; padding:4px;" layout="block" rendered="{!IF(feedItemInfo.poll == null, false, true)}">
+                                <apex:outputPanel layout="block" rendered="{!IF(feedItemInfo.poll.myChoiceId == null, false, true)}">
+                                    <apex:repeat value="{!feedItemInfo.poll.choices}" var="choice">
+                                        <apex:outputText style="color:#000000;" value="{!choice.text}" />
+                                        <br />
+                                        <div style="display:inline-block; width:125px; position:relative;">
+											<div style="width:{!choice.voteCountRatio * 100}%;display:inline-block; background-color:#BEE6FF; position:relative;">&nbsp;</div>
+										</div>
+										<div style="display:inline-block;">&nbsp;{!choice.voteCount}&nbsp;({!choice.voteCountRatio * 100}%)</div>
+                                        <br />
+                                    </apex:repeat>
+                                    <div style="padding-top:4px;">
+                                        <apex:outputText style="color:#000000;" value="{!feedItemInfo.poll.totalVoteCount} Votes" />
+                                    </div>
+                                </apex:outputPanel>
+                                <apex:outputPanel layout="block" rendered="{!IF(feedItemInfo.poll.myChoiceId == null, true, false)}">
+                                    <apex:repeat value="{!feedItemInfo.poll.choices}" var="choice">
+                                        <input type="radio" onclick="makePollChoice('{!feedItemInfo.feedItemId}', '{!choice.position}', '{!feedItemInfo.numChoices}')" name="poll_{!feedItemInfo.feedItemId}_choice_{!choice.position}" id="poll_{!feedItemInfo.feedItemId}_choice_{!choice.position}" />
+                                        &nbsp;<span style="vertical-align:20%;"><apex:outputText style="color:#000000;" value="{!choice.text}" /></span><br />
+                                    </apex:repeat>
+                                    <br />
+                                    <apex:commandButton onclick="addVoteToPoll('{!feedItemInfo.feedItemId}', '{!feedItemInfo.numChoices}')" value="Vote" rerender="feedRows" />
+                                    &nbsp;<apex:outputText style="color:#000000;" value="{!feedItemInfo.poll.totalVoteCount} Votes" />
+                                </apex:outputPanel>
+                            </apex:outputPanel>
+                            
+                            <div style="padding-top:4px; padding-bottom:2px; word-wrap:">
+                                <a href="#" onclick="showCommentBox('{!feedItemInfo.feedItemId}')" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">Comment</a>
+								<span style="vertical-align:25%; font-weight:bold; color:#000000;padding:0px 3px 0px 3px;">.</span>
+                                <apex:outputPanel rendered="{!IF(feedItemInfo.isLikedByUser == true, false, true)}">
+                                    <span style="border:none;background:#FFFFFF;text-decoration:none;color:#015ba7;font: normal 11px Arial, Helvetica, clean, sans-serif; cursor:pointer;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'" onclick="likeFeedItem('{!feedItemInfo.feedItemId}')">Like</span>
+                                </apex:outputPanel>
+                                <apex:outputPanel rendered="{!IF(feedItemInfo.isLikedByUser == false, false, true)}">
+                                    <span style="border:none;background:#FFFFFF;text-decoration:none;color:#015ba7;font: normal 11px Arial, Helvetica, clean, sans-serif; cursor:pointer;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'" onclick="unLikeFeedItem('{!feedItemInfo.myLikeId}')">Unlike</span>
+                                </apex:outputPanel>
+                                <span style="vertical-align:25%; font-weight:bold; color:#000000;padding:0px 3px 0px 3px;">.</span>
+                                &nbsp;<apex:outputText style="color:#AAAAAA; font:italic 9px Arial, Helvetica, clean, sans-serif; padding: 2px 0px 2px 0px;" value="{!feedItemInfo.relativeCreatedDate}" />
+                            </div>
+                        </div>
+                        
+                        <apex:outputPanel layout="block" rendered="{!IF(feedItemInfo.contentDownloadUrl != null && feedItemInfo.imageUrl != null && feedItemInfo.hasImagePreview, true, false)}" >          
+                            <div style="left: 3em; width: 85%; padding: 2px; position: relative;">    
+                                <apex:image style="margin:4px" width="60" url="{!feedItemInfo.imageUrl}"/>
+                                <div style="float:right;position:relative;padding:2px;width:65%;">
+                                    <a href="{!feedItemInfo.contentDownLoadUrl}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">Download:<br />{!feedItemInfo.contentTitle }</a>
+                                </div> 
+                            </div>               
+                        </apex:outputPanel>
+
+                        <apex:outputPanel rendered="{!IF(feedItemInfo.likesMessage != '', true, false)}">
+                            <div style="width:85%;padding:2px;position:relative;left:3em;background-color:#E0F0FF;border-bottom:1px solid #CCCCCC;">
+                                <div style="margin-left:4px;width:95%;">
+                                    <div style="display:inline-block;vertical-align:top;">
+                                        <apex:image value="{!$Resource.STR002_LikeThumb_CA}" />
+                                    </div>
+                                    <div style="display:inline-block;width:80%;padding-top:2px;">
+                                        <apex:outputText style="margin-left:4px;" value="{!feedItemInfo.likesMessage}" />
+                                    </div>
+                                </div>
+                            </div>
+                        </apex:outputPanel>
+
+                        <apex:outputPanel rendered="{!IF(feedItemInfo.commentCount > 0, true, false)}">
+                            <div style="width:85%;padding:2px;position:relative;left:3em;background-color:#E0F0FF;">
+                                <apex:outputPanel rendered="{!IF(feedItemInfo.commentCount > 3, true, false)}" >
+                                    <div id="showCmt-{!feedItemInfo.feedItemId}" style="width:99.5%;border-bottom:1px solid #CCCCCC;padding:3px 0px 3px 0px;">
+                                        <a href="#" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'" onclick="showAllComments('{!feedItemInfo.feedItemId}', {!feedItemInfo.commentCount})"><span style="padding-left:4px;">Show all {!feedItemInfo.commentCount} comments</span></a>
+                                    </div>
+                                </apex:outputPanel>
+                                <apex:variable var="cmtRowNum" value="{!1}" />
+                                <apex:repeat value="{!feedItemInfo.comments}" var="commentInfo">
+                                    <div id="{!IF(cmtRowNum < (feedItemInfo.commentCount - 2), 'hidden-'+text(cmtRowNum)+'-'+feedItemInfo.feedItemId, 'shown-'+text(cmtRowNum)+'-'+feedItemInfo.feedItemId)}" style="{!IF(cmtRowNum < (feedItemInfo.commentCount - 2), 'display:none;width:99.5%;border-bottom:1px solid #CCCCCC;padding:3px 0px 3px 0px;', 'width:99.5%;border-bottom:1px solid #CCCCCC;padding:3px 0px 3px 0px;')}">
+                                        <div style="display:inline-block;vertical-align:top;">
+                                            <apex:image style="margin:4px" width="25" url="{!commentInfo.comment.user.photo.smallPhotoUrl}"/>
+                                        </div>
+
+                                        <div style="display:inline-block;vertical-align:top;width:80%">
+                                            <a href="/{!commentInfo.userId}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">
+                                                <b>{!commentInfo.userName}</b>
+                                            </a>:&nbsp;
+                                            <apex:outputText value="{!commentInfo.formattedText}" escape="false" />
+                                            <div style="color:#AAAAAA; font:italic 9px Arial, Helvetica, clean, sans-serif; padding: 2px 0px 2px 0px;">
+                                                <apex:outputText value="{!commentInfo.relativeCreatedDate}" />
+                                            </div>
+                                        </div>
+
+                                        <apex:outputPanel rendered="{!IF(commentInfo.imageUrl == null, false, true)}" >
+                                            <div style="padding-left:4px;display:inline-block;vertical-align:top;float:left;position:relative;width:95%" >
+                                                <apex:image style="padding:4px" width="60" url="{!commentInfo.imageUrl}"/>
+                                                <div style="float:right;position:relative;padding:2px;width:65%;">
+                                                    <a href="{!commentInfo.contentDownLoadUrl}" style="color:#015ba7;text-decoration:none;" onmouseover="this.style.textDecoration = 'underline'" onmouseout="this.style.textDecoration = 'none'">Download:<br />{!commentInfo.contentTitle }</a> 
+                                                </div>
+                                            </div>
+                                            <div style="clear: both;" />
+                                        </apex:outputPanel>
+                                    </div><!-- end:commentBox-inner -->
+                                    <apex:variable var="cmtRowNum" value="{!cmtRowNum + 1}" />
+                                </apex:repeat>
+                            </div>
+                        </apex:outputPanel>
+                        <div style="display:none;width:85%;padding:2px;position:relative;left:3em;background-color:#E0F0FF;" id="comBox_{!feedItemInfo.feedItemId}">
+                            <input type="text" id="comIn_{!feedItemInfo.feedItemId}" style="border:1px solid #AAAAAA;" value="Add a comment..." onfocus="clearCommentToAdd('{!feedItemInfo.feedItemId}')" />
+                            &nbsp;<apex:commandButton onclick="addCommentToFeedItem('{!feedItemInfo.feedItemId}')" value="Comment" rerender="feedRows" />
+                        </div>
+                    </div><!-- end:row -->
+                </apex:repeat>
+                <apex:actionFunction name="addLike" action="{!addLikeToFeedItem}" rerender="feedRows">
+                    <apex:param name="theItemId" assignTo="{!feedItemId}" value="" />
+                </apex:actionFunction>
+                <apex:actionFunction name="removeLike" action="{!removeLikeFromFeedItem}" rerender="feedRows">
+                    <apex:param name="theLikeId" assignTo="{!likeId}" value="" />
+                </apex:actionFunction>
+                <apex:actionFunction name="addComment" action="{!addCommentToFeedItem}" rerender="feedRows">
+                    <apex:param name="theItemId" assignTo="{!feedItemId}" value="" />
+                    <apex:param name="theComment" assignTo="{!commentToAdd}" value="" />
+                </apex:actionFunction>
+                <apex:actionFunction name="addVote" action="{!addVoteToFeedItemPoll}" rerender="feedRows">
+                    <apex:param name="theItemId" assignTo="{!feedItemId}" value="" />
+                    <apex:param name="theChoicePosition" assignTo="{!pollChoicePosition}" value="" />
+                </apex:actionFunction>
+            </apex:outputPanel>
+        </apex:form>
+    </div>
+</apex:page>

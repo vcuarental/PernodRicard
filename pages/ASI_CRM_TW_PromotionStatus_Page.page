@@ -1,0 +1,585 @@
+<apex:page standardController="ASI_HK_CRM_Promotion__c" extensions="ASI_CRM_TW_PromotionStatus_Ctrl" docType="html-5.0" sidebar="false">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
+    <script>
+        function selectAllCheckboxes(obj,receivedInputID){
+            var inputCheckBox = document.getElementsByTagName("input");
+            for(var i=0; i<inputCheckBox.length; i++){
+                if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){
+                    inputCheckBox[i].checked = obj.checked;
+                }
+            }
+        }
+    </script>
+
+    <script type='text/javascript'>
+        var addnlFldname = [];
+        $(function(){
+            ASI_CRM_TW_PromotionStatus_Ctrl.findSObjects('ASI_CRM_AccountsAdditionalField__c', '','', function(result, event){
+                if(event.type == 'exception') {
+                    alert(event.message);
+                } else {
+                    addnlFldname = result;
+                    for(var i = 0, len = addnlFldname.length;i<len;i++ )
+                    {
+                        addnlFldname[i] =  htmlEncode(addnlFldname[i]);
+                    }
+                    $( ".lookupInput" ).each(function(){
+
+                        $(this).find('input').autocomplete({
+                            source: addnlFldname
+                        });
+                    })
+                }
+            });
+        });
+        function createBindingAction() {
+            for(var i = 0, len = addnlFldname.length;i<len;i++ )
+            {
+                addnlFldname[i] =  htmlEncode(addnlFldname[i]);
+            }
+            $(".lookupInput").each(function(){
+                $(this).find('input').autocomplete({
+                    source: addnlFldname
+                });
+            });
+        };
+        function htmlEncode( input ) {
+            var e = document.createElement('div');
+            e.innerHTML = input;
+            return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+            //return String(input).replace(/\&amp;/g,'&').replace(/\&lt;/g,'<').replace(/\&rt;/g,'>');
+        }
+    </script>
+
+    <apex:actionStatus id="LoadingStatus" >
+        <apex:facet name="start">
+            <c:ASI_CRM_TW_LoadingStatus BackColor="#ffffff"
+                                        borderColor="#6B6B6B"
+                                        borderSize="1"
+                                        height="50px"
+                                        width="150px"
+                                        margintop="-25px"
+                                        marginleft="-60px"
+                                        ImageUrl="{!$Resource.loadingStatus}"
+                                        Message="Please Wait..."/>
+        </apex:facet>
+    </apex:actionStatus>
+
+    <apex:form >
+        <apex:pageMessages id="errormsg"/>
+        <apex:sectionHeader title="{!IF(userLanguage=='zh_TW', '更新活動進度', 'Update Promotion Status')}" subtitle="{!promo.Name} - {!promo.ASI_HK_CRM_Promotion_Name__c}"/>
+        <apex:pageBlock id="wholePage">
+            <apex:pageBlockButtons location="both">
+                <apex:actionStatus id="SaveButtonStatus">
+                    <apex:facet name="stop">
+                        <apex:outputPanel >
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Save}" action="{!saveAction}" status="SaveButtonStatus" rendered="{!!readOnly}"/>
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_QuickSave}" action="{!quickSave}" oncomplete="createBindingAction()" status="SaveButtonStatus" rerender="errormsg, wholePage" rendered="{!!readOnly}"/>
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Cancel}" action="/{!promoId}" immediate="TRUE" rendered="{!!readOnly}"/>
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Back}" action="/{!promoId}" immediate="TRUE" rendered="{!readOnly}"/>
+                            <apex:commandLink target="_blank" style="text-decoration:none" action="/{!$Setup.ASI_CRM_TW_Settings__c.ASI_CRM_TW_PromoStatus_ReportID__c}?pv0={!promo.Name}" immediate="TRUE" rendered="{!!readOnly}">
+                                <apex:commandButton value="{!IF(userLanguage=='zh_TW', '活動進度列表', 'Promotion Status List')}"/>
+                            </apex:commandLink>
+                        </apex:outputPanel>
+                    </apex:facet>
+                    <apex:facet name="start">
+                        <apex:outputPanel >
+                            <apex:commandButton value="{!IF(userLanguage=='zh_TW', '正在儲存...', 'Saving...')}" disabled="true"/>
+                            <apex:commandButton value="{!IF(userLanguage=='zh_TW', '正在儲存...', 'Saving...')}" disabled="true"/>
+                            <apex:commandButton value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Cancel}" action="/{!promoId}" immediate="TRUE"/>
+                            <apex:commandButton value="{!IF(userLanguage=='zh_TW', '活動進度列表', 'Promotion Status List')}" disabled="true"/>
+                        </apex:outputPanel>
+                    </apex:facet>
+                </apex:actionStatus>
+            </apex:pageBlockButtons>
+
+            <apex:outputText >View:&nbsp;</apex:outputText>
+            <apex:actionRegion >
+                <apex:selectList value="{!selectView}" size="1">
+                    <apex:selectOptions value="{!listSelectViews}"/>
+                    <apex:actionSupport event="onchange" action="{!checkViewSelection}" status="LoadingStatus" rerender="summary, promoStatus"/>
+                </apex:selectList>
+            </apex:actionRegion>
+            <apex:outputText >&nbsp;</apex:outputText>
+            <apex:actionRegion >
+                <apex:selectList value="{!selectRegion}" size="1">
+                    <apex:selectOptions value="{!listRegions}"/>
+                    <apex:actionSupport event="onchange" action="{!checkViewSelection}" status="LoadingStatus" rerender="summary, promoStatus"/>
+                </apex:selectList>
+            </apex:actionRegion><br/><br/>
+
+            <apex:pageblocksection title="{!IF (userLanguage=='zh_TW', "WS 總結", "WS Summary")}" columns="2" id="summary">
+                <apex:pageblocktable value="{!mapWSSummary}" var="mapItm" width="100%">
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Supplier__c.label}</apex:facet>
+                        <apex:outputText value="{!mapItm}"/>
+                        <apex:facet name="footer"><apex:outputText value="{!IF(userlanguage=='zh_TW', '合計', 'TOTAL')}"></apex:outputText></apex:facet>
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Unit__c.label}</apex:facet>
+                        <apex:outputText value="{!mapWSSummary[mapItm]}"/>
+                        <apex:facet name="footer"><apex:outputText value="{0,number,###,###,##0.00}"><apex:param value="{!totalUnit}"/></apex:outputText></apex:facet>
+                    </apex:column>
+                </apex:pageblocktable>
+            </apex:pageblocksection>
+
+            <apex:outputPanel id="promoStatus">
+                <apex:pageblocksection title="{!$ObjectType.ASI_CRM_Promotion_Status__c.Label}" columns="1">
+                    <apex:actionRegion >
+                        <apex:pageblocktable value="{!mapPromoStatus}" var="itm" style="width: 100%">
+                            <apex:column rendered="{!readOnly==FALSE}">
+                                <apex:facet name="header">
+                                    <apex:commandLink value="{!IF(userlanguage=='zh_TW', '添加', 'Add New')}" style="text-decoration:underline;" oncomplete="createBindingAction()" action="{!addPromoStatus}" rerender="promoStatus, errormsg, errMsg" status="LoadingStatus"/>
+                                </apex:facet>
+                                <apex:variable value="v1" var="" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}">
+                                    <apex:commandLink value="{!IF(userlanguage=='zh_TW', '複製', 'Clone')}"  oncomplete="createBindingAction()" action="{!clonePromoStatus}" rerender="promoStatus, errormsg, errMsg" status="LoadingStatus"><apex:param assignTo="{!intRowid}" value="{!itm}" name="assignvalue"/></apex:commandLink>
+                                    <apex:outputText value=" / "></apex:outputText>
+                                    <apex:commandLink value="{!IF(userlanguage=='zh_TW', '刪除', 'Delete')}" immediate="TRUE" action="{!deletePromoStatus}" rerender="promoStatus, errormsg, errMsg" status="LoadingStatus"><apex:param assignTo="{!intRowid}" value="{!itm}" name="assignvalue"/></apex:commandLink>
+                                </apex:variable>
+                                <apex:variable value="v2" var="" rendered="{!mapPromoStatus[itm].boolDetailsNotEditable}">
+                                    <font color="#BAACAC">
+                                        <apex:outputText value="{!IF(userlanguage=='zh_TW', '複製', 'Clone')}"/>
+                                        <apex:outputText value=" / "></apex:outputText>
+                                        <apex:outputText value="{!IF(userlanguage=='zh_TW', '刪除', 'Delete')}"/>
+                                    </font>
+                                </apex:variable>
+                            </apex:column>
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.Account.fields.ASI_HK_CRM_JDE_Account_Number__c.label}</apex:facet>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Account__r.ASI_HK_CRM_JDE_Account_Number__c}"/>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Account__c.label}</apex:facet>
+                                <apex:actionRegion >
+                                    <apex:inputField required="TRUE" value="{!mapPromoStatus[itm].status.ASI_CRM_Account__c}" style="width:70%" rendered="{!!mapPromoStatus[itm].boolAccNotEditable}">
+                                        <apex:actionSupport event="onchange" action="{!CheckOutlet}" rerender="errMsg" status="LoadingStatus"><apex:param assignTo="{!intRowid}" value="{!itm}" name="assignvalue"/></apex:actionSupport>
+                                    </apex:inputField>
+                                </apex:actionRegion>
+                                <font color="red"><apex:outputText id="errMsg" value="{!mapPromoStatus[itm].errorMsg}" rendered="{!!mapPromoStatus[itm].boolAccNotEditable}"/></font>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Account__c}" style="width:70%" rendered="{!mapPromoStatus[itm].boolAccNotEditable}"/><br/>
+                                <font color="red"><apex:outputText id="errMsg_1" value="{!mapPromoStatus[itm].errorMsg}" rendered="{!mapPromoStatus[itm].boolAccNotEditable}"/></font>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Unit__c.label}</apex:facet>
+                                <apex:inputField required="TRUE" value="{!mapPromoStatus[itm].status.ASI_CRM_Unit__c}" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}"/>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Unit__c}" rendered="{!mapPromoStatus[itm].boolDetailsNotEditable}"/>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Supplier__c.label}</apex:facet>
+                                <!--<apex:actionRegion >
+                                    <apex:inputField required="TRUE" value="{!mapPromoStatus[itm].status.ASI_CRM_Supplier__c}" style="width:70%" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}">  
+                                        <apex:actionSupport event="onchange" action="{!CheckSupplier}" rerender="errMsg1" status="LoadingStatus"><apex:param assignTo="{!intRowid}" value="{!itm}" name="assignvalue"/></apex:actionSupport>
+                                    </apex:inputField>
+                                </apex:actionRegion>-->
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Supplier__c}" style="width:70%" rendered="{!mapPromoStatus[itm].boolDetailsNotEditable}"/>
+                                <apex:selectList value="{!mapPromoStatus[itm].status.ASI_CRM_Supplier__c}" size="1" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}">
+                                    <apex:selectOptions value="{!listSupplierPicklist}"/>
+                                </apex:selectList>
+                                <br/>
+                                <font color="red"><apex:outputText id="errMsg1" value="{!mapPromoStatus[itm].errorMsg1}" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}"/></font>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Source__c.label}</apex:facet>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Source__c}"/>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Task__c.label}</apex:facet>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Task__c}"/>
+                            </apex:column>
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Done__c.label}</apex:facet>
+                                <apex:inputField value="{!mapPromoStatus[itm].status.ASI_CRM_Done__c}" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable && grantCheckDone}" onchange="doneChecked(this, '{!mapPromoStatus[itm].status.id}')"/>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Done__c}" rendered="{!mapPromoStatus[itm].boolDetailsNotEditable || !grantCheckDone}"/>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">Photo Upload</apex:facet>
+                                <apex:pageBlockSection columns="1">
+                                    <apex:outputPanel rendered="{!if(!mapPromoStatus[itm].boolNew && !mapPromoStatus[itm].boolDetailsNotEditable, true, false)}">
+                                        <input type="file" id="file1_{!mapPromoStatus[itm].status.id}" onchange="fileChosen(this, '{!mapPromoStatus[itm].status.id}', 1)" />
+                                        <br/><small><output id="divFilePromoStatusMsg1_{!mapPromoStatus[itm].status.id}" style="margin-left:10px;"/></small><br/>
+                                        <input type="file" id="file2_{!mapPromoStatus[itm].status.id}" onchange="fileChosen(this, '{!mapPromoStatus[itm].status.id}', 2)" />
+                                        <br/><small><output id="divFilePromoStatusMsg2_{!mapPromoStatus[itm].status.id}" style="margin-left:10px;"/></small><br/>
+                                        <input type="file" id="file3_{!mapPromoStatus[itm].status.id}" onchange="fileChosen(this, '{!mapPromoStatus[itm].status.id}', 3)" />
+                                        <br/><small><output id="divFilePromoStatusMsg3_{!mapPromoStatus[itm].status.id}" style="margin-left:10px;"/></small><br/>
+                                        <input type="file" id="file4_{!mapPromoStatus[itm].status.id}" onchange="fileChosen(this, '{!mapPromoStatus[itm].status.id}', 4)" />
+                                        <br/><small><output id="divFilePromoStatusMsg4_{!mapPromoStatus[itm].status.id}" style="margin-left:10px;"/></small><br/>
+                                    </apex:outputPanel>
+                                    <apex:outputPanel rendered="{!if(mapPromoStatus[itm].boolNew && !mapPromoStatus[itm].boolDetailsNotEditable, true, false)}" style="color:red">Please quick save before upload</apex:outputPanel>
+                                </apex:pageBlockSection>
+                            </apex:column>
+
+                            <apex:column >
+                                <apex:facet name="header">{!$ObjectType.ASI_CRM_Promotion_Status__c.fields.ASI_CRM_Remarks__c.label}</apex:facet>
+                                <apex:inputField value="{!mapPromoStatus[itm].status.ASI_CRM_Remarks__c}" rendered="{!!mapPromoStatus[itm].boolDetailsNotEditable}"/>
+                                <apex:outputField value="{!mapPromoStatus[itm].status.ASI_CRM_Remarks__c}" rendered="{!mapPromoStatus[itm].boolDetailsNotEditable}"/>
+                            </apex:column>
+                        </apex:pageblocktable>
+                    </apex:actionRegion>
+                </apex:pageblocksection>
+            </apex:outputPanel>
+        </apex:pageBlock>
+        <apex:repeat value="{!mapPromoStatus}" var="key">
+            <script>
+                console.log('{!mapPromoStatus[key].status.ASI_CRM_Done__c}');
+                if('{!mapPromoStatus[key].status.ASI_CRM_Done__c}' == 'true')
+                {
+                    console.log('true id: {!mapPromoStatus[key].status.id}');
+                    document.getElementById('file1_{!mapPromoStatus[key].status.id}').setAttribute("disabled", "disabled");
+                    document.getElementById('file2_{!mapPromoStatus[key].status.id}').setAttribute("disabled", "disabled");
+                    document.getElementById('file3_{!mapPromoStatus[key].status.id}').setAttribute("disabled", "disabled");
+                    document.getElementById('file4_{!mapPromoStatus[key].status.id}').setAttribute("disabled", "disabled");
+                }
+           </script>
+        </apex:repeat>
+    </apex:form>
+
+    <script type="text/javascript">
+        var maxStringSize = 6000000;    //Maximum String size is 6,000,000 characters
+        var maxFileSize = 4350000;      //After Base64 Encoding, this is the max file size
+        var chunkSize = 950000;         //Maximum Javascript Remoting message size is 1,000,000 characters
+        var file;
+        var attachment;
+    	var attachment_EV;
+        var attachmentName;
+        var attachmentName_EV;
+        var fileSize;
+        var positionIndex;
+        var doneUploading;
+    	var doneUploading_EV;
+        j$ = jQuery.noConflict();
+
+        function doneChecked(checkboxElement, parentRecId) {
+            if(checkboxElement.checked){
+                document.getElementById('file1_' + parentRecId).setAttribute("disabled", "disabled");
+                document.getElementById('file2_' + parentRecId).setAttribute("disabled", "disabled");
+                document.getElementById('file3_' + parentRecId).setAttribute("disabled", "disabled");
+                document.getElementById('file4_' + parentRecId).setAttribute("disabled", "disabled");
+            }
+            else{
+                document.getElementById('file1_' + parentRecId).removeAttribute("disabled");
+                document.getElementById('file2_' + parentRecId).removeAttribute("disabled");
+                document.getElementById('file3_' + parentRecId).removeAttribute("disabled");
+                document.getElementById('file4_' + parentRecId).removeAttribute("disabled");
+            }
+        }
+
+        function fileChosen(fileChosenEvent, parentRecId, pType) {
+
+            // Get file
+            file = fileChosenEvent.files[0];
+
+            // Is it an image?
+            if(!file.type.match('image')) {
+                alert('Must use an image! Received: ' + file.type);
+                return;
+            }
+            console.log(file);
+			doneUploading = false;
+            if(file.size <= maxFileSize) {
+                attachmentName = file.name;
+                var fileReader = new FileReader();
+				
+                fileReader.onload = function(readerEvent) {
+                    if (pType == 1 || pType == 2 || pType == 3 || pType == 4)
+                    {
+                        //attachmentName = 'PromoStatus_' + file.name;
+                        if(file.type == 'image/jpeg')                     
+                        	attachmentName = 'PromoStatus_ReImg.jpg';
+						else if(file.type == 'image/png')                      
+							attachmentName = 'PromoStatus_ReImg.png';
+                        else
+                            attachmentName = 'PromoStatus_ReImg.' + file.type;
+
+                    }
+                    
+                    console.log('Resize upload');
+
+                    var canvas = document.createElement('canvas');
+                    var ctx = canvas.getContext("2d");
+
+                    var img = new Image();
+                    img.onload = function (imageEvent) {
+                        var W = img.width;
+                        var H = img.height;
+                        console.log(W+','+H);
+                        var ratio = W/H;
+                        canvas.width = W;
+                        canvas.height = H;
+                        ctx.drawImage(img, 0, 0); //draw image
+						//Wilken 20190423 Temporarily Disable Resize
+                        
+                        if(W>=H)
+                            resample_hermite(canvas, W, H, 320, 320/ratio);
+                        else
+                           resample_hermite(canvas, W, H, 320*ratio, 320);
+                    }
+                    
+                    img.src = readerEvent.target.result;
+                }
+
+                fileReader.readAsDataURL(file);  //Read the body of the file
+
+                function resample_hermite(canvas, W, H, W2, H2){
+                    var time1 = Date.now();
+                    W2 = Math.round(W2);
+                    H2 = Math.round(H2);
+                    var img = canvas.getContext("2d").getImageData(0, 0, W, H);
+                    var img2 = canvas.getContext("2d").getImageData(0, 0, W2, H2);
+                    var data = img.data;
+                    var data2 = img2.data;
+                    var ratio_w = W / W2;
+                    var ratio_h = H / H2;
+                    var ratio_w_half = Math.ceil(ratio_w/2);
+                    var ratio_h_half = Math.ceil(ratio_h/2);
+                    for(var j = 0; j < H2; j++){
+                        for(var i = 0; i < W2; i++){
+                            var x2 = (i + j*W2) * 4;
+                            var weight = 0;
+                            var weights = 0;
+                            var weights_alpha = 0;
+                            var gx_r = gx_g = gx_b = gx_a = 0;
+                            var center_y = (j + 0.5) * ratio_h;
+                            for(var yy = Math.floor(j * ratio_h); yy < (j + 1) * ratio_h; yy++){
+                                var dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half;
+                                var center_x = (i + 0.5) * ratio_w;
+                                var w0 = dy*dy //pre-calc part of w
+                                for(var xx = Math.floor(i * ratio_w); xx < (i + 1) * ratio_w; xx++){
+                                    var dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half;
+                                    var w = Math.sqrt(w0 + dx*dx);
+                                    if(w >= -1 && w <= 1){
+                                        //hermite filter
+                                        weight = 2 * w*w*w - 3*w*w + 1;
+                                        if(weight > 0){
+                                            dx = 4*(xx + yy*W);
+                                            //alpha
+                                            gx_a += weight * data[dx + 3];
+                                            weights_alpha += weight;
+                                            //colors
+                                            if(data[dx + 3] < 255)
+                                                weight = weight * data[dx + 3] / 250;
+                                            gx_r += weight * data[dx];
+                                            gx_g += weight * data[dx + 1];
+                                            gx_b += weight * data[dx + 2];
+                                            weights += weight;
+                                        }
+                                    }
+                                }
+                            }
+                            data2[x2]     = gx_r / weights;
+                            data2[x2 + 1] = gx_g / weights;
+                            data2[x2 + 2] = gx_b / weights;
+                            data2[x2 + 3] = gx_a / weights_alpha;
+                        }
+                    }
+                    console.log("hermite = "+(Math.round(Date.now() - time1)/1000)+" s");
+                    canvas.getContext("2d").clearRect(0, 0, Math.max(W, W2), Math.max(H, H2));
+                    canvas.width = W2;
+                    canvas.height = H2;
+                    canvas.getContext("2d").putImageData(img2, 0, 0);
+
+                    //attachment = window.btoa(this.result);  //Base 64 encode the file before sending it
+                    attachment = canvas.toDataURL(file.type);
+                    attachment = attachment.substring(attachment.indexOf(',')+1,attachment.length);
+                    //alert(attachment);
+                    positionIndex=0;
+                    fileSize = attachment.length;
+
+                    console.log("Total Attachment Length: " + fileSize);               
+                    doneUploading = false;
+                    if(fileSize < maxStringSize) {
+                        uploadAttachment(parentRecId, pType, null);
+                    } else {
+                        alert("Base 64 Encoded file is too large.  Maximum size is " + maxStringSize + " your file is " + fileSize + ".");
+                    }
+                }
+            } else {
+                alert("File must be under 4.3 MB in size.  Your file is too large.  Please try again.");
+            }
+        }
+        function uploadAttachment_EV(parentRecId, pType, fileId) {
+            var attachmentBody_EV = "";
+            if(fileSize <= positionIndex + chunkSize) {
+                attachmentBody_EV = attachment_EV.substring(positionIndex);           
+                doneUploading_EV = true;
+            } else {
+                attachmentBody_EV = attachment_EV.substring(positionIndex, positionIndex + chunkSize);
+            }
+
+            console.log("Uploading " + attachmentBody_EV.length + " chars of " + fileSize);
+            ASI_CRM_TW_PromotionStatus_Ctrl.insertAttachment(parentRecId, attachmentBody_EV, attachmentName_EV, pType, fileId,
+                    function(result, event) {
+                        console.log('result:' + result);
+                        if(event.type === 'exception') {
+                            console.log("exception");
+                            console.log(event);
+                        } else if(event.status) {
+                            console.log('event status :' + event.status);
+                            if(result.substring(0,3) == '00P') {
+                                if(doneUploading_EV == true) {
+                                    if (pType == 1){
+                                        j$('#divFilePromoStatusMsg1_' + parentRecId).text('上傳成功！可繼續下一張.');
+                                        j$("#file1_"+ parentRecId).prop("disabled", false);
+                                        j$("#file2_"+ parentRecId).prop("disabled", false);
+                                        j$("#file3_"+ parentRecId).prop("disabled", false);
+                                        j$("#file4_"+ parentRecId).prop("disabled", false);
+                                    }
+                                    else if (pType == 2) {
+                                        j$('#divFilePromoStatusMsg2_' + parentRecId).text('上傳成功！可繼續下一張.');
+                                        j$("#file1_"+ parentRecId).prop("disabled", false);
+                                        j$("#file2_"+ parentRecId).prop("disabled", false);
+                                        j$("#file3_"+ parentRecId).prop("disabled", false);
+                                        j$("#file4_"+ parentRecId).prop("disabled", false);
+                                    }
+                                    else if (pType == 3) {
+                                        j$('#divFilePromoStatusMsg3_' + parentRecId).text('上傳成功！可繼續下一張.');
+                                        j$("#file1_"+ parentRecId).prop("disabled", false);
+                                        j$("#file2_"+ parentRecId).prop("disabled", false);
+                                        j$("#file3_"+ parentRecId).prop("disabled", false);
+                                        j$("#file4_"+ parentRecId).prop("disabled", false);
+                                    }
+                                    else if (pType == 4) {
+                                        j$('#divFilePromoStatusMsg4_' + parentRecId).text('上傳成功！可繼續下一張.');
+                                        j$("#file1_"+ parentRecId).prop("disabled", false);
+                                        j$("#file2_"+ parentRecId).prop("disabled", false);
+                                        j$("#file3_"+ parentRecId).prop("disabled", false);
+                                        j$("#file4_"+ parentRecId).prop("disabled", false);
+                                    }
+
+                                    //alert(result);
+                                } else{
+                                    positionIndex += chunkSize;
+                                    uploadAttachment_EV(parentRecId, pType, result);
+                                }
+                            }
+                        }else {
+                            console.log('event :' + event.message);
+                        }
+                    },
+                    {buffer: true, escape: true, timeout: 120000}
+            );
+        }
+    
+        function uploadAttachment(parentRecId, pType, fileId) {
+            var attachmentBody = "";
+            if(fileSize <= positionIndex + chunkSize) {
+                attachmentBody = attachment.substring(positionIndex);           
+                doneUploading = true;
+            } else {
+                attachmentBody = attachment.substring(positionIndex, positionIndex + chunkSize);
+            }
+            
+            if (pType == 1) {
+                j$('#divFilePromoStatusMsg1_' + parentRecId).text('圖片上傳中,請等待至結束,才能上傳下一張.');
+                j$('#file1_'+ parentRecId).prop("disabled", true);
+                j$("#file2_"+ parentRecId).prop("disabled", true);
+                j$("#file3_"+ parentRecId).prop("disabled", true);
+                j$("#file4_"+ parentRecId).prop("disabled", true);
+            }
+            else if (pType == 2) {
+                j$('#divFilePromoStatusMsg2_' + parentRecId).text('圖片上傳中,請等待至結束,才能上傳下一張.');
+                j$("#file1_"+ parentRecId).prop("disabled", true);
+                j$("#file2_"+ parentRecId).prop("disabled", true);
+                j$("#file3_"+ parentRecId).prop("disabled", true);
+                j$("#file4_"+ parentRecId).prop("disabled", true);
+            }
+            else if (pType == 3) {
+                j$('#divFilePromoStatusMsg3_' + parentRecId).text('圖片上傳中,請等待至結束,才能上傳下一張.');
+                j$("#file1_"+ parentRecId).prop("disabled", true);
+                j$("#file2_"+ parentRecId).prop("disabled", true);
+                j$("#file3_"+ parentRecId).prop("disabled", true);
+                j$("#file4_"+ parentRecId).prop("disabled", true);
+            }
+            else if (pType == 4) {
+                j$('#divFilePromoStatusMsg4_' + parentRecId).text('圖片上傳中,請等待至結束,才能上傳下一張.');
+                j$("#file1_"+ parentRecId).prop("disabled", true);
+                j$("#file2_"+ parentRecId).prop("disabled", true);
+                j$("#file3_"+ parentRecId).prop("disabled", true);
+                j$("#file4_"+ parentRecId).prop("disabled", true);
+            }
+
+
+            console.log("Uploading " + attachmentBody.length + " chars of " + fileSize);
+            ASI_CRM_TW_PromotionStatus_Ctrl.insertAttachment(parentRecId, attachmentBody, attachmentName, pType, fileId,
+                    function(result, event) {
+                        console.log('result:' + result);
+                        if(event.type === 'exception') {
+                            console.log("exception");
+                            console.log(event);
+                        } else if(event.status) {
+                            console.log('event status :' + event.status);
+                            if(result.substring(0,3) == '00P') {
+                                if(doneUploading == false) {
+                                    positionIndex += chunkSize;
+                                    uploadAttachment(parentRecId, pType, result);
+                                }
+                            }
+                        }else {
+                            console.log('event :' + event.message);
+                        }
+                    },
+                    {buffer: true, escape: true, timeout: 120000}
+            );
+            
+            if (doneUploading == true)
+            {
+                attachmentName_EV = file.name;
+                var fileReader = new FileReader();
+                var fileReader_EV = new FileReader();
+
+                fileReader_EV.onload = function(readerEvent) {
+                    if (pType == 1 || pType == 2 || pType == 3 || pType == 4)
+                    {
+                        //attachmentName_EV = 'EV_PromoStatus_' + file.name;
+                        if(file.type == 'image/jpeg')                     
+                        	attachmentName_EV = 'EV_PromoStatus_OriImg.jpg';
+						else if(file.type == 'image/png')                      
+							attachmentName_EV = 'EV_PromoStatus_OriImg.png';
+                        else
+                            attachmentName_EV = 'EV_PromoStatus_OriImg' + file.type;                      
+
+                    }
+                    console.log('EV upload');
+                    
+                    var canvas = document.createElement('canvas');
+                    var ctx = canvas.getContext("2d");
+                    
+                    var img_EV = new Image();
+                    img_EV.onload = function (imageEvent) {
+                        var W_EV = img_EV.width;
+                        var H_EV = img_EV.height;
+                        console.log(W_EV+','+H_EV);
+                        canvas.width = W_EV;
+                        canvas.height = H_EV;
+                        ctx.drawImage(img_EV, 0, 0);
+                        attachment_EV = canvas.toDataURL(file.type);
+                        attachment_EV = attachment_EV.substring(attachment_EV.indexOf(',')+1,attachment_EV.length);
+                        
+                        positionIndex=0;
+                        fileSize = attachment_EV.length;
+                        console.log("Total Attachment Length: " + fileSize);               
+                        doneUploading_EV = false;
+                        if(fileSize < maxStringSize) {
+                            uploadAttachment_EV(parentRecId, pType, null);
+                        } else {
+                            alert("Base 64 Encoded file is too large.  Maximum size is " + maxStringSize + " your file is " + fileSize + ".");
+                        }
+                    }
+                    
+                    img_EV.src = readerEvent.target.result;
+                }
+                fileReader_EV.readAsDataURL(file);
+            }
+        }
+    </script>
+</apex:page>

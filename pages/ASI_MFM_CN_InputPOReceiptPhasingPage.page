@@ -1,0 +1,589 @@
+<apex:page standardController="ASI_MFM_PO__c" extensions="ASI_MFM_CN_InputPOReceiptPhasingCtl">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery1.10.2.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Jquery, 'jquery-ui1.10.4.min.js')}"/>
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    
+    <meta charset="UTF-8" />
+    
+    <head>
+        <script>
+		var isEditMode = false;        
+        var dateStart;
+        var dateEnd ;
+        var dateFyStart;
+        var dateFyEnd;
+        var poStartStr;
+        var poEndStr;
+        var poAmount;
+        var payedAmount;
+        var modifyBy;
+        var poid;
+        var prepaid;
+        var postatus;
+        var dateCurr;
+        var approvedRow = {};
+        var systemRow = {};
+        var approvedSystem = {};
+
+        var columns = [];
+        var savedRows = [];
+        var deletedRowIds = [];
+        var receiptDates = [];
+        var firstAmountColKey = '';
+        var cloneSavedRow = [];
+
+
+        var allDateCount = 0;
+        var amountMap = {};
+        var oTable;
+        function randomNum () {
+            return parseInt(Math.random()*10);
+        }
+        
+        
+        function fillAutoCountData(rowData) {
+            var indexCount = 0;
+            var keys = Object.keys(amountMap);
+            var passedAmount =0;
+            var paidAmountDiff =0;  // fix 20170725
+            var total = 0;
+            
+            var runningDate = new Date(dateFyStart.getFullYear(), dateFyStart.getMonth(), 1);
+            var poStartDate = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1);
+            var tmpAllDateCount = Number(allDateCount);
+                
+
+            while(runningDate<dateFyEnd){
+
+                var index = runningDate.getMonth()+1;
+                var key   = 'amount'+index;
+                if(runningDate<poStartDate) {
+                    if(payedAmount==0) {
+                        rowData[key]=0;
+                    } else {
+						passedAmount += parseFloat(rowData[key]);
+                        total += parseFloat(rowData[key]);
+                    }
+                } else if(runningDate>dateEnd) {
+                    rowData[key]=0;
+                } else if(amountMap[key]!=null){
+                    indexCount++;
+                    var amount = ((poAmount-passedAmount)-paidAmountDiff)*amountMap[key]/tmpAllDateCount; // fix 20170725
+                    
+                    if(prepaid){
+                        if(indexCount < keys.length){
+                            var strAmount = amount.toFixed(2);
+                            var pAmount = parseFloat(strAmount);
+                            rowData[key] = pAmount;
+                        }else{
+                            var strAmount = (poAmount-total).toFixed(2);
+                            var finalAmount = parseFloat(strAmount);
+                            rowData[key] = finalAmount;
+                        }
+                    } else {
+                        if(total>=poAmount) amount=0;
+                        if(indexCount < keys.length){
+                            var strAmount = amount.toFixed(2);
+                            var pAmount = parseFloat(strAmount);
+                            if(payedAmount>0 && pAmount<payedAmount && key==firstAmountColKey) {
+                                paidAmountDiff = payedAmount; // fix 20170725
+                                pAmount = payedAmount;                                 
+                                tmpAllDateCount -= amountMap[key]; // fix 20170725
+                            }
+                            rowData[key] = pAmount;
+                            
+                        }else{
+                            var strAmount = (poAmount-total).toFixed(2);
+                            var finalAmount = parseFloat(strAmount);
+                            rowData[key] = finalAmount;
+                        }
+                    }
+                    total += rowData[key];
+                    
+                }
+                
+                runningDate.setMonth(index);
+            }
+
+            rowData.total   = parseFloat(total.toFixed(2));
+            rowData.postart = poStartStr;
+            rowData.poend 	= poEndStr;
+            return rowData;
+        }
+        function resetRowAmount(dataRow) {
+            dataRow.amount1 = dataRow.amount2 = dataRow.amount3 = dataRow.amount4 = dataRow.amount5 = dataRow.amount6 = dataRow.amount7 = dataRow.amount8 = dataRow.amount9 = dataRow.amount10 = dataRow.amount11 = dataRow.amount12 = 0;
+        }
+        function defaultRow() {
+            var rowData = {
+                rowcontrol:0, version:0, modify:'', postart:'', poend:'',
+                amount1:0, amount2:0, amount3:0,
+  				amount4:0, amount5:0, amount6:0,
+                amount7:0, amount8:0, amount9:0,
+                amount10:0, amount11:0, amount12:0,
+                total :0, comment:'', id:'', poid:poid, approved:false
+            };
+            return rowData;
+		}
+        function cloneRowData(orgData) {
+            var nextVer = getNextVersion();
+            var newData = {
+                amount1  : orgData.amount1,   amount2  : orgData.amount2,
+                amount3  : orgData.amount3,   amount4  : orgData.amount4,
+                amount5  : orgData.amount5,   amount6  : orgData.amount6,
+                amount7  : orgData.amount7,   amount8  : orgData.amount8,
+                amount9  : orgData.amount9,   amount10 : orgData.amount10,
+                amount11 : orgData.amount11,  amount12 : orgData.amount12,
+                comment  : '',	  			  total	   : orgData.total,
+                version  : nextVer,			  modify   : modifyBy,
+            	postart  : poStartStr,		  poend    : poEndStr,
+                id 		 : '', 				  poid 	   : poid,
+                rowcontrol:0, 				  approved : false
+            };
+            var runningDate = new Date(dateFyStart.getFullYear(), dateFyStart.getMonth(), 1);
+            var poStartDate = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1);
+            while(runningDate<dateFyEnd){
+                var index = runningDate.getMonth()+1;
+                var key   = 'amount'+index;
+                if(runningDate<poStartDate && payedAmount==0) {
+                    newData[key]=0;
+                }
+                if(runningDate>dateEnd) {
+                    newData[key]=0;
+                }
+                
+                runningDate.setMonth(index);
+            }
+            newData.total = newData.amount1+newData.amount2+newData.amount3+newData.amount4+newData.amount5+newData.amount6+newData.amount7+newData.amount8+newData.amount9+newData.amount10+newData.amount11+newData.amount12;
+            return newData;
+        }
+        function rowCompare(systemRow, compareRow) {
+            if(systemRow==null || compareRow==null) return false;
+            return (systemRow.amount1==compareRow.amount1 && systemRow.amount2==compareRow.amount2 && systemRow.amount3==compareRow.amount3
+                   && systemRow.amount4==compareRow.amount4 && systemRow.amount5==compareRow.amount5 && systemRow.amount6==compareRow.amount6
+                   && systemRow.amount7==compareRow.amount7 && systemRow.amount8==compareRow.amount8 && systemRow.amount9==compareRow.amount9 
+                   && systemRow.amount10==compareRow.amount10 && systemRow.amount11==compareRow.amount11 && systemRow.amount12==compareRow.amount12);
+        }
+        function contructRow() {
+            var cloneDataFromPrevRow = cloneRowData(approvedRow);
+            var rowData;
+            //if(approvedRow!=null && payedAmount>0) {
+            if(approvedRow!=null) {
+                rowData = fillAutoCountData(cloneDataFromPrevRow);
+            } else {
+                rowData = fillAutoCountData(defaultRow());
+            }
+            return rowData;
+        }
+        function getDateCount(inDate){
+            return new Date(inDate.getFullYear(), inDate.getMonth()+1, 0).getDate();
+		}
+        function recalculateVersion() {
+            var rows = oTable.rows().data();
+            for(var i=0; i<rows.length; i++) {
+                var version = rows[i].version;
+                if(version-i>1) { rows[i].version=i+1; }
+			}
+            oTable.clear();
+            oTable.rows.add(rows).draw();
+        }
+        function getNextVersion() {
+            if(oTable==null) return 1;
+            var last_row = oTable.row(':last').data();
+            var lastVersion=0;
+            if(last_row) lastVersion = parseInt(last_row.version);
+            return lastVersion+1;
+        }
+        function addNewRow() {
+            var newData = contructRow();
+            oTable.row.add(newData).draw(false);
+        }
+        function cloneRow(cloneBtn) {
+            var orgData = oTable.row(cloneBtn.closest("td")).data();
+            var newData = cloneRowData(orgData);
+            oTable.row.add(newData).draw(false);
+        }
+        function deleteRow(deleteBtn) {
+            var removeData = oTable.row(deleteBtn.closest("td")).data();
+            if(removeData.id!=null&&removeData.id!='') {
+                deletedRowIds.push(removeData.id);
+            }
+            console.log(deletedRowIds);
+            oTable.row(deleteBtn.closest("td")).remove().draw();
+            recalculateVersion();
+        }
+        function inputChange(inputBox) {
+            var id 		= inputBox.id;
+            var value 	= inputBox.value;
+            var row 	= oTable.row(inputBox.closest("td"));
+            var rowData = row.data();
+            rowData[id] = value;
+            inputBox.value= value;
+            
+            if(id.includes("amount")){
+                value = Number(value);
+                //console.log('firstAmountColKey ' + firstAmountColKey);
+                //console.log('payedAmount ' + payedAmount);
+                if(payedAmount>0 && value<payedAmount && id==firstAmountColKey) {
+                    alert('Receipt Phasing amount cannot be smaller than paid amount: ' +payedAmount );
+                    value = payedAmount;
+                }
+                rowData[id] = value;
+                inputBox.value= value;
+                var total = 0;
+                for (var i=1; i<=12; i++) {
+                    var key = 'amount'+i;
+                    total += parseFloat(rowData[key]);
+                }
+                rowData.total = parseFloat(total.toFixed(2));
+				row.column(5).nodes()[row.index()].innerHTML = rowData.total;
+            }
+            console.log(value);
+		}
+        function renderTable(isEdit){
+            if(isEdit) {
+                $("[id$=editBtn]").removeClass("btn").addClass("hidden");
+                $("[id$=saveBtn]").addClass("btn").removeClass("hidden");
+                $("[id$=cancelBtn]").addClass("btn").removeClass("hidden");
+            } else {
+                $("[id$=saveBtn]").removeClass("btn").addClass("hidden");
+                $("[id$=cancelBtn]").removeClass("btn").addClass("hidden");
+                $("[id$=editBtn]").addClass("btn").removeClass("hidden");
+            }
+            oTable.column( 0 ).visible( isEdit );
+        }
+        function saveRow() {
+            var last_row = oTable.row(':last').data();
+            var lastAmount = last_row.total;
+            if(postatus=='Draft') {
+                submitData();
+            } else if(!last_row.approved && last_row.modify!='SYSTEM'){
+                var answer = confirm("PO Status will change to Draft, confirm?")
+                if (answer) {
+                    submitData();
+                }
+            } else {
+                submitData();
+                //cancelEdit();
+            }
+        }
+        
+        function submitData() {
+            
+            var rows = oTable.rows().data();
+            if(rows.length==0) {
+                alert('Please Insert New Receipt Phasing.');
+                return;
+            }
+
+            var lastRow = rows[rows.length-1];
+            var submitData = [];
+            for(var i=0; i<rows.length; i++) {
+                submitData.push(rows[i]);
+            }
+            savedRows = submitData;
+            
+            var submitObj = {
+                submitedList:savedRows,
+                deleteIdList:deletedRowIds,
+                poid:poid
+            }
+            
+            $('.waitingSearchDiv').show();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_CN_InputPOReceiptPhasingCtl.validate}',
+                JSON.stringify(submitObj), 
+                function(result, event){
+                    $('.waitingSearchDiv').hide();
+                    if (event.status) {
+                        if(result.success) {
+                            console.log(result.phasingList);
+                            savedRows  = result.phasingList;
+                            constructData();
+                            
+                            isEditMode = false;
+                            renderTable(isEditMode);
+                            oTable.clear();
+                            oTable.rows.add(savedRows).draw();
+
+                            if(postatus!='Draft'){
+                                window.top.location = '/{!pid}';
+                            }
+                            
+                        } else {
+                            alert(result.message);
+                        }
+                    } else if (event.type === 'exception') {
+                        alert(JSON.stringify(event));
+                    } else {
+                        alert('Fail to Save Receipt Phasing');
+                    }
+                }, 
+                {escape: true}
+            );
+        }
+
+        function cancelEdit() {
+            savedRows=[];
+            for(var i=0;i<cloneSavedRow.length;i++) {
+                savedRows.push(Object.assign({},cloneSavedRow[i]));
+            }
+            isEditMode = false;
+            renderTable(isEditMode);
+            oTable.clear();
+            oTable.rows.add(savedRows).draw();
+		}
+        function editRow() {
+            if(!isEditMode) {
+                if(postatus!='Draft' && !rowCompare(systemRow,approvedSystem)) {
+                	savedRows.push(systemRow);
+                }
+                isEditMode = true;
+                renderTable(isEditMode);
+                oTable.clear();
+                oTable.rows.add(savedRows).draw();
+            }
+        }
+        function configTable(initData) {
+            columns = [
+                { title: "rowcontrol",		"data": "rowcontrol"},
+                { title: "Version",			"data": "version" },
+                { title: "Modify By",		"data": "modify" },
+                { title: "PO Start Date",	"data": "postart" },
+                { title: "PO End Date",		"data": "poend" },
+                { title: "Total",			"data": "total" },
+                { title: "Jul",				"data": "amount7" },
+                { title: "Aug",				"data": "amount8" },
+                { title: "Sep",				"data": "amount9" },
+                { title: "Oct",				"data": "amount10" },
+                { title: "Nov",				"data": "amount11" },
+                { title: "Dec",				"data": "amount12" },
+                { title: "Jan",				"data": "amount1" },
+                { title: "Feb",				"data": "amount2" },
+                { title: "Mar",				"data": "amount3" },
+                { title: "Apr",				"data": "amount4" },
+                { title: "May",				"data": "amount5" },
+                { title: "Jun",				"data": "amount6" },
+                { title: "Comments",		"data": "comment" },
+
+            ];
+
+            var datatable = $('#datatable').removeAttr('width').DataTable({
+                scrollX: true,
+                searching: false,
+                paging: false,
+                ordering: false,
+                info: false,
+                data: initData,
+	            columns: columns,
+                fixedColumns: true,
+                "columnDefs":[
+                    {
+                        "targets": 0,
+                        'className': 'dt-body-center',
+                		"render": function ( data, type, row, meta ) {
+                            var editable = (row.modify !='SYSTEM' && !row.approved);
+                            var newData = '<a onclick="cloneRow(this)">Clone</a>';
+                            if(editable) {
+                                newData += '|<a onclick="deleteRow(this)">Delete</a>';
+                            }
+							return newData;
+                        }
+                    },
+                    {
+                        "targets": [6,7,8,9,10,11,12,13,14,15,16,17,18],
+                        "render": function ( data, type, row, meta ) {
+                            var editable = (row.modify !='SYSTEM' && !row.approved);
+                            var key = columns[meta.col].data;
+                            
+                            var newData = '';
+                            var inputType = 'text';
+                            if(editable) {
+                                var styleWidth = 'width:95%';
+                                if (key.includes("amount")) {
+                                	styleWidth = 'width:50px';
+                                    inputType = 'number';
+                                }
+                                if((amountMap[key]!=null || key=='comment') && isEditMode) {
+                                    if(data==null&&key=='comment') data='';
+                                    return '<input class="userinput" type="'+inputType+'" id="'+key+'" name="'+key+'" value="'+data+'" onchange="inputChange(this)" style="'+styleWidth+'; margin-right:5px;">';
+                                }
+                            }
+                            if (key.includes("amount")) { return parseFloat(data).toFixed(2); } 
+                            if (!data) { data = ''; }
+                            return data;
+                        }
+                    }
+                ]
+            });
+            $(datatable.column(0).header()).html("<a onclick='addNewRow()'>Add New</a>");
+        	return datatable;
+        }
+        function scanPrevRow(initDatas){
+            var approved = null;
+            var approvedSystem = null;
+            var system = null;
+            if(initDatas==null||initDatas.length==0) {
+                return { approvedRow : defaultRow(), systemRow : null };
+            } else {
+                for(var i=initDatas.length-1; i>=0; i--){
+                    if( initDatas[i].approved && initDatas[i].modify!='SYSTEM' && approved==null) approved=initDatas[i];
+                    if( initDatas[i].approved && initDatas[i].modify=='SYSTEM' && approvedSystem==null)   approvedSystem=initDatas[i];
+                    if(!initDatas[i].approved && initDatas[i].modify=='SYSTEM' && system==null)   system=initDatas[i];
+                }
+            }
+            if(approved==null)approved=defaultRow();
+            return { approvedRow : approved, systemRow : system, approvedSystem:approvedSystem };
+        }
+        function setupAmountMap(refRow) {
+            allDateCount = 0;
+
+            var passedDateCount = 0;
+            var amountMap = {};
+            var runningDate = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1);
+            var opEndDate = new Date(dateEnd.getFullYear(), dateEnd.getMonth(), 1);
+            if(opEndDate<dateCurr && runningDate<dateCurr) {
+                //console.log(dateCurr);
+                var index = dateCurr.getMonth()+1;
+                var key   = 'amount'+index;
+                allDateCount = 1;
+                amountMap[key] = 1;
+                return amountMap;
+            }
+            var firstMonthKey = null;
+            
+            payedAmount = {!poPaidAmount};
+            while(runningDate<dateEnd){
+                var index = runningDate.getMonth()+1;
+                var key   = 'amount'+index;
+                var receiptDateCount = getDateCount(runningDate);
+                
+                if(runningDate.getMonth()==dateStart.getMonth() && runningDate.getMonth()==dateEnd.getMonth() ) {
+                    receiptDateCount = dateStart.getDate()-(dateEnd.getDate()-1);
+                } else if(runningDate.getMonth()==dateStart.getMonth()) {
+                    receiptDateCount -= (dateStart.getDate()-1);
+                } else if (runningDate.getMonth()==dateEnd.getMonth()) {
+                    receiptDateCount = (dateEnd.getDate());
+                }
+                
+                var prevMonth = new Date(runningDate.getFullYear(), runningDate.getMonth()+1, 1);
+                if(prevMonth<dateCurr) {
+                    if(refRow[key]==0) {
+                        passedDateCount += receiptDateCount;
+                    } else if(refRow[key]>0) {
+                        passedDateCount = 0;
+                    }
+                    receiptDateCount = 0;
+                    if(payedAmount>0) {
+                        var approvedAmount = Number(refRow[key]);
+                        payedAmount -= approvedAmount;
+                    }
+                } else {
+                    if(passedDateCount>0) {
+                        receiptDateCount+=passedDateCount;
+                        passedDateCount=0;
+                    }
+                    if(firstMonthKey==null)firstMonthKey=key;
+                    amountMap[key]=receiptDateCount;
+                    allDateCount += receiptDateCount;
+                }
+                runningDate.setMonth(index);
+            }
+            if(payedAmount>0) {
+                payedAmount = Number(payedAmount.toFixed(2));
+            }
+            firstAmountColKey = firstMonthKey;
+            //console.log(amountMap);
+            return amountMap;
+        }
+        $(document).ready(function(){
+            $('.waitingSearchDiv').hide();
+            prepaid = {!prepaidPo};
+            poid = '{!pid}';
+            poStartStr = '{!poStartStr}';
+            poEndStr   = '{!poEndStr}';
+            modifyBy   = '{!modifyBy}';
+            poAmount   = {!poAmount};
+            postatus   = '{!poStatus}';
+            dateCurr   = new Date('{!currentDate}');
+            dateStart  = new Date('{!poStartDate}');
+            dateEnd    = new Date('{!poEndDate}');
+            dateFyStart= new Date('{!fyStartDate}');
+            dateFyEnd  = new Date('{!fyEndDate}');
+            payedAmount = {!poPaidAmount};
+            savedRows  = {!savedDatas};
+            var editable = {!editable};
+            console.log(prepaid);
+			constructData();
+            oTable = configTable(savedRows);
+            renderTable(isEditMode);
+            if(!editable){
+                $("[id$=editBtn]").removeClass("btn").addClass("hidden");
+            }
+
+        });
+        function constructData() {
+            var prevRow = scanPrevRow(savedRows);
+            approvedRow = prevRow.approvedRow;
+            amountMap   = setupAmountMap(approvedRow);
+            systemRow   = prevRow.systemRow;
+            approvedSystem = prevRow.approvedSystem;
+            
+            //console.log(amountMap);
+            
+            if(systemRow==null) {
+                var version = 1;
+                if(savedRows!=null && savedRows.length>0) {
+                    version = parseInt(savedRows[savedRows.length-1].version)+1;
+                }
+                if(approvedRow!=null) {
+                    systemRow = cloneRowData(approvedRow);
+                } else {
+                    systemRow = defaultRow();
+                }
+
+                fillAutoCountData(systemRow);
+
+                systemRow.modify = 'SYSTEM';
+                systemRow.version = version;
+                if(postatus=='Draft' && !rowCompare(systemRow,approvedSystem)) {
+                    savedRows.push(systemRow);
+                }
+            } else if(systemRow!=null) {
+                fillAutoCountData(systemRow);
+            }
+            cloneSavedRow=[];
+            for(var i=0;i<savedRows.length;i++) {
+                cloneSavedRow.push(Object.assign({},savedRows[i]));
+            }
+        }
+        function constructPage() {
+            if(postatus!='Draft'){
+                window.top.location = '/{!pid}';
+            }
+		}
+        </script>
+
+    </head>
+	<apex:pageMessages />
+    <apex:form id="pageMainForm">
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                <apex:commandButton id="editBtn" value="Edit" onclick="editRow(); return false;"/>
+                <apex:commandButton id="saveBtn" value="Save" onclick="saveRow(); return false;"/>
+                <apex:commandButton id="cancelBtn" value="Cancel" onclick="cancelEdit(); return false;"/>
+            </apex:pageBlockButtons>
+            <table id="datatable" class="display compact" style="width:100%">
+            </table>
+        </apex:pageBlock>
+    </apex:form>
+
+</apex:page>

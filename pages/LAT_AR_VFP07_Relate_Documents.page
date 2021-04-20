@@ -1,0 +1,271 @@
+<!-------------------------------------------------------------------------------------------------------------
+* Company: Zimmic
+* Nombre del pagina: LAT_AR_VFP07_Relate_Documents
+* Descripcion: Relaciona documentos con recibos
+* Fecha: 03/02/2015
+-------------------------------------------------------------------------------------------------------------->
+
+<apex:page id="relateDocsToReceipts" name="relateDocsToReceipts" controller="BTN03_AnaliticCCBtnController_AR"    standardStylesheets="true" showHeader="true">
+    
+<html ng-app="relateDocsToReceipts" class="ng-app"  id="ng-app" xmlns:ng="http://angularjs.org">
+    <head>
+        
+
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/jquery-1.7.1.min.js"></script>
+              
+        <script src="{!$Resource.LAT_Resources}/js/json3.js"></script>
+        
+
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/angular.js"></script>
+        <script type="text/javascript" src="{!$Resource.LAT_Resources}/js/angular-animate.js"></script>
+        
+        
+       <style>    
+       .sf1button {
+            cursor: pointer;
+            margin-top: 5px;
+            margin-bottom: 11px;
+            margin-left: 5px;
+            width: 80px;
+        }
+        .sf1buttonLarge {
+          width: 108px;
+      }
+
+        .zen-deemphasize{
+            cursor: pointer;
+        }
+
+
+       
+       </style>
+
+
+
+        <!--[if lte IE 8]>
+            <script>
+                document.createElement('ng-include');
+                document.createElement('ng-pluralize');
+                document.createElement('ng-view');
+ 
+                // Optionally these for CSS
+                document.createElement('ng:include');
+                document.createElement('ng:pluralize');
+                document.createElement('ng:view');
+            </script>
+        <![endif]-->
+
+        <script type="text/javascript">
+            //Get configuration from environment variables (via heroku or localhost env)
+            var configFromEnv = {}; 
+            configFromEnv.client_id    = "<%= client_id %>";
+            configFromEnv.app_url = "<%= app_url %>";
+            configFromEnv.sessionId = "{!$API.session_Id}";
+        
+    
+            $(document).ready(function() {
+              
+                if(jQuery.browser.msie){
+                    if(jQuery.browser.version == '7.0' || jQuery.browser.version == '8.0' || jQuery.browser.version == '9.0'){
+                        angular.bootstrap(document);
+                    }
+                }
+            
+            });
+            var app = angular.module('relateDocsToReceipts',[]);
+            app.constant('SFConfig', getSFConfig());
+            
+            function getSFConfig() {
+                var location = document.location;
+                var href = location.href;
+                if (href.indexOf('file:') >= 0) { //Phonegap 
+                    return {};
+                } else {
+                    if (configFromEnv.sessionId) {
+                        return {
+                            sessionId: configFromEnv.sessionId
+                        }
+                    } else {
+                        if (!configFromEnv || configFromEnv.client_id == "" || configFromEnv.client_id == "undefined"
+                            || configFromEnv.app_url == "" || configFromEnv.app_url == "undefined") {
+                            throw 'Environment variable client_id and/or app_url is missing. Please set them before you start the app';
+                        }
+                        return {
+                            sfLoginURL: 'https://login.salesforce.com/',
+                            consumerKey: configFromEnv.client_id,
+                            oAuthCallbackURL: removeTrailingSlash(configFromEnv.app_url) + '/#/callback',
+                            proxyUrl: removeTrailingSlash(configFromEnv.app_url) + '/proxy/'
+                        }
+                    }
+                }
+            }
+        
+            //Helper
+            function removeTrailingSlash(url) {
+                return url.replace(/\/$/, "");
+            }
+            
+            function getURLParameter(name) {
+              return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,""])[1].replace(/\+/g, '%20'))||null
+            }
+            
+            function Ctrl($scope,$location) {
+                $scope.predicate = 'Name';
+                $scope.idCliente = '';
+                $scope.fromAccount = (getURLParameter('idAccount') != null);
+
+
+                Visualforce.remoting.timeout = 120000;
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.BTN03_AnaliticCCBtnController_AR.getTitulos}', 
+                    getURLParameter('idRecibo'),
+                    getURLParameter('idAccount'),
+                    function(result, event){ 
+                        if (event.status) {
+                            if(result.length > 0)$scope.idCliente = result[0].Cliente__c;
+                            $scope.values = result;
+                            $scope.$apply();
+                        } else if (event.type == 'exception') {
+                            
+                        } 
+                    }, 
+                    {escape: false}
+                );
+                
+                $scope.relateValues = function(){
+                    var valArray = new Array();
+                     for(var i =0;i<$scope.values.length;i++){
+                        if($scope.values[i].Selected){
+                            valArray.push($scope.values[i].Id);
+                        }
+                     }
+                     Visualforce.remoting.timeout = 120000;
+                     Visualforce.remoting.Manager.invokeAction(
+                         '{!$RemoteAction.BTN03_AnaliticCCBtnController_AR.idPage}', 
+                            getURLParameter('idRecibo'),
+                            valArray,
+                         function(resultado, event){
+                             if(resultado =='OK' || (String(resultado).indexOf('Warning1')!=-1)){
+                                if((String(resultado).indexOf('Warning1')!=-1)){
+                                    resultado = String(resultado).replace('Warning1', '');
+                                    alert(resultado);
+                                }
+                                window.location.href = "/"+getURLParameter('idRecibo');
+                             }else{
+                                resultado = String(resultado).replace("Warning0", "");
+                                alert(resultado);
+                             }
+                     
+                         });
+                };
+
+                $scope.goBack = function(){
+                	window.location.href = "/" + $scope.idCliente;
+                }
+
+                $scope.goBackR = function(){
+                	window.location.href = "/" + getURLParameter('idRecibo');
+                }
+
+                $scope.generateReceipt = function(){
+                    var valArray = new Array();
+                    var idReg = '';
+                     for(var i =0;i<$scope.values.length;i++){
+                        if($scope.values[i].Selected){
+                            valArray.push($scope.values[i].Id);
+                            idReg += $scope.values[i].Id + ',';
+                        }
+                     }
+                     if(idReg.length >0)idReg = idReg.substring(0,idReg.length-1);
+                     if(valArray.length >0){
+                         Visualforce.remoting.timeout = 120000;
+                         Visualforce.remoting.Manager.invokeAction(
+                             '{!$RemoteAction.BTN03_AnaliticCCBtnController_AR.GenerateReceipt}', 
+                                valArray,
+                             function(resultado, event){
+                                 if(resultado == ''){
+                                    window.location.href = "/apex/VFC01_ReceiptRTSelection_AR?idAcc="+ $scope.idCliente + '&idArray=' + idReg;
+                                 }else{
+                                    alert(resultado);
+                                 }
+                         
+                             });
+                    }else{
+                        alert('{!$Label.LAT_AR_TIT_BTN01_001} '); 
+                    }
+                };
+                
+                $scope.toggleSelection = function(a){
+                    a.Selected = !a.Selected;
+                };
+            }
+            
+            
+
+        </script>
+
+    </head>
+        
+    <apex:form >
+        <div ng-controller="Ctrl">
+            <apex:pageBlock >
+            <input ng-hide="{{fromAccount}}" class="sf1button" style="cursor:pointer;" type="button"  ng-click="relateValues();" value="Relacionar"/>
+            <input ng-hide="{{fromAccount}}" class="sf1button" style="cursor:pointer;" type="button"  ng-click="goBackR();" value="Cancelar"/>
+
+            <input ng-show="{{fromAccount}}" class="sf1button sf1buttonLarge" style="cursor:pointer;" type="button"  ng-click="generateReceipt();" value="Generar Recibo"/> 
+
+            <input ng-show="{{fromAccount}}" class="sf1button sf1buttonLarge" style="cursor:pointer;" type="button"  ng-click="goBack();" value="Cancelar"/> 
+            
+            <table class="list" border="0" cellspacing="0" cellpadding="0">
+                <tbody>
+                    <tr class="headerRow">
+                        <th scope="col" class=" zen-deemphasize" style="width: 20px;"></th>
+                        <th ng-click="predicate='Name';reverse=!reverse" scope="col" class=" zen-deemphasize">Numero de Analitico</th>
+                        <th ng-click="predicate='tipoDocumento__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Tipo Doc.</th>
+                        <th ng-click="predicate='LegalInvoice_AR__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Documento Legal</th>
+                        <th ng-click="predicate='valorOriginalTitulo__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Importe Original</th>
+                        <th ng-click="predicate='NetSRReceipts_AR__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Pendiente Recibo SF</th>
+                        <th ng-click="predicate='NetOpenBalance_AR__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Saldo Neto de Recibos CRM</th>
+                        <th ng-click="predicate='PaymentID_AR__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Id de Pago</th>
+                        <th ng-click="predicate='Ruinusebypendingreceipt_AR__c';reverse=!reverse" scope="col" class=" zen-deemphasize">RU en uso por Recibo Pendiente</th>
+                        <th ng-click="predicate='dataEmissao__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Fecha Emisión</th>
+                        <th ng-click="predicate='valorSaldo__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Saldo</th>
+                        <!--<th ng-click="predicate='AN8__c';reverse=!reverse" scope="col" class=" zen-deemphasize">AN8</th>
+                        <!--<th ng-click="predicate='Cliente__r.Name';reverse=!reverse" scope="col" class=" zen-deemphasize">Cliente</th>-->
+                        <!--<th ng-click="predicate='dataVencimentoOriginal__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Fecha Vto. Original</th>-->
+                        <!--<th ng-click="predicate='dataVencimentoAtual__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Fecha Vencimiento</th>-->
+                        <!--<th ng-click="predicate='diasAtraso__c';reverse=!reverse" scope="col" class=" zen-deemphasize">Dias Vencido</th>-->
+                    </tr>
+                    <tr ng-repeat="v in values | orderBy:predicate:reverse" class="dataRow even last first" onblur="if (window.hiOff){hiOff(this);}" onfocus="if (window.hiOn){hiOn(this);}" onmouseout="if (window.hiOff){hiOff(this);}" onmouseover="if (window.hiOn){hiOn(this);}">
+                        <td><input 
+                            type="checkbox"
+                            value="{{v.Selected}}"
+                            ng-checked="{{v.Selected}}" 
+                            ng-click="toggleSelection(v);"
+                          /></td>
+                        <td class=" dataCell">
+                            <a href="/{{v.Id}}" target="_parent">{{v.Name}}</a>
+                        </td>
+                        <td class=" dataCell  ">{{v.tipoDocumento__c}}</td>
+                        <td class=" dataCell  ">{{v.LegalInvoice_AR__c}} </td>
+                        <td class=" dataCell  ">{{v.CurrencyIsoCode}} {{v.valorOriginalTitulo__c | currency}} </td>
+                        <td class=" dataCell  ">{{v.CurrencyIsoCode}} {{v.NetSRReceipts_AR__c | currency}} </td>
+                        <td class=" dataCell  ">{{v.CurrencyIsoCode}} {{v.NetOpenBalance_AR__c | currency}} </td>
+                        <td class=" dataCell  ">{{v.PaymentID_AR__c}} </td>
+                        <td class=" dataCell  ">
+                        	 <a href="/{{v.Ruinusebypendingreceipt_AR__c}}" target="_parent">{{v.Ruinusebypendingreceipt_AR__r.Name}}</a>
+                         </td>
+                        <td class=" dataCell  ">{{v.dataEmissao__c | date: 'dd/MM/yyyy'}}</td>
+                        <td class=" dataCell  ">{{v.CurrencyIsoCode}} {{v.valorSaldo__c | currency}}</td>
+
+                    </tr>
+                 </tbody>
+            </table>
+            
+            </apex:pageBlock>
+        
+        </div>
+    </apex:form>
+</html>
+    
+</apex:page>

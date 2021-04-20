@@ -1,0 +1,2802 @@
+<!--
+/*********************************************************************************
+ * Name: ASI_CRM_SG_BuildContractPage
+ * Description: SG CRM: Build Contract Page 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * ??????????       Laputa                  Created
+ * 2016-02-05       Laputa: Vincent         [VL 1.0] Add extra column (Duty) to SKU tab and do calculation
+ * 2016-02-10       IPC: DC                 [DC 1.0] Add extra columns (FOB and Handling Cost) to SKU tab and do calculation
+ * 2016-02-11       Laputa: Vincent         [VL 2.0] Remove DC's debug alert
+ * 2016-02-12       IPC: DC                 [DC 2.0] Added extra column (No.) to SKU tab
+ * 2016-02-16       IPC: DC                 [DC 3.0] Added extra columns (Schedule Date, Achieved, Request Payment, Payment Issued)
+ *                                                   to Payment Schedule tab.
+ * 2016-02-18       IPC: DC                 [DC 4.0] Added logic for "Request Payment" button.
+ * 2016-02-23       Laputa: Vincent         [VL 5.0] Enable "Request Payment" button in display mode.
+ * 2016-02-18       IPC: DC                 [DC 4.1] Changed logic for "Request Payment" button to redirect complete page.
+ * 2016-02-26       Laputa: Vincent         [VL 6.0] For tab A&P, separate Signage and Advertising Spot
+ * 2016-02-29       Laputa: Vincent         ********* This part is done on 2016-02-26, but it is overwritten. So I have to rework today ***********
+ *                                          [VL 6.1] For tab Contract Margin, add Bottle Incentive and Bottle Incentive - Total columns
+ *                                          [VL 6.2] Disable "Request Payment" button in edit mode.
+ *                                          ********* The above part is done on 2016-02-26, but it is overwritten. So I have to rework today ***********
+ * 2016-03-15       Laputa: Vincent         [VL 7.0] Hide Sequence No. in SKU tab
+ * 2016-04-15       Laputa: Vincent         [VL 8.0] Hide columns Achieved / Request Payment / Payment Issued of Payment Schedule for Proposal
+ * 2016-06-10       Laputa: Hugo            [HC 1.0] Output number with 2 decimal place and align right
+ * 2016-06-10       Laputa: Hugo            [HC 2.0] Auto adjust section block width
+ * 2016-08-08       Laputa: Vincent         [VL 9.0] Enhance performance at initial load - remove all change trigger on load
+ * 2016-08-09       Laputa: Hugo            [HC 3.0] Add flag to identify the load status
+ * 2016-12-14       Laputa: Vincent         Change Sub-brand from select-option to auto-complete
+ * 2017-04-09		Laputa: Vincent			[VL 10.0] Add WS-OT price column; update consumer price offer calculation
+ * 2017-05-03		Laputa: Vincent			[VL 11.0] Add Remarks in payment schedule cash
+ * 2017-05-12		Laputa: Vincent			[VL 12.0] Add ROI%
+ * 20/11/2017       Wilken Lee             	[WL 1.0] Apply validation to prevent change in Sales Case or delete target in simulation
+ */
+-->
+<apex:page standardController="ASI_TH_CRM_Contract__c" extensions="ASI_CRM_SG_BuildContractController" sidebar="false" showheader="false" id="mainPage">
+    <apex:outputField value="{!ASI_TH_CRM_Contract__c.name}" rendered="false"/>
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/styles/common.css')}" />
+
+
+<link href="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+<style>
+body {
+    margin-top: 40px;
+    font-size: 12px;
+    font-family: Helvetica,Arial,Verdana,sans-serif;
+    width:100%;
+}
+        
+.loadingOverlay{
+    opacity: 0.4;
+    postion: absolute;
+    top:0px;
+    left:0px;
+    background-color:#001100;
+    width:100%;
+    z-index: 5000
+}
+
+#container1{
+    width:100%;
+}
+
+#tabLink{
+    font-size: 10px;
+}
+
+.overlay {
+            display: none;
+            height: 100%;
+            left: 0;
+            position: fixed;
+            top: 0;
+            opacity: 0.3;
+            -moz-opacity: 0.3;
+            width: 100%;
+            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+            filter: alpha(opacity=30);
+            background: #000;
+            -khtml-opacity: 0.3;
+            z-index: 1000;
+        }
+.loader {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+    left: 50%;
+}
+
+/* [HC 2.0] BEGIN */
+#mechanicTypeTabs {
+    min-width: 100%;
+    display:table;
+}
+/* [HC 2.0] END */
+
+.inputField_short {
+	width: 50px;
+}
+
+.inputField_medium {
+	width: 75px;
+}
+
+</style>
+
+</head>
+
+<body style="font-size: x-small !important"> 
+    <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+
+    <apex:actionStatus id="loadingSave" onstart="startLoading();" onstop="setTimeout(function() { endLoading(); }, 5000);" />
+
+    <apex:variable var="testing" value="{!allContractTargetMap}" />
+     
+    <apex:pageMessages id="pageMsg"></apex:pageMessages>
+    
+    <apex:form id="mainForm">
+
+    <apex:actionFunction name="requestPayment" action="{!requestPayment}"
+                         oncomplete="if ('{!REQUESTEDPAYMENTID_VF}'!='') window.open('/{!REQUESTEDPAYMENTID_VF}', '_parent');" reRender="pageMsg, panel0">
+        <!-- <apex:param name="paymentId" value="" /> -->
+        <apex:param name="scheduleId" value="" />
+        <apex:param name="prevScheduleId" value="" />
+    </apex:actionFunction>
+
+    <apex:outputPanel id="panel0">
+        <apex:inputHidden id="paymentRequestId" value="{!paymentRequestInstance.Id}" />
+        <script>
+            
+        </script>
+    </apex:outputPanel>
+
+    <div id="contentLoading" style="display:none;">
+        <div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    
+    <div id="load_scrl" class="loadingBox loader" style="display:none"><div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    <div class="loadingBox overlay"> </div>
+    
+    <apex:actionFunction name="retrieveSKUbySubBrand" action="{!retrieveSKUbySubBrand}" oncomplete="setTables();"/>
+    <apex:actionFunction name="saveContract" action="{!saveContract}" reRender="pageMsg">
+        <apex:param name="IS_QUICK_SAVE" value=""/>
+    </apex:actionFunction>
+     <apex:actionFunction name="quickSaveContract" action="{!saveContract}" oncomplete="" reRender="pageMsg">
+        <apex:param name="IS_QUICK_SAVE" value=""/>
+    </apex:actionFunction>
+        <!--
+        <center>
+        <apex:commandButton value="Save" 
+            oncomplete="console.log('Save Done');"
+            status="loading"
+            id="saveButton"
+            onclick="beforeSaveContract(false);">
+        </apex:commandButton>
+        <apex:commandButton value="Quick Save" 
+            oncomplete="console.log('Quick Save Done'); hideShowDtCol(showColStart,showColEnd);"
+            status="loading"
+            id="quickSaveButton"
+            onclick="beforeSaveContract(true);">
+        </apex:commandButton>
+        <apex:commandLink value="Cancel" action="{!cancel}" 
+            immediate="true"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;"/>
+            </center>-->
+       
+    <apex:pageBlock id="main_pageBlock">
+         <apex:pageblockButtons rendered="{!isEdit}" id="mainPageBlockButton">
+        <!--
+        <apex:commandLink value="Save" 
+            status="loading"
+            action="{!saveContract}"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;">
+            <apex:param name="IS_QUICK_SAVE" value="false"/>
+        </apex:commandLink>
+        <apex:commandButton value="Quick Save" 
+            rerender="pageMsg"
+            oncomplete="console.log('Quick Save Done');"
+            status="loading"
+            action="saveContract">
+            
+            <apex:param name="IS_QUICK_SAVE" value="true"/>
+        </apex:commandButton>
+		-->
+        <apex:commandButton value="Save" 
+            oncomplete="console.log('Save Done'); hideShowDtCol(showColStart,showColEnd);"
+            status="loadingSave"
+            id="saveButton"
+            onclick="beforeSaveContract(false);">
+        </apex:commandButton>
+        <apex:commandButton value="Quick Save" 
+            oncomplete="console.log('Quick Save Done'); hideShowDtCol(showColStart,showColEnd);"
+            status="loadingSave"
+            id="quickSaveButton"
+            onclick="beforeSaveContract(true);">
+        </apex:commandButton>
+        <apex:commandLink value="Cancel" action="{!cancel}" 
+            immediate="true"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;"/>
+        </apex:pageblockButtons>
+        
+        <apex:pageBlockSection columns="1">
+            <apex:outputField value="{!contractObj.Name}"/>
+
+            
+        </apex:pageBlockSection>
+        
+        <div id="mechanicTypeTabs" class="tabLink" >
+            <ul>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU" onclick="hideShowDtCol(3,9)">SKU</a></apex:outputPanel></li>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU" onclick="hideShowDtCol(10,15)">Free Goods</a></apex:outputPanel></li>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU" onclick="hideShowDtCol(16,24)">Contract Margin</a></apex:outputPanel></li>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU" onclick="hideShowDtCol(25,27)">Cash Sponsorship</a></apex:outputPanel></li>
+                <li><apex:outputPanel rendered="true"><a href="#tab_SKU" onclick="hideShowDtCol(28,40)">A&amp;P</a></apex:outputPanel></li>
+                <li><apex:outputPanel rendered="true"><a href="#tab_PaymentSchedule">Payment Schedule</a></apex:outputPanel></li>
+                <apex:outputtext rendered="{!isParentOutlet}">
+                <li><apex:outputPanel rendered="true"><a href="#tab_ContractOutlet">Contract Outlets</a></apex:outputPanel></li>
+                </apex:outputtext>
+            </ul>
+            
+            <div id="tab_SKU">
+                    <apex:pageBlock id="pageBlock_SKU"> 
+                        <apex:pageBlockSection id="section_lineItem_SKU" title="Contract Line Items" columns="1">
+                            
+                            <apex:outputPanel layout="block" id="outputPanelMain">
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU" width="100%">
+                                    <apex:repeat var="cpiKey" value="{!allContractTargetMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractTargetMap[cpiKey]}">
+                                    <tr id="row_SKU_{!cpiKey}" class="cpiContent">
+                                        <td>
+											<!--[WL 1.0] BEGIN-->
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeContractSKU}"
+                                            rerender="outputPanelMain, pageMsg"
+                                            onComplete="console.log('Remove CPI'); setSKUTable();"
+                                            status="loading"											
+											rendered="{!isEdit && cpiObj.contractTarget.ASI_CRM_Block_Delete__c == false}">
+                                                <apex:param name="PARAM_CONTRACT_ID" value="{!cpiKey}" />
+                                                <apex:param name="PARAM_CONTRACT_SKU_ID" value="{!cpiObj.contractTarget.ASI_CRM_SKU__c}" />
+                                                <apex:param name="PARAM_CONTRACT_SUBBRAND_ID" value="{!cpiObj.targetSubBrandSelected}" />
+                                            </apex:commandLink>
+											<!--rendered="{!isEdit}">-->
+											<!--[WL 1.0] END-->
+                                        </td>
+                                        <td><apex:outputField value="{!cpiObj.contractTarget.ASI_CRM_SKU__c}"/></td>
+                                       <!--<td><apex:inputField value="{!cpiObj.ASI_CRM_SG_FOC_Calculation__c}"
+                                            required="false"
+                                            styleclass="cpiVolume"
+                                            onChange="$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_FreeGoods_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}')));">
+                                            </apex:inputField>
+                                        </td> -->
+                                        <!-- [VL 12.0] BEGIN -->
+                                        <td align="right">
+                                            <span class="ROI numbers" id="ROI_{!cpiKey}">{!ROUND(IF(cpiObj.contractTarget.ASI_CRM_SG_Net_Sales__c = 0, 0, (cpiObj.contractTarget.ASI_CRM_SG_Gross_Margin__c - cpiObj.contractTarget.ASI_CRM_SG_Trade_A_P_Total_PRS__c)*100/cpiObj.contractTarget.ASI_CRM_SG_Net_Sales__c),2)}%</span>
+                                        </td>
+                                        <!-- [VL 12.0] END -->
+                                        <!-- [VL 7.0] BEGIN -->
+                                        
+                                        <td>
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_Sequence_No__c}"
+                                            required="false"
+                                            styleclass="SequenceNo inputField_short">
+                                            </apex:inputField>
+                                        </td>
+                                        
+                                        <!-- [VL 7.0] END -->
+                                        <td><!--
+                                            <apex:selectList value="{!cpiObj.targetSubBrandSelected}" size="1" label="Sub-Brand" id="subBrandBlock" styleClass="subBrandPick"
+                                            onChange="validateSubBrand($('#row_SKU_{!cpiKey}'), '{!cpiKey}'); ">
+                                                <apex:selectOptions value="{!SubBrandSelectOptions}"></apex:selectOptions>
+                                            </apex:selectList>
+                                            <span class="subBrandPickSKU" style="display: none;">{!cpiObj.contractTarget.ASI_CRM_SKU__r.ASI_MFM_Sub_brand__c}</span>-->
+                                            <apex:inputText value="{!cpiObj.targetSubBrandNameSelected}" id="subBrandBlock" styleClass="subBrandPick" style="width: 255px !important;">
+                                            </apex:inputText>
+                                        </td>
+                                        <td>
+                                            <!-- [VL 1.0] BEGIN -->
+                                            <!--
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_TargetCase__c}"
+                                            required="false"
+                                            styleclass="SalesCases"
+                                            onchange="$('#TargetSales9L_{!cpiKey}').text(calculateTotalSpend($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}')); 
+                                            $('#CompensationForWS_{!cpiKey}').text(calculateCompensationForWSPriceDiff($('#row_ContractMargin_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#WholesalersMarginTotal_{!cpiKey}').text(calculateWholeMargTotal($('#row_ContractMargin_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            summarizeSKU();$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_FreeGoods_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}')));">
+                                            </apex:inputField>
+                                            -->
+                                            <!-- [DC 1.0] BEGIN (Added calls to methods which calculate FOB and Handling Cost) -->
+											<!-- [WL 1.0] BEGIN-->
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_TargetCase__c}"
+                                            required="false"
+                                            styleclass="SalesCases inputField_medium"
+											html-disabled="true" 
+											rendered="{!cpiObj.contractTarget.ASI_CRM_Block_Delete__c == true}"
+                                            onchange="$('#TargetSales9L_{!cpiKey}').text(calculateTotalSpend($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}')); 
+                                            $('#TargetDuty_{!cpiKey}').text(calculateTotalDuty($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TargetFOB_{!cpiKey}').text(calculateTotalFob($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TargetHandlingCost_{!cpiKey}').text(calculateTotalHandlingCost($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#CompensationForWS_{!cpiKey}').text(calculateCompensationForWSPriceDiff($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#WholesalersMarginTotal_{!cpiKey}').text(calculateWholeMargTotal($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}')));
+											$('#BottleIncentiveTotal_{!cpiKey}').text(calculateBottleIncentive($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+											summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');">
+                                            </apex:inputField>
+											
+											<apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_TargetCase__c}"
+                                            required="false"
+                                            styleclass="SalesCases inputField_medium"
+											rendered="{!cpiObj.contractTarget.ASI_CRM_Block_Delete__c == false}"
+                                            onchange="$('#TargetSales9L_{!cpiKey}').text(calculateTotalSpend($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}')); 
+                                            $('#TargetDuty_{!cpiKey}').text(calculateTotalDuty($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TargetFOB_{!cpiKey}').text(calculateTotalFob($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TargetHandlingCost_{!cpiKey}').text(calculateTotalHandlingCost($('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#CompensationForWS_{!cpiKey}').text(calculateCompensationForWSPriceDiff($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#WholesalersMarginTotal_{!cpiKey}').text(calculateWholeMargTotal($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}')));
+											$('#BottleIncentiveTotal_{!cpiKey}').text(calculateBottleIncentive($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+											summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');">
+                                            </apex:inputField>
+											
+											<!-- [WL 1.0] BEGIN-->
+                                            <!-- [VL 1.0] END -->
+                                        </td>
+                                        <td align="right">
+                                            <span class="Sales9L numbers" id="TargetSales9L_{!cpiKey}">{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_9L_Cases__c}</span>
+                                        </td>
+                                        <!-- [VL 1.0] BEGIN -->
+                                        <td align="right">
+                                            <span class="Duty numbers" id="TargetDuty_{!cpiKey}">{!cpiObj.contractTarget.ASI_CRM_Total_Duty__c}</span>
+                                        </td>
+                                        <!-- [VL 1.0] END -->
+                                        <!-- [DC 1.0] BEGIN -->
+                                        <td align="right">
+                                            <span class="FOB numbers" id="TargetFOB_{!cpiKey}">{!cpiObj.contractTarget.ASI_CRM_Total_FOB__c}</span>
+                                        </td>
+                                        <td align="right">
+                                            <span class="HandlingCost numbers" id="TargetHandlingCost_{!cpiKey}">{!cpiObj.contractTarget.ASI_CRM_Total_Handling_Cost__c}</span>
+                                        </td>
+                                        <!-- [DC 1.0] END -->
+                                        
+                                        
+                                        <td>
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_SG_Sales_Incentive__c}"
+                                            styleclass="SalesIncentive inputField_medium"
+                                            onchange="$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}'))); summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_SG_Management_Incentives__c}"
+                                            styleclass="ManagementIncentives inputField_medium"
+                                            onchange="$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}'))); summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_SG_Cont_Sponsor_Target_Incentive__c}"
+                                            styleclass="SponsorTargetIncentive inputField_medium"
+                                            onchange="$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}'))); summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField value="{!cpiObj.contractTarget.ASI_CRM_SG_Others__c}"
+                                            styleclass="Others inputField_medium"
+                                            onchange="$('#TotalFreeGoodCases_{!cpiKey}').text(calculateTotalFreeGoods($('#row_SKU_{!cpiKey}'), $('#TotalFreeGood9LCases_{!cpiKey}'),
+                                            '{!cpiObj.contractTarget.ASI_CRM_SG_Target_Sales_Cases_FOC__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', $('#row_SKU_{!cpiKey}'))); summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td align="right">
+                                            <span class="numbers" id="TotalFreeGoodCases_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Total_Free_Goods_Cases__c}</span>
+                                        </td>
+                                        <td align="right">
+                                            <span class="numbers" id="TotalFreeGood9LCases_{!cpiKey}" styleclass="freeGoods9L" >{!cpiObj.contractTarget.ASI_CRM_SG_Total_Free_Goods_9L_Cases__c}</span>
+                                        </td>
+                                        
+										<!-- [VL 10.0] BEGIN -->
+                                        <td>
+                                            <apex:inputField styleclass="consumerPriceOffer inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c}"
+                                            onChange="$('#CompensationForWS_{!cpiKey}').text(calculateCompensationForWSPriceDiff($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                                        $('#ContractMarginPer9L_{!cpiKey}').text(calculateConMargPer9Lc($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}'));
+                                                        $('#ContractMarginTotal_{!cpiKey}').text(calculateConMargTotal('CompensationForWS_{!cpiKey}','WholesalersMarginTotal_{!cpiKey}'));
+                                                        summarizeSKU();
+														calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+										<!--
+                                        <td>
+                                            <apex:inputField styleclass="consumerPriceOffer inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Consumer_Price_Offer__c}"
+                                            onChange="$('#CompensationForWS_{!cpiKey}').text(calculateCompensationForWSPriceDiff($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                                        $('#ContractMarginPer9L_{!cpiKey}').text(calculateConMargPer9Lc($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}'));
+                                                        $('#ContractMarginTotal_{!cpiKey}').text(calculateConMargTotal('CompensationForWS_{!cpiKey}','WholesalersMarginTotal_{!cpiKey}'));
+                                                        summarizeSKU();"/>
+                                        </td>
+										-->
+                                        <td align="right">
+                                            <span class="numbers" id="PriceWSOT_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}</span>
+                                        </td>
+										<!-- [VL 10.0] END -->
+                                        <td align="right">
+                                            <span class="CompensationForWS numbers" id="CompensationForWS_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Compensation_for_WS_Price_Dif__c}</span>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="wholesalerMargin inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Wholesaler_Margin__c}"
+                                            onChange="$('#WholesalersMarginTotal_{!cpiKey}').text(calculateWholeMargTotal($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                            $('#ContractMarginPer9L_{!cpiKey}').text(calculateConMargPer9Lc($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'),'{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}','{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}'));
+                                            $('#ContractMarginTotal_{!cpiKey}').text(calculateConMargTotal('CompensationForWS_{!cpiKey}','WholesalersMarginTotal_{!cpiKey}'));
+                                            summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td align="right">
+                                            <span class="WholesalersMarginTotal numbers" id="WholesalersMarginTotal_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Wholesaler_Margin_Total__c}</span>
+                                        </td>
+                                        <td align="right">
+                                            <span class="numbers" id="ContractMarginPer9L_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Contract_Margin_per_9Lc__c}</span>
+                                        </td>
+                                        <td align="right">
+                                            <span class="numbers" id="ContractMarginTotal_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Contract_Margin_Total__c}</span>
+                                        </td>
+                                        <!-- [VL 6.1] BEGIN -->
+                                        <td>
+                                            <apex:inputField styleclass="bottleIncentive inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_Bottle_Incentive__c}"
+                                            onChange="$('#BottleIncentiveTotal_{!cpiKey}').text(calculateBottleIncentive($('#row_SKU_{!cpiKey}'), $('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}'));
+                                                        summarizeSKU();
+														calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td align="right">
+                                            <span class="BottleIncentiveTotal numbers" id="BottleIncentiveTotal_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_Bottle_Incentive_Total__c}</span>
+                                        </td>
+                                        <!-- [VL 6.1] END -->
+                                        
+                                        <td>
+                                            <apex:inputField styleclass="GoodinKinds inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Good_in_Kinds__c}"
+                                            onChange="$('#sponsorshipTotal_{!cpiKey}').text(calculateCashSponsTotal($('#row_SKU_{!cpiKey}')));summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="cashSponsorhip inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Cash__c}"
+                                            onChange="$('#sponsorshipTotal_{!cpiKey}').text(calculateCashSponsTotal($('#row_SKU_{!cpiKey}')));summarizeSKU();
+											calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td align="right">
+                                            <span class="numbers" id="sponsorshipTotal_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Cash_Sponsorship_Total__c}</span>
+                                        </td>
+                                        
+                                        <td>
+                                            <apex:inputField styleclass="eventsBottle inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Events_Free_Bottles__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="eventsValue inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Events__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="signageAdvertisingBottle inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Signages_Ad_Spot_Free_Btl__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="signageAdvertisingValue inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Signages_Advertising_Spot__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+            <!-- [VL 6.0] BEGIN -->
+                                        <td>
+                                            <apex:inputField styleclass="advertisingBottle inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_Advertising_Spot_Free_Bottles__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="advertisingValue inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_Advertising_Spot__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+            <!-- [VL 6.0] END -->
+                                        <td>
+                                            <apex:inputField styleclass="anniversaryBottle inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Anniversary_Free_Bottles__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="tradeIncentiveTrips inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Trade_Incentive_Trips__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="productBrandingDisplay inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Product_Branding_Display__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="adhocPromo inputField_medium" value="{!cpiObj.contractTarget.ASI_CRM_SG_Ad_hoc_Promotions__c}"
+                                                onChange="$('#tradePromoTotal_{!cpiKey}').text(calculateTradePromoTotal($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_WS_On_Trade__c}'));
+                                                $('#tradePromoTotalPRS_{!cpiKey}').text(calculateTradePromoTotalPRS($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}'));
+                                                summarizeSKU();
+												calculateROI($('#row_SKU_{!cpiKey}'), '{!cpiObj.contractTarget.ASI_CRM_SG_Size_cl__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Btls_Per_Case__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_Selling_Price_Btl_PRS_WS__c}', '{!cpiObj.contractTarget.ASI_CRM_Duty_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_FOB_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_Handling_Cost_Per_Bottle__c}', '{!cpiObj.contractTarget.ASI_CRM_SG_IGC_Cost_Per_case__c}');"/>
+                                        </td>
+                                        <td align="right">
+                                            <span style="width:80px;" class="tradeAdvertPromoTotal numbers" id="tradePromoTotal_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Trd_Adv_Promo_Total__c}</span>
+                                        </td>
+                                        <td align="right">
+                                            <span style="width:80px;" class="tradeAdvertTotal numbers" id="tradePromoTotalPRS_{!cpiKey}" >{!cpiObj.contractTarget.ASI_CRM_SG_Trd_Adv_Promo_TotalPRS__c}</span>
+                                        </td>
+                                        
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                    <tfoot>
+                                        <tr>
+                                        <th style="text-align:right;" colspan="1" rowspan="1"><apex:outputLabel value="Total Value: "/></th>
+                                        <th></th>
+                                        <!-- [VL 12.0] BEGIN -->
+                                        <th></th>
+                                        <!-- [VL 12.0] END -->
+                                        <!-- [VL 7.0] BEGIN -->
+                                        
+                                        <th id="footer_total_SequenceNo" rowspan="1" colspan="1">
+                                            
+                                        </th>
+                                        
+                                        <!-- [VL 7.0] END -->
+                                        <th></th>
+                                        <th id="footer_total_Sales" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_TargetSales"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_TargetSales9L"/>
+                                            </div>
+                                        </th>
+                                        <!-- [VL 1.0] BEGIN -->
+                                        <th id="footer_total_TotalDuty" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_TotalDuty"/>
+                                            </div>
+                                        </th>
+                                        <!-- [VL 1.0] END -->
+                                        <!-- [DC 1.0] BEGIN -->
+                                        <th id="footer_total_TotalFOB" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_TotalFOB"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_TotalHandlingCost" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_TotalHandlingCost"/>
+                                            </div>
+                                        </th>
+                                        <!-- [DC 1.0] END -->
+                                        <th></th>
+                                        <!-- [VL 10.0] BEGIN -->
+                                        <th></th>
+                                        <!-- [VL 10.0] END -->
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th id="footer_total_Sales" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_eventsCases"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_eventsValue"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_signageCases"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_SignageValue"/>
+                                            </div>
+                                        </th>
+        <!-- [VL 6.0] BEGIN -->
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_advertisingCases"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_advertisingValue"/>
+                                            </div>
+                                        </th>
+        <!-- [VL 6.0] END -->
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_AnniversaryCases"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_tradeIncentive"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_productBrandingDisplay"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_adHoc"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_tradeAPTotal"/>
+                                            </div>
+                                        </th>
+                                        <th id="footer_total_Sales9L" rowspan="1" colspan="1">
+                                            <div align="right">
+                                                <span class="numbers" id="span_footer_total_tradeAdvertTotal"/>
+                                            </div>
+                                        </th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                        <!--<apex:pageBlockSection id="section_available_SubBrand" title="Sub-Brand" columns="1" rendered="{!isEdit}">
+                            
+                            <apex:pageBlockSectionItem id="pageblockSectionItemSubBrand">
+                                <apex:outputLabel value="Sub-Brand" />
+                                <apex:outputPanel id="section_subBrand_outPutPanel">
+                                    <apex:selectList value="{!subBrandSelected}" size="1" label="Sub-Brand" id="subBrandBlock" styleClass="subBrandBlockAdd">
+                                        <apex:selectOptions value="{!subBrandSelectOptions}"></apex:selectOptions>
+                                    </apex:selectList>
+                                    <apex:commandLink value="Add" 
+                                        onClick="validateAddSubBrand();return false;" 
+                                        styleClass="btn" 
+                                        style="text-decoration:none;padding:4px;"
+                                        rerender="pageMsg">
+                                    </apex:commandLink>
+                                    <apex:actionFunction name="addSubBrand" action="{!addContractProductItem}"
+                                    rerender="pageBlock_SKU, pageBlock_FreeGoods, pageBlock_ContractMargin, pageBlock_Cash, pageBlock_AP, pageBlock_PaymentSchedule, pageMsg" 
+                                    onComplete="setTables();summarizeSKU();" status="loading">
+                                        <!--<apex:param name="PARAM_CONTRACT_SOURCE_ITEM_ID" value="{!subBrandSelected}"/> -->
+                                        <!--<apex:param name="PARAM_CONTRACT_SOURCE_ITEM_TYPE" value="isSubBrand"/>
+                                    </apex:actionFunction>
+
+                                </apex:outputPanel>
+                            </apex:pageBlockSectionItem>
+                        </apex:pageBlockSection> -->
+                        
+                                    <apex:actionFunction name="updateSubBrandPick" action="{!updateSubBrandPick}" rerender="pageMsg">
+                                            <apex:param name="subBrandChoice" value="" />
+                                            <apex:param name="cpiKey" value="" />
+                                    </apex:actionFunction>
+                        <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1" rendered="{!isEdit}">
+                            <apex:pageBlockSectionItem >
+                            
+                                <apex:outputLabel value="SKU" />
+                                <apex:outputPanel >
+                                    <apex:inputText value="{!skuNameFilter}" />
+                                    <apex:commandbutton value="Search" action="{!retrieveSKUbySubBrand}" rerender="outputPanelSKUsearch" onComplete="setSKUsearchTable();" status="loading"/>
+                                </apex:outputPanel>
+                            </apex:pageBlockSectionItem>
+
+                            <apex:pageBlockSectionItem >
+                            </apex:pageBlockSectionItem>
+                            <apex:outputPanel layout="block" id="outputPanelSKUsearch">
+                                <table id="available_SKU">
+                                    <apex:repeat var="csKey" value="{!allSKUMap}">
+                                    <apex:repeat var="csObj" value="{!allSKUMap[csKey]}">
+                                    <tr>
+                                        <td>
+                                            <apex:commandLink value="Add"
+                                            rendered="true" 
+                                            immediate="true"
+                                            action="{!addContractProductItem}"
+                                            rerender="outputPanelMain, outputPanelSKUsearch, pageMsg"
+                                            onComplete="console.log('Add CPI'); setSKUTable();setSKUsearchTable();recalculateROI();"
+                                            status="loading"> 
+                                                <apex:param name="PARAM_CONTRACT_SOURCE_ITEM_ID" value="{!csKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                        <td><apex:outputField value="{!csObj.Name}"/></td>
+                                        <td><apex:outputField value="{!csObj.ASI_MFM_Sub_brand__c}"/></td>
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                           </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                        
+                    </apex:pageBlock>
+                    
+                
+            </div>
+            
+            <!--
+            
+            <div id="tab_FreeGoods">
+                    <apex:pageBlock id="pageBlock_FreeGoods"> 
+                        <apex:pageBlockSection id="section_lineItem_FreeGoods" title="Contract Line Items" columns="1">
+                            <apex:outputPanel layout="block" >
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}FreeGoods">
+                                    <apex:repeat var="cpiKey" value="{!allContractTargetMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractTargetMap[cpiKey]}">
+                                    <tr id="row_FreeGoods_{!cpiKey}" class="cpiContent2">
+                                        
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+            </div>
+            
+            <div id="tab_ContractMargin">
+                    <apex:pageBlock id="pageBlock_ContractMargin"> 
+                        <apex:pageBlockSection id="section_lineItem_ContractMargin" title="Contract Line Items" columns="1">
+                            <apex:outputPanel layout="block" >
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}ContractMargin">
+                                    <apex:repeat var="cpiKey" value="{!allContractTargetMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractTargetMap[cpiKey]}">
+                                    <tr id="row_ContractMargin_{!cpiKey}" class="cpiContent4">
+                                        
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+                
+            </div>
+            
+            <div id="tab_Cash">
+                    <apex:pageBlock id="pageBlock_Cash"> 
+                        <apex:pageBlockSection id="section_lineItem_Cash" title="Contract Line Items" columns="1">
+                            <apex:outputPanel layout="block">
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}Cash">
+                                    <apex:repeat var="cpiKey" value="{!allContractTargetMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractTargetMap[cpiKey]}">
+                                    <tr id="row_Cash_{!cpiKey}" class="cpiContent5">
+                                        
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+                
+            </div>
+            
+            <div id="tab_AP">
+                    <apex:pageBlock id="pageBlock_AP"> 
+                        <apex:pageBlockSection id="section_lineItem_AP" title="Contract Line Items" columns="1">
+                            <apex:outputPanel layout="block">
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}AP">
+                                    <apex:repeat var="cpiKey" value="{!allContractTargetMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractTargetMap[cpiKey]}">
+                                    <tr id="row_AP_{!cpiKey}" class="cpiContent6">
+                                        
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                    <tfoot>
+                                        <tr>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+                
+            </div>
+            
+            -->
+            
+            <div id="tab_PaymentSchedule">
+                    <apex:pageBlock id="pageBlock_PaymentSchedule"> 
+                        <apex:pageBlockSection id="section_lineItem_PaymentSchedule1" title="Cash Sponsorship" columns="1">
+                            <apex:outputPanel layout="block">
+                            
+                                <apex:commandButton value="Add New Cash Sponsorship"
+                                    immediate="true"
+                                    action="{!addCashSponsorship}"
+                                    rerender="pageBlock_PaymentSchedule, pageMsg"
+                                    onComplete="console.log('Add CPI'); setPaymentScheduleTable1(); setPaymentScheduleTable2();"
+                                    status="loading"
+                                    rendered="{!isEdit}"> 
+                                </apex:commandButton>
+                                <br/>
+                                <br/>
+                            
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}PaymentSchedule1">
+                                    <apex:variable var="i" value="{!0}"/>
+                                    <apex:repeat var="cpiKey" value="{!allPaymentScheduleCashMap}">
+                                    <apex:outputText value="{!cpiKey}" styleClass="val{!i}" style="display:none;"/>
+                                    <apex:repeat var="cpiObj" value="{!allPaymentScheduleCashMap[cpiKey]}">
+                                    <tr id="row_PaymentSchedule1_{!cpiKey}" class="cpiContent7">
+                                        <td>
+											<!-- [WL 1.0] BEGIN-->
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeCashSponsorship}"
+                                            rerender="pageBlock_PaymentSchedule, pageMsg"
+                                            onComplete="console.log('Remove CPI'); setPaymentScheduleTable1(); setPaymentScheduleTable2();"
+                                            status="loading"
+											rendered="{!isEdit && cpiObj.ASI_CRM_Payment_Issued__c == false}">
+                                                <apex:param name="PARAM_PAYMENT_ID" value="{!cpiKey}"/>
+                                            </apex:commandLink>
+											<!--rendered="{!isEdit}">-->
+											<!-- [WL 1.0] END-->
+                                        </td>
+                                        <td>
+											<!-- [WL 1.0] BEGIN-->
+                                            <apex:inputField styleclass="cashSponsorshipS" value="{!cpiObj.ASI_CRM_Sponsorship__c}" style="width:100px;" required="true"
+												rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == true}" html-disabled="true"/>											
+											<apex:inputField styleclass="cashSponsorshipS" value="{!cpiObj.ASI_CRM_Sponsorship__c}" style="width:100px;" required="true"
+												rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == false}"/>
+											<!-- [WL 1.0] END-->
+                                        </td>
+                                        <td>
+											<!-- [WL 1.0] BEGIN-->
+                                            <apex:inputField styleclass="achievedSalesTarget" value="{!cpiObj.ASI_CRM_Percentof_achieved_Sales_Target__c}" style="width:75px;"
+												rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == true}" html-disabled="true"/>
+											<apex:inputField styleclass="achievedSalesTarget" value="{!cpiObj.ASI_CRM_Percentof_achieved_Sales_Target__c}" style="width:75px;"
+												rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == false}"/>
+											<!-- [WL 1.0] END-->
+                                        </td>
+                                        <!-- [DC 3.0 BEGIN] -->
+                                        <td>
+											<!-- [WL 1.0] BEGIN-->
+                                            <apex:inputField styleclass="scheduleDate" value="{!cpiObj.ASI_CRM_Schedule_Date__c}" rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == true}" html-disabled="true"/>
+											<apex:inputField styleclass="scheduleDate" value="{!cpiObj.ASI_CRM_Schedule_Date__c}" rendered="{!cpiObj.ASI_CRM_Payment_Issued__c == false}"/>
+											<!-- [WL 1.0] END-->
+                                        </td>
+                                        <!-- [VL 11.0 BEGIN] -->
+                                        <td>
+                                            <apex:inputField styleclass="remarks" value="{!cpiObj.ASI_CRM_Remarks__c}"/>
+                                        </td>
+                                        <!-- [VL 11.0 END] -->
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <apex:outputtext rendered="{!CONTAINS(contractObj.recordtype.developername,'ASI_CRM_SG_Contract')}">
+                                        <!-- [VL 8.0] END -->
+                                            <td>
+                                                <apex:outputField styleclass="achieved" value="{!cpiObj.ASI_CRM_Achieved__c}"/>
+                                            </td>
+                                        <!-- [VL 8.0] BEGIN -->
+                                        </apex:outputtext>
+                                        <!-- [VL 8.0] END -->
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <apex:outputtext rendered="{!CONTAINS(contractObj.recordtype.developername,'ASI_CRM_SG_Contract')}">
+                                        <!-- [VL 8.0] END -->
+                                        <td>
+                                            <apex:commandButton id="requestBtn" value=" Create "
+                                                                onclick="requestPaymentAndRedirect('{!cpiKey}', '{!i}'); return false;"
+                                                                disabled="{! OR( NOT(cpiObj.ASI_CRM_Achieved__c), (contractObj.ownerid!=$User.Id), cpiObj.ASI_CRM_Payment_Issued__c, (NOT(contractObj.ASI_TH_CRM_Contract_Status__c=='Contract Approved')))}">
+                                                <!-- <apex:param name="paymentId" value="{!cpiKey}" assignTo="{!paymentScheduleId}" /> -->
+                                            </apex:commandButton>
+                                        </td>
+                                        <!-- [VL 8.0] BEGIN -->
+                                        </apex:outputtext>
+                                        <!-- [VL 8.0] END -->
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <apex:outputtext rendered="{!CONTAINS(contractObj.recordtype.developername,'ASI_CRM_SG_Contract')}">
+                                        <!-- [VL 8.0] END -->
+                                        <td>
+                                            <apex:outputField styleclass="achieved" value="{!cpiObj.ASI_CRM_Payment_Issued__c}"/>
+                                        </td>
+                                        <!-- [VL 8.0] BEGIN -->
+                                        </apex:outputtext>
+                                        <!-- [VL 8.0] END -->
+                                        <!-- [DC 3.0 END] -->
+                                    </tr>
+                                    </apex:repeat>
+                                    <apex:variable var="i" value="{!i+1}"/>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                        <apex:pageBlockSection id="section_lineItem_PaymentSchedule2" title="Contract Sponsorship" columns="1">
+                            <apex:outputPanel layout="block">
+                            
+                                <apex:commandButton value="Add New Contract Sponsorship"
+                                    immediate="true"
+                                    action="{!addContractSponsorship}"
+                                    rerender="pageBlock_PaymentSchedule, pageMsg"
+                                    onComplete="console.log('Add CPI'); setPaymentScheduleTable1(); setPaymentScheduleTable2();"
+                                    status="loading"
+                                    rendered="{!isEdit}"> 
+                                </apex:commandButton>
+                                <br/>
+                                <br/>
+                            
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}PaymentSchedule2">
+                                    <apex:repeat var="cpiKey" value="{!allPaymentScheduleContractMap }">
+                                    <apex:repeat var="cpiObj" value="{!allPaymentScheduleContractMap [cpiKey]}">
+                                    <tr id="row_PaymentSchedule2_{!cpiKey}" class="cpiContent8">
+                                        
+                                        <td>
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeContractSponsorship}"
+                                            rerender="pageBlock_PaymentSchedule, pageMsg"
+                                            onComplete="console.log('Remove CPI'); setPaymentScheduleTable1(); setPaymentScheduleTable2();"
+                                            status="loading"
+                                            rendered="{!isEdit}">
+                                                <apex:param name="PARAM_PAYMENT_ID" value="{!cpiKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="cashSponsorshipS" value="{!cpiObj.ASI_CRM_Sponsorship__c}"/>
+                                        </td>
+                                        <td>
+                                            <apex:inputField styleclass="achievedSalesTarget" value="{!cpiObj.ASI_CRM_Percentof_achieved_Sales_Target__c}"/>
+                                        </td>
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+                
+            </div>
+            
+            <apex:outputtext rendered="{!isParentOutlet}">
+            <div id="tab_ContractOutlet">
+                    <apex:pageBlock id="pageBlock_ContractOutlet"> 
+                        <apex:pageBlockSection id="section_lineItem_PaymentSchedule" title="Selected Contract Outlets" columns="1">
+                            <apex:outputPanel layout="block">
+                            
+                                <table id="{!CONTRACT_LINE_ITEM_TABLE_PREFIX}ContractOutlet">
+                                    <apex:repeat var="cpiKey" value="{!allContractOutletSelectedMap}">
+                                    <apex:repeat var="cpiObj" value="{!allContractOutletSelectedMap[cpiKey]}">
+                                    <tr id="row_ContractOutlet_{!cpiKey}" class="cpiContent9">
+                                        
+                                        <td>
+                                            <apex:commandLink value="Delete"
+                                            immediate="true"
+                                            action="{!removeContractOutlet}"
+                                            rerender="pageBlock_ContractOutlet, pageMsg"
+                                            onComplete="setContractOutletTable();"
+                                            status="loading">
+                                                <apex:param name="PARAM_CONTRACT_CUSTOMER_ID" value="{!cpiKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                        <td>
+                                            <apex:outputField styleclass="contractOutlet" value="{!cpiObj.ASI_CRM_SG_Customer__c}"/>
+                                        </td>
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                        <apex:pageBlockSection id="section_available_ContractOutlet" title="Contract Outlet" columns="1" rendered="{!isEdit}">
+                            
+                            <apex:outputPanel layout="block">
+                                <table id="available_ContractOutlet">
+                                    <apex:repeat var="csKey" value="{!allContractOutletMap}">
+                                    <apex:repeat var="csObj" value="{!allContractOutletMap[csKey]}">
+                                    <tr>
+                                        <td>
+                                            <apex:commandLink value="Add"
+                                            rendered="true" 
+                                            immediate="true"
+                                            action="{!addContractOutlet}"
+                                            rerender="pageBlock_ContractOutlet, pageMsg"
+                                            onComplete="setContractOutletTable();"
+                                            status="loading"> 
+                                                <apex:param name="PARAM_CONTRACT_SOURCE_ITEM_ID" value="{!csKey}"/>
+                                            </apex:commandLink>
+                                        </td>
+                                        <td><apex:outputField value="{!csObj.name}"/></td>
+                                    </tr>
+                                    </apex:repeat>
+                                    </apex:repeat>
+                                </table>
+                           </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlock>
+                
+            </div>
+            </apex:outputtext>
+        </div>
+        
+        
+        <script>
+            
+        </script>
+        
+    </apex:pageBlock>
+        <!--<br/>
+    <center>
+        <apex:commandButton value="Save" 
+            oncomplete="console.log('Save Done');"
+            status="loading"
+            id="saveButtonBottom"
+            onclick="beforeSaveContract(false);">
+        </apex:commandButton>
+        <apex:commandButton value="Quick Save" 
+            oncomplete="console.log('Quick Save Done'); hideShowDtCol(showColStart,showColEnd);"
+            status="loading"
+            id="quickSaveButtonBottom"
+            onclick="beforeSaveContract(true);">
+        </apex:commandButton>
+        <apex:commandLink value="Cancel" action="{!cancel}" 
+            immediate="true"
+            target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;"/>
+            </center>-->
+    </apex:form>
+
+
+
+<!-- this guy first -->
+<script type="text/javascript">__sfdcSessionId = '{!$Api.Session_Id}';</script>
+
+<!-- this guy second -->
+<script src="/soap/ajax/29.0/connection.js" type="text/javascript"></script>
+
+<script>
+
+    /* [HC 3.0] BEGIN */
+    var isFirstRun = false;
+    /* [HC 3.0] END */
+    
+    var showColStart = 2;
+    var showColEnd = 7;
+
+    $ = jQuery.noConflict();
+
+    /* [DC 4.1 BEGIN] */
+    var requestPaymentAndRedirect = function(cpiKey, i) {
+        console.log(cpiKey);
+        console.log(i);
+        var paymentId = cpiKey;
+        var scheduleIdClass = "val" + i;
+        var scheduleId = $('[class$="' + scheduleIdClass + '"]').html();
+        // alert(scheduleId);
+        var prevScheduleIdClass;
+        var prevScheduleId;
+        if(i > 0) {
+            console.log(i-1);
+            prevScheduleIdClass = "val" + (i-1);
+            prevScheduleId = $('[class$="' + prevScheduleIdClass + '"]').html();
+        } else {
+            prevScheduleId = "NULL";
+        }
+        console.log('scheduleId : ' + scheduleId);
+        console.log('prevScheduleId : ' + prevScheduleId);
+        requestPayment(scheduleId, prevScheduleId);
+    }
+
+    var redirectOnSuccess = function() {
+        // var requestId = '{!$CurrentPage.parameters.pymtReqId}';
+        var requestId = $('[id$="paymentRequestId"]').prop("value");
+        if(requestId != null && requestId != undefined && (requestId.length == 15 || requestId.length == 18) ) {
+            window.parent.location = '/' + requestId;
+        }
+    }
+    /* [DC 4.1 END] */    
+    
+    var eventDescriptionItemCount = 0;
+    var trainingDescriptionItemCount = 0;
+    
+    var colLabel_Action = "Action";     
+    var colLabel_Brand = "Brand";       
+    var colLabel_BrandQuality = "Brand Quality"; 
+    var colLabel_Volume = "Volume";     
+    
+    var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : false,
+        "aLengthMenu":[10,25,50,100,200],
+        "iDisplayLength":25,
+        "bSort" : false,
+        "oLanguage" : {"sSearch": "Filter"},
+        "ordering" : true
+    };
+    
+    //Contract Mechanic Column Definition
+    var contractLineItemColumns = [
+        {"sTitle": colLabel_Action},
+        {"sTitle": colLabel_Brand}
+    ]
+    
+    var contractMechanicColumns = [
+        {"sTitle": colLabel_Action},
+        {"sTitle": colLabel_Brand}
+    ]
+    
+    //DataTable Variable
+    var cliSKU;
+    var cmSKU;
+    var cliFreeGoods;
+    var cmFreeGoods;
+    var cliEvents;
+    var cmEvents;
+    var summaryEvents;
+    var cliCash;
+    var cliAP;
+    var cliPaymentSchedule1;
+    var cliPaymentSchedule2;
+    var cliContractOutlet;
+    var cmContractOutlet;
+    
+    var subBrandItems = [];
+    var subBrandSKURep;
+	
+	var onLoadFlag = true;
+	var massCalculateROI = true;
+    
+    $(document).ready(
+        function(){
+            console.log("##INIT - Contract Builder Page");
+            setTables();            
+            /* [HC 3.0] BEGIN */
+            isFirstRun = false;
+            /* [HC 3.0] End */
+            redirectOnSuccess();
+            $("#mechanicTypeTabs").tabs();
+            $( "input" )
+                .change(function () {
+                    $("span.numbers").digits();
+                })
+            .change();
+			onLoadFlag = false;
+			massCalculateROI = false;
+        }
+    );
+    
+    function hideShowDtCol(start,end){
+        var cliSKU = $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU").dataTable();
+        for (i=3; i<40; i++){
+            if (i>=start && i<=end) {
+                cliSKU.fnSetColumnVis( i, true);
+            } else {
+                cliSKU.fnSetColumnVis( i, false );
+            }
+        }
+        if('{!isEdit}' == 'false') {
+            // Do not disable the "Request Payment" button in display mode
+           $(":input").each(function(){
+               if (this.id.substr(this.id.length - 11) != ':requestBtn') $(this).prop("disabled", true);
+           });
+        }
+        if (!(start==3 && end==40)){
+            showColStart = start;
+            showColEnd = end;
+        }
+    }
+    
+    var subBrandNameList = [];
+    <apex:repeat value="{!subBrandNameList }" var="sb"> 
+            subBrandNameList .push("{!sb}"); 
+    </apex:repeat>
+    
+    function initiaizeAutocomplete(){
+        $( ".subBrandPick" ).autocomplete({
+          source: subBrandNameList,
+          select: function( event, ui ) {
+                  event.preventDefault();
+              var rowID = $(this).closest('tr').prop('id');
+              var recordID = rowID.substring(8);
+              if (validateSubBrandName(ui.item.value, recordID, $('#row_SKU_'+recordID))){
+                  $('#row_SKU_'+recordID).find(".subBrandPick").val(ui.item.value);
+              } else {
+                  $('#row_SKU_'+recordID).find(".subBrandPick").val('');
+              }
+          }
+        });
+    }
+    
+    function summarizeSKU(){
+        $('#span_footer_total_TargetSales').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.SalesCases'));
+        /* [DC 2.0] BEGIN I AM NOT SURE IF THIS TOTAL CALCULATION IS NECESSARY! Please review. */
+        /* Vincent 2016-02-29 (should have answered on 2016-02-26, but it is overwritten): Not required. 
+        $('#span_footer_total_SequenceNo').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.SequenceNo'));
+        */
+        /* [DC 2.0] END */
+        $('#span_footer_total_TargetSales9L').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.Sales9L'));
+        /* [VL 1.0] BEGIN */
+        $('#span_footer_total_TotalDuty').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.Duty'));
+        /* [VL 1.0] END */
+        /* [DC 1.0] BEGIN */
+        $('#span_footer_total_TotalFOB').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.FOB'));
+        $('#span_footer_total_TotalHandlingCost').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.HandlingCost'));
+        /* [DC 1.0] END */
+        /* [VL 6.1] BEGIN */
+        // Contract Margin tab
+        $('#span_footer_total_bottleIncentive').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.bottleIncentive'));
+        /* [VL 6.1] END */
+        //AP Tab
+        $('#span_footer_total_eventsCases').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.eventsBottle'));
+        $('#span_footer_total_eventsValue').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.eventsValue'));
+        $('#span_footer_total_signageCases').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.signageAdvertisingBottle'));
+        $('#span_footer_total_SignageValue').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.signageAdvertisingValue'));
+        /* [VL 6.0] BEGIN */
+        $('#span_footer_total_advertisingCases').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.advertisingBottle'));
+        $('#span_footer_total_advertisingValue').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.advertisingValue'));
+        /* [VL 6.0] END */
+        $('#span_footer_total_AnniversaryCases').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.anniversaryBottle'));
+        $('#span_footer_total_tradeIncentive').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.tradeIncentiveTrips'));
+        $('#span_footer_total_productBrandingDisplay').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.productBrandingDisplay'));
+        $('#span_footer_total_adHoc').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'input.adhocPromo'));
+        $('#span_footer_total_tradeAPTotal').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.tradeAdvertPromoTotal'));
+        $('#span_footer_total_tradeAdvertTotal').text(sumTotalSpend($('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU'),'span.tradeAdvertTotal'));
+    }
+    
+    function setSKUTable(){
+        //if('{!isEdit}' == 'false') {
+            basicDataTableProperties["iDisplayLength"] = 200;
+        //}
+        var cliSKU_dataTableProperties = basicDataTableProperties;
+        /* [DC 2.0] BEGIN */
+        cliSKU_dataTableProperties["order"] = [[ 1, "asc" ]];
+        /* [DC 2.0] END */
+        cliSKU_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action, "sWidth":"50px"},
+            /* [DC 2.0] BEGIN */
+            /* [DC 2.0] END */
+            {"sTitle": "SKU"},
+            /* [VL 12.0] BEGIN */
+            {"sTitle": "ROI%"},
+            /* [VL 12.0] END */
+            /* [VL 7.0] BEGIN */
+            
+            {"sTitle": "Seq. No."},
+            
+            /* [VL 7.0] END */
+            {"sTitle": "Sub-Brand"},
+            {"sTitle": "Sales (Cases)"},
+            {"sTitle": "Sales (9L)"},
+            /* [VL 1.0] BEGIN */
+            {"sTitle": "Duty (S$)"},
+            /* [VL 1.0] END */
+            /* [DC 1.0] BEGIN */
+            {"sTitle": "FOB (S$)"},
+            {"sTitle": "Handling Cost (S$)"}
+            /* [DC 1.0] END */,            
+            {"sTitle": "Sales Incentive<br/>(Bt per case)", "bVisible": true},
+            {"sTitle": "Management<br/>Incentives<br/>(Cases per month)", "bVisible": true},
+            {"sTitle": "Contract Sponsorship/<br/>Target Incentive<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Others<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Total<br/>Free Goods<br/>(Cases)", "bVisible": true},
+            {"sTitle": "Total<br/>Free Goods<br/>(9L)", "bVisible": true},
+            {"sTitle": "Consumer<br/>Price Offer<br/>(S$/Bottle)", "bVisible": true},
+			/* [VL 10.0] BEGIN */
+            {"sTitle": "WS - OT<br/>(S$/Bottle)", "bVisible": true},
+			/* [VL 10.0] END */
+            {"sTitle": "Compensation<br/>for WS - Price<br/>Difference (S$)", "bVisible": true},
+            {"sTitle": "Wholesaler<br/>Margin<br/>(S$/Bottle)", "bVisible": true},
+            {"sTitle": "Wholesaler<br/>Margin<br/>Total (S$)", "bVisible": true},
+            {"sTitle": "Contract<br/>Margin<br/>- per 9Lc (S$)", "bVisible": true},
+            {"sTitle": "Contract<br/>Margin<br/>- Total (S$)", "bVisible": true}
+            /* [VL 6.1] BEGIN */
+            ,
+            {"sTitle": "Bottle<br/>Incentive<br/>(S$/Bottle)", "bVisible": true},
+            {"sTitle": "Bottle<br/>Incentive<br/>- Total (S$)", "bVisible": true}
+            /* [VL 6.1] END */,
+            {"sTitle": "Good-in-Kinds (S$)", "bVisible": true},
+            {"sTitle": "Cash (S$)", "bVisible": true},
+            {"sTitle": "Cash Sponsorship - Total (S$)", "bVisible": true},
+            {"sTitle": "Events<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Events<br/>(by S$ value)", "bVisible": true},
+            /* [VL 6.0] BEGIN */
+            /*
+            {"sTitle": "Signages /<br/>Advertising Spot<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Signages /<br/>Advertising Spot<br/>(by S$ value)", "bVisible": true},
+            */
+            {"sTitle": "Signages <br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Signages <br/>(by S$ value)", "bVisible": true},
+            {"sTitle": "Advertising Spot<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Advertising Spot<br/>(by S$ value)", "bVisible": true},
+            /* [VL 6.0] END */
+            {"sTitle": "Anniversary<br/>(Total Cases)", "bVisible": true},
+            {"sTitle": "Trade Incentive<br/>Trips (S$)", "bVisible": true},
+            {"sTitle": "Product<br/>Branding<br/>Display (S$)", "bVisible": true},
+            {"sTitle": "Ad-hoc<br/>Promotions (S$)", "bVisible": true},
+            {"sTitle": "Trade Advertising &<br/>Promotional - Total -<br/>(FOC: WS -Ontrade SP)", "bVisible": true},
+            {"sTitle": "Trade Advertising &<br/>Promotional- Total<br/>- PRS (S$)", "bVisible": true}
+        ];
+        
+        initiaizeAutocomplete();
+        cliSKU =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU").dataTable(cliSKU_dataTableProperties);
+
+        //Sum Sales 9L
+        //console.log("Processing table - #{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU");       
+        //calculateAllTotalSpend($("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU"),'span.Sales9L');
+        //Set Sales, Sales 9L (SUM)
+        summarizeSKU();
+        
+        subBrandItems = [];
+        $('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU > tbody  > tr').each(function() {
+            
+            
+            var subBrandPicklist = $(this).find(".subBrandPick").val();
+            var subBrandSKU = $(this).find("span.subBrandPickSKU").text();
+            //console.log('********subBrandSKU ' + subBrandSKU);
+            //console.log('********subBrandPicklist ' + subBrandPicklist);
+            if (subBrandPicklist === "" || subBrandPicklist === null) {
+            } else if($.inArray(subBrandPicklist, subBrandItems) == -1) {
+                subBrandItems.push(subBrandPicklist);
+            }
+
+            if (subBrandSKU === "" || subBrandSKU === null) {
+            } else if($.inArray(subBrandSKU, subBrandItems) == -1){
+                subBrandItems.push(subBrandSKU);
+            }
+
+        });
+        
+        //console.log('**********SubBrandItems ' + subBrandItems);
+		
+        hideShowDtCol(3,9);
+    }
+    
+    function setSKUsearchTable(){
+        
+        var cmSKU_dataTableProperties = basicDataTableProperties;
+        cmSKU_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "SKU"},
+            {"sTitle": "Sub-Brand"}
+        ];
+        cmSKU =  $("#available_SKU").dataTable(cmSKU_dataTableProperties);
+    
+    }
+    
+    
+    
+    function setFreeGoodsTable(){
+        var cliFreeGoods_dataTableProperties = basicDataTableProperties;
+        cliFreeGoods_dataTableProperties["aoColumns"] = [
+            {"sTitle": "SKU/Sub-Brand"},
+            {"sTitle": "Sales Incentive<br/>(Given Bottles per Case)"},
+            {"sTitle": "Management Incentives<br/>(Cases per month)"},
+            {"sTitle": "Contract Sponsorship/<br/>Target Incentive<br/>(Total Cases)"},
+            {"sTitle": "Others<br/>(Total Cases)"},
+            {"sTitle": "Total Free Goods (Cases)"},
+            {"sTitle": "Total Free Goods (9L)"}
+        ];
+        
+        cliFreeGoods =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}FreeGoods").dataTable(cliFreeGoods_dataTableProperties);
+
+    }
+    
+    function setContractMarginTable(){
+        var cliContractMargin_dataTableProperties = basicDataTableProperties;
+        cliContractMargin_dataTableProperties["aoColumns"] = [
+            {"sTitle": "SKU/Sub-Brand"},
+            {"sTitle": "Consumer Price Offer<br/>(S$ per bottle)"},
+            {"sTitle": "Compensation for WS/<br/>- Price Difference (S$)"},
+            {"sTitle": "Wholesaler Margin/<br/>(S$ value per Bottle)"},
+            {"sTitle": "Wholesaler Margin Total (S$)"},
+            {"sTitle": "Contract Margin/<br/>- per 9Lc (S$)"},
+            {"sTitle": "Contract Margin - Total (S$)"}
+            /* [VL 6.1] BEGIN */
+            ,
+            {"sTitle": "Bottle Incentive <br/>(S$)"},
+            {"sTitle": "Bottle Incentive - Total <br/>(S$)"}
+            /* [VL 6.1] END */
+        ];
+        
+        cliContractMargin =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}ContractMargin").dataTable(cliContractMargin_dataTableProperties);
+
+    }
+    
+    function setCashTable(){
+        var cliCash_dataTableProperties = basicDataTableProperties;
+        cliCash_dataTableProperties["aoColumns"] = [
+            {"sTitle": "SKU/Sub-Brand"},
+            {"sTitle": "Good-in-Kinds (S$)"},
+            {"sTitle": "Cash (S$)"},
+            {"sTitle": "Cash Sponsorship - Total (S$)"}
+        ];
+        
+        cliCash =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}Cash").dataTable(cliCash_dataTableProperties);
+
+    }
+    
+    function setAPTable(){
+        var cliAP_dataTableProperties = basicDataTableProperties;
+        cliAP_dataTableProperties["aoColumns"] = [
+            {"sTitle": "SKU/Sub-Brand"},
+            {"sTitle": "Events<br/>(Total Cases)"},
+            {"sTitle": "Events<br/>(by S$ value)"},
+            /* [VL 6.0] BEGIN */
+            /*
+            {"sTitle": "Signages /<br/>Advertising Spot<br/>(Total Cases)"},
+            {"sTitle": "Signages /<br/>Advertising Spot<br/>(by S$ value)"},
+            */
+            {"sTitle": "Signages <br/>(Total Cases)"},
+            {"sTitle": "Signages <br/>(by S$ value)"},
+            {"sTitle": "Advertising Spot<br/>(Total Cases)"},
+            {"sTitle": "Advertising Spot<br/>(by S$ value)"},
+            /* [VL 6.0] END */
+            {"sTitle": "Anniversary<br/>(Total Cases)"},
+            {"sTitle": "Trade Incentive<br/>Trips (S$)"},
+            {"sTitle": "Product<br/>Branding<br/>Display (S$)"},
+            {"sTitle": "Ad-hoc<br/>Promotions (S$)"},
+            {"sTitle": "Trade Advertising &<br/>Promotional - Total -<br/>(FOC: WS -Ontrade SP)"},
+            {"sTitle": "Trade Advertising &<br/>Promotional- Total<br/>- PRS (S$)"}
+        ];
+        
+        cliAP =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}AP").dataTable(cliAP_dataTableProperties);
+
+    }
+    
+    function setPaymentScheduleTable1(){
+        var cliPaymentSchedule1_dataTableProperties = basicDataTableProperties;
+        /* [VL 8.0] BEGIN */
+        /*
+        cliPaymentSchedule1_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "Cash Sponsorship (S$)"},
+            {"sTitle": "% of Achieved Sales Target"},
+            // [DC 3.0 BEGIN] 
+            {"sTitle": "Schedule Date"},
+            {"sTitle": "Achieved"},
+            {"sTitle": "Request Payment"},
+            {"sTitle": "Payment Issued"}
+            // [DC 3.0 END] 
+        ];
+        */
+        var recordtypeHeader = '{!contractObj.recordtype.developername}'; 
+        if(recordtypeHeader.indexOf('ASI_CRM_SG_Contract') > -1) {
+            cliPaymentSchedule1_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "Cash Sponsorship<br/>(S$)"},
+                {"sTitle": "% of Achieved<br/>Sales Target"},
+                // [DC 3.0 BEGIN] 
+                {"sTitle": "Schedule Date"},
+				// [VL 11.0] BEGIN
+                {"sTitle": "Remarks"},
+				// [VL 11.0] END
+                {"sTitle": "Achieved"},
+                {"sTitle": "Payment<br/>Request"},
+                {"sTitle": "Created"}
+                // [DC 3.0 END] 
+            ];
+        } else {
+            cliPaymentSchedule1_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "Cash Sponsorship<br/>(S$)"},
+                {"sTitle": "% of Achieved<br/>Sales Target"},
+                {"sTitle": "Schedule Date"}
+				// [VL 11.0] BEGIN
+                ,{"sTitle": "Remarks"}
+				// [VL 11.0] END
+            ];
+        }
+        /* [VL 8.0] BEGIN */
+        
+        cliPaymentSchedule1 =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}PaymentSchedule1").dataTable(cliPaymentSchedule1_dataTableProperties);
+
+    }
+    
+    function setPaymentScheduleTable2(){
+        var cliPaymentSchedule2_dataTableProperties = basicDataTableProperties;
+        cliPaymentSchedule2_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "Free Goods (Act Case)"},
+            {"sTitle": "% of Achieved Sales Target"},
+        ];
+        
+        cliPaymentSchedule2 =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}PaymentSchedule2").dataTable(cliPaymentSchedule2_dataTableProperties);
+
+    }
+    
+    function setContractOutletTable(){
+        var cliContractOutlet_dataTableProperties = basicDataTableProperties;
+        cliContractOutlet_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "Contract Outlet"}
+        ];
+        
+        cliContractOutlet =  $("#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}ContractOutlet").dataTable(cliContractOutlet_dataTableProperties);
+        
+        var cmContractOutlet_dataTableProperties = basicDataTableProperties;
+        cmContractOutlet_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "Contract Outlet"}
+        ];
+        cmContractOutlet =  $("#available_ContractOutlet").dataTable(cmContractOutlet_dataTableProperties);
+
+    }
+
+    $.fn.digits = function(){ 
+        return this.each(function(){ 
+            $(this).text( $(this).text().replace(/(\d)(?=(\d\d\d)+(?!\d))/g, "$1,") ); 
+        })
+    }
+
+    function setTables(){
+        //Set all line item and contract mechanic tables (for all mechanic type)
+        setSKUTable();
+        setFreeGoodsTable();
+        setContractMarginTable();
+        setCashTable();
+        setAPTable();
+        setPaymentScheduleTable1();
+        setPaymentScheduleTable2();
+        setContractOutletTable();
+        setSKUsearchTable();
+
+        console.log('disable1');
+        $('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU > tbody  > tr').each(function() {
+            
+            
+            var uniqueID = $(this).attr('id');
+			/*
+            var freeGoodsID = uniqueID.replace("SKU", "FreeGoods");
+            var contractMarginID = uniqueID.replace("SKU", "ContractMargin");
+            var cashID = uniqueID.replace("SKU", "Cash");
+            var apD = uniqueID.replace("SKU", "AP");
+			*/
+            
+            /* [HC 3.0] BEGIN */
+            if(!isFirstRun) {
+                /* [VL 9.0] BEGIN */
+                $(this).find("input.SalesCases").trigger("change");
+                /* [VL 9.0] END */
+
+                /* [VL 9.0] BEGIN */
+                $(this).find("input.SalesIncentive").trigger("change");
+                $(this).find("input.ManagementIncentives").trigger("change");
+                $(this).find("input.SponsorTargetIncentive").trigger("change");
+                $(this).find("input.Others").trigger("change");
+                
+                $(this).find("input.consumerPriceOffer").trigger("change");
+                $(this).find("input.wholesalerMargin").trigger("change");
+                // [VL 6.1] BEGIN 
+                //$('#'.concat(contractMarginID)).find("input.bottleIncentive").trigger("change");
+                // [VL 6.1] END 
+                
+                $(this).find("input.GoodinKinds").trigger("change");
+                $(this).find("input.cashSponsorhip").trigger("change");
+                
+                $(this).find("input.eventsBottle").trigger("change");
+                $(this).find("input.eventsValue").trigger("change");
+                $(this).find("input.signageAdvertisingBottle").trigger("change");
+                $(this).find("input.signageAdvertisingValue").trigger("change");
+                // [VL 6.0] BEGIN 
+                $(this).find("input.advertisingBottle").trigger("change");
+                $(this).find("input.advertisingValue").trigger("change");
+                // [VL 6.0] END 
+                $(this).find("input.anniversaryBottle").trigger("change");
+                $(this).find("input.tradeIncentiveTrips").trigger("change");
+                $(this).find("input.productBrandingDisplay").trigger("change");
+                $(this).find("input.adhocPromo").trigger("change");
+                /* [VL 9.0] END */
+            }
+            /* [HC 3.0] END */
+			
+
+        });
+
+
+        console.log('disable');
+        if('{!isEdit}' == 'false') {
+        console.log('yes');
+            /* [VL 5.0] BEGIN */
+            /*
+            $(":input").prop("disabled", true);
+            */
+            // Do not disable the "Request Payment" button in display mode
+           $(":input").each(function(){
+               if (this.id.substr(this.id.length - 11) != ':requestBtn') $(this).prop("disabled", true);
+           });
+            /* [VL 5.0] END */
+        }
+        /* [VL 6.2] BEGIN */
+        else {
+        console.log('no');
+            $(":input").each(function(){
+               if (this.id.substr(this.id.length - 11) == ':requestBtn') $(this).prop("disabled", true);
+           });
+        }
+        /* [VL 6.2] END */
+        $("span.numbers").digits();
+        
+    }
+	
+	/* [VL 12.0] BEGIN */
+	function calculateROI(row, size, bottlePerCase, PRS_WS, duty, fob, handling, IGC){
+		if (!onLoadFlag) {
+			if (!massCalculateROI) hideShowDtCol(3,40);
+			var inflationRate     = normalizeFloat('{!contractObj.ASI_CRM_Inflation_Rate__c}', [",", "."]);
+			inflationRate = inflationRate/100;
+			var distributionRate  = normalizeFloat('{!contractObj.ASI_CRM_Distribution_Rate__c}', [",", "."]);
+			distributionRate = distributionRate/100;
+			var contractEndDate   = new Date('{!contractObj.ASI_TH_CRM_End_Date__c}');
+			var contractStartDate = new Date('{!contractObj.ASI_TH_CRM_Start_Date__c}');
+			var contractPeriod    = Math.round((((contractEndDate - contractStartDate)/86400000)/30));
+			
+			size = parseFloat(size);
+			bottlePerCase = parseFloat(bottlePerCase);
+			PRS_WS = parseFloat(PRS_WS);
+			duty = parseFloat(duty);
+			fob = parseFloat(fob);
+			handling = parseFloat(handling);
+			IGC = parseFloat(IGC);
+				
+			var SalesCases = normalizeFloat(row.find("input.SalesCases").val() ? row.find("input.SalesCases").val() : 0, [",", "."]);
+			var ASI_CRM_SG_Target_Sales_Cases_FOC__c = SalesCases;
+			console.log('SalesCases: '+SalesCases);
+			
+			var SalesIncentive = normalizeFloat(row.find("input.SalesIncentive").val() ? row.find("input.SalesIncentive").val() : 0, [",", "."]);
+			console.log('SalesIncentive: '+SalesIncentive);
+			var ManagementIncentives = normalizeFloat(row.find("input.ManagementIncentives").val() ? row.find("input.ManagementIncentives").val() : 0, [",", "."]);
+			console.log('ManagementIncentives: '+ManagementIncentives);
+			var ASI_CRM_Total_Management_Incentives__c = ManagementIncentives * contractPeriod;
+			var SponsorTargetIncentive = normalizeFloat(row.find("input.SponsorTargetIncentive").val() ? row.find("input.SponsorTargetIncentive").val() : 0, [",", "."]);
+			console.log('SponsorTargetIncentive: '+SponsorTargetIncentive);
+			var Others = normalizeFloat(row.find("input.Others").val() ? row.find("input.Others").val() : 0, [",", "."]);
+			console.log('Others: '+Others);
+			var ASI_CRM_SG_Total_Free_Goods_Cases__c = SalesIncentive * ASI_CRM_SG_Target_Sales_Cases_FOC__c / bottlePerCase + ASI_CRM_Total_Management_Incentives__c + SponsorTargetIncentive + Others;
+			
+			var ASI_CRM_Total_Duty__c = (SalesCases + ASI_CRM_SG_Total_Free_Goods_Cases__c) * bottlePerCase * duty;
+			var ASI_CRM_Total_FOB__c = (SalesCases + ASI_CRM_SG_Total_Free_Goods_Cases__c) * bottlePerCase * fob;
+			var ASI_CRM_Total_Handling_Cost__c = (SalesCases + ASI_CRM_SG_Total_Free_Goods_Cases__c) * bottlePerCase * handling;
+			var ASI_CRM_SG_Free_Goods__c = - ASI_CRM_SG_Total_Free_Goods_Cases__c * bottlePerCase * PRS_WS;
+			
+			var ASI_CRM_SG_Consumer_Price_Offer__c = normalizeFloat(row.find("input.consumerPriceOffer").val() ? row.find("input.consumerPriceOffer").val() : 0, [",", "."]);
+			console.log('ASI_CRM_SG_Consumer_Price_Offer__c: '+ASI_CRM_SG_Consumer_Price_Offer__c);
+			var ASI_CRM_SG_Compensation_for_WS_Price_Dif__c = 0;
+			if (ASI_CRM_SG_Consumer_Price_Offer__c!=0 && ASI_CRM_SG_Consumer_Price_Offer__c < PRS_WS){
+				ASI_CRM_SG_Compensation_for_WS_Price_Dif__c = (PRS_WS - ASI_CRM_SG_Consumer_Price_Offer__c) * SalesCases * bottlePerCase;
+			}
+			var ASI_CRM_SG_Wholesaler_Margin__c = normalizeFloat(row.find("input.wholesalerMargin").val() ? row.find("input.wholesalerMargin").val() : 0, [",", "."]);
+			console.log('ASI_CRM_SG_Wholesaler_Margin__c: '+ASI_CRM_SG_Wholesaler_Margin__c);
+			var ASI_CRM_SG_Wholesaler_Margin_Total__c = ASI_CRM_SG_Wholesaler_Margin__c * SalesCases * bottlePerCase;
+			var ASI_CRM_Bottle_Incentive__c = normalizeFloat(row.find("input.bottleIncentive").val() ? row.find("input.bottleIncentive").val() : 0, [",", "."]);
+			console.log('ASI_CRM_Bottle_Incentive__c: '+ASI_CRM_Bottle_Incentive__c);
+			var ASI_CRM_Bottle_Incentive_Total__c = ASI_CRM_Bottle_Incentive__c * SalesCases * bottlePerCase;
+			
+			var GoodinKinds = normalizeFloat(row.find("input.GoodinKinds").val() ? row.find("input.GoodinKinds").val() : 0, [",", "."]);
+			console.log('GoodinKinds: '+GoodinKinds);
+			var cashSponsorhip = normalizeFloat(row.find("input.cashSponsorhip").val() ? row.find("input.cashSponsorhip").val() : 0, [",", "."]);	
+			console.log('cashSponsorhip: '+cashSponsorhip);
+			
+			var ASI_CRM_SG_Total_Allowances_Discounts__c = ASI_CRM_SG_Free_Goods__c - ASI_CRM_SG_Compensation_for_WS_Price_Dif__c - ASI_CRM_SG_Wholesaler_Margin_Total__c - ASI_CRM_Bottle_Incentive_Total__c - GoodinKinds - cashSponsorhip;
+			var ASI_CRM_SG_Gross_Sales__c = (SalesCases + ASI_CRM_SG_Total_Free_Goods_Cases__c) * bottlePerCase * PRS_WS;
+			var ASI_CRM_SG_Distribution_Cost__c = - ASI_CRM_SG_Gross_Sales__c * distributionRate;
+			var ASI_CRM_SG_Net_Sales__c = ASI_CRM_SG_Gross_Sales__c + ASI_CRM_SG_Total_Allowances_Discounts__c;
+			
+			var ASI_CRM_SG_Cost_of_Sales__c = -((((fob + handling) * (1+inflationRate)) + duty) * (SalesCases + ASI_CRM_SG_Total_Free_Goods_Cases__c) * bottlePerCase) + ASI_CRM_SG_Distribution_Cost__c;
+			var ASI_CRM_SG_Gross_Margin__c = ASI_CRM_SG_Net_Sales__c + ASI_CRM_SG_Cost_of_Sales__c;
+			
+			var eventsBottle = normalizeFloat(row.find("input.eventsBottle").val() ? row.find("input.eventsBottle").val() : 0, [",", "."]);
+			console.log('eventsBottle: '+eventsBottle);
+			var eventsValue = normalizeFloat(row.find("input.eventsValue").val() ? row.find("input.eventsValue").val() : 0, [",", "."]);
+			console.log('eventsValue: '+eventsValue);
+			var signageAdvertisingBottle = normalizeFloat(row.find("input.signageAdvertisingBottle").val() ? row.find("input.signageAdvertisingBottle").val() : 0, [",", "."]);
+			console.log('signageAdvertisingBottle: '+signageAdvertisingBottle);
+			var signageAdvertisingValue = normalizeFloat(row.find("input.signageAdvertisingValue").val() ? row.find("input.signageAdvertisingValue").val() : 0, [",", "."]);
+			console.log('signageAdvertisingValue: '+signageAdvertisingValue);
+			var advertisingBottle = normalizeFloat(row.find("input.advertisingBottle").val() ? row.find("input.advertisingBottle").val() : 0, [",", "."]);
+			console.log('advertisingBottle: '+advertisingBottle);
+			var advertisingValue = normalizeFloat(row.find("input.advertisingValue").val() ? row.find("input.advertisingValue").val() : 0, [",", "."]);
+			console.log('advertisingValue: '+advertisingValue);
+			var anniversaryBottle = normalizeFloat(row.find("input.anniversaryBottle").val() ? row.find("input.anniversaryBottle").val() : 0, [",", "."]);
+			console.log('anniversaryBottle: '+anniversaryBottle);
+			var tradeIncentiveTrips = normalizeFloat(row.find("input.tradeIncentiveTrips").val() ? row.find("input.tradeIncentiveTrips").val() : 0, [",", "."]);
+			console.log('tradeIncentiveTrips: '+tradeIncentiveTrips);
+			var productBrandingDisplay = normalizeFloat(row.find("input.productBrandingDisplay").val() ? row.find("input.productBrandingDisplay").val() : 0, [",", "."]);
+			console.log('productBrandingDisplay: '+productBrandingDisplay);
+			var adhocPromo = normalizeFloat(row.find("input.adhocPromo").val() ? row.find("input.adhocPromo").val() : 0, [",", "."]);
+			console.log('adhocPromo: '+adhocPromo);
+			var tradeAdvertTotal = eventsValue + signageAdvertisingValue + advertisingValue + tradeIncentiveTrips + productBrandingDisplay + adhocPromo +
+				((eventsBottle + signageAdvertisingBottle + advertisingBottle + anniversaryBottle) * IGC);
+			var ASI_CRM_SG_Return_on_Investment__c = ASI_CRM_SG_Gross_Margin__c - tradeAdvertTotal;
+			
+			var roi = 0;
+			roi = ASI_CRM_SG_Return_on_Investment__c / ASI_CRM_SG_Net_Sales__c * 100;
+			roi = roi.toFixed(2);
+			row.find("span.ROI").text(roi+"%");
+			
+			if (!massCalculateROI) hideShowDtCol(showColStart,showColEnd);
+		}
+	}
+	
+	function recalculateROI(){
+		massCalculateROI = true;
+		hideShowDtCol(3,40);
+		$('#{!CONTRACT_LINE_ITEM_TABLE_PREFIX}SKU').find('tbody').find('tr').each(function(index){
+			$(this).find("input.SalesCases").trigger('change');
+		});
+		hideShowDtCol(showColStart,showColEnd);
+		massCalculateROI = false;
+	}
+	/* [VL 12.0] END */
+    
+    function validateNumber(input){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{0})?$"); 
+        return numRe.test(input);
+    }
+    
+    function validateFloat(input, precision){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{1,"+precision+"})?$"); 
+        return numRe.test(input);
+    }
+
+    
+    function normalizeFloat(number, chars) {
+        /*
+        var lastIndex = -1;
+        for(i=0; i < chars.length; i++) {
+            t = number.lastIndexOf(chars[i]);
+
+            if (t > lastIndex) {
+                lastIndex = t;
+            }
+        }
+
+        if (lastIndex == -1) {
+            lastIndex = number.length;
+        }
+
+        var whole = number.substring(0, lastIndex);   
+        var precision = number.substring(lastIndex);
+        for (i=0; i < chars.length; i++) {
+            whole = whole.replace(chars[i], '');
+            precision = precision.replace(chars[i],'.');           
+        }
+        number = whole + precision;
+        */
+        if (number==undefined) return 0;
+        
+        for(i=0; i < chars.length; i++) {
+            if (chars[i]==","){
+                //number = number.replace(new RegExp('"_0x69b9[' + chars[i] + ']"', 'g'), '');
+                number = number.toString().split(',').join('');
+                //console.log("Number : "+i+" "+chars[i]+" "+number);
+            }
+        }
+
+        f = parseFloat(number);
+        return f;
+    }
+    
+    /* **************************************************************** SKU TAB: AUTOCALC SALES (9L) *********************************** */
+    function calculateTotalSpend(cpiRow, sizeCL, btlsPerCase){
+        var totalSpendVal = 0;
+        var isInputValid = false;
+
+        //console.log('Calculate Total Spend - CPI Row:'+cpiRow);
+        if (cpiRow!=undefined){
+            
+            var amount = cpiRow.find("input.SalesCases").val();//cpiRow.children().children(".SalesCases").val();
+            if (amount!= undefined){
+                if (validateFloat(amount, 2)){
+                    isInputValid = true;
+                }else{
+                    isAllInputValid = false;
+                }
+            }
+            
+            if (isInputValid){
+                
+                amount = normalizeFloat(amount, [",","."]);
+                amount = (amount!=null&&amount!=undefined&&amount!="NaN")?parseFloat(amount):0;
+                
+                sizeCL = (sizeCL!=null&&sizeCL!=undefined&&!isNaN(sizeCL)&&sizeCL!='')?parseFloat(sizeCL):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+
+                totalSpendVal = (sizeCL*amount*btlsPerCase)/900;
+                
+                totalSpendVal = (totalSpendVal!=null&&totalSpendVal!=undefined&&!isNaN(totalSpendVal)&&totalSpendVal!="Infinity")?parseFloat(totalSpendVal):0;
+                totalSpendVal = parseFloat(Math.round(totalSpendVal * 100) / 100).toFixed(2);
+                totalSpendVal = Math.round(totalSpendVal);
+            }
+        }
+        return totalSpendVal.toFixed(2);
+    }
+    
+    function sumTotalSpend(tableEle, colEle){
+        var sTotalSpend = 0;
+        var totalSpendArr = tableEle.find(colEle);//tableEle.find("span.Sales9L");
+        //console.log('Table Element:'+tableEle +'-'+totalSpendArr);
+        //console.log('colEle' + colEle);
+        //console.log('Table Element size: ' + totalSpendArr.length);
+        for (j=0; j<totalSpendArr.length; j++){
+            var totalSpendEle = $(totalSpendArr[j]);
+            var fTotalSpend = normalizeFloat(totalSpendEle.text(), [",",""]);//parseFloat(totalSpendEle.text())
+            if(colEle.indexOf('input')>-1)
+                fTotalSpend = normalizeFloat(totalSpendEle.val(), [",",""]);
+                            
+            fTotalSpend = isNaN(fTotalSpend)?0:fTotalSpend;
+            sTotalSpend += fTotalSpend;
+        }
+        
+        //console.log("sTotalSpend:" + sTotalSpend);
+        sTotalSpend = isNaN(sTotalSpend)?0:sTotalSpend;
+        return precise_round(sTotalSpend, 2).toFixed(2);
+    }
+    
+    /*function calculateAllTotalSpend(tableEle,cellEle){
+        var allCliContentRow = tableEle.find(".cpiContent");
+        
+        //console.log("allCliContentRow:" +allCliContentRow+'-'+allCliContentRow.length);
+        for (k=0; k<allCliContentRow.length; k++){
+            var cliContentRow = $(allCliContentRow[k]);
+            //console.log('Check - Calculate All Total Spend:' + cliContentRow);
+
+            var tSpend = calculateTotalSpend(cliContentRow);
+            //console.log("Check - Calculate All Total Spend - TSpend:"+ tSpend);
+            cliContentRow.find(cellEle).text(tSpend);//cliContentRow.children().children(".cpiTotalSpend").text(tSpend);
+            //console.log("Check - Calculate All Total Spend - Assign:" +cliContentRow.find(cellEle) + "-"+cliContentRow.find("span.cpiTotalSpend").val());
+        }
+    }*/
+    
+    /* [VL 1.0] BEGIN */
+    /* **************************************************************** SKU TAB: AUTOCALC DUTY *********************************** */
+    function calculateTotalDuty(cpiRow, dutyPerBtl, btlsPerCase){
+        var totalDutyVal = 0;
+        var isInputValid = false;
+
+        //console.log('Calculate Total Duty - CPI Row:'+cpiRow);
+        if (cpiRow!=undefined){
+            
+            var amount = cpiRow.find("input.SalesCases").val();//cpiRow.children().children(".SalesCases").val();
+            if (amount!= undefined){
+                if (validateFloat(amount, 2)){
+                    isInputValid = true;
+                }else{
+                    isAllInputValid = false;
+                }
+            }
+            
+            if (isInputValid){
+                
+                amount = normalizeFloat(amount, [",","."]);
+                amount = (amount!=null&&amount!=undefined&&amount!="NaN")?parseFloat(amount):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                totalDutyVal = Math.round(dutyPerBtl*amount*btlsPerCase * 100)/100;
+                
+            }
+        }
+        return totalDutyVal.toFixed(2);
+    }
+    /* [VL 1.0] END */
+
+    /* [DC 1.0] BEGIN */
+    /* **************************************************************** SKU TAB: AUTOCALC FOB *********************************** */
+    function calculateTotalFob(cpiRow, fobPerBtl, btlsPerCase){
+        var totalFobVal = 0;
+        var isInputValid = false;
+
+        //console.log('Calculate Total FOB - CPI Row:'+cpiRow);
+        if (cpiRow!=undefined){
+            
+            var amount = cpiRow.find("input.SalesCases").val();//cpiRow.children().children(".SalesCases").val();
+            if (amount!= undefined){
+                if (validateFloat(amount, 2)){
+                    isInputValid = true;
+                }else{
+                    isAllInputValid = false;
+                }
+            }
+            
+            if (isInputValid){
+                
+                amount = normalizeFloat(amount, [",","."]);
+                amount = (amount!=null&&amount!=undefined&&amount!="NaN")?parseFloat(amount):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                totalFobVal = Math.round(fobPerBtl*amount*btlsPerCase * 100)/100;
+                /* [VL 2.0] BEGIN */
+                /*
+                alert('fobPerBtl: ' + fobPerBtl +'\ntotalFobVal: ' + totalFobVal);
+                */
+                /* [VL 2.0] END */
+                
+            }
+        }
+        return totalFobVal.toFixed(2);
+    }
+
+    /* **************************************************************** SKU TAB: AUTOCALC HANDLING COST *********************************** */
+    function calculateTotalHandlingCost(cpiRow, costPerBtl, btlsPerCase){
+        var totalCostVal = 0;
+        var isInputValid = false;
+
+        //console.log('Calculate Total Handling Cost - CPI Row:'+cpiRow);
+        if (cpiRow!=undefined){
+            
+            var amount = cpiRow.find("input.SalesCases").val();//cpiRow.children().children(".SalesCases").val();
+            if (amount!= undefined){
+                if (validateFloat(amount, 2)){
+                    isInputValid = true;
+                }else{
+                    isAllInputValid = false;
+                }
+            }
+            
+            if (isInputValid){
+                
+                amount = normalizeFloat(amount, [",","."]);
+                amount = (amount!=null&&amount!=undefined&&amount!="NaN")?parseFloat(amount):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                totalCostVal = Math.round(costPerBtl*amount*btlsPerCase * 100)/100;
+                
+            }
+        }
+        return totalCostVal.toFixed(2);
+    }
+    /* [DC 1.0] END */
+    
+    /* **************************************************************** FREE GOODS TAB: AUTOCALC TOTAL FREE GOODS (CASES) *********************************** */
+    function calculateTotalFreeGoods(cpiRow, cpiTotalFreeGoods9L, targetSalesFOC, sizeCL, BtlsPerCase, cpiSKURow) {
+        var totalSpendVal = 0;
+        var isInputValid = false;
+        if (cpiRow!=undefined){
+            
+            var salesIncentive = cpiRow.find("input.SalesIncentive").val();
+            if (salesIncentive!= undefined){
+                if (validateFloat(salesIncentive, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var managementIncentives = cpiRow.find("input.ManagementIncentives").val();
+            if (managementIncentives!= undefined){
+                if (validateFloat(managementIncentives, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var endDate = new Date('{!contractObj.ASI_TH_CRM_End_Date__c}');
+            var startDate = new Date('{!contractObj.ASI_TH_CRM_Start_Date__c}');
+            var diff = Math.round((((endDate - startDate)/86400000)/30));
+            
+            var otherIncentives = cpiRow.find("input.Others").val();
+            if (otherIncentives!= undefined){
+                if (validateFloat(otherIncentives, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var sponsorIncentive = cpiRow.find("input.SponsorTargetIncentive").val();
+            if (sponsorIncentive!= undefined){
+                if (validateFloat(sponsorIncentive, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+
+            //if (isInputValid){
+                
+                salesIncentive = normalizeFloat(salesIncentive, [",","."]);
+                salesIncentive = (salesIncentive!=null&&salesIncentive!=undefined&&!isNaN(salesIncentive))?parseFloat(salesIncentive):0;
+                
+                managementIncentives = normalizeFloat(managementIncentives, [",","."]);
+                managementIncentives = (managementIncentives!=null&&managementIncentives!=undefined&&!isNaN(managementIncentives))?parseFloat(managementIncentives):0;
+                
+                otherIncentives = normalizeFloat(otherIncentives, [",","."]);
+                otherIncentives = (otherIncentives!=null&&otherIncentives!=undefined&&!isNaN(otherIncentives))?parseFloat(otherIncentives):0;
+                
+                sponsorIncentive = normalizeFloat(sponsorIncentive, [",","."]);
+                sponsorIncentive = (sponsorIncentive!=null&&sponsorIncentive!=undefined&&!isNaN(sponsorIncentive))?parseFloat(sponsorIncentive):0;
+                
+                targetSalesFOC = (targetSalesFOC!=null&&targetSalesFOC!=undefined&&!isNaN(targetSalesFOC)&&targetSalesFOC!='')?parseFloat(targetSalesFOC):0;
+                
+                if(targetSalesFOC == 0) {
+                    var salesCases = cpiSKURow.find("input.SalesCases").val();
+                    salesCases = (salesCases!=null&&salesCases!=undefined&&!isNaN(salesCases)&&salesCases!='')?parseFloat(salesCases):0;
+                    /*var FOCpickList = cpiSKURow.find("select.cpiVolume").val();
+                    if(FOCpickList != 'By Sub-Brand') {
+                        targetSalesFOC = salesCases;
+                    }*/
+                }
+                
+                sizeCL = (sizeCL!=null&&sizeCL!=undefined&&!isNaN(sizeCL)&&sizeCL!='')?parseFloat(sizeCL):0;
+                
+                BtlsPerCase = (BtlsPerCase!=null&&BtlsPerCase!=undefined&&!isNaN(BtlsPerCase)&&BtlsPerCase!='')?parseFloat(BtlsPerCase):0;
+                
+                totalSpendVal = salesIncentive * (targetSalesFOC / BtlsPerCase) + managementIncentives * diff + otherIncentives + sponsorIncentive;
+                
+                totalSpendVal = (totalSpendVal!=null&&totalSpendVal!=undefined&&!isNaN(totalSpendVal)&&totalSpendVal!="Infinity")?parseFloat(totalSpendVal):0;
+                totalSpendVal = parseFloat(Math.round(totalSpendVal * 100) / 100).toFixed(2);
+                totalSpendVal = Math.round(totalSpendVal);
+                calculateTotalFreeGoods9L(cpiRow, cpiTotalFreeGoods9L, totalSpendVal, sizeCL, BtlsPerCase);
+            //}
+        }
+        return totalSpendVal.toFixed(2);
+    }
+    
+    /* **************************************************************** FREE GOODS TAB: Total Free Goods (9L) *********************************** */
+    function calculateTotalFreeGoods9L(cpiRow, cpiTotalFreeGoods9L, totalFreeGoods, sizeCL, BtlsPerCase) {
+        var totalSpendVal = 0;
+        var isInputValid = false;
+        if (cpiRow!=undefined){
+            
+            sizeCL = (sizeCL!=null&&sizeCL!=undefined&&!isNaN(sizeCL)&&sizeCL!="Infinity")?parseFloat(sizeCL):0;
+            BtlsPerCase = (BtlsPerCase!=null&&BtlsPerCase!=undefined&&!isNaN(BtlsPerCase)&&BtlsPerCase!="Infinity")?parseFloat(BtlsPerCase):0;
+                
+            totalFreeGoods = (totalFreeGoods!=null&&totalFreeGoods!=undefined&&!isNaN(totalFreeGoods)&&totalFreeGoods!='')?parseFloat(totalFreeGoods):0;
+
+            sizeCL = (sizeCL!=null&&sizeCL!=undefined&&!isNaN(sizeCL)&&sizeCL!='')?parseFloat(sizeCL):0;
+                
+            BtlsPerCase = (BtlsPerCase!=null&&BtlsPerCase!=undefined&&!isNaN(BtlsPerCase)&&BtlsPerCase!='')?parseFloat(BtlsPerCase):0;
+
+            totalSpendVal = (totalFreeGoods * sizeCL * BtlsPerCase) / 900;
+            
+            totalSpendVal = (totalSpendVal!=null&&totalSpendVal!=undefined&&!isNaN(totalSpendVal)&&totalSpendVal!="Infinity")?parseFloat(totalSpendVal):0;
+            totalSpendVal = parseFloat(Math.round(totalSpendVal * 100) / 100).toFixed(2);
+            totalSpendVal = Math.round(totalSpendVal);
+            cpiTotalFreeGoods9L.text(totalSpendVal.toFixed(2));
+        }
+    }
+    
+    /* **************************************************************** Contract Margin Tab: AUTOCALC Compensation For WS/ Price Difference *********************************** */
+    function calculateCompensationForWSPriceDiff(cpiRowC, cpiRowS, sellingPriceBtl, btlsPerCase) {
+        
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRowC!=undefined && cpiRowS!=undefined){
+            
+            var consumerPriceOffer = cpiRowC.find("input.consumerPriceOffer").val();
+            if (consumerPriceOffer!= undefined){
+                if (validateFloat(consumerPriceOffer, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var targetCase = cpiRowS.find("input.SalesCases").val();
+            if (targetCase!= undefined){
+                if (validateFloat(targetCase, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            
+            if (isInputValid){
+                
+                consumerPriceOffer = normalizeFloat(consumerPriceOffer, [",","."]);
+                consumerPriceOffer = (consumerPriceOffer!=null&&consumerPriceOffer!=undefined&&!isNaN(consumerPriceOffer))?parseFloat(consumerPriceOffer):0;
+                
+                targetCase = normalizeFloat(targetCase, [",","."]);
+                targetCase = (targetCase!=null&&targetCase!=undefined&&!isNaN(targetCase))?parseFloat(targetCase):0;
+                
+                sellingPriceBtl = (sellingPriceBtl!=null&&sellingPriceBtl!=undefined&&!isNaN(sellingPriceBtl)&&sellingPriceBtl!='')?parseFloat(sellingPriceBtl):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                if(consumerPriceOffer == 0 || consumerPriceOffer > sellingPriceBtl) {
+                    totalResult = 0.00;
+                } else {
+                    totalResult = targetCase * btlsPerCase * (sellingPriceBtl - consumerPriceOffer);
+                    totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                    totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+                }
+            }
+            
+        }
+        return totalResult.toFixed(2);
+    }
+    
+    /* **************************************************************** Contract Margin Tab: AUTOCALC Wholesaler Margin Total *********************************** */
+    function calculateWholeMargTotal(cpiRowC, cpiRowS, btlsPerCase) {
+        var totalResult = 0.00;
+        var isInputValid = false;
+        if (cpiRowC!=undefined && cpiRowS!=undefined){
+            
+            var wholesalerMargin = cpiRowC.find("input.wholesalerMargin").val();
+            if (wholesalerMargin!= undefined){
+                if (validateFloat(wholesalerMargin, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var targetCase = cpiRowS.find("input.SalesCases").val();
+            if (targetCase!= undefined){
+                if (validateFloat(targetCase, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            
+            if (isInputValid){
+                
+                wholesalerMargin = normalizeFloat(wholesalerMargin, [",","."]);
+                wholesalerMargin = (wholesalerMargin!=null&&wholesalerMargin!=undefined&&!isNaN(wholesalerMargin))?parseFloat(wholesalerMargin):0;
+                
+                targetCase = normalizeFloat(targetCase, [",","."]);
+                targetCase = (targetCase!=null&&targetCase!=undefined&&!isNaN(targetCase))?parseFloat(targetCase):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                totalResult = targetCase * btlsPerCase * wholesalerMargin;
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                    totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+            }
+            
+        }
+        
+        return totalResult.toFixed(2);
+    }
+    
+    /* **************************************************************** Contract Margin Tab: AUTOCALC Contract Margin Per 9Lc *********************************** */
+    function calculateConMargPer9Lc(cpiRowC, cpiRowS, Selling_Price_PRS_WS, sizeCl) {
+        
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRowC!=undefined && cpiRowS!=undefined){
+            
+            var consumerPriceOffer = cpiRowC.find("input.consumerPriceOffer").val();
+            if (consumerPriceOffer!= undefined){
+                if (validateFloat(consumerPriceOffer, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var wholesalerMargin = cpiRowC.find("input.wholesalerMargin").val();
+            if (wholesalerMargin!= undefined){
+                if (validateFloat(wholesalerMargin, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            
+            if (isInputValid){
+                
+                wholesalerMargin = normalizeFloat(wholesalerMargin, [",","."]);
+                wholesalerMargin = (wholesalerMargin!=null&&wholesalerMargin!=undefined&&!isNaN(wholesalerMargin))?parseFloat(wholesalerMargin):0;
+                
+                consumerPriceOffer = normalizeFloat(consumerPriceOffer, [",","."]);
+                consumerPriceOffer = (consumerPriceOffer!=null&&consumerPriceOffer!=undefined&&!isNaN(consumerPriceOffer))?parseFloat(consumerPriceOffer):0;
+                
+                Selling_Price_PRS_WS = (Selling_Price_PRS_WS!=null&&Selling_Price_PRS_WS!=undefined&&!isNaN(Selling_Price_PRS_WS)&&Selling_Price_PRS_WS!='')?parseFloat(Selling_Price_PRS_WS):0;
+                
+                sizeCl = (sizeCl!=null&&sizeCl!=undefined&&!isNaN(sizeCl)&&sizeCl!='')?parseFloat(sizeCl):0;
+                
+                if(consumerPriceOffer == 0) {
+                    totalResult = 0.00;
+                } else {
+                    totalResult = ((Selling_Price_PRS_WS - consumerPriceOffer + wholesalerMargin)*900)/(sizeCl);
+                    totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity"&&totalResult!="-Infinity")?parseFloat(totalResult):0;
+                    totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+                }
+            }
+            
+        }
+        
+        return totalResult.toFixed(2);
+    }
+    
+    /* **************************************************************** Contract Margin Tab: AUTOCALC Contract Margin - Total *********************************** */
+    function calculateConMargTotal(compWsPriceKey, wholeMargTotalKey) {
+        
+        var totalResult = 0.00;
+        if (compWsPriceKey!=undefined && wholeMargTotalKey!=undefined){
+            
+            var compWsPrice = $('#'.concat(compWsPriceKey)).text();
+            var wholeMarginTotal = $('#'.concat(wholeMargTotalKey)).text();
+            
+            compWsPrice = normalizeFloat(compWsPrice, [",","."]);
+            compWsPrice = (compWsPrice!=null&&compWsPrice!=undefined&&!isNaN(compWsPrice))?parseFloat(compWsPrice):0;
+                
+            wholeMarginTotal = normalizeFloat(wholeMarginTotal, [",","."]);
+            wholeMarginTotal = (wholeMarginTotal!=null&&wholeMarginTotal!=undefined&&!isNaN(wholeMarginTotal))?parseFloat(wholeMarginTotal):0;
+            
+            totalResult = compWsPrice + wholeMarginTotal;
+            
+            totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity"&&totalResult!="-Infinity")?parseFloat(totalResult):0;
+            totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+            
+        }
+        
+        return totalResult.toFixed(2);
+    }
+    
+    /* [VL 6.1] BEGIN */
+    /* **************************************************************** Contract Margin Tab: AUTOCALC Wholesaler Margin Total *********************************** */
+    function calculateBottleIncentive(cpiRowC, cpiRowS, btlsPerCase) {
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRowC!=undefined && cpiRowS!=undefined){
+            
+            var bottleIncentive = cpiRowC.find("input.bottleIncentive").val();
+            if (bottleIncentive!= undefined){
+                if (validateFloat(bottleIncentive, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var targetCase = cpiRowS.find("input.SalesCases").val();
+            if (targetCase!= undefined){
+                if (validateFloat(targetCase, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            
+            if (isInputValid){
+                
+                bottleIncentive = normalizeFloat(bottleIncentive, [",","."]);
+                bottleIncentive = (bottleIncentive!=null&&bottleIncentive!=undefined&&!isNaN(bottleIncentive))?parseFloat(bottleIncentive):0;
+                
+                targetCase = normalizeFloat(targetCase, [",","."]);
+                targetCase = (targetCase!=null&&targetCase!=undefined&&!isNaN(targetCase))?parseFloat(targetCase):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                totalResult = targetCase * btlsPerCase * bottleIncentive;
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+            }
+            
+        }
+        
+        return totalResult.toFixed(2);
+    }
+    /* [VL 6.1] END */
+    
+    /* **************************************************************** Cash Sponsorship Tab: AUTOCALC Cash Sponsorship - Total *********************************** */
+    function calculateCashSponsTotal(cpiRow) {
+        
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRow!=undefined){
+            
+            var GoodinKinds = cpiRow.find("input.GoodinKinds").val();
+            
+            if (GoodinKinds!= undefined){
+                if (validateFloat(GoodinKinds, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var cashSponsorhip = cpiRow.find("input.cashSponsorhip").val();
+            if (cashSponsorhip!= undefined){
+                if (validateFloat(cashSponsorhip, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            isInputValid = true;
+            
+            if (isInputValid){
+                
+                GoodinKinds = normalizeFloat(GoodinKinds, [",","."]);
+                GoodinKinds = (GoodinKinds!=null&&GoodinKinds!=undefined&&!isNaN(GoodinKinds))?parseFloat(GoodinKinds):0;
+                
+                cashSponsorhip = normalizeFloat(cashSponsorhip, [",","."]);
+                cashSponsorhip = (cashSponsorhip!=null&&cashSponsorhip!=undefined&&!isNaN(cashSponsorhip))?parseFloat(cashSponsorhip):0;
+                
+                totalResult = cashSponsorhip + GoodinKinds;
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+            }
+            
+        }
+        
+        return totalResult.toFixed(2);
+    }
+    
+    /* **************************************************************** AP Tab: AUTOCALC Trade Advertising & Promotional - Total *********************************** */
+    function calculateTradePromoTotal(cpiRow, btlsPerCase, sellingPriceBtlWSOnTrade) {
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRow!=undefined){
+        
+            var eventsBottle = cpiRow.find("input.eventsBottle").val();
+            if (eventsBottle!= undefined){
+                if (validateFloat(eventsBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var eventsValue = cpiRow.find("input.eventsValue").val();
+            if (eventsValue!= undefined){
+                if (validateFloat(eventsValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var signageAdvertisingBottle = cpiRow.find("input.signageAdvertisingBottle").val();
+            if (signageAdvertisingBottle!= undefined){
+                if (validateFloat(signageAdvertisingBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var signageAdvertisingValue = cpiRow.find("input.signageAdvertisingValue").val();
+            if (signageAdvertisingValue!= undefined){
+                if (validateFloat(signageAdvertisingValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            /* [VL 6.0] BEGIN */
+            var advertisingBottle = cpiRow.find("input.advertisingBottle").val();
+            if (advertisingBottle!= undefined){
+                if (validateFloat(advertisingBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var advertisingValue = cpiRow.find("input.advertisingValue").val();
+            if (advertisingValue!= undefined){
+                if (validateFloat(advertisingValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            /* [VL 6.0] END */
+            
+            var anniversaryBottle = cpiRow.find("input.anniversaryBottle").val();
+            if (anniversaryBottle!= undefined){
+                if (validateFloat(anniversaryBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var tradeIncentiveTrips = cpiRow.find("input.tradeIncentiveTrips").val();
+            if (tradeIncentiveTrips!= undefined){
+                if (validateFloat(tradeIncentiveTrips, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var productBrandingDisplay = cpiRow.find("input.productBrandingDisplay").val();
+            if (productBrandingDisplay!= undefined){
+                if (validateFloat(productBrandingDisplay, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var adhocPromo= cpiRow.find("input.adhocPromo").val();
+            if (adhocPromo!= undefined){
+                if (validateFloat(adhocPromo, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            isInputValid = true;
+            if (isInputValid){
+                eventsBottle = normalizeFloat(eventsBottle, [",","."]);
+                eventsBottle = (eventsBottle!=null&&eventsBottle!=undefined&&!isNaN(eventsBottle))?parseFloat(eventsBottle):0;
+                
+                eventsValue = normalizeFloat(eventsValue, [",","."]);
+                eventsValue = (eventsValue!=null&&eventsValue!=undefined&&!isNaN(eventsValue))?parseFloat(eventsValue):0;
+                
+                signageAdvertisingBottle = normalizeFloat(signageAdvertisingBottle, [",","."]);
+                signageAdvertisingBottle = (signageAdvertisingBottle!=null&&signageAdvertisingBottle!=undefined&&!isNaN(signageAdvertisingBottle))?parseFloat(signageAdvertisingBottle):0;
+                
+                signageAdvertisingValue = normalizeFloat(signageAdvertisingValue, [",","."]);
+                signageAdvertisingValue = (signageAdvertisingValue!=null&&signageAdvertisingValue!=undefined&&!isNaN(signageAdvertisingValue))?parseFloat(signageAdvertisingValue):0;
+                
+                /* [VL 6.0] BEGIN */
+                advertisingBottle = normalizeFloat(advertisingBottle, [",","."]);
+                advertisingBottle = (advertisingBottle!=null&&advertisingBottle!=undefined&&!isNaN(advertisingBottle))?parseFloat(advertisingBottle):0;
+                
+                advertisingValue = normalizeFloat(advertisingValue, [",","."]);
+                advertisingValue = (advertisingValue!=null&&advertisingValue!=undefined&&!isNaN(advertisingValue))?parseFloat(advertisingValue):0;
+                /* [VL 6.0] END */
+                
+                anniversaryBottle = normalizeFloat(anniversaryBottle, [",","."]);
+                anniversaryBottle = (anniversaryBottle!=null&&anniversaryBottle!=undefined&&!isNaN(anniversaryBottle))?parseFloat(anniversaryBottle):0;
+                
+                tradeIncentiveTrips = normalizeFloat(tradeIncentiveTrips, [",","."]);
+                tradeIncentiveTrips = (tradeIncentiveTrips!=null&&tradeIncentiveTrips!=undefined&&!isNaN(tradeIncentiveTrips))?parseFloat(tradeIncentiveTrips):0;
+                
+                productBrandingDisplay = normalizeFloat(productBrandingDisplay, [",","."]);
+                productBrandingDisplay = (productBrandingDisplay!=null&&productBrandingDisplay!=undefined&&!isNaN(productBrandingDisplay))?parseFloat(productBrandingDisplay):0;
+                
+                adhocPromo = normalizeFloat(adhocPromo, [",","."]);
+                adhocPromo = (adhocPromo!=null&&adhocPromo!=undefined&&!isNaN(adhocPromo))?parseFloat(adhocPromo):0;
+                
+                btlsPerCase = (btlsPerCase!=null&&btlsPerCase!=undefined&&!isNaN(btlsPerCase)&&btlsPerCase!='')?parseFloat(btlsPerCase):0;
+                
+                sellingPriceBtlWSOnTrade = (sellingPriceBtlWSOnTrade!=null&&sellingPriceBtlWSOnTrade!=undefined&&!isNaN(sellingPriceBtlWSOnTrade)&&btlsPerCase!='')?parseFloat(sellingPriceBtlWSOnTrade):0;
+                
+                /* [VL 6.0] BEGIN */
+                /*
+                totalResult = (eventsValue + signageAdvertisingValue + tradeIncentiveTrips + productBrandingDisplay + adhocPromo)+((eventsBottle + signageAdvertisingBottle + anniversaryBottle) * btlsPerCase * sellingPriceBtlWSOnTrade);
+                */
+                totalResult = (eventsValue + signageAdvertisingValue + advertisingValue + tradeIncentiveTrips + productBrandingDisplay + adhocPromo)+((eventsBottle + signageAdvertisingBottle + advertisingBottle + anniversaryBottle) * btlsPerCase * sellingPriceBtlWSOnTrade);
+                /* [VL 6.0] BEGIN */
+                
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+            }
+        }
+        return totalResult.toFixed(2);
+    }
+    
+    /* **************************************************************** AP Tab: AUTOCALC Trade Advertising & Promotional - Total -PRS *********************************** */
+    function calculateTradePromoTotalPRS(cpiRow, IGCCostPercase) {
+        var totalResult = 0;
+        var isInputValid = false;
+        if (cpiRow!=undefined){
+        
+            var eventsBottle = cpiRow.find("input.eventsBottle").val();
+            if (eventsBottle!= undefined){
+                if (validateFloat(eventsBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var eventsValue = cpiRow.find("input.eventsValue").val();
+            if (eventsValue!= undefined){
+                if (validateFloat(eventsValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var signageAdvertisingBottle = cpiRow.find("input.signageAdvertisingBottle").val();
+            if (signageAdvertisingBottle!= undefined){
+                if (validateFloat(signageAdvertisingBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var signageAdvertisingValue = cpiRow.find("input.signageAdvertisingValue").val();
+            if (signageAdvertisingValue!= undefined){
+                if (validateFloat(signageAdvertisingValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            /* [VL 6.0] BEGIN */
+            var advertisingBottle = cpiRow.find("input.advertisingBottle").val();
+            if (advertisingBottle!= undefined){
+                if (validateFloat(advertisingBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var advertisingValue = cpiRow.find("input.advertisingValue").val();
+            if (advertisingValue!= undefined){
+                if (validateFloat(advertisingValue, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            /* [VL 6.0] END */
+            
+            var anniversaryBottle = cpiRow.find("input.anniversaryBottle").val();
+            if (anniversaryBottle!= undefined){
+                if (validateFloat(anniversaryBottle, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var tradeIncentiveTrips = cpiRow.find("input.tradeIncentiveTrips").val();
+            if (tradeIncentiveTrips!= undefined){
+                if (validateFloat(tradeIncentiveTrips, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var productBrandingDisplay = cpiRow.find("input.productBrandingDisplay").val();
+            if (productBrandingDisplay!= undefined){
+                if (validateFloat(productBrandingDisplay, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            
+            var adhocPromo= cpiRow.find("input.adhocPromo").val();
+            if (adhocPromo!= undefined){
+                if (validateFloat(adhocPromo, 2)){
+                    isInputValid = true;
+                }else{
+                    isInputValid = false;
+                }
+            }
+            isInputValid = true;
+            if (isInputValid){
+                eventsBottle = normalizeFloat(eventsBottle, [",","."]);
+                eventsBottle = (eventsBottle!=null&&eventsBottle!=undefined&&!isNaN(eventsBottle))?parseFloat(eventsBottle):0;
+                
+                eventsValue = normalizeFloat(eventsValue, [",","."]);
+                eventsValue = (eventsValue!=null&&eventsValue!=undefined&&!isNaN(eventsValue))?parseFloat(eventsValue):0;
+                
+                signageAdvertisingBottle = normalizeFloat(signageAdvertisingBottle, [",","."]);
+                signageAdvertisingBottle = (signageAdvertisingBottle!=null&&signageAdvertisingBottle!=undefined&&!isNaN(signageAdvertisingBottle))?parseFloat(signageAdvertisingBottle):0;
+                
+                signageAdvertisingValue = normalizeFloat(signageAdvertisingValue, [",","."]);
+                signageAdvertisingValue = (signageAdvertisingValue!=null&&signageAdvertisingValue!=undefined&&!isNaN(signageAdvertisingValue))?parseFloat(signageAdvertisingValue):0;
+                
+                /* [VL 6.0] BEGIN */
+                advertisingBottle = normalizeFloat(advertisingBottle, [",","."]);
+                advertisingBottle = (advertisingBottle!=null&&advertisingBottle!=undefined&&!isNaN(advertisingBottle))?parseFloat(advertisingBottle):0;
+                
+                advertisingValue = normalizeFloat(advertisingValue, [",","."]);
+                advertisingValue = (advertisingValue!=null&&advertisingValue!=undefined&&!isNaN(advertisingValue))?parseFloat(advertisingValue):0;
+                /* [VL 6.0] END */
+                
+                anniversaryBottle = normalizeFloat(anniversaryBottle, [",","."]);
+                anniversaryBottle = (anniversaryBottle!=null&&anniversaryBottle!=undefined&&!isNaN(anniversaryBottle))?parseFloat(anniversaryBottle):0;
+                
+                tradeIncentiveTrips = normalizeFloat(tradeIncentiveTrips, [",","."]);
+                tradeIncentiveTrips = (tradeIncentiveTrips!=null&&tradeIncentiveTrips!=undefined&&!isNaN(tradeIncentiveTrips))?parseFloat(tradeIncentiveTrips):0;
+                
+                productBrandingDisplay = normalizeFloat(productBrandingDisplay, [",","."]);
+                productBrandingDisplay = (productBrandingDisplay!=null&&productBrandingDisplay!=undefined&&!isNaN(productBrandingDisplay))?parseFloat(productBrandingDisplay):0;
+                
+                adhocPromo = normalizeFloat(adhocPromo, [",","."]);
+                adhocPromo = (adhocPromo!=null&&adhocPromo!=undefined&&!isNaN(adhocPromo))?parseFloat(adhocPromo):0;
+                
+                IGCCostPercase = (IGCCostPercase!=null&&IGCCostPercase!=undefined&&!isNaN(IGCCostPercase)&&IGCCostPercase!='')?parseFloat(IGCCostPercase):0;
+
+                /* [VL 6.0] BEGIN */
+                /*
+                totalResult = (eventsValue + signageAdvertisingValue + tradeIncentiveTrips + productBrandingDisplay + adhocPromo)+((eventsBottle + signageAdvertisingBottle + anniversaryBottle) * IGCCostPercase);
+                */
+                totalResult = (eventsValue + signageAdvertisingValue + advertisingValue + tradeIncentiveTrips + productBrandingDisplay + adhocPromo)+((eventsBottle + signageAdvertisingBottle + advertisingBottle + anniversaryBottle) * IGCCostPercase);
+                /* [VL 6.0] BEGIN */
+                
+                totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+                totalResult = parseFloat(Math.round(totalResult * 100) / 100);
+            }
+        }
+        return totalResult.toFixed(2);
+    }
+
+    /* **************************************************************** SKU Tab: Verify Unique Sub-Brand *********************************** */
+    function validateSubBrand(cpiRow, cpiKey) {
+
+        var subBrandValue = cpiRow.find(".subBrandPick").val();
+        //console.log('********SubBrand Picklist Change ' + subBrandValue);
+        if(subBrandValue != null && subBrandValue != '') {
+            var subBrandSKU = cpiRow.find("span.subBrandPickSKU").text();
+            if($.inArray(subBrandValue, subBrandItems) > -1 && subBrandSKU != subBrandValue) {
+                alert('Cannot have duplicate Sub-Brand.');
+                cpiRow.find(".subBrandPick").val('');
+                return false;
+            } else
+            {
+                subBrandItems.push(subBrandValue);
+                updateSubBrandPick(subBrandValue, cpiKey);
+                return true;
+            }
+        }
+    }
+
+    function validateSubBrandName(newValue, cpiKey, cpiRow) {
+
+        var subBrandValue = newValue;
+        //console.log('********SubBrand Picklist Change ' + subBrandValue);
+        if(subBrandValue != null && subBrandValue != '') {
+            var subBrandSKU = cpiRow.find("span.subBrandPickSKU").text();
+            if($.inArray(subBrandValue, subBrandItems) > -1 && subBrandSKU != subBrandValue) {
+                alert('Cannot have duplicate Sub-Brand.');
+                cpiRow.find(".subBrandPick").val('');
+                return false;
+            } else
+            {
+                cpiRow.find(".subBrandPick").val(subBrandValue);
+                subBrandItems.push(subBrandValue);
+                updateSubBrandPick(subBrandValue, cpiKey);
+                return true;
+            }
+        }
+    }
+
+
+    function validateAddSubBrand() {
+        if(subBrandSKURep == undefined || subBrandSKURep == null ) {
+            initializeData();
+        }
+        var isValid = true;
+        var subBrand = $("select.subBrandBlockAdd").val();
+        //console.log('*******subBrand ' + subBrand);
+        if(subBrand === '' || subBrand === null || subBrand === undefined) {
+            isValid = false;
+        }
+        if(subBrand in subBrandSKURep) {
+            var subBrandSKUData = subBrandSKURep[subBrand];
+            var subBrandSKURepData = subBrandSKUData.ASI_CRM_Representative_SKU__c;
+            //console.log('********subBrandSKUREpData ' + subBrandSKURepData);
+            if(subBrandSKURepData === null || subBrandSKURepData === '' || subBrandSKURepData === undefined ) {
+                isValid = false;
+            }
+        }
+
+        if($.inArray(subBrand, subBrandItems) > -1) {
+            alert('Cannot have duplicate Sub-Brand.');
+            return false;   
+        }
+
+        //console.log('*******isValid ' + isValid);
+        if(isValid) {
+            addSubBrand();
+        } else {
+            if(subBrand === '' || subBrand === null || subBrand === undefined) {
+                alert('No sub-brand chosen.');
+            } else {
+                alert('Sub-brand ' + subBrandSKUData.Name + ' does not have a representative SKU.');
+            }
+            
+        }
+    }
+
+    /* **************************************************************** Initialize data tables *********************************** */
+    function initializeData() {
+        if(subBrandSKURep == undefined || subBrandSKURep == null) {
+            try
+            {
+                var subBrandList = sforce.connection.query("SELECT ID, Name, ASI_CRM_Representative_SKU__c FROM ASI_MFM_Sub_brand__c WHERE recordtype.developername = 'ASI_CRM_SG_Sub_brand'");
+                var records = subBrandList.getArray("records");
+                subBrandSKURep = {};
+        
+                for (var i=0; i< records.length; i++) {
+                    var record = records[i];
+                    subBrandSKURep[record.Id] = record;
+                }
+                    
+            }
+            catch (error)
+            {
+                alert(error + ' Sub- Brand Map Error.');
+            }
+            //console.log('*********subBrandList ' + subBrandList);
+        }
+    }
+    
+    function precise_round(num,decimals){
+        return Math.round(num*Math.pow(10,decimals))/Math.pow(10,decimals);
+    }
+    
+    function loading(val) {
+        if (val) {
+          document.getElementById('contentLoading').style.display = 'block';
+          document.getElementById('contentLoaded').style.display = 'none';
+        }
+        else {
+          document.getElementById('contentLoading').style.display = 'none';
+          document.getElementById('contentLoaded').style.display = 'block';
+        }
+    }
+    
+    function startLoading(){
+        $('#load_scrl').css('top', $(document).scrollTop() + 200);
+        $('.loadingBox').show();
+        var btn = document.getElementById("{!$Component.mainPage.mainForm.main_pageBlock.mainPageBlockButton.quickSaveButton}");
+        
+    }
+    function endLoading(){
+        $('.loadingBox').hide();/*
+        var btn = document.getElementById("{!$Component.mainPage.mainForm.quickSaveButton}");
+        btn.disabled = false;
+        var btn2 = document.getElementById("{!$Component.mainPage.mainForm.quickSaveButtonBottom}");
+        btn2.disabled = false;*/
+    }
+    
+    function beforeSaveContract(b){
+        hideShowDtCol(3,40);/*
+        var btn = document.getElementById("{!$Component.mainPage.mainForm.quickSaveButton}");
+        btn.disabled = true;
+        var btn2 = document.getElementById("{!$Component.mainPage.mainForm.quickSaveButtonBottom}");
+        btn2.disabled = true;*/
+        if (!b) saveContract(b);
+        else quickSaveContract(b);
+    }
+    
+</script>
+
+</body>
+</apex:page>

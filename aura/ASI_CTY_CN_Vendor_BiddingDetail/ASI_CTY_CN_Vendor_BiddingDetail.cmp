@@ -1,0 +1,586 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,forceCommunity:availableForAllPageTypes" access="global" controller="ASI_CTY_CN_Vendor_BidDetailController">
+    <aura:attribute name="isLoading" type="Boolean" default="false" />
+    <aura:attribute name="showSpinner" type="Boolean" default="false"/>
+    <aura:attribute name="isShowModal" type="Boolean" default="false"/>
+    <aura:attribute name="isShowRejectedModal" type="Boolean" default="false"/>
+    <aura:attribute name="isShowImageModal" type="Boolean" default="false" />
+    <aura:attribute name="fileList" type="List" default="[]"/>
+    <aura:attribute name="poList" type="List" default="[]"/>
+    <aura:attribute name="editButtonPriv" type="Boolean" default="false"/>
+    <aura:attribute name="isApply" type="Boolean" default="false"/>
+    <aura:attribute name="isExpired" type="Boolean" default="false"/>
+    <aura:attribute name="isNeedDeadLine" type="Boolean" default="false"/>
+    <aura:attribute name="status" type="String"/>
+    <aura:attribute name="outClass" type="String"/>
+    
+    <aura:attribute name="deadLineHelpTextClassName" type="String" default="DeadLineHelpText"/>
+    <aura:attribute name="recordId" type="String"/>
+    <!-- Open PR Attribute End -->
+
+    <!-- All PRS Attribute Start -->
+    <aura:attribute name="PR" type="Object"/>
+    <aura:attribute name="Buyer" type="Object"/>
+    <aura:attribute name="Quotation" type="Object"/>
+    <aura:attribute name="Address" type="List" default="[]"/>
+    <!-- All PRS Attribute End -->
+
+    <!-- handler Start -->
+    <aura:handler name="init" value="{! this }" action="{! c.doInit }"/>
+
+    <aura:if isTrue="{!v.showSpinner}">
+        <div aura:id="spinnerId" class="slds-spinner_container" style="position: fixed;z-index: 9999;">
+            <div class="slds-spinner--brand  slds-spinner slds-spinner--large slds-is-relative" role="alert">
+                <span class="slds-assistive-text">Loading...</span>
+                <div class="slds-spinner__dot-a"></div>
+                <div class="slds-spinner__dot-b"></div>
+            </div>
+        </div>
+    </aura:if>
+
+    <body>
+        <div class="c-container">
+            <div style="margin-bottom: 15px;">
+                <lightning:layout class="slds-page-header slds-page-header--object-home">
+                    <lightning:layoutItem >
+                        <lightning:icon iconName="standard:orders" class="headerIcon" />
+                    </lightning:layoutItem>
+                    <lightning:layoutItem padding="horizontal-small" size="12">
+                        <div class="page-section page-header">
+                            <h1 class="slds-text-heading--medium" style="display: inline-block;position: relative;top: 8px;">{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Info + $Label.c.ASI_CTY_CN_Vendor_Bidding_Operate_Apply + '('}<label style="color: red;font-weight: bold;">{! v.status}</label>)</h1>
+
+                            <div style="float: right; margin-right: 40px;text-align: right;">
+                                <h1 class="slds-text-heading--medium">{!v.PR.quotation.Name}</h1>
+                                <a href="./bidding">&lt; {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ReturnBiddingList}</a>
+                            </div>
+                        </div>
+                    </lightning:layoutItem>
+                </lightning:layout>
+            </div>
+
+            <lightning:card variant="Narrow" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_BiddingRequired}" iconName="standard:task" class="basicFont">
+                <div style="padding: 5px;margin-left: 27px;font-family: Arial Unicode MS;">
+                    <aura:if isTrue="{! v.fileList.length > 0}">
+                        <a onclick="{! c.getIGImage}">{!v.PR.itemGroup.ASI_CRM_CN_Chinese_Name__c + ' / ' + v.PR.itemGroup.ASI_CRM_CN_Eng_Name__c + ' - ' + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGroupImage}</a>
+                        
+                        <aura:set attribute="else">
+                            <label>{!v.PR.itemGroup.ASI_CRM_CN_Chinese_Name__c + ' / ' + v.PR.itemGroup.ASI_CRM_CN_Eng_Name__c + ' - ' + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_NoItemGroupImage}</label>
+                        </aura:set>
+                    </aura:if>
+                </div>
+            </lightning:card>
+            <lightning:card variant="Narrow" title="{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ContactInfo}" iconName="standard:contact" class="basicFont">
+                <lightning:layout multipleRows="true" horizontalAlign="center" pullToBoundary="small">
+                    <lightning:layoutItem flexibility="auto" size="3" padding="horizontal-small" class="contactInfo">
+                        <label class="left">{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Contact_Name}</label><label class="disable-value">{! v.Buyer.Name}</label>
+                    </lightning:layoutItem>
+                    <lightning:layoutItem flexibility="auto" size="3" padding="horizontal-small" class="contactInfo">
+                        <label class="left">{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Contact_Tel}</label>
+                        <label class="disable-value">
+                            <aura:if isTrue="{! v.Buyer.Phone != null}">
+                                {! v.Buyer.Phone}
+                                <aura:set attribute="else">
+                                    {! v.Buyer.MobilePhone}
+                                </aura:set>
+                            </aura:if>
+                        </label>
+                    </lightning:layoutItem>
+                    <lightning:layoutItem flexibility="auto" size="6" padding="horizontal-small" >
+                    </lightning:layoutItem>
+                </lightning:layout>
+            </lightning:card>
+            <lightning:card variant="Narrow" title="{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Info}" iconName="standard:product" class="basicFont">
+                <lightning:layout multipleRows="true" horizontalAlign="center">
+                    <lightning:layoutItem flexibility="auto" size="12" padding="around-small">
+                        <table id="orderTable" aria-multiselectable="true" class="slds-table slds-table_cell-buffer slds-table_resizable-cols orderTable" role="grid">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 345px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Name}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Name}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 140px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Remark}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Remark}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 75px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Quantity}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Quantity}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 90px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_UnitPrice}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_UnitPrice}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 85px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 85px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 85px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalFreight}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalFreight}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 120px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalPrice}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalPrice}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 150px;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Remark}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Remark}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 154px;text-align: center;">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Operation}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Operation}
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="itemGroup">
+                                <aura:if isTrue="{! v.PR.quotation != null}">
+                                    <tr class="slds-hint-parent" role="row" >
+                                        <td role="gridcell">
+                                            {!v.PR.itemGroup.ASI_CRM_CN_Chinese_Name__c + ' / ' + v.PR.itemGroup.ASI_CRM_CN_Eng_Name__c + ' - ' + v.PR.itemGroup.ASI_MFM_Item_Group_Code__c}
+                                        </td>
+                                        <td role="gridcell">{!v.PR.itemGroup.ASI_MFM_Item_Group_Remark__c}</td>
+                                        <td role="gridcell">{!v.PR.quotation.ASI_CTY_CN_Vendor_Total_Quantity__c}</td>
+                                        <td role="gridcell"> 
+                                            <aura:if isTrue="{! v.PR.quotation.ASI_CTY_CN_Vendor_Unitl_Price__c == null || v.PR.quotation.ASI_CTY_CN_Vendor_Unitl_Price__c == ''}">
+                                                0
+                                                <aura:set attribute="else">
+                                                    <lightning:formattedNumber value="{!v.PR.quotation.ASI_CTY_CN_Vendor_Unitl_Price__c}" minimumFractionDigits="2"/>
+                                                </aura:set>
+                                            </aura:if>
+                                        </td>
+                                        <td role="gridcell">
+                                            <aura:if isTrue="{! v.PR.quotation.ASI_CTY_CN_Vendor_Sample__c == null || v.PR.quotation.ASI_CTY_CN_Vendor_Sample__c == ''}">
+                                                0
+                                                <aura:set attribute="else">
+                                                    <lightning:formattedNumber value="{!v.PR.quotation.ASI_CTY_CN_Vendor_Sample__c}" minimumFractionDigits="2"/>
+                                                </aura:set>
+                                            </aura:if>
+                                        </td>
+                                        <td role="gridcell">
+                                            <aura:if isTrue="{! v.PR.quotation.ASI_CTY_CN_Vendor_Model__c == null || v.PR.quotation.ASI_CTY_CN_Vendor_Model__c == ''}">
+                                                0
+                                                <aura:set attribute="else">
+                                                    <lightning:formattedNumber value="{!v.PR.quotation.ASI_CTY_CN_Vendor_Model__c}" minimumFractionDigits="2"/>
+                                                </aura:set>
+                                            </aura:if>
+                                        </td>
+                                        <td role="gridcell">
+                                            <aura:if isTrue="{! v.PR.quotation.ASI_CTY_CN_Vendor_Total_Freight__c == null || v.PR.quotation.ASI_CTY_CN_Vendor_Total_Freight__c == ''}">
+                                                0
+                                                <aura:set attribute="else">
+                                                    <lightning:formattedNumber value="{!v.PR.quotation.ASI_CTY_CN_Vendor_Total_Freight__c}" minimumFractionDigits="2"/>
+                                                </aura:set>
+                                            </aura:if>
+                                        </td>
+                                        <td role="gridcell"> 
+                                            <lightning:formattedNumber value="{!v.PR.quotation.ASI_CTY_CN_Vendor_Total_Price__c}" minimumFractionDigits="2"/>
+                                        </td>
+                                        <td role="gridcell">{!v.PR.quotation.ASI_CTY_CN_Vendor_Remark__c}</td>
+                                        <td role="gridcell" style="text-align: center;">
+                                            <aura:if isTrue="{! v.editButtonPriv}">
+                                                <div class="slds-button-group" role="group">
+                                                    <aura:if isTrue="{! v.isApply}">
+                                                        <input id="{!v.PR.itemGroup.ASI_MFM_Item_Group_Code__c}" type="button" class="slds-button slds-button--neutral slds-not-selected" value="{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Operate_Update + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Detail}" onclick="{! c.writeUnitPrice}" disabled="{! v.isExpired ? 'true' : ''}" />
+
+                                                        <aura:set attribute="else">
+                                                            <input id="{!v.PR.itemGroup.ASI_MFM_Item_Group_Code__c}" type="button" class="slds-button slds-button--neutral slds-not-selected" value="{! $Label.c.ASI_CTY_CN_Vendor_Bidding_Writed + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Detail}" onclick="{! c.writeUnitPrice}" disabled="{! v.isExpired ? 'true' : ''}" />
+                                                        </aura:set>
+                                                    </aura:if>
+                                                </div>
+                                            </aura:if>
+                                        </td>
+                                    </tr>
+                                </aura:if>
+                                <aura:if isTrue="{!(v.PR.quotation == null)}">
+                                    <p class="padding8">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_NoQuotation}</p>
+                                </aura:if>
+                            </tbody>
+                        </table>
+                        <div class="ItemGroupTotalAmount">
+                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_TotalPrice + ' : '}<span>￥ 
+                            <lightning:formattedNumber value="{! v.PR.quotation.ASI_CTY_CN_Vendor_Total_Price__c}" minimumFractionDigits="2"/></span>
+                        </div>
+                    </lightning:layoutItem>
+                </lightning:layout>
+            </lightning:card>
+            <lightning:card variant="Narrow" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Detail}" iconName="standard:address" class="basicFont">
+                <lightning:layout multipleRows="true" horizontalAlign="center">
+                    <lightning:layoutItem flexibility="auto" size="12" padding="around-small">
+                        <table id="orderTable" aria-multiselectable="true" class="slds-table slds-table_cell-buffer slds-table_resizable-cols orderTable" role="grid">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 542px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Name}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Name}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 65px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Quantity}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Quantity}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 270px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Name}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Name}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 150px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Remark}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Remark}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 80px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_ReceiptOwner}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_ReceiptOwner}
+                                        </div>
+                                    </th>
+                                    <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 80px">
+                                        <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Freight}">
+                                            {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Freight}
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="itemGroup">
+                                <aura:if isTrue="{!v.PR.quoteLineItem.length > 0}">
+                                    <aura:iteration items="{! v.PR.quoteLineItem }" var="addr" indexVar="{! index}" >
+                                        <tr class="slds-hint-parent" role="row" >
+                                            <td role="gridcell">{!v.PR.itemGroup.ASI_CRM_CN_Chinese_Name__c + ' / ' + v.PR.itemGroup.ASI_CRM_CN_Eng_Name__c + ' - ' + v.PR.itemGroup.ASI_MFM_Item_Group_Code__c}
+                                            </td>
+                                            <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Quantity_Required__c}</td>
+                                            <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Delivery_Address__c}<br/>
+                                            {!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_ContactName__c + '(' + addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Receipt_Phone__c + ')'}</td>
+                                            <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Note__c}</td>
+                                            <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Receipt_Owner__c}</td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! addr.ASI_CTY_CN_Vendor_Freight__c == null || addr.ASI_CTY_CN_Vendor_Freight__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{!addr.ASI_CTY_CN_Vendor_Freight__c}" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                        </tr>
+                                    </aura:iteration>
+                                </aura:if>
+                                <aura:if isTrue="{!(v.PR.quoteLineItem.length == 0)}">
+                                    <p class="padding8">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_NoAddress}</p>
+                                </aura:if>
+                            </tbody>
+                        </table>
+                    </lightning:layoutItem>
+                </lightning:layout>
+            </lightning:card>
+
+            <aura:if isTrue="{! v.PR.poList.length > 0}">
+                <lightning:card variant="Narrow" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_PO_Info}" iconName="standard:contract" class="basicFont">
+                    <lightning:layout multipleRows="true" horizontalAlign="center">
+                        <lightning:layoutItem flexibility="auto" size="12" padding="around-small">
+                            <table id="orderTable" aria-multiselectable="true" class="slds-table slds-table_cell-buffer slds-table_resizable-cols orderTable" role="grid">
+                                <thead>
+                                    <tr class="slds-line-height_reset">
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 120px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Number}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_PO_Number}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_Quantity}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_Quantity}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_UnitPrice}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_POList_ItemGroup_UnitPrice}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalFreight}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_TotalFreight}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 120px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Amount}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_PO_Total_Amount}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 120px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Paid_Amount}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_PO_Paid_Amount}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_POList_WritedSIRQty}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_POList_WritedSIRQty}
+                                            </div>
+                                        </th>
+                                        <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col" style="width: 100px">
+                                            <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_PO_Start_Date}">
+                                                {!$Label.c.ASI_CTY_CN_Vendor_PO_Start_Date}
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="itemGroup">
+                                    <aura:iteration items="{! v.PR.poList }" var="po" indexVar="{! index}" >
+                                        <tr class="slds-hint-parent" role="row" >
+                                            <td role="gridcell">
+                                                <a id="{! po.Id}" onclick="{! c.toPODetail}">{! po.Name}</a>
+                                            </td>
+                                            <td role="gridcell">
+                                                {! po.TotalQty }
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.UnitPrice == null || po.UnitPrice == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.UnitPrice }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.ASI_CTY_CN_Vendor_Model_Price__c == null || po.ASI_CTY_CN_Vendor_Model_Price__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.ASI_CTY_CN_Vendor_Model_Price__c }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.ASI_CTY_CN_Vendor_Sample_Price__c == null || po.ASI_CTY_CN_Vendor_Sample_Price__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.ASI_CTY_CN_Vendor_Sample_Price__c }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.ASI_CTY_CN_Vendor_Total_Freight__c == null || po.ASI_CTY_CN_Vendor_Total_Freight__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.ASI_CTY_CN_Vendor_Total_Freight__c }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.ASI_MFM_CN_PO_Amount_RMB__c == null || po.ASI_MFM_CN_PO_Amount_RMB__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.ASI_MFM_CN_PO_Amount_RMB__c }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                <aura:if isTrue="{! po.ASI_MFM_Total_Paid_Amount__c == null || po.ASI_MFM_Total_Paid_Amount__c == ''}">
+                                                ￥ 0
+                                                    <aura:set attribute="else">
+                                                        ￥ <lightning:formattedNumber value="{! po.ASI_MFM_Total_Paid_Amount__c }" minimumFractionDigits="2"/>
+                                                    </aura:set>
+                                                </aura:if>
+                                            </td>
+                                            <td role="gridcell">
+                                                {! po.ActualQty}
+                                            </td>
+                                            <td role="gridcell">{! po.ASI_MFM_PO_Final_Date__c}</td>
+                                        </tr>
+                                    </aura:iteration>
+                                </tbody>
+                            </table>
+                        </lightning:layoutItem>
+                    </lightning:layout>
+                </lightning:card>
+            </aura:if>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <aura:if isTrue="{! v.editButtonPriv}">
+                <lightning:button variant="brand" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Status_Rejected}" onclick="{! c.openRejectedDialog}" disabled="{! v.isExpired ? 'true' : ''}"/>
+            </aura:if>
+            <aura:if isTrue="{! v.editButtonPriv}">
+                <lightning:button variant="brand" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Result_Status_Abandon_Bid}" onclick="{! c.giveUpBidding}" disabled="{! v.isExpired ? 'true' : ''}" />
+            </aura:if>
+            <aura:if isTrue="{! v.editButtonPriv || v.isApply}">
+                <lightning:button variant="brand" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Operate_Submit + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Info + $Label.c.ASI_CTY_CN_Vendor_Bidding_Operate_Apply}" onclick="{! c.submitQuotation}" disabled="{! v.isExpired ? 'true' : ''}" />
+            </aura:if>
+        </div>
+
+        <aura:if isTrue="{!v.isShowModal}">
+            <div id="modal1">
+                <section role="dialog" tabindex="-1" class="slds-modal slds-backdrop_open slds-modal_small" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1">
+                    <div class="slds-modal__container">
+                        <header class="slds-modal__header model-header">
+                            <lightning:icon iconName="action:edit_relationship" />
+                            <aura:if isTrue="{! v.isApply}">
+                                <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Operate_Update + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Detail}</h2>
+
+                                <aura:set attribute="else">
+                                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Writed + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Detail}</h2>
+                                </aura:set>
+                            </aura:if>
+                            <div>
+                                <div class="fontsmall text_right">
+                                    {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGorup_Name + ' : '}<label>{!v.PR.itemGroup.ASI_CRM_CN_Chinese_Name__c + ' / ' + v.PR.itemGroup.ASI_CRM_CN_Eng_Name__c}</label>
+                                </div>
+                                <div class="text_right">
+                                    {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Total_Quantity + ' : '}<label>{! v.PR.quotation.ASI_CTY_CN_Vendor_Total_Quantity__c}</label> {! ' , ' + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_TotalPrice + ' : '}<span>￥ {! v.Quotation.ASI_CTY_CN_Vendor_Total_Price__c}</span>
+                                </div>
+                            </div>
+                        </header>
+                        <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                            <lightning:layout multipleRows="true" horizontalAlign="left" pullToBoundary="small">
+                                <lightning:layoutItem flexibility="auto" size="6" padding="horizontal-small" class="contactInfo">
+                                    <lightning:input type="Number" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGroup_UnitPrice}" step=".01" formatter="currency" value="{!v.Quotation.ASI_CTY_CN_Vendor_Unitl_Price__c}" aura:id="ASI_CTY_CN_Vendor_Unitl_Price__c" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGroup_UnitPrice_Tips}" messageWhenValueMissing="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_ItemGroup_UnitPrice_Tips}" messageWhenStepMismatch="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_FloatValidation_TwoDecimal_Tips}" onchange="{! c.countItemGroupAmount}" onblur="{! c.isNeedDeadLine}"/>
+                                </lightning:layoutItem>
+                                <aura:if isTrue="{!v.Quotation.ASI_CTY_CN_Vendor_Is_Need_Sample__c}">
+                                    <lightning:layoutItem flexibility="auto" size="6" padding="horizontal-small" class="contactInfo">
+                                        <lightning:input type="Number" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice}" step=".01" formatter="currency" value="{!v.Quotation.ASI_CTY_CN_Vendor_Sample__c}" messageWhenStepMismatch="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_FloatValidation_TwoDecimal_Tips}" aura:id="ASI_CTY_CN_Vendor_Sample__c" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice_Tips}" messageWhenValueMissing="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_SamplePrice_Tips}" onchange="{! c.countItemGroupAmount}"/>
+                                    </lightning:layoutItem>
+                                </aura:if>
+                                
+                                <lightning:layoutItem flexibility="auto" size="6" padding="horizontal-small" class="contactInfo">
+                                    <lightning:input required="{! v.isNeedDeadLine}" type="Number" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_DeadLine}" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_DeadLine_Tips}" messageWhenValueMissing="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_DeadLine_Tips}"  messageWhenStepMismatch="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_IntegerValidation_Tips}" aura:id="ASI_CTY_CN_Vendor_DeadLine__c" value="{!v.Quotation.ASI_CTY_CN_Vendor_DeadLine__c}" onblur="{! c.deadLineInputBlur}"/>
+                                    <lightning:helptext content="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_DeadLine_Helptext}" class="{! v.deadLineHelpTextClassName}" />
+                                </lightning:layoutItem>
+                                <aura:if isTrue="{!v.Quotation.ASI_CTY_CN_Vendor_Is_Need_Model__c}">
+                                    <lightning:layoutItem flexibility="auto" size="6" padding="horizontal-small" class="contactInfo">
+                                        <lightning:input type="Number" label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice}" step=".01" formatter="currency" value="{!v.Quotation.ASI_CTY_CN_Vendor_Model__c}" aura:id="ASI_CTY_CN_Vendor_Model__c" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice_Tips}" messageWhenValueMissing="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_ModelPrice_Tips}"  messageWhenStepMismatch="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_FloatValidation_TwoDecimal_Tips}" onchange="{! c.countItemGroupAmount}"/>
+                                    </lightning:layoutItem>
+                                </aura:if>
+                                
+                                <lightning:layoutItem flexibility="auto" size="12" padding="horizontal-small" class="contactInfo">
+                                    <lightning:textarea label="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Remark}" name="reason" value="{!v.Quotation.ASI_CTY_CN_Vendor_Remark__c}" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Remark_Tips}" />
+                                </lightning:layoutItem>
+                            </lightning:layout>
+                            <lightning:layout multipleRows="true" horizontalAlign="left">
+                                <lightning:layoutItem flexibility="auto" size="12" padding="around-small">
+                                    <table id="orderTable" aria-multiselectable="true" class="slds-table slds-table_cell-buffer slds-table_resizable-cols orderTable" role="grid" style="margin-left: 10px;">
+                                        <thead>
+                                            <tr class="slds-line-height_reset">
+                                                <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                                    <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Name}">
+                                                        {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Name}
+                                                    </div>
+                                                </th>
+                                                <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                                    <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Quantity}">
+                                                        {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Quantity}
+                                                    </div>
+                                                </th>
+                                                <th aria-label="" aria-sort="none" class="slds-is-resizable slds-is-sortable" scope="col">
+                                                    <div class="slds-truncate" title="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Freight}">
+                                                        {!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Address_Freight}
+                                                    </div>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <aura:if isTrue="{!v.Address.length > 0}">
+                                                <aura:iteration items="{! v.Address}" var="addr" indexVar="index" >
+                                                    <tr class="slds-hint-parent" role="row" >
+                                                        <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Delivery_Address__c}</td>
+                                                        <td role="gridcell">{!addr.ASI_CTY_CN_Vendor_Address__r.ASI_CTY_CN_Vendor_Quantity_Required__c}</td>
+                                                        <td role="gridcell">
+                                                             <lightning:input class="DeliveryInput" type="Number" formatter="currency" aura:id="ASI_CTY_CN_Vendor_Freight__c" step=".01" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_FreightPrice_Tips}" value="{!addr.ASI_CTY_CN_Vendor_Freight__c}"  messageWhenStepMismatch="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_FloatValidation_TwoDecimal_Tips}" onchange="{! c.countItemGroupAmount}" />
+                                                        </td>
+                                                    </tr>
+                                                </aura:iteration>
+                                            </aura:if>
+                                            <aura:if isTrue="{!(v.Address.length == 0)}">
+                                                <p class="padding8">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_NoAddress}</p>
+                                            </aura:if>
+                                        </tbody>
+                                    </table>
+                                </lightning:layoutItem>
+                            </lightning:layout>
+                        </div>
+                        <footer class="slds-modal__footer model-footer">
+                            <button type="button" name="inhouse" class="slds-button slds-button_neutral" onclick="{!c.submitWriteUnitPrice}">{!$Label.c.ASI_CTY_CN_Vendor_Comfirm}</button>
+                            <button type="button" name="inhouse" class="slds-button slds-button_neutral" onclick="{!c.cancelWriteUnitPrice}">{!$Label.c.ASI_CTY_CN_Vendor_Cancel}</button>
+                        </footer>
+                    </div>
+                </section>
+                <div class="slds-backdrop slds-backdrop_open"></div>
+            </div>
+        </aura:if>
+
+        <aura:if isTrue="{!v.isShowRejectedModal}">
+            <div class="RejectedDialog">
+                <section role="dialog" tabindex="-1" class="slds-modal slds-backdrop_open slds-modal_small" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1">
+                    <div class="slds-modal__container">
+                        <header class="slds-modal__header model-header">
+                            <lightning:icon iconName="action:edit_relationship" />
+                            <aura:if isTrue="{! v.PR.quotation.ASI_CTY_CN_Vendor_Status__c != $Label.c.ASI_CTY_CN_Vendor_Bidding_Status_Rejected}">
+                                <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Writed + $Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Rejected_Reason}</h2>
+                                <aura:set attribute="else">
+                                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Rejected_Reason}</h2>
+                                </aura:set>
+                            </aura:if>
+                        </header>
+                        <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                            <lightning:layout multipleRows="true" horizontalAlign="left" pullToBoundary="small">
+                                <lightning:textarea variant="label-hidden" value="{!v.Quotation.ASI_CTY_CN_Vendor_Reject_Reason__c}" placeholder="{!$Label.c.ASI_CTY_CN_Vendor_Bidding_Detail_Quotation_Rejected_Reason_Tips}" readonly="{!v.PR.quotation.ASI_CTY_CN_Vendor_Status__c == $Label.c.ASI_CTY_CN_Vendor_Bidding_Status_Rejected || v.PR.quotation.ASI_CTY_CN_Vendor_Result_Status__c == $Label.c.ASI_CTY_CN_Vendor_Bidding_Result_Status_Abandon_Bid}" />
+                            </lightning:layout>
+                        </div>
+                        <footer class="slds-modal__footer model-footer">
+                            <button type="button" name="inhouse" class="slds-button slds-button_neutral" onclick="{! c.submitRejectedDialog}">{!$Label.c.ASI_CTY_CN_Vendor_Comfirm}</button>
+                            <button type="button" name="inhouse" class="slds-button slds-button_neutral" onclick="{! c.cancelRejectedDialog}">{!$Label.c.ASI_CTY_CN_Vendor_Cancel}</button>
+                        </footer>
+                    </div>
+                </section>
+                <div class="slds-backdrop slds-backdrop_open"></div>
+            </div>
+        </aura:if>
+
+        <aura:if isTrue="{!v.isShowImageModal}">
+            <div class="SIRImageModel" onmouseover="{! c.mouseoverImageModel}" onmouseout="{! c.mouseoutImageModel}" style="position: fixed;left: 0;right: 0;top: 0;bottom: 0;padding: 0;margin: 0;background-color: rgba(0,0,0,.8);z-index: 9200;">
+                <div class="out">
+                    <div class="{! v.outClass + ' SIRImageModelHeader'}">
+                        <lightning:layout horizontalAlign="left" pullToBoundary="small" verticalAlign="center" class="outImageHeader">
+                            <lightning:layoutItem class="outImageIcon">
+                                <lightning:icon iconName="doctype:image" class="fileListImageIcon"/>
+                            </lightning:layoutItem>
+                            <lightning:layoutItem padding="horizontal-medium" size="10">
+                                <div class="page-section page-header">
+                                    <h1 class="slds-text-heading--label" style="color:white;">{! v.fileList[0].Title}</h1>
+                                    <h1 class="slds-text-heading--medium">{! v.fileList[0].Size} B</h1>
+                                </div>
+                            </lightning:layoutItem>
+                            <lightning:layoutItem padding="around-small" class="outCloseIcon">
+                                 <lightning:icon iconName="action:download" alternativeText="{!$Label.c.ASI_CTY_CN_Vendor_Download}" size="x-small" class="imageIcon"  onclick="{! c.downloadSIRImage}"/>
+                                 <lightning:icon iconName="action:close" alternativeText="{!$Label.c.ASI_CTY_CN_Vendor_Close}" size="x-small" class="imageIcon"  onclick="{! c.closeSIRImageModel}"/>
+                            </lightning:layoutItem>
+                        </lightning:layout>
+                    </div>
+                </div>
+
+                <div class="outImage" id="outImage">
+                    <img src="{! v.fileList[0].Content}" id="SIRImagePrew" />
+                </div>
+            </div>
+        </aura:if>
+    </body>
+</aura:component>

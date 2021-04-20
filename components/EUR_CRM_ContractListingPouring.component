@@ -1,0 +1,265 @@
+<apex:component id="Component_ListingPouring"
+	controller="EUR_CRM_ContractListingPouringController">
+	<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+	<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+	<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'js/jquery.dataTables.js')}" />
+	<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_fnLengthChange)}" />
+
+	<script>
+/*
+* Edit 12/15: Disable restriction on having only one Pouring
+*/
+$ = jQuery.noConflict();
+
+//var colLabel_Action = "{!$Label.EUR_CRM_Action}";
+//var colLabel_BrandQuality = "{!$ObjectType.EUR_CRM_Contract_Listing_Pouring__c.fields.EUR_CRM_Brand_Quality__c.label}";
+
+var cliListingPouring;
+var cliListingPouringAll;
+
+var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[0, "asc"]],
+        "bSearch":false,
+        "bFilter" : true,
+        
+};
+
+$(document).ready(
+        function(){
+            console.log("##INIT - Listing Pouring Component");
+            setListingPouringTable();
+        }
+);
+
+function setListingPouringTable(){
+    var listingPouring_dataTableProperties = basicDataTableProperties;
+    listingPouring_dataTableProperties["aoColumns"] = [
+        {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Listing_Pouring__c.fields.EUR_CRM_Brand_Quality__c.label}"},
+        {"sTitle": "<input id='checkAllElemId' type='checkbox'/> {!$ObjectType.EUR_CRM_Contract_Listing_Pouring__c.fields.EUR_CRM_Listing__c.label}","bSortable": false},
+        {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Listing_Pouring__c.fields.EUR_CRM_Pouring__c.label}","bSortable": false}
+    ];
+    
+    cliListingPouring =  $("#CONTRACT_LINE_ITEM_ListingPouring").dataTable(listingPouring_dataTableProperties);
+    cliListingPouringAll = $("#CONTRACT_LINE_ITEM_ListingPouring_All").dataTable(listingPouring_dataTableProperties); 
+}
+
+var itemX;
+var itemY;
+function processSelectedPouring(selectedItem, rowId){
+        //on change
+        var row = $("#"+rowId);
+        var listing = $(row).find(".CheckBox_Listing");
+        
+        itemX = selectedItem;
+        itemY = listing;
+        
+        console.log("FLAG LISTING:" + listing + row);
+        if( $(selectedItem).is(":checked") ) {
+            /*var checkboxItems = $.find(".CheckBox_Pouring");
+            for (i=0; i<checkboxItems.length; i++){
+                var item = checkboxItems[i];
+                if(item.checked){
+                    $(item).prop("checked", false);
+                }
+            }*/
+            
+            $(selectedItem).prop("checked", true);
+            if (listing != undefined){
+                $(listing).prop("checked", true);
+                //listing.click(function() { return false; });
+            }
+        }
+        else {
+            $(selectedItem).prop("checked", false);
+            //listing.unbind( "click" );
+            
+        }
+        
+        disablingCheckbox();
+        
+    }
+    
+    function disablingCheckbox() {
+        var storeIndex = [];
+        var listingVar =  $(".CheckBox_Listing");
+        
+        $(".CheckBox_Pouring").each(function(i) {
+           if (this.checked) {
+               storeIndex.push(i);
+           }
+        });
+        
+        for (var i=0;i<listingVar.length;i++) {
+            if (storeIndex.indexOf(i) != -1) {
+                $(listingVar[i]).click(function() { return false; });
+            } else {
+                $(listingVar[i]).unbind( "click" );
+            }
+        }       
+    }
+    
+    $(document).on('change','input[id="checkAllElemId"]',function() {
+        var storeIndex = [];
+        var listingVar =  $(".CheckBox_Listing");
+        var listingVarLength = listingVar.length;
+        
+        var listingPouringTable = $('#CONTRACT_LINE_ITEM_ListingPouring_All').dataTable();
+        if(typeof listingPouringTable != "undefined" &&
+			listingPouringTable != null &&
+			listingPouringTable.length > 0) {
+			
+			listingPouringTable.fnLengthChange(5000);
+        } else {
+	        // Change the length of Listing Pouring BQ table
+	        listingPouringTable = $('#CONTRACT_LINE_ITEM_ListingPouring').dataTable();
+	        if(typeof listingPouringTable != "undefined" &&
+	          listingPouringTable != null &&
+	          listingPouringTable.length > 0) {
+	          
+	          listingPouringTable.fnLengthChange(5000);
+	        }          
+        }
+        
+        $(".CheckBox_Pouring").each(function(i) {
+           if (this.checked) {
+               storeIndex.push(i);
+           }
+        });
+        
+        // Get the length of all listing checkboxes
+        var allListingVar = $(".CheckBox_Listing");
+        for (var i=0;i<allListingVar.length;i++) {
+            if (storeIndex.indexOf(i) != -1) {
+                $(allListingVar[i]).click(function() { return false; });
+            } else {
+                $(allListingVar[i]).prop("checked" , this.checked);
+                $(allListingVar[i]).unbind( "click" );
+            }
+        }
+        
+        // Revert back to old listing var length
+        listingPouringTable.fnLengthChange(listingVarLength);
+    });
+</script>
+
+	<apex:attribute name="Component_Key" type="String" assignTo="{!key}"
+		description="Key for page controller to access this component" />
+	<apex:attribute name="Page_Controller"
+		type="EUR_CRM_PageControllerBase" assignTo="{!pageController}"
+		required="true" description="Main page controller" />
+	<apex:attribute name="Contract_Header"
+		description="Contract Record (EUR_CRM_Contract__c)"
+		assignTo="{!contractObj}" type="EUR_CRM_Contract__c" required="true" />
+	<apex:attribute name="All_BrandQuality_List"
+		description="List of all brand quality"
+		assignTo="{!brandQualityReferenceList}" type="EUR_CRM_Quality__c[]"
+		required="true" />
+	<apex:attribute name="Listing_Pouring_List"
+		description="List of existing listing/pouring"
+		assignTo="{!listingPouringReferenceList}"
+		type="EUR_CRM_Contract_Listing_Pouring__c[]" required="false" />
+
+	<apex:actionStatus id="loading">
+		<apex:facet name="start">
+			<c:EUR_CRM_LoadingStatus BackColor="#ffffff" borderColor="#6B6B6B"
+				borderSize="1" height="50px" width="120px" margintop="-25px"
+				marginleft="-60px" ImageUrl="{!$Resource.loadingStatus}"
+				Message="Loading..." />
+		</apex:facet>
+	</apex:actionStatus>
+
+
+	<apex:actionFunction name="changeSelectedCategory"
+		action="{!validateListingPouringCategory}"
+		rerender="panel_BrandListMain" oncomplete="setListingPouringTable();"
+		status="loading">
+		<apex:param name="PARAM_CATEGORY_ID" value="" />
+	</apex:actionFunction>
+
+	<apex:actionFunction name="onChangeShowAllBQ"
+		action="{!validateListingPouringCategory}"
+		rerender="pageSection_BQList" oncomplete="setListingPouringTable();"
+		status="loading">
+		<apex:param name="PARAM_CATEGORY_ID" value="" />
+	</apex:actionFunction>
+
+	<apex:inputHidden value="{!initDummyVar}" id="initVar" />
+
+	<apex:pageBlock id="pageBlock_ListingPouring">
+
+		<apex:pageBlockSection >
+			<apex:inputCheckbox value="{!showAllFlag}"
+				label="Show all Brand-Qualities" onchange="onChangeShowAllBQ();">
+			</apex:inputCheckbox>
+		</apex:pageBlockSection>
+
+		<apex:pageBlockSection columns="1" id="pageSection_BQList">
+			<apex:outputPanel layout="block" id="panel_AllBrandList"
+				rendered="{!showAllFlag}">
+				<table id="CONTRACT_LINE_ITEM_ListingPouring_All">
+					<thead />
+					<tbody>
+						<apex:repeat var="categoryKey" value="{!listingPouringMap}">
+
+							<apex:repeat var="lpKey"
+								value="{!listingPouringMap[categoryKey].createdListingPouring}">
+
+								<apex:repeat var="lpObj"
+									value="{!listingPouringMap[categoryKey].createdListingPouring[lpKey]}">
+
+									<tr
+										id="LP_{!lpObj.listingPouringObj.EUR_CRM_Brand_Quality__c }">
+										<td><apex:outputText value="{!lpObj.brandQualityName}" /></td>
+										<td><apex:inputField value="{!lpObj.listingPouringObj.EUR_CRM_Listing__c}"
+												styleClass="CheckBox_Listing" /></td>
+										<td><apex:inputField value="{!lpObj.listingPouringObj.EUR_CRM_Pouring__c}"
+												styleClass="CheckBox_Pouring"
+												onclick="processSelectedPouring(this, 'LP_{!lpObj.listingPouringObj.EUR_CRM_Brand_Quality__c }');" /></td>
+									</tr>
+								</apex:repeat>
+							</apex:repeat>
+						</apex:repeat>
+					</tbody>
+				</table>
+			</apex:outputPanel>
+
+
+			<apex:outputPanel layout="block" id="panel_BrandListMain"
+				rendered="{!NOT(showAllFlag)}">
+				<apex:selectList value="{!selectedCategory}" size="1"
+					onchange="changeSelectedCategory('{!selectedCategory}');">
+					<apex:selectOptions value="{!categoryOptions}" />
+				</apex:selectList>
+				<br />
+				<apex:outputPanel layout="block" id="panel_BrandList"
+					rendered="{!IF(selectedCategory==null,false, true)}">
+
+					<table id="CONTRACT_LINE_ITEM_ListingPouring">
+						<thead />
+						<tbody>
+							<apex:repeat var="lpKey"
+								value="{!listingPouringMap[selectedCategory].createdListingPouring}">
+								<apex:repeat var="lpObj"
+									value="{!listingPouringMap[selectedCategory].createdListingPouring[lpKey]}">
+									<tr
+										id="LP_{!lpObj.listingPouringObj.EUR_CRM_Brand_Quality__c }">
+										<td><apex:outputText value="{!lpObj.brandQualityName}" /></td>
+										<td><apex:inputField value="{!lpObj.listingPouringObj.EUR_CRM_Listing__c}"
+												styleClass="CheckBox_Listing" /></td>
+										<td><apex:inputField value="{!lpObj.listingPouringObj.EUR_CRM_Pouring__c}"
+												styleClass="CheckBox_Pouring"
+												onclick="processSelectedPouring(this, 'LP_{!lpObj.listingPouringObj.EUR_CRM_Brand_Quality__c }');" /></td>
+									</tr>
+								</apex:repeat>
+							</apex:repeat>
+						</tbody>
+					</table>
+				</apex:outputPanel>
+
+			</apex:outputPanel>
+		</apex:pageBlockSection>
+	</apex:pageBlock>
+
+</apex:component>

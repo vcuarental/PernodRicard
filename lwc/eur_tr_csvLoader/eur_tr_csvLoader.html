@@ -1,0 +1,146 @@
+<!--
+ - Created by aliku on 9/21/2020.
+ -->
+
+<!-- Eur Tr Csv Loader -->
+<template>
+
+    <lightning-layout multiple-rows="true">
+        <lightning-layout-item size="12" large-device-size="12" small-device-size="12">
+            <lightning-input label={fileInputLabel} type="file" accept={accept} disabled={componentDisabled}
+                             onchange={handleFileSelected}></lightning-input>
+        </lightning-layout-item>
+        <lightning-layout-item size="8">
+            <label class="slds-form-element__label">
+                Yüklediğiniz dosyadaki kolonların ekrandaki tablo ile aynı sıralamada olduğundan emin olunuz.
+            </label>
+            <lightning-input type="checkbox" label="İlk satırda başlık var" checked={header} onchange={handleToggleHeader}></lightning-input>
+            <lightning-input type="checkbox" label="Hatalı veri olan satırları aktarma" checked={ignoreErrorLine}
+                             onchange={handleToggleIgnoreErrorLine}></lightning-input>
+        </lightning-layout-item>
+        <lightning-layout-item size="4" large-device-size="4" small-device-size="4">
+            <lightning-button-group class="slds-float_right">
+                <template if:true={showPreviewErrorsButtonVisible}>
+                    <lightning-button variant="destructive" label={previewErrorsButtonText} title={previewErrorsButtonText}
+                                      onclick={handleShowPreviewErrors}
+                                      class="slds-m-left_x-small"></lightning-button>
+                </template>
+                <lightning-button label="Yükle" disabled={loadButtonDisabled} onclick={handleLoadButtonClick}></lightning-button>
+                <lightning-button-menu alternative-text="Preview Size"
+                                       value="Preview10"
+                                       disabled={loadButtonDisabled}
+                                       menu-alignment="right"
+                                       variant="border-filled" onselect={handlePreviewChange} icon-name="utility:filter">
+                    <lightning-menu-item class="slds-float_right" value="Preview10" label="10 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview20" label="20 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview50" label="50 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview100" label="100 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview200" label="200 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview500" label="500 Kayıt Göster"></lightning-menu-item>
+                    <lightning-menu-item class="slds-float_right" value="Preview1000" label="1000 Kayıt Göster"></lightning-menu-item>
+                </lightning-button-menu>
+            </lightning-button-group>
+        </lightning-layout-item>
+        <lightning-layout-item size="12" large-device-size="12" small-device-size="12" class="table-grid slds-is-relative">
+            <template if:true={previewLoading}>
+                <lightning-spinner alternative-text="Loading" variant="brand"></lightning-spinner>
+            </template>
+            <div style="min-height: 300px">
+                <lightning-datatable
+                        key-field="id"
+                        data={previewData}
+                        hide-checkbox-column="true"
+                        columns={columns}>
+                </lightning-datatable>
+            </div>
+        </lightning-layout-item>
+        <template if:true={rowCount}>
+            Toplam Satır: {rowCount}
+        </template>
+    </lightning-layout>
+
+    <template if:true={showLoadingModal}>
+        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-loading" aria-modal="true"
+                 aria-describedby="modal-content-id-loading"
+                 class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <h2 id="modal-heading-loading" class="slds-modal__title slds-hyphenate">
+                        <template if:true={isRunning}>
+                            Yükleniyor...
+                        </template>
+                        <template if:true={isCompleted}>
+                            İşlem Tamamlandı
+                        </template>
+                        <template if:true={isAborted}>
+                            İşlem Sonlandırıldı
+                        </template>
+                    </h2>
+                </header>
+                <div class="slds-modal__content slds-is-relative" id="modal-content-id-loading">
+                    <template if:true={isRunning}>
+                        <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
+                            <h2>{loadingMessage}</h2>
+                        </div>
+                    </template>
+                    <template if:true={isAborted}>
+                        <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_warning" role="alert">
+                            <h2>{abortedMessage}</h2>
+                        </div>
+                    </template>
+                    <template if:true={isCompleted}>
+                        <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_success" role="alert">
+                            <h2>{completedMessage}</h2>
+                        </div>
+                    </template>
+                    <div style="padding-top: 50px; padding-bottom: 50px">
+                        <lightning-layout>
+                            <lightning-layout-item size="6">
+                                <div class="score-circle score-circle__success slds-align_absolute-center">Başarılı<br>{successCount}</div>
+                            </lightning-layout-item>
+                            <lightning-layout-item size="6">
+                                <div class="score-circle score-circle__error slds-align_absolute-center">Hatalı<br>{failedCount}</div>
+                            </lightning-layout-item>
+                        </lightning-layout>
+                    </div>
+                </div>
+                <footer class="slds-modal__footer slds-modal__footer_directional ">
+                    <button class="slds-button slds-button_neutral" disabled={abortButtonDisabled} onclick={abortCurrentParser}>İptal et</button>
+                    <button class="slds-button slds-button_brand" disabled={isRunning} onclick={handleCloseLoadingModal}>Kapat</button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+    <template if:true={showPreviewErrors}>
+        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-previewErrors" aria-modal="true"
+                 aria-describedby="modal-content-id-previewErrors"
+                 class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <h2 id="modal-heading-previewErrors" class="slds-modal__title slds-hyphenate">Satır Hataları</h2>
+                </header>
+                <div class="slds-modal__content" id="modal-content-id-previewErrors">
+                    <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_warning" role="alert">
+                        <h2>Bu sayfada sadece önizleme yapılan kayıtlar için hatalar listelenmektedir.</h2>
+                    </div>
+                    <div style="height: 300px;">
+                        <lightning-datatable
+                                key-field="id_xx"
+                                data={previewErrorData}
+                                hide-checkbox-column="true"
+                                columns={previewErrorColumns}>
+                        </lightning-datatable>
+                    </div>
+                </div>
+                <footer class="slds-modal__footer">
+                    <button class="slds-button slds-button_neutral" onclick={handleHidePreviewErrors}>Kapat</button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+
+</template>

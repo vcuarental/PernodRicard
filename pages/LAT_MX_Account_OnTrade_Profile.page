@@ -1,0 +1,536 @@
+<apex:page showHeader="true" sidebar="true" standardController="Account" extensions="LAT_MX_Account_OnTrade_Prof_Control" id="thePage">
+    <style>
+        #text-underline {
+            text-decoration: underline;
+        }
+    </style>
+    <apex:includeScript value="{!$Resource.LAT_Resources}/js/jquery-1.7.1.min.js" />
+    <apex:sectionHeader title="Cliente" subtitle="{!acc.name}" id="headerTitle"/>
+    <chatter:feedWithFollowers entityId="{!acc.Id}"/>
+    
+                            
+          <br/> 
+
+          <a href="#thePage:processStepList" onmouseout="$('#customHover').html('');" onmouseover="$('#customHover').html(document.getElementById('thePage:processStepList').innerHTML);">Historial de aprobaciones</a>
+
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <a href="#thePage:CombinedAttList" onmouseout="$('#customHover').html('');" onmouseover="$('#customHover').html(document.getElementById('thePage:CombinedAttList').innerHTML);">Notas y archivos adjuntos</a>
+            
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <a href="#thePage:accountOnTrade:RFCList" onmouseout="$('#customHover').html('');" onmouseover="$('#customHover').html(document.getElementById('thePage:accountOnTrade:RFCList').innerHTML);">Lista RFCs</a>
+        <br/>
+        <br/>
+        <div id = "customHover" style="width: 100%; margin: 0 auto;">
+            
+        </div>
+        <br/> 
+        <br/>
+    <apex:form id="accountOnTrade">
+        <apex:pageBlock >
+            <apex:actionStatus id="status" >
+                <apex:facet name="start">
+                    <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_BR_VFP05_00023}"/>
+                    <!-- Label.LAT_BR_VFP05_00023 = Espere... -->
+                </apex:facet>
+            </apex:actionStatus>
+            <apex:pageMessages id="mesages"/>
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="Enviar a aprobar" action="{!URLFOR($Action.account.submit, Id)}" id="Submit_for_Approval" status="status" reRender="headerTitle,mesages"/>
+                <apex:commandButton value="Eliminar" action="{!deleteAccount}" id="Delete_Account" status="status" rendered="{!userCanDelete}"/>
+                <apex:commandButton value="Editar" action="{!doEdit}" status="status" reRender="headerTitle,mesages"/>
+                <apex:commandButton value="{!IF(account.Status__c == 'Inactive Account', 'Habilitar cuenta', 'Inhabilitar cuenta')}" action="{!doInactivar}" status="status" reRender="headerTitle,mesages"/>
+            </apex:pageBlockButtons>
+
+            <apex:pageBlockSection id="pgBlockDatosBasicos" title="Datos Basicos" collapsible="true" columns="2">
+                <apex:facet name="header">
+                    <h3>Información de Cliente<span class="titleSeparatingColon">:</span></h3>
+                </apex:facet>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Nombre de Cliente</apex:outputLabel>
+                    <apex:outputField id="clientName" value="{!acc.name}">
+                        <a href="/acc/account_hierarchy.jsp?id={!acc.Id}"><span id="text-underline">[Ver Jerarquía]</span></a>
+                    </apex:outputField>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Cliente Padre</apex:outputLabel>
+                    <apex:outputField id="parent" value="{!acc.parentID}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Nombre Comercial</apex:outputLabel>
+                    <apex:outputField id="nombreComercial" value="{!accFields.LAT_Nombre_Comercial__c}" />
+                </apex:pageBlockSectionItem>
+                <!--
+                 <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Descripción</apex:outputLabel>
+                    <apex:outputField id="descripcion" value="{!acc.Description}" />
+                </apex:pageBlockSectionItem>
+                -->
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Grupo</apex:outputLabel>
+                    <apex:outputField id="grupo" value="{!acc.LAT_MX_Group__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Status</apex:outputLabel>
+                    <apex:outputField id="status" value="{!acc.Status__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Ejecutivo responsable</apex:outputLabel>
+                    <apex:outputField id="propietario" value="{!acc.ownerID}" >
+                        <a href="/{!acc.ID}/a?retURL={!acc.ID}"><span id="text-underline">[Cambiar]</span></a>
+                    </apex:outputField>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >ID Cliente</apex:outputLabel>
+                    <apex:outputField id="idCliente" value="{!acc.Client_code_AN8__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Ejecutivo que lo atiende</apex:outputLabel>
+                    <apex:outputField id="propietarioAtendiendo" value="{!accFields.LAT_MX_AttendingKAM__c}" >
+                        
+                    </apex:outputField>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="calificacion">
+                        <apex:outputLabel id="lcalificacion">Calificación</apex:outputLabel>
+                        <apex:outputField id="fcalificacion" value="{!accFields.LAT_Calificacion__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >KAM</apex:outputLabel>
+                    <apex:outputField id="ejecutivo" value="{!acc.LAT_MX_CreditAndCollectionsExecutive__c}" />
+                </apex:pageBlockSectionItem>                
+            </apex:pageBlockSection>           
+
+            <apex:pageBlockSection id="pgBlockSectionDatosComerciales" title="Datos Comerciales" collapsible="true" columns="2">               
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Marca de prioridad 1</apex:outputLabel>
+                    <apex:outputField id="marca1" value="{!acc.LAT_MX_PriorityBrand_1__c}" />
+                </apex:pageBlockSectionItem>                                               
+                <apex:pageBlockSectionItem >
+                        <apex:outputLabel >Horario Apertura</apex:outputLabel>
+                        <apex:outputField id="horarioApertura" value="{!acc.Begin_Time__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Marca de prioridad 2</apex:outputLabel>
+                    <apex:outputField id="marca1" value="{!acc.LAT_MX_PriorityBrand_2__c}" />
+                </apex:pageBlockSectionItem>
+                <!--
+                <apex:pageBlockSectionItem >
+                        <apex:outputLabel >Fecha Apertura</apex:outputLabel>
+                        <apex:outputField id="fechaApertura" value="{!accFields.LAT_Fecha_Apertura__c}" />
+                </apex:pageBlockSectionItem>
+                -->
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Marca de prioridad 3</apex:outputLabel>
+                    <apex:outputField id="marca1" value="{!acc.LAT_MX_PriorityBrand_3__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                        <apex:outputLabel >Día Relevante</apex:outputLabel>
+                        <apex:outputField id="diaRelevante" value="{!accFields.LAT_MX_MejorDia__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                        <apex:outputLabel >Periodicidad de Visitas</apex:outputLabel>
+                        <apex:outputField id="periodicidadVisitas" value="{!accFields.LAT_MX_Periodicity__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Ticket Promedio</apex:outputLabel>
+                    <apex:outputField id="ticketPromedio" value="{!acc.LAT_MX_AverageTicket__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Capacidad</apex:outputLabel>
+                    <apex:outputField id="capacidad" value="{!accFields.LAT_Capacidad__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Mayorista 1</apex:outputLabel>
+                    <apex:outputField id="mayorista1" value="{!accFields.LAT_MX_FirstSupplyOption__c}" />
+                </apex:pageBlockSectionItem> 
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Bonifica</apex:outputLabel>
+                    <apex:outputField id="bonifica" value="{!acc.LAT_MX_GiveBonus__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Mayorista 2</apex:outputLabel>
+                    <apex:outputField id="mayorista2" value="{!accFields.LAT_MX_SecondSupplyOption__c}" />
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+                
+            <apex:pageBlockSection id="pgBlockSectionSegmentacion" title="Segmentación - PROS" collapsible="true" columns="2">
+                <apex:facet name="headez">
+                    <h3>Segmentación - PROS<span class="titleSeparatingColon">:</span></h3>
+                </apex:facet>
+                    <apex:pageBlockSectionItem id="TcentroConsumo">
+                        <apex:outputLabel id="lTcentroConsumo">Tipo Centro Consumo</apex:outputLabel>
+                        <apex:outputField id="fTcentroConsumo" value="{!accFields.LAT_TipoCentro__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="idStatuss">
+                        <apex:outputLabel id="lidStatus">Status sistema bonificaciones</apex:outputLabel>
+                        <apex:outputField id="fidStatus" value="{!accFields.LAT_ID_Status__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="CuadranteClientes">
+                        <apex:outputLabel id="lCuadranteClientes">Cuadrante de Cliente</apex:outputLabel>
+                        <apex:outputField id="fCuadranteClientes" value="{!accFields.LAT_MX_CuadranteClientes__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="tipoCliente">
+                        <apex:outputLabel id="ltipoCliente">Tipo Cliente</apex:outputLabel>
+                        <apex:outputField id="ftipoCliente" value="{!acc.type}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="scoreType">
+                        <apex:outputLabel id="lScoreType">Tipo de Lugar</apex:outputLabel>
+                        <apex:outputField id="fScoreType" value="{!acc.Channel_Type__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="subTipoLugar">
+                        <apex:outputLabel id="lsubTipoLugar">Sub Tipo Lugar</apex:outputLabel>
+                        <apex:outputField id="fsubTipoLugar" value="{!acc.Sub_Channel__c}" /> 
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="aceptanBranding">
+                        <apex:outputLabel id="lAceptanBranding">Aceptan Branding?</apex:outputLabel>
+                        <apex:outputField id="fAceptanBranding" value="{!accFields.LAT_Branding__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="calidadBateo">
+                        <apex:outputLabel id="lCalidadBateo">Calidades de Bateo</apex:outputLabel>
+                        <apex:outputField id="fCalidadBateo" value="{!accFields.LAT_CalidadBateo__c}" />
+                    </apex:pageBlockSectionItem>
+                    
+                    <apex:pageBlockSectionItem id="cubaLibre">
+                        <apex:outputLabel id="lCubaLibre">Precio Cuba Libre</apex:outputLabel>
+                        <apex:outputField id="fCubaLibre" value="{!accFields.LAT_CubaLibre__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="DJInternacional">
+                        <apex:outputLabel id="lDJInternacional">Presencia de DJ Internacional</apex:outputLabel>
+                        <apex:outputField id="fDJInternacional" value="{!accFields.LAT_DJInternacional__c}" />
+                    </apex:pageBlockSectionItem>
+                    
+                    <apex:pageBlockSectionItem id="precioBacardi">
+                        <apex:outputLabel id="lPrecioBacardi">Precio Botella de Bacardí</apex:outputLabel>
+                        <apex:outputField id="fPrecioBacardi" value="{!accFields.LAT_PrecioBacardi__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="precioPlatoFuerte">
+                        <apex:outputLabel id="lPrecioPlatoFuerte">Precio Mínimo de Plato Fuerte</apex:outputLabel>
+                        <apex:outputField id="fPrecioPlatoFuerte" value="{!accFields.LAT_PrecioMinPlatoFuerte__c}" /> 
+                    </apex:pageBlockSectionItem>           
+                    
+                    <apex:pageBlockSectionItem id="promocionPrecioPaquete">
+                        <apex:outputLabel id="lPromocionesPrecioPaquete">Promociones de Precios o Paquetes</apex:outputLabel>
+                        <apex:outputField id="fPromocionesPrecioPaquete" value="{!accFields.LAT_PromocionesPrecioPaquete__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="restriccionesAcceso">
+                        <apex:outputLabel id="lRestriccionesAcceso">Restricciones de Acceso</apex:outputLabel>
+                        <apex:outputField id="fRestriccionesAcceso" value="{!accFields.LAT_RestriccionesAcceso__c}" />
+                    </apex:pageBlockSectionItem> 
+
+                    <apex:pageBlockSectionItem id="skuChampagne">
+                        <apex:outputLabel id="lSkuChampagne">Números de SKUs de Champagne</apex:outputLabel>
+                        <apex:outputField id="fSkuChampagne" value="{!accFields.LAT_SKUChampagne__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="skuWhisky">
+                        <apex:outputLabel id="lSkuWhisky">Número de SKUs de Whiskies de 18 Años en Adelante</apex:outputLabel>
+                        <apex:outputField id="fSkuWhisky" value="{!accFields.LAT_SKUWhiskies__c}" />
+                    </apex:pageBlockSectionItem>
+
+                    <apex:pageBlockSectionItem id="somelier">
+                        <apex:outputLabel id="lSomelier">Presencia de Somelier</apex:outputLabel>
+                        <apex:outputField id="fSomelier" value="{!accFields.LAT_Somelier__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem id="visibilidadTailorMade">
+                        <apex:outputLabel id="lVisibilidadTailorMade">Acepta Visibilidad Tailor Made</apex:outputLabel>
+                        <apex:outputField id="fVisibilidadTailorMade" value="{!accFields.LAT_VisibilidadTailorMade__c}" />
+                    </apex:pageBlockSectionItem> 
+                    <apex:pageBlockSectionItem >
+                        <apex:outputLabel id="lTipoComida" >Tipo Comida</apex:outputLabel>
+                        <apex:outputField id="fTipoComida" value="{!accFields.LAT_TipoComida__c}" />
+                    </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem >
+                        <apex:outputLabel id="lTipoComida" >Cuenta con Chef Reconocido</apex:outputLabel>
+                        <apex:outputField id="fTipoComida" value="{!accFields.LAT_MX_HasRecognizedChef__c}" />
+                    </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>            
+
+            <apex:pageBlockSection id="pgBlockSectionConvenio" title="Convenio" collapsible="true" columns="2">
+                <apex:facet name="headez">
+                    <h3>Convenio<span class="titleSeparatingColon">:</span></h3>
+                </apex:facet>
+                <apex:pageBlockSectionItem id="Convenio">
+                        <apex:outputLabel id="lConvenio">Tiene convenio PRM</apex:outputLabel>
+                        <apex:outputField id="fConvenio" value="{!accPadre.LAT_Convenio_prm__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="Capacitacion">
+                        <apex:outputLabel id="lCapacitacion">Acepta Capacitacion</apex:outputLabel>
+                        <apex:outputField id="fCapacitacion" value="{!accPadre.LAT_Capacitacion__c}" />
+                </apex:pageBlockSectionItem>
+
+                <apex:pageBlockSectionItem id="fechaInicioConvenio">
+                        <apex:outputLabel id="lConvenio">Fecha de Inicio Convenio</apex:outputLabel>
+                        <apex:outputField id="fConvenio" value="{!accPadre.LAT_MX_InicioConvenio__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="Activaciones">
+                        <apex:outputLabel id="lActivaciones">Acepta Activaciones</apex:outputLabel>
+                        <apex:outputField id="fActivaciones" value="{!accPadre.LAT_Activaciones__c}" />
+                </apex:pageBlockSectionItem>
+
+                <apex:pageBlockSectionItem id="fechaFinConvenio">
+                        <apex:outputLabel id="lConvenio">Fecha de Fin Convenio</apex:outputLabel>
+                        <apex:outputField id="fConvenio" value="{!accPadre.LAT_MX_FinConvenio__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="Incentivos">
+                        <apex:outputLabel id="lIncentivos">Incentivos</apex:outputLabel>
+                        <apex:outputField id="fIncentivos" value="{!accPadre.LAT_Incentivos__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="contractoAnual">
+                        <apex:outputLabel id="lcontractoAnual">Inversión contrato anual</apex:outputLabel>
+                        <apex:outputField id="fcontractoAnual" value="{!accPadre.LAT_MX_AnualContract__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem ></apex:pageBlockSectionItem> 
+                <apex:pageBlockSectionItem id="Convenio1">
+                        <apex:outputLabel id="lConvenio1">Convenio de Competencia 1</apex:outputLabel>
+                        <apex:outputField id="fConvenio1" value="{!accPadre.LAT_Convenio1__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem ></apex:pageBlockSectionItem> 
+                <apex:pageBlockSectionItem id="Convenio2">
+                        <apex:outputLabel id="lConvenio2">Convenio de Competencia 2</apex:outputLabel>
+                        <apex:outputField id="fConvenio2" value="{!accPadre.LAT_Convenio2__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem ></apex:pageBlockSectionItem> 
+                <apex:pageBlockSectionItem id="Convenio3">
+                        <apex:outputLabel id="lConvenio3">Convenio de Competencia 3</apex:outputLabel>
+                        <apex:outputField id="fConvenio3" value="{!accPadre.LAT_Convenio3__c}" />
+                </apex:pageBlockSectionItem>                     
+            </apex:pageBlockSection>
+            <apex:pageBlockSection id="pgBlockSectionDireccion" title="Dirección" collapsible="true" columns="2">
+                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Calle</apex:outputLabel>
+                    <apex:outputField id="direccion" value="{!accFields.LAT_MX_Direccion__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Teléfono</apex:outputLabel>
+                    <apex:outputField id="telefono" value="{!acc.Phone}" />
+                </apex:pageBlockSectionItem>
+                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Colonia/Fraccionamiento</apex:outputLabel>
+                    <apex:outputField id="colonia" value="{!acc.LAT_MX_Neighbourhood__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Sitio Web</apex:outputLabel>
+                    <apex:outputField id="web" value="{!acc.Website}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Ciudad </apex:outputLabel>
+                    <apex:outputField id="ciudad" value="{!acc.LAT_MX_City__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Email</apex:outputLabel>
+                    <apex:outputField id="email" value="{!acc.Email_NFE__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Región</apex:outputLabel>
+                    <apex:outputField id="region" value="{!accFields.LAT_Region_Formula__c}" />
+                </apex:pageBlockSectionItem>
+                  <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Contacto</apex:outputLabel>
+                    <apex:outputField id="contacto" value="{!acc.Contact_Schedule__c}" />
+                </apex:pageBlockSectionItem>
+                    <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Plaza</apex:outputLabel>
+                    <apex:outputField id="plaza" value="{!accFields.LAT_Plaza_Formula__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Código Postal</apex:outputLabel>
+                    <apex:outputField id="codigoPostal" value="{!acc.LAT_MX_PostalCode__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Delegación/Municipio</apex:outputLabel>
+                    <apex:outputField id="delegacion" value="{!acc.LAT_MX_County__c}" />
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+            <!--
+            <apex:pageBlockSection id="pgBlockSectionRecomendacion" title="Recomendación" collapsible="true" columns="2">
+                <apex:facet name="headez">
+                    <h3>Recomendacion<span class="titleSeparatingColon">:</span></h3>
+                </apex:facet>
+                <apex:pageBlockSectionItem id="Entrada">
+                    <apex:outputLabel id="lEntrada">Entrada</apex:outputLabel>
+                    <apex:outputField id="fEntrada" value="{!accFields.LAT_Entrada__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="Coctel">
+                    <apex:outputLabel id="lCoctel">Coctel</apex:outputLabel>
+                    <apex:outputField id="fCoctel" value="{!accFields.LAT_Coctel__c}" />
+                </apex:pageBlockSectionItem>
+
+                <apex:pageBlockSectionItem id="PlatoFuerte">
+                    <apex:outputLabel id="lPlatoFuerte">Plato Fuerte</apex:outputLabel>
+                    <apex:outputField id="fPlatoFuerte" value="{!accFields.LAT_PlatoFuerte__c}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="Postre">
+                    <apex:outputLabel id="lPostre">Postre</apex:outputLabel>
+                    <apex:outputField id="fPostre" value="{!accFields.LAT_Postre__c}" />
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+            -->
+        
+            <apex:pageBlockSection id="pgBlockSectionControl" title="Control Fields" collapsible="true" columns="2">                
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel >Documentos Faltantes</apex:outputLabel>
+                    <apex:outputField id="missing" value="{!acc.LAT_MX_MissingDocuments__c}" />
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+        <apex:pageBlock title="RFC" id="RFCList" mode="detail">
+            <apex:pageBlockTable value="{!accFields.LAT_MX_RFC_Accounts__r}" var="h" id="headerListTable" styleClass="slds-table" style="width: 100%; margin: 0 auto;">
+                <apex:column headerValue="Acción" width="width: 20%">
+                    <apex:outputPanel layout="none">
+                        <!--<apex:commandLink action="{!doDelete}" styleClass="actionLink" value="Eliminar">
+                            <apex:param value="{!h.id}" assignTo="{!toDeleteId}" name="toDelete"/>
+                        </apex:commandLink>-->
+                        <a href="#" class="actionLink" onclick="confirmDelete('{!h.id}')">Eliminar</a>
+                    </apex:outputPanel>
+                </apex:column> 
+                <apex:column value="{!h.LAT_MX_RFC__r.LAT_RFC__c}" headerValue="RFC" width="width: 40%"/>  
+                <apex:column value="{!h.LAT_MX_RFC__r.Name}" headerValue="Razón Social"  width="width: 40%"/>   
+                
+            </apex:pageBlockTable>
+            <apex:actionFunction action="{!doDelete}" id="deleteRFCLine" name="deleteRFCLine" reRender="headerListTable">
+                <apex:param value="" name="toDelete" id="toDelete"/>
+            </apex:actionFunction>
+        </apex:pageBlock>
+        <apex:pageBlock title="Información del sistema" >
+                <apex:facet name="headez">
+                    <h3>Información del sistema<span class="titleSeparatingColon">:</span></h3>
+                </apex:facet>
+            <apex:pageBlockSection id="pgBlockInfoAcc" collapsible="false" columns="2">
+                         <apex:facet name="headez">
+                            <h3>Recomendación<span class="titleSeparatingColon">:</span></h3>
+                        </apex:facet>
+                            <apex:pageBlockSectionItem id="CreadoPor">
+                                <apex:outputLabel id="lCreadoPor">Creado por</apex:outputLabel>
+                                <apex:outputField id="fCreadoPor" value="{!acc.CreatedBy.name}" />
+                            </apex:pageBlockSectionItem>
+                            <apex:pageBlockSectionItem id="ultimaMod">
+                                <apex:outputLabel id="lultimaMod">Última modificación por</apex:outputLabel>
+                                <apex:outputField id="fultimaMod" value="{!acc.LastModifiedBy.name}" />
+                            </apex:pageBlockSectionItem>
+                            <apex:pageBlockSectionItem id="redJDE">
+                                <apex:outputLabel id="lredJDE">Error integración sistema bonificaciones</apex:outputLabel>
+                                <apex:outputField id="fredJDE" value="{!acc.Return_JDE_Integration__c}" />
+                            </apex:pageBlockSectionItem>
+                    </apex:pageBlockSection>
+       </apex:pageBlock>
+        
+       
+            
+        </apex:form>
+        <apex:relatedList id="processStepList" list="ProcessSteps" ></apex:relatedList>
+        <!--<apex:relatedList id="rfcList" list="accFields.LAT_MX_RFC_Accounts__r" ></apex:relatedList>-->
+        <apex:relatedList id="CombinedAttList" list="CombinedAttachments" ></apex:relatedList>
+        <apex:pageBlock >
+            <apex:pageBlockSection collapsible="true" title="Historial" columns="1">
+                <apex:pageBlockTable value="{!Account.Histories}" var="h">
+                    <apex:column headerValue="Fecha" value="{!h.createddate}"/>
+                    <apex:column headerValue="Usuario" value="{!h.CreatedById}"/>
+                    <apex:column headerValue="Campo" value="{!h.Field}"/>
+                    <apex:column headerValue="Acción"> 
+                        <apex:outputText escape="false"> De  <b>{!h.oldvalue}</b> para <b>{!h.newvalue}</b></apex:outputText>
+                    </apex:column>
+                </apex:pageBlockTable>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+
+        
+    <script>
+
+        var positions = {};
+        var labels = {};
+        var fields = {};
+
+        $(document).ready(init);
+
+        function loadFields() {
+            $('[id$="pgBlockSectionSegmentacion"] div.pbSubsection table th label').each(function () {
+                labels[getId($(this).attr('id'))] = $(this);
+                positions[getId($(this).attr('id'))] = $(this).parent();
+            });
+
+            $('[id$="pgBlockSectionSegmentacion"] div.pbSubsection table td').children(0).each(function () {        
+                fields[getId($(this).attr('id'))] = $(this);
+                positions[getId($(this).attr('id'))] = $(this).parent();
+            });   
+        }
+
+        function init() {
+            loadFields();
+            cleanPositions();
+            completePage();
+        }
+
+        function getId(str) {
+            console.info(str);
+            var position = str.lastIndexOf(':');
+            return str.substring(position + 1); 
+        }
+
+        function cleanPositions() {
+            $.each(positions, function(key, value) {
+                if ('fidStatus' != key && 'lidStatus' != key && 'fTcentroConsumo' != key &&'lTcentroConsumo' != key && 'fScoreType' != key && 'lScoreType' != key && 'lcalificacion' != key && 'fcalificacion' !=key && 'ltipoCliente' != key && 'ftipoCliente' != key && 'lsubTipoLugar' != key && 'fsubTipoLugar' != key && 'lCuadranteClientes' != key && 'fCuadranteClientes' != key  ) {
+                    value.empty(); 
+                }   
+            });
+        }
+        function confirmDelete(toDeleteId) {
+            var conf = confirm('Seguro que quiere eliminar este registro?');
+
+            if (conf) {
+                deleteRFCLine(toDeleteId);
+            }
+        }
+
+        function completePage() {
+
+            if ('{!acc.Channel_Type__c}'.toUpperCase() == "HEB") {
+
+                positions['fAceptanBranding'].append(fields['fPromocionesPrecioPaquete']);
+                positions['lAceptanBranding'].append(labels['lPromocionesPrecioPaquete']);
+                positions['fCalidadBateo'].append(fields['fAceptanBranding']);
+                positions['lCalidadBateo'].append(labels['lAceptanBranding']);
+                positions['fCubaLibre'].append(fields['fSkuChampagne']);
+                positions['lCubaLibre'].append(labels['lSkuChampagne']);
+                positions['fDJInternacional'].append(fields['fCubaLibre']);
+                positions['lDJInternacional'].append(labels['lCubaLibre']);          
+            }
+
+            else if('{!acc.Channel_Type__c}'.toUpperCase() == "LEB"){
+                positions['fAceptanBranding'].append(fields['fPromocionesPrecioPaquete']);
+                positions['lAceptanBranding'].append(labels['lPromocionesPrecioPaquete']);
+                positions['fCalidadBateo'].append(fields['fAceptanBranding']);
+                positions['lCalidadBateo'].append(labels['lAceptanBranding']);
+                positions['fCubaLibre'].append(fields['fCalidadBateo']);
+                positions['lCubaLibre'].append(labels['lCalidadBateo']);
+                positions['fDJInternacional'].append(fields['fCubaLibre']);
+                positions['lDJInternacional'].append(labels['lCubaLibre']);
+            }
+            else if('{!acc.Channel_Type__c}'.toUpperCase() == "NIGHT CLUB"){
+                positions['fAceptanBranding'].append(fields['fDJInternacional']);
+                positions['lAceptanBranding'].append(labels['lDJInternacional']);
+                positions['fCalidadBateo'].append(fields['fPrecioBacardi']);
+                positions['lCalidadBateo'].append(labels['lPrecioBacardi']);
+                positions['fCubaLibre'].append(fields['fRestriccionesAcceso']);
+                positions['lCubaLibre'].append(labels['lRestriccionesAcceso']);
+                positions['fDJInternacional'].append(fields['fVisibilidadTailorMade']);
+                positions['lDJInternacional'].append(labels['lVisibilidadTailorMade']);
+            }
+
+            else if('{!acc.Channel_Type__c}'.toUpperCase() == "RESTAURANTE"){
+                    
+                positions['fAceptanBranding'].append(fields['fSomelier']);
+                positions['lAceptanBranding'].append(labels['lSomelier']);
+                positions['fCalidadBateo'].append(fields['fAceptanBranding']);
+                positions['lCalidadBateo'].append(labels['lAceptanBranding']);
+                positions['fCubaLibre'].append(fields['fPrecioPlatoFuerte']);
+                positions['lCubaLibre'].append(labels['lPrecioPlatoFuerte']);
+                positions['fDJInternacional'].append(fields['fSkuWhisky']);
+                positions['lDJInternacional'].append(labels['lSkuWhisky']);
+                positions['fPrecioBacardi'].append(fields['fTipoComida']);
+                positions['lPrecioBacardi'].append(labels['lTipoComida']);
+            }        
+        }
+     
+
+    </script>
+</apex:page>

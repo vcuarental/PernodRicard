@@ -1,0 +1,516 @@
+<apex:page standardController="ASI_HK_CRM_Visitation_Plan_Detail__c" recordSetVar="vPlans" extensions="ASI_TH_CRM_VisitationPlanEditController" action="{!initPage}" title="Visitation Planner" showHeader="true" sidebar="false" showChat="false">
+    <apex:stylesheet id="fullCalStyleSheet" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/fullcalendar/fullcalendar.css')}"/>
+    <apex:includeScript id="jqueryScript" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/jquery/jquery-1.8.1.min.js')}"/>
+    <apex:includeScript id="fullCalScript" value="{!URLFOR($Resource.ASI_HK_CRM_FullCalendar_130516, '/fullcalendar-1.5.4/fullcalendar/fullcalendar.min.js')}"/>
+    <apex:includeScript id="floatingHeader" value="{!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/scripts/vfFloatingHeaders.js')}"/>
+    <style type="text/css">
+        #calendar .fc-widget-content {
+            background-color:#FFFFFF;
+            height:47px;
+        }
+        #calendar .fc-widget-header {
+            background-color:#F2F3F3;
+        }
+        
+        .visitCheckboxDiv {
+            background-color:#E5F4FF;
+        }
+        .visitCheckboxDiv, .visitCheckbox {
+            cursor:pointer;
+        }
+        .visitCheckboxDivClicked {
+            background-color:#FFF199;
+            font-weight:bold;
+        }
+        .visitCountDiv {
+            background-color:#FFFFFF;
+            color:#000000;
+            font-size:80%;
+        }
+        
+        .visitTargetTR {
+            cursor:pointer;
+        }
+        .visitTargetTRClicked {
+            background-color:#D3E3FF;
+        }
+        
+        #vptTable {
+            background-color:#FFFFFF;
+            border:1px solid #E0E3E5;
+            border-width:0px 1px 1px 0px;
+            border-spacing:0px;
+            margin-top:192px;
+        }
+        #vptTable td, #vptTable th {
+            padding:5px;
+            width:60px;
+            border:1px solid #E0E3E5;
+            border-width: 1px 0px 0px 1px;
+        }
+        #vptTable .pointTH {
+            background-color:#F2F3F3;
+        }
+        #vptTable .pointTHLeft {
+            text-align:right;
+        }
+        .floatingStyle {
+            position:relative;
+        }
+    </style>
+    <script type="text/javascript">
+        //TODO: Use visitation header year and month
+        var targetVisitYear = {!YEAR(visitPlanBeginDate)};
+        var targetVisitMonth = {!MONTH(visitPlanBeginDate)};
+        var defVisitDay = 1;
+        var visitDayDelim = '{!visitDayDelim}';
+        var ptKey_total = '{!ptKeyTotal}';
+        var isLocked = {!isLocked};
+        
+        // Target Table functions
+        
+        function clickTR(theTR) {
+            $('.visitTargetTRClicked').removeClass('visitTargetTRClicked');
+            $(theTR).addClass('visitTargetTRClicked');
+            var targetSObjId = searchTargetSObjIdByTR(theTR);
+            if (targetSObjId) {
+                refreshCalendar(targetSObjId);
+            }
+        }
+        function updateTargetTablePoint(sObjId, isChecked) {
+            var change = 0;
+            var worthPtDiv = $('#tgWorthPt_' + sObjId);
+            var reqPtDiv = $('#tgReqPt_' + sObjId);
+            var planPtDiv = $('#tgPlanPt_' + sObjId);
+            var balancePtDiv = $('#tgBalancePt_' + sObjId);
+            if (worthPtDiv && reqPtDiv && planPtDiv && balancePtDiv) {
+                var worthPtInt = parseInt(worthPtDiv.text());
+                var reqPtInt = parseInt(reqPtDiv.text());
+                var planPtInt = parseInt(planPtDiv.text());
+                var plusOrMinus = isChecked ? 1 : -1;
+                change = plusOrMinus * worthPtInt;
+                planPtInt += change
+                planPtDiv.text(planPtInt);
+                balancePtDiv.text(reqPtInt - planPtInt);
+            }
+            return change;
+        }
+        function updateTargetTableVisitDate(sObjId, day, isChecked) {
+            var visitDayDiv = $('#visitDayStr_' + sObjId);
+            if (typeof(day) === 'string') day = parseInt(day);
+            var visitDayInput = visitDayDiv.closest('td').find('input');
+            if (visitDayDiv && visitDayInput) {
+                var visitDayArray = visitDayToArray(visitDayDiv.text());
+                var newVisitDayArray = [];
+                if (!visitDayArray)
+                    visitDayArray = [];
+                if (isChecked) {
+                    var inserted = false;
+                    for (var i = 0; i < visitDayArray.length; i++) {
+                        if (visitDayArray[i] == day)
+                            inserted = true;
+                        else if (!inserted && parseInt(visitDayArray[i]) > day) {
+                            newVisitDayArray.push('' + day);
+                            inserted = true;
+                        }
+                        newVisitDayArray.push(visitDayArray[i]);
+                    }
+                    if (!inserted) newVisitDayArray.push('' + day);
+                } else {
+                    for (var i = 0; i < visitDayArray.length; i++) {
+                        if (visitDayArray[i] != day)
+                            newVisitDayArray.push(visitDayArray[i]);
+                    }
+                }
+                var newVisitDayStr = visitDayToStr(newVisitDayArray);
+                visitDayDiv.text(newVisitDayStr);
+                visitDayInput.val(newVisitDayStr);
+            }
+        }
+        
+        // Point Table Functions
+        function updatePointTable(sObjId, change) {
+            var ptType = $('#tgType_' + sObjId).text();
+            if (ptType) {
+                // Update planned points
+                var typePlanPt = $('#planPt_' + ptType).text();
+                var newTypePlanPt = parseInt(typePlanPt) + change;
+                $('#planPt_' + ptType).text(newTypePlanPt);
+                var totalPlanPt = $('#planPt_' + ptKey_total).text();
+                var newTotalPlanPt = parseInt(totalPlanPt) + change;
+                $('#planPt_' + ptKey_total).text(newTotalPlanPt);
+                // Update balance points
+                var typeReqPt = $('#reqPt_' + ptType).text();
+                $('#balancePt_' + ptType).text(parseInt(typeReqPt) - newTypePlanPt);
+                var totalReqPt = $('#reqPt_' + ptKey_total).text();
+                $('#balancePt_' + ptKey_total).text(parseInt(totalReqPt) - newTotalPlanPt);
+            }
+        }
+        
+        // Calendar Functions
+        
+        function refreshCalendar(targetObjSFId) {
+            // Gather the visitation info of input row
+            var visitDayStrInput = $('#visitDayStr_' + targetObjSFId).closest('td').find('input');
+            var visitDayStr = visitDayStrInput.val();
+            var hasVisitArray = [];
+            if (visitDayStr && visitDayStr.length > 0) {
+                var visitDays = visitDayToArray(visitDayStr);
+                for (var i = 0; i < visitDays.length; i++)
+                    hasVisitArray['key' + visitDays[i]] = true;
+            }
+            // refresh checkbox
+            $('#calendar .visitCheckboxDiv').each(function() {
+                var theCheckboxDiv = $(this);
+                var day = $(this).attr('id').replace(/^visitCheckboxDiv_/, '');
+                if (hasVisitArray['key' + day])
+                    setVisitCheckboxDiv(theCheckboxDiv, true);
+                else
+                    setVisitCheckboxDiv(theCheckboxDiv, false);
+                theCheckboxDiv.attr('onclick', '').off('click');
+                theCheckboxDiv.click(function() {
+                    toggleVisitCheckboxDiv(this);
+                    renderVisitCheckboxDiv(this, targetObjSFId);
+                });
+            });
+        }
+        
+        function renderVisitCheckboxDiv(cbDiv, targetSObjId) {
+            if (cbDiv) {
+                if (!(cbDiv instanceof jQuery)) cbDiv = $(cbDiv);
+                var rollbackChange = true;
+                var isChecked = cbDiv.hasClass('visitCheckboxDivClicked');
+                if (!isLocked) {
+                    var theDay = cbDiv.attr('id').replace(/^visitCheckboxDiv_/, '');
+                    // Update point calculations in table
+                    var change = updateTargetTablePoint(targetSObjId, isChecked);
+                    if (change && change != 0) {
+                        // Update visitation count
+                        updateVisitCount(theDay, isChecked);
+                        // Update visitation date in table
+                        updateTargetTableVisitDate(targetSObjId, theDay, isChecked);
+                        // Update point table summary
+                        updatePointTable(targetSObjId, change);
+                        rollbackChange = false;
+                    }
+                }
+                if (rollbackChange) { // Do not allow to change checkbox
+                    setVisitCheckboxDiv(cbDiv, !isChecked);
+                    return false;
+                }
+            }
+            return true;
+        }
+        function toggleVisitCheckboxDiv(cbDiv) {
+            if (!(cbDiv instanceof jQuery)) cbDiv = $(cbDiv);
+            var isChecked = cbDiv.hasClass('visitCheckboxDivClicked');
+            setVisitCheckboxDiv(cbDiv, !isChecked);
+        }
+        function setVisitCheckboxDiv(cbDiv, isChecked) {
+            if (isChecked) {
+                if (!cbDiv.hasClass('visitCheckboxDivClicked'))
+                    cbDiv.addClass('visitCheckboxDivClicked');
+                cbDiv.text('{!$Label.ASI_HK_CRM_VF_VISIT_SelectedVisit}');
+            } else {
+                cbDiv.removeClass('visitCheckboxDivClicked');
+                cbDiv.text('{!$Label.ASI_HK_CRM_VF_VISIT_ClickToVisit}');
+            }
+        }
+        function updateVisitCount(day, isChecked) {
+            var countSpan = $('#visitCount_' + day);
+            if (countSpan) {
+                var origCount = parseInt(countSpan.text());
+                var changeCount = isChecked ? 1 : -1;
+                countSpan.text(origCount + changeCount);
+            }
+        }
+        
+        // Help Functions
+        
+        function searchTargetSObjIdByTR(theTR) {
+            var result = null;
+            $('.targetObjSFId').each(function() {
+                if ($(this).closest('tr')[0].rowIndex == theTR.rowIndex) {
+                    result = $(this).text();
+                    return false;
+                }
+            });
+            return result;
+        }
+        
+        function visitDayToArray(visitDayStr) { return strToArray(visitDayStr, visitDayDelim); }
+        function strToArray(theStr, delim) {
+            var resultElements = [];
+            if (theStr && theStr.length > 0) {
+                var tempElements = theStr.split(delim);
+                for (var i = 0; i < tempElements.length; i++) {
+                    resultElements.push(tempElements[i].replace(/^\s+|\s+$/g, ''));
+                }
+            }
+            return resultElements;
+        }
+        function visitDayToStr(visitDayArray) { return arrayToStr(visitDayArray, visitDayDelim); }
+        function arrayToStr(theArray, delim) {
+            var resultStr = '';
+            if (theArray) {
+                for (var i = 0; i < theArray.length; i++)
+                    resultStr += delim + theArray[i];
+            }
+            return resultStr.substring(delim.length);
+        }
+        String.prototype.format = function () {
+            var args = arguments;
+            return this.replace(/\{(\d+)\}/g, function (m, n) { return args[n]; });
+        };
+        
+        function noenter(ev)  {
+          if (window.event && window.event.keyCode == 13 || ev.which == 13) {
+              doSearchName();
+              return false;
+           } else {
+                return true;
+           }
+       }
+    </script>
+    <apex:form id="wholeForm" style="width:1250px;min-height:530px;">
+        <apex:actionFunction name="doSearchName" action="{!NameSearch}" />
+        <apex:pageMessages id="pageMsgs"/>
+        <apex:pageBlock id="wholePageBlock" title="{!$ObjectType.ASI_HK_CRM_Visitation_Plan__c.Label}" rendered="{!NOT(hasError)}">
+            <apex:pageBlockButtons id="wholePageBlockBtns" location="top">
+                <apex:commandbutton action="{!saveChanges}" value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Save}" rendered="{!isLocked != 'true'}"/>   
+                <!--            
+                <apex:commandButton action="{!saveChanges}" value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_Save}" reRender="pageMsgs" rendered="{!isLocked != 'true'}"/>
+                -->
+                <apex:commandButton action="{!quickSaveChanges}" value="{!$Label.ASI_HK_CRM_VF_COMMON_BTN_QuickSave}" reRender="pageMsgs" rendered="{!isLocked != 'true'}"/>
+                <apex:commandButton action="{!URLFOR($Action.ASI_HK_CRM_Visitation_Plan__c.View, visitPlanId)}" value="{!IF(isLocked != 'true', $Label.ASI_HK_CRM_VF_COMMON_BTN_Cancel, $Label.ASI_HK_CRM_VF_COMMON_BTN_Back)}"/>
+            </apex:pageBlockButtons>
+            <apex:outputPanel id="wholePanel">
+                <apex:outputPanel id="headerPanel" layout="block" style="width:100%;height:340px;min-width:1150px;">
+                    <apex:outputPanel id="calPanel" layout="block" style="float:left;width:750px;">
+                        <div id='calendar'></div>
+                        <script type="text/javascript">
+                            function createCheckboxEventObj(year, month, day, checked) {
+                                return {
+                                    title: '{!$Label.ASI_HK_CRM_VF_VISIT_ClickToVisit}'
+                                    , allDay: true
+                                    , start: new Date(year, (typeof month == "string" ? parseInt(month) : month) - 1, day)
+                                    , editable: false
+                                    , color: '#60aff3'
+                                    , type: 'checkboxEvent'
+                                    , checked: checked
+                                };
+                            }
+                            function createVisitCountEventObj(year, month, day, visitCount) {
+                                return {
+                                    title: "{!$Label.ASI_HK_CRM_VF_VISIT_VisitCount}".format(visitCount.toString())
+                                    , allDay: true
+                                    , start: new Date(year, (typeof month == "string" ? parseInt(month) : month) - 1, day)
+                                    , editable: false
+                                    , type: 'visitCountEvent'
+                                    , visitCount: visitCount
+                                };
+                            }
+                            function createVisitCheckbox(event) {
+                                var theDay = $.fullCalendar.parseDate(event.start).getDate();
+                                var cbDiv = document.createElement('div');
+                                cbDiv.className = 'visitCheckboxDiv';
+                                cbDiv.id = 'visitCheckboxDiv_' + theDay;
+                                var cbText = document.createTextNode('{!$Label.ASI_HK_CRM_VF_VISIT_ClickToVisit}');
+                                cbDiv.appendChild(cbText);
+                                if (event.checked) {
+                                    setVisitCheckboxDiv(cbDiv, true);
+                                }
+                                return cbDiv;
+                            }
+                            function createVisitCountElement(event) {
+                                var theDay = $.fullCalendar.parseDate(event.start).getDate();
+                                var vcDiv = document.createElement('div');
+                                vcDiv.className = 'visitCountDiv';
+                                vcDiv.id = 'visitCountDiv_' + theDay;
+                                vcDiv.innerHTML = "{!$Label.ASI_HK_CRM_VF_VISIT_VisitCount}".format(
+                                    '<span id="visitCount_' + theDay + '">'
+                                    + event.visitCount
+                                    + '</span>'
+                                );
+                                return vcDiv;
+                            }
+                        
+                            $(document).ready(function() {
+                                // Create events for visit checkbox and visit count elements
+                                var visitEvents = [];
+                                $('.initVisitCount').each(function() {
+                                    var data = $(this).text();
+                                    var dataArray = data.split('|');
+                                    if (dataArray.length == 4) {
+                                        visitEvents.push(createCheckboxEventObj(dataArray[0], dataArray[1], dataArray[2], false));
+                                        visitEvents.push(createVisitCountEventObj(dataArray[0], dataArray[1], dataArray[2], dataArray[3]));
+                                    }
+                                });
+                                
+                                // initialize the calendar
+                                theCalendar.fullCalendar({
+                                    header: {
+                                        left: ''
+                                        , center: 'title'
+                                        , right: ''
+                                    }
+                                    , aspectRatio: 2.2
+                                    , height: 250
+                                    , weekMode: 'fixed'
+                                    , year: targetVisitYear
+                                    , month: targetVisitMonth - 1
+                                    , date: defVisitDay
+                                    , events: visitEvents
+                                    , eventRender: function(event, element) {
+                                        if (event.type === 'checkboxEvent') {
+                                            return createVisitCheckbox(event);
+                                        } else if (event.type === 'visitCountEvent') {
+                                            return createVisitCountElement(event);
+                                        }
+                                    }
+                                });
+                                $('.floatingTable').vfFloatingHeaders();
+                            });
+                            var theCalendar = $('#calendar');
+                        </script>
+                    </apex:outputPanel>
+                    <apex:outputPanel id="pointPanel" layout="block" style="float:left;margin-left:20px;height:340px;">
+                        <table id="vptTable">
+                            <thead>
+                                <tr>
+                                    <th class="pointTH"></th>
+                                    <!--<th class="pointTH">{!$Label.ASI_HK_CRM_VF_VISIT_RequiredPoint}</th>-->
+                                    <th class="pointTH">{!$Label.ASI_HK_CRM_VF_VISIT_PlannedPoint}</th>
+                                    <!--<th class="pointTH">+/-</th>-->
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <apex:repeat value="{!ptKeyList}" var="ptKey">
+                                    <apex:variable var="point" value="{!keyToVisitPointMap[ptKey]}" />
+                                    <tr>
+                                        <th class="pointTH pointTHLeft">{!point.label}</th>
+                                        <!--<td id="reqPt_{!ptKey}">{!point.requiredPt}</td>-->
+                                        <td id="planPt_{!ptKey}">{!point.plannedPt}</td>
+                                        <!--<td id="balancePt_{!ptKey}">{!point.balancePt}</td>-->
+                                    </tr>
+                                </apex:repeat>
+                            </tbody>
+                        </table>
+                    </apex:outputPanel>
+                </apex:outputPanel>
+                
+                <apex:pageBlock title="Find Account" mode="edit" id="criteria">
+                    <table cellpadding="2" cellspacing="2">
+                    <tr>
+                        <td>{!$ObjectType.Account.Fields.Name.Label}</td>
+                        <td>
+                            <apex:inputText value="{!searchAccountName}" id="docStrId" onkeypress="return noenter(event);"/>
+                            <apex:commandButton value="Search" action="{!NameSearch}"/>
+                            <apex:commandButton value="Reset" action="{!ResetNameSearch}"/>
+                        </td>
+                    </tr>      
+                    </table>
+                </apex:pageBlock>
+                
+                <script type="text/javascript">var headerPanelId = '{!$Component.headerPanel}';</script>
+                <apex:outputPanel id="contentPanel" layout="block" style="width:100%;min-height:250px;height:250px;overflow:auto;margin-top:10px;">
+                    <apex:pageBlockTable id="visitTargetTable" value="{!visitTableRows}" var="row" styleClass="floatingTable"
+                        onRowClick="clickTR(this)" rowClasses="visitTargetTR"
+                        columnsWidth="250px, 100px, 130px,130px, 70px, 70px, 70px, 70px, 70px, 140px">
+                    
+                        <apex:column id="targetNameCol">
+                            <apex:facet name="header">   
+                                <apex:commandLink action="{!ViewData}" value="{!$ObjectType.Account.Fields.Name.Label+' '+ IF(sortExpression=='name',IF(sortDirection='ASC','▲','▼'),'')}" id="cmdSort1">
+                                    <apex:param value="name" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                </apex:commandLink>
+                            </apex:facet>
+                            <apex:outputField value="{!row.targetSObj.Name}"/>
+                            <div class="targetObjSFId" style="display:none">{!row.targetSObj.Id}</div>
+                            <div id="tgType_{!row.targetSObj.Id}" style="display:none">{!row.customType}</div>
+                            <div id="tgWorthPt_{!row.targetSObj.Id}" style="display:none">{!row.worthPt}</div>
+                        </apex:column>
+                                               
+                        <apex:column >
+                            <apex:facet name="header">   
+                                <apex:commandLink action="{!ViewData}" value="{!'Outlet Status '+ IF(sortExpression=='RecordType.Name',IF(sortDirection='ASC','▲','▼'),'')}" id="cmdSort2">
+                                    <apex:param value="RecordType.Name" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                </apex:commandLink>
+                            </apex:facet>
+                            <apex:outputField value="{!row.targetSObj.RecordType.Name}"/>
+                        </apex:column>
+                              
+                        <apex:column id="outletType" value="{!row.additionalField.ASI_TH_CRM_OutletType__c}"/>
+                        <apex:column id="outletSubType" value="{!row.additionalField.ASI_TH_CRM_OutletSubType__c}"/>
+                        <apex:column id="outletImage" value="{!row.additionalField.ASI_TH_CRM_OutletImage__c}"/>
+                        <apex:column id="LeadBrand" value="{!row.additionalField.ASI_TH_CRM_LeadBrand__c}"/>
+                        <apex:column id="targetAddressCol" value="{!row.targetSObj.ASI_HK_CRM_Address__c}"/>
+                        <!--  
+                        <apex:column >
+                            <apex:facet name="header">   
+                                <apex:commandLink action="{!ViewData}" value="{!$ObjectType.Account.Fields.ASI_HK_CRM_Territory__c.Label+' '+ IF(sortExpression=='ASI_HK_CRM_Territory__c',IF(sortDirection='ASC','▲','▼'),'')}" id="cmdSort4">
+                                    <apex:param value="ASI_HK_CRM_Territory__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                </apex:commandLink>
+                            </apex:facet>
+                            <apex:outputField value="{!row.targetSObj.ASI_HK_CRM_Territory__c}"/>
+                        </apex:column>
+                                                
+                        <apex:column >
+                            <apex:facet name="header">   
+                                <apex:commandLink action="{!ViewData}" value="{!$ObjectType.Account.Fields.ASI_HK_CRM_Grade__c.Label+' '+IF(sortExpression=='ASI_HK_CRM_Grade__c',IF(sortDirection='ASC','▲','▼'),'')}" id="cmdSort5">
+                                    <apex:param value="ASI_HK_CRM_Grade__c" name="column" assignTo="{!sortExpression}" ></apex:param>
+                                </apex:commandLink>
+                            </apex:facet>
+                            <apex:outputField value="{!row.targetSObj.ASI_HK_CRM_Grade__c}"/>
+                        </apex:column>
+                                           
+                        <apex:column id="targetRequiredPtCol" headerValue="{!$Label.ASI_HK_CRM_VF_VISIT_RequiredPoint}">
+                            <div id="tgReqPt_{!row.targetSObj.Id}">{!row.requiredPt}</div>
+                        </apex:column>
+                        -->
+                        
+                        <apex:column id="targetPlannedPtCol" headerValue="{!$Label.ASI_HK_CRM_VF_VISIT_PlannedPoint}">
+                            <div id="tgPlanPt_{!row.targetSObj.Id}">{!row.plannedPt}</div>
+                        </apex:column>
+                        <!-- 
+                        <apex:column id="targetBalancePtCol" headerValue="+/-">
+                            <div id="tgBalancePt_{!row.targetSObj.Id}">{!row.requiredPt - row.plannedPt}</div>
+                        </apex:column>
+                         -->
+                        <apex:column id="visitDayCol" headerValue="{!$Label.ASI_HK_CRM_VF_VISIT_VisitDate}">
+                            <div id="visitDayStr_{!row.targetSObj.Id}">{!row.visitDayStr}</div>
+                            <apex:inputHidden id="visitDayStrInput" value="{!row.visitDayStr}"/>
+                        </apex:column>
+                        
+                    </apex:pageBlockTable>
+                    <script type="text/javascript">var visitTargetTableId = '{!$Component.visitTargetTable}';</script>
+                </apex:outputPanel>
+                <script type="text/javascript">var contentPanelId = '{!$Component.contentPanel}';</script>
+            </apex:outputPanel>
+            <script type="text/javascript">var wholePanelId = '{!$Component.wholePanel}';</script>
+        </apex:pageBlock>
+    </apex:form>
+    <div id="initData" style="display:none;">
+        <apex:repeat id="initVisitCountRepeat" value="{!dateToVisitCountMap}" var="theDate">
+        <div class="initVisitCount">{!TEXT(YEAR(theDate)) & '|' & TEXT(MONTH(theDate)) & '|' & TEXT(DAY(theDate)) & '|' & TEXT(dateToVisitCountMap[theDate])}</div>
+        </apex:repeat>
+    </div>
+    <script type="text/javascript">
+        function adjustContentSize() {
+            var windowHeight = $(window).height();
+            var wholeForm = document.getElementById(wholePanelId);
+            if (windowHeight) windowHeight -= 70;
+            if (!windowHeight || windowHeight < 590)
+                windowHeight = 590;
+            wholeForm.style.height = '' + windowHeight + 'px';
+            
+            var headerPanel = document.getElementById(headerPanelId);
+            if (headerPanel) {
+                var newHeight = windowHeight - headerPanel.offsetHeight - 20;
+                if (newHeight >= 250)
+                    document.getElementById(contentPanelId).style.height = '' + newHeight + 'px';
+            }
+        }
+        
+        adjustContentSize();
+    </script>
+</apex:page>

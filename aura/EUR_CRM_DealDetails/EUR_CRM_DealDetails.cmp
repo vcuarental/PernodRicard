@@ -1,0 +1,145 @@
+<!--
+ - Created by V. Kamenskyi on 19.07.2018.
+ -->
+
+<aura:component description="EUR_CRM_DealDetails" implements="lightning:isUrlAddressable,force:appHostable,force:lightningQuickAction,lightning:actionOverride,force:hasRecordId,force:hasSObjectName" controller="EUR_CRM_DealDetailsController">
+    <!--METHODS-->
+    <aura:method name="validate" />
+    <!--EVENTS HANDLERS-->
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+
+    <!--DYNAMIC COMPONENTS DEFINITION-->
+    <aura:attribute name="discountConditions" type="AuraDefinition" description="Conditions for Discounts" />
+    <aura:attribute name="freeConditions" type="AuraDefinition" description="Conditions for Free Products" />
+    <aura:attribute name="posmConditions" type="AuraDefinition" description="Conditions for Free POSM" />
+
+    <aura:attribute name="isUpdate" type="Boolean" />
+    <aura:attribute name="isCreate" type="Boolean" />
+
+    <aura:attribute name="record" type="EUR_CRM_Deal__c" default="{'sobjectType':'EUR_CRM_Deal__c'}"/>
+    <aura:attribute name="sourceId" type="Id" description="Id of source record on clone action"/>
+    <aura:attribute name="requiredFields" type="String[]" default="['Name','EUR_CRM_Objectives_Promotions__c','EUR_CRM_Deal_logic__c']"/>
+    <aura:attribute name="layoutType" type="String" default="edit"/>
+    <aura:attribute name="model" type="EUR_CRM_AuraNestable" />
+    <aura:attribute name="viewModel" type="EUR_CRM_AuraNestable" access="private" />
+    <aura:attribute name="isReady" type="Boolean" default="false"/>
+    <aura:attribute name="isOrderTypeEmpty" type="Boolean" default="true"/>
+
+    <aura:attribute name="message" type="Object"  />
+    <aura:attribute name="validity" type="Object"  />
+
+    <aura:if isTrue="{!!empty(v.model)}">
+
+    <lightning:recordEditForm objectApiName="{!v.sObjectName}"
+                              recordId="{!v.recordId ? v.recordId : v.sourceId ? v.sourceId : null}"
+                              recordTypeId="{!v.record.RecordTypeId}"
+                              aura:id="recordEditForm"
+                              onload="{!c.onRecordEditFormLoad}">
+        <div>
+            <ui:scrollerWrapper >
+                <!--HEADER-->
+                <div class="slds-page-header">
+                    <lightning:layout class="slds-grid">
+                        <lightning:layoutItem class="slds-col slds-has-flexi-truncate">
+                            <div class="slds-media slds-no-space slds-grow">
+                                <div class="slds-media__figure">
+                                    <lightning:icon size="medium" iconName="standard:thanks" />
+                                </div>
+                                <div class="slds-media__body">
+                                    <p class="slds-text-title--caps slds-line-height--reset">{!v.model.labels.entities.EUR_CRM_Deal__c.label}</p>
+                                    <h1 class="slds-page-header__title slds-m-right--small slds-align-middle slds-truncate"
+                                        title="{!v.record.Name}"><ui:outputText value="{!v.record.Name}" /></h1>
+                                </div>
+                            </div>
+                        </lightning:layoutItem>
+                        <!--CONTROLS-->
+                        <lightning:layoutItem class="slds-col slds-no-flex slds-grid slds-align-bottom">
+                            <lightning:buttonGroup >
+                                <lightning:button type="reset" onclick="{!c.handleControlButtonClick}" name="{!v.layoutType == 'view' ? 'back' : 'cancel'}" label="{!v.layoutType == 'view' ? $Label.c.EUR_CRM_Back : $Label.c.EUR_CRM_Cancel}" />
+                                <lightning:button type="button" onclick="{!c.handleControlButtonClick}" name="delete" label="{!$Label.c.EUR_CRM_Delete}" disabled="{! empty(v.recordId) }"/>
+                                <lightning:button type="button" onclick="{!c.handleControlButtonClick}" name="clone" label="{!$Label.c.EUR_CRM_Clone}" disabled="{!!v.validity.isClonable || empty(v.recordId)}" />
+                                <lightning:button type="button" onclick="{!c.handleControlButtonClick}" name="{!v.layoutType == 'view' ? 'edit' : 'save'}" label="{!v.layoutType == 'view' ? $Label.c.EUR_CRM_Edit : $Label.c.EUR_CRM_Save}" variant="brand" disabled="{!!v.validity.isUpdatable || v.isPerformingSaveAction || !v.isReady }" />
+                            </lightning:buttonGroup>
+                        </lightning:layoutItem>
+                    </lightning:layout>
+                    <!--DEAL DETAILS-->
+                    <lightning:layout class="slds-p-top_small">
+                        <!--OP-->
+                        <lightning:layoutItem >
+                            <lightning:inputField fieldName="EUR_CRM_Objectives_Promotions__c" aura:id="dealInputFields" onchange="{!c.onInputFieldChange}"/>
+                        </lightning:layoutItem>
+                        <!--Name-->
+                        <lightning:layoutItem class="slds-p-left_small">
+                            <lightning:inputField fieldName="Name" aura:id="dealInputFields" onchange="{!c.onInputFieldChange}"/>
+                        </lightning:layoutItem>
+                        <!--Deal Logic-->
+                        <lightning:layoutItem class="slds-p-left_small">
+                            <lightning:inputField fieldName="EUR_CRM_Deal_logic__c" aura:id="dealInputFields" onchange="{!c.onInputFieldChange}"/>
+                        </lightning:layoutItem>
+                        <!--Multiply-->
+                        <lightning:layoutItem class="slds-p-left_small slds-align-middle">
+                            <lightning:inputField fieldName="EUR_CRM_Multiply__c" class="slds-p-left_small slds-p-right_large" aura:id="dealInputFields" onchange="{!c.onInputFieldChange}"/>
+                        </lightning:layoutItem>
+                        <!--Order type-->
+                        <aura:if isTrue="{!v.record.EUR_CRM_OrderType__c}">
+                            <lightning:layoutItem class="slds-p-left_small slds-align-middle slds-col_bump-left">
+                                <lightning:combobox label="{!v.model.labels.entities.EUR_CRM_Deal__c.fields.EUR_CRM_OrderType__c}" options="{!v.model.picklistEntries.orderTypes}" value="{!v.record.EUR_CRM_OrderType__c}" disabled="true"/>
+                            </lightning:layoutItem>
+                        </aura:if>
+                    </lightning:layout>
+
+                </div>
+                <!--/HEADER-->
+
+                <!--CONDITIONS-->
+                <div class="slds-m-top--small slds-p-bottom--xx-large" aura:id="detailsSection">
+                    <div class="slds-panel slds-grid slds-grid--vertical slds-nowrap">
+                        <div class="slds-form--stacked slds-grow">
+                            <div class="slds-panel__section levels-section" aura:id="levelsSection">
+                                <h3 class="slds-text-heading--small slds-m-vertical--medium slds-section-title--divider">{!$Label.c.EUR_CRM_Deal_Conditions}</h3>
+
+                                <lightning:tabset>
+                                    <aura:iteration var="discountType" items="{!v.model.discountTypes}" indexVar="pos">
+                                        <aura:if isTrue="{! !and(discountType.id != 'Discount', v.record.RecordType.DeveloperName != 'EUR_Free') }">
+                                            <lightning:tab label="{!discountType.label}" id="{!discountType.id}" title="{!discountType.title}" onactive="{!c.onConditionsTabActive}" accesskey="c" tabindex="{!pos}">
+                                                <aura:if isTrue="{!discountType.id == 'Discount'}">
+                                                        {!v.discountConditions}
+
+                                                </aura:if>
+                                                <aura:if isTrue="{!discountType.id == 'Free Product'}">
+                                                        {!v.freeConditions}
+                                                </aura:if>
+                                                <aura:if isTrue="{!discountType.id == 'Free POSM'}">
+                                                        {!v.posmConditions}
+                                                </aura:if>
+                                            </lightning:tab>
+                                        </aura:if>
+                                    </aura:iteration>
+                                </lightning:tabset>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!--/CONDITIONS-->
+
+                <!--SPINNER-->
+                <aura:if isTrue="{!!v.isReady}">
+                    <div class="slds-spinner_container slds-backdrop_open slds-is-fixed" style="background-color: rgba(255, 255, 255, .25)">
+                        <lightning:spinner variant="brand" size="large" alternativeText="wait" />
+                    </div>
+                </aura:if>
+            </ui:scrollerWrapper>
+        </div>
+    </lightning:recordEditForm>
+
+    </aura:if>
+
+    <!--SERVICES-->
+    <lightning:notificationsLibrary aura:id="notificationsLib"/>
+    <lightning:overlayLibrary aura:id="overlayLib"/>
+    <lightning:navigation aura:id="navigationService"/>
+    <c:EUR_CRM_CalloutService aura:id="calloutService" context="{!this}" />
+    <c:EUR_CRM_DialogBuilder aura:id="dialogBuilder" />
+
+</aura:component>

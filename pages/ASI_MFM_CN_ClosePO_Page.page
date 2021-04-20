@@ -1,0 +1,345 @@
+<apex:page controller="ASI_MFM_CN_ClosePO_Ctrl" standardStylesheets="false" docType="html-5.0" lightningStylesheets="true">
+
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_CN_JqueryUI, '/css/base/jquery-ui-1.10.4.custom.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_CN_JqueryUI, '/js/jquery-1.10.2.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_CN_JqueryUI, '/js/jquery-ui-1.10.4.custom.min.js')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CN_DataTables, 'datatables.min.js')}"/>
+    <apex:includeScript value="{!$Resource.ASI_Datatable_Builder}"/>
+    
+	<meta charset="UTF-8" />
+    <head>
+        <apex:slds />
+        <script>
+        var poId = null;
+        var ownerId = null;
+        var table;
+        $(document).ready(function(){ 
+            $('.waitingSearchDiv').hide();
+            return;
+            var columns = [
+                //{title:"PO", 		data:"name", 	defaultContent:"", 	fieldType:TYPE_LOOKUP, 	mandate:true, lookupMap:itemMap},
+                //{title:"Select",data:"check", 		defaultContent:"", 	fieldType:TYPE_CHECKBOX},
+                {title:"PO",	data:"name", 		defaultContent:"", 	fieldType:TYPE_DISPLAY},
+                {title:"Type",	data:"type", 		defaultContent:"", 	fieldType:TYPE_DISPLAY},
+                {title:"BU",	data:"bu", 		defaultContent:"", 	fieldType:TYPE_DISPLAY},
+                {title:"Owner",	data:"owner", 		defaultContent:"", 	fieldType:TYPE_DISPLAY},
+                {title:"Amount",	data:"amount", 		defaultContent:"", 	fieldType:TYPE_DISPLAY}
+            ];
+            var config = {
+                scrollX: true,
+                searching: true,
+                paging: true,
+                ordering: false,
+                info: false,
+                data: [],
+                fixedColumns: false,
+                autoWidth: false,
+            };
+            var createdCell = function(nTd, oData, dataKey, iRow, iCol) {
+                console.log(dataKey);
+                /*
+                if(dataKey=='itemgroup') {
+                    $(nTd).find('input').css("width", "400px");
+                } else if(dataKey=='qty') {
+                    $(nTd).find('input').css("width", "50px");
+                }*/
+                //$(nTd).css("width", "1%");
+            };
+            var oninput = function(nTd, result) {};
+            var onblur  = function(nTd, result, lookupObj) {
+                /*
+                if(result.data=="itemgroup") {
+                    var tdItemGroup = table.getCell(nTd, 1);
+                    result.oData.id = lookupObj.id;
+                }*/
+            };
+            table = new DataTableBuilder("polineTbl",config,columns,false,[],[],createdCell,oninput,onblur);
+            table.defLine = function() {
+                return {itemgroup:'',qty:1,editable:true};
+            };
+            table.setEditMode(false);
+            table.dataTable.row.add(table.defLine()).draw(false);
+		});
+        function openLookup(baseURL, width, modified, searchParam){
+            var originalbaseURL = baseURL;
+            var originalwidth = width;
+            var originalmodified = modified;
+            var originalsearchParam = searchParam;
+            
+            var lookupType = baseURL.substr(baseURL.length-3, 3);
+            if (modified == '1') baseURL = baseURL + searchParam;
+            
+            var isCustomLookup = false;
+            // Following "001" is the lookup type for Account object so change this as per your standard or custom object
+            //if(lookupType == "001"){
+                
+                var urlArr = baseURL.split("&");
+                var txtId = '';
+                if(urlArr.length > 2) {
+                    urlArr = urlArr[1].split('=');
+                    txtId = urlArr[1];
+                }
+                // Following is the url of Custom Lookup page. You need to change that accordingly
+                baseURL = "/apex/ASI_MFM_CN_SearchPO_PopupPage?txt=" + txtId;
+                
+                // Following is the id of apex:form control "myForm". You need to change that accordingly
+                baseURL = baseURL + "&frm=" + escapeUTF("{!$Component.myForm}");
+                if (modified == '1') {
+                    baseURL = baseURL + "&lksearch=" + searchParam;
+                }
+                
+                // Following is the ID of inputField that is the lookup to be customized as custom lookup
+                if(txtId.indexOf('poInputField') > -1 ){
+                    isCustomLookup = true;
+                }
+            //}
+            
+            
+            if(isCustomLookup == true){
+                openPopup(baseURL, "lookup", 350, 480, "width="+width+",height=480,toolbar=no,status=no,directories=no,menubar=no,resizable=yes,scrollable=no", true);
+            }
+            else {
+                if (modified == '1') originalbaseURL = originalbaseURL + originalsearchParam;
+                openPopup(originalbaseURL, "lookup", 350, 480, "width="+originalwidth+",height=480,toolbar=no,status=no,directories=no,menubar=no,resizable=yes,scrollable=no", true);
+            } 
+        }
+
+    	function searchPO(){
+            var fy = $("#fiscalYear").find('option:selected').val();
+            console.log(fy);
+            if(fy=='--') {
+                alert('Please select Fiscal Year');
+                return;
+            }
+            $('.waitingSearchDiv').show();
+            ASI_MFM_CN_ClosePO_Ctrl.searchPO(fy,poId,ownerId,function(result, event){
+                $('.waitingSearchDiv').hide();
+                if(event && result!=null){
+                    console.log(result);
+                    if(result==0) {
+                        var dialog = $('<p>There is no PO Line to close.</p>').dialog();
+                    } else {
+                        processBatch(fy,poId,ownerId,result);
+                    }
+                }
+            });
+        }
+        
+        function processBatch(fy,poId,ownerId,noOfLine) {
+            var dialog = $('<p>approximate number of PO Line(s) to close: '+noOfLine+'</p>').dialog({
+                buttons: {
+                    "Process": function() {
+                        dialog.dialog('close');
+                        console.log(fy+' , '+poId+' , '+ownerId);
+                        startCloseBatch(fy,poId,ownerId);
+                    },
+                    "Cancel":  function() {dialog.dialog('close');}
+                }
+            });
+        }
+        
+        function lookupCallback(tmp){
+            console.log(tmp);
+            poId = document.getElementById(tmp+'_lkid').value;
+            console.log(poId);
+            $('#poname').val(document.getElementById(tmp+'_lkold').value);
+        }
+        function lookupPOownerCallback(tmp){
+            console.log(tmp);
+            ownerId = document.getElementById(tmp+'_lkid').value;
+            console.log(ownerId);
+            $('#poowner').val(document.getElementById(tmp+'_lkold').value);
+        }
+        function clearSelect(){
+            poId = null;
+            ownerId=null;
+            $('#fiscalYear').prop('selectedIndex',0);
+            $('#poname').val('');
+            $('#poowner').val('');
+            var inputbox = $('.hideField');
+            inputbox.val('');
+        }
+
+        </script>
+        <style>
+            input.hideField {
+            width:0px;
+            visibility:collapse;
+            }
+            .hideField select {
+            width:0px;
+            visibility:collapse;
+            }
+            .hideField .lookupInput input {
+            width:0px;
+            visibility:collapse;
+            }
+            .vertical-center {
+            margin: 0;
+            position: absolute;
+            top: 50%;
+            -ms-transform: translateY(-50%);
+            transform: translateY(-50%);
+            }
+            .container { 
+            height: 20px;
+            width: 150px;
+            position: relative;
+            }
+            table #mytable {
+            border-collapse: collapse;
+            }
+            
+            table #mytable tr td {
+            border: 1px solid black; 
+            }
+        </style>
+    </head>
+    
+    <div class="slds-scope">
+        <apex:PageBlock id="PageBlock">		
+            <apex:form id="frm" style="width:100%;">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+                    <div class="waitingHolder" style="top: 50%; width: 100px;">
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Loading...</span>
+                    </div>
+                </div>
+                
+                <div class="slds-form__row">
+                    <div class="slds-form__item" role="listitem">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label" for="fiscalYear">Fiscal Year</label>
+                            <div class="slds-form-element__control">
+                                <div class="slds-select_container">
+                                    <select class="slds-select" id="fiscalYear">
+                                        <option value="--">Select FY</option>
+                                        <apex:repeat value="{!pickListFYkey}" var="key">
+                                            <option value="{!key}">{!pickListFYmap[key]}</option>
+                                        </apex:repeat>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+    
+                <div class="slds-form-element__row">                                    
+                    <label class="slds-form-element__label" for="lookup">PO Owner</label>
+                    <div class="slds-grid slds-grid_align-left">
+                        <div class="slds-col slds-size_1-of-6">
+                            <span><input type="text" id="poowner" class="slds-input" disabled="disabled"/></span>
+                        </div>
+                        <div class="slds-col slds-grow-none">
+                            <span><apex:inputfield styleClass="hideField" id="poOwnerField" value="{!poline.ASI_MFM_PO__r.OwnerId}" onchange="lookupPOownerCallback('{!$Component.frm:poOwnerField}')" required="false"/></span>
+                        </div>
+                    </div>
+                    
+                    <label class="slds-form-element__label" for="lookup">PO Number</label>
+                    <div class="slds-grid slds-grid_align-left">
+                        <div class="slds-col slds-size_1-of-6">
+                            <span><input type="text" id="poname" class="slds-input" disabled="disabled"/></span>
+                        </div>
+                        <div class="slds-col slds-grow-none">
+                            <span><apex:inputfield styleClass="hideField" id="poInputField" value="{!poline.ASI_MFM_PO__c}" onchange="lookupCallback('{!$Component.frm:poInputField}')" required="false"/></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <br/>
+                <div class="slds-button-group" role="group">
+                    <button class="slds-button slds-button_brand" onclick="searchPO(); return false;">Search</button>
+                    <button class="slds-button slds-button_neutral" onclick="clearSelect(); return false;">Clear</button>
+                </div>
+    
+                <apex:actionFunction name="startCloseBatch" action="{!startCloseJob}" reRender="msgBlock">
+                    <apex:param name="searchFy"  value="" />
+                    <apex:param name="searchPoId" value="" />
+                    <apex:param name="searchOwnerId" value="" />
+                </apex:actionFunction>
+    
+            </apex:form>
+            
+            <!--
+        	<br/><br/>
+        	<div style="width:100%"><table id="polineTbl" class="display compact" style="width:100%"></table></div>-->
+        </apex:PageBlock>
+    </div>
+    
+	
+    <apex:form >
+        <apex:pageBlock id="msgBlock">
+            <apex:actionRegion >
+                <apex:actionPoller rerender="statusPanel" interval="5"/>
+                <apex:outputPanel id="statusPanel">
+                    <apex:repeat value="{!StatusMsgs}" var="statusMsg">
+                        <apex:outputText style="color:red;" value="{!statusMsg}" /><br />
+                    </apex:repeat>
+                </apex:outputPanel>
+            </apex:actionRegion>
+        </apex:pageBlock>
+    </apex:form>
+
+<!--
+    <apex:pageMessages />
+    
+    <apex:PageBlock id="PageBlock">		
+        <apex:form id="frm" style="width:100%;">
+            <apex:outputLabel >Please enter PO or select Fiscal Year</apex:outputLabel>
+            <br/><br/>
+
+			<table id="mytable">
+                <tr>
+                    <td colspan="2">
+            <select id='fiscalYear'>
+                <option value="--">Select FY</option>
+                <apex:repeat value="{!pickListFYkey}" var="key">
+                    <option value="{!key}">{!pickListFYmap[key]}</option>
+                </apex:repeat>
+            </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><apex:inputfield styleClass="hideField" id="poInputField" value="{!poline.ASI_MFM_PO__c}" onchange="lookupCallback('{!$Component.frm:poInputField}')" required="false"/></td>
+                    <td class="container"><div class="vertical-center"><p id="poname" style="margin: auto; text-align: center;"></p></div></td>
+                </tr>
+            </table>
+
+            <apex:commandButton value="Search" onclick="searchPO('{!$Component.frm:poInputField}'); return false;"/>
+            <apex:commandButton value="Clear" onclick="clearSelect(); return false;"/>
+        </apex:form>
+    </apex:PageBlock>
+    
+    <apex:form id="cloneItem">
+        <div class="waitingSearchDiv" id="el_loading" style="background-color: #CCCCCC; opacity:0.5; height: 100%;width:100%;z-index:99999;"> 
+            <div class="waitingHolder" style="top: 50%; width: 100px;">
+                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                <span class="waitingDescription">Loading...</span>
+            </div>
+        </div>
+        
+
+
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockButtons id="buttonArea" location="top">
+                <apex:outputText value="Execute AutoReceipt Job by pressing " /> 
+                <apex:commandButton value="Run" id="theButton" action="{!startCloseJob}" />
+            </apex:pageBlockButtons>
+            
+            <apex:actionRegion >
+                <apex:actionPoller rerender="statusPanel" interval="5"/>
+                <apex:outputPanel id="statusPanel">
+                <apex:repeat value="{!StatusMsgs}" var="statusMsg">
+                	<apex:outputText style="color:red;" value="{!statusMsg}" /><br />
+                </apex:repeat>
+
+                </apex:outputPanel>
+                
+            </apex:actionRegion>
+        </apex:pageBlock>
+
+        
+    </apex:form>
+-->    
+</apex:page>

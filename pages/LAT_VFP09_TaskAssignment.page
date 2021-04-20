@@ -1,0 +1,400 @@
+<apex:page controller="LAT_VFC09_TasksAssignment" standardStylesheets="false" docType="html-5.0" >
+
+<html xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">   
+
+	<head>
+		<!-- SLDS (Salesforce Lightning Design System) -->
+		<apex:stylesheet value="{!$Resource.LAT_Sds}/slds0.8.0/assets/styles/salesforce-lightning-design-system-vf.min.css"/>
+
+		 <!-- jQuery & ALJS Init -->
+	    <apex:includeScript value="{!$Resource.LAT_BR_CreditAnalysisResources}/js/jquery.min.js" /> 
+	    <apex:includeScript value="{!URLFOR($Resource.LAT_aljs, '/jquery/jquery.aljs-init.min.js')}" />
+	     
+	     <!-- Moment JS -->
+	    <apex:includeScript value="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.11.0/moment.js" />
+
+	    <!-- Page-Specific ALJS Plugins -->
+	     <apex:includeScript value="{!URLFOR($Resource.LAT_aljs, '/jquery/jquery.aljs-datepicker.min.js')}"></apex:includeScript>
+		<apex:includeScript value="{!URLFOR($Resource.LAT_aljs, '/jquery/jquery.aljs-modal.min.js')}"></apex:includeScript>
+		<apex:includeScript value="{!URLFOR($Resource.LAT_aljs, '/jquery/jquery.aljs-picklist.min.js')}"></apex:includeScript>
+		<apex:includeScript value="{!URLFOR($Resource.LAT_aljs, '/jquery/jquery.aljs-multi-select.min.js')}"></apex:includeScript>
+
+		<!-- Common Settings Overrides -->
+	    <script>
+	        var assetsLocation = '{!URLFOR($Resource.LAT_Sds)}';
+	        var tasksNotAssigned = []; 
+	        var visitIdGlobal;
+	        $.aljsInit({
+	            assetsLocation: assetsLocation,
+	            scoped: true
+	        });
+	        $(document).ready(function() {
+
+
+	        	var fromDate = new Date('{!PlanejamentData}');
+
+	        	$('#date').datepicker({
+	        		numYearsBefore: 30,
+	        		numYearsAfter: 10,
+	        		format: 'DD/MM/YYYY',
+	        		initDate: moment(fromDate).add('days',1)
+	        	});
+			        $('#date2').datepicker({
+	        		numYearsBefore: 30,
+	        		numYearsAfter: 10,
+	        		format: 'DD/MM/YYYY',
+	        		initDate: moment(fromDate).add('days', 29)
+	        	});
+
+				loadVisitTable();
+
+			});
+	        function loadVisitTable (){
+	        	var dateTemp = $('#date').val();
+	        	var dateTemp2 = $('#date2').val();
+
+	        	if( dateTemp != '' && dateTemp2 != ''){
+
+	        		$('#ulAssigned').children().remove();
+					$('#ulUnAssigned').children().remove();
+
+	        		 //show loading gif
+	        		 $('#loadingDiv').css('display','block');
+	        		 Visualforce.remoting.Manager.invokeAction(
+			            '{!$RemoteAction.LAT_VFC09_TasksAssignment.loadVisitTableData}',
+			            dateTemp, dateTemp2,
+			            function(result, event){
+			                if (event.status) {
+	        		 			    var visitsToDate = result;
+								    var visitsArray = [];
+								    var dataRowsVisits = '';
+								    for(var i=0;i<visitsToDate.length;i++) {
+								    	var dataRow = '<tr class="slds-hint-parent" onclick="loadTaskAssigned(\''+visitsToDate[i].Id +'\'  ); $(\'#visitTable tr\').removeClass(\'highlighted\'); $(this).addClass(\'highlighted\');">';
+								    	dataRow += '<td data-label="Subject" >';
+								    	dataRow += ' <span class="slds-truncate"><a target="_blank" href="{!urlSalesforce}/' + visitsToDate[i].Id +'">' + visitsToDate[i].Name + '</a></span>';
+								    	dataRow += '</td>';
+								    	dataRow += '<td data-label="Client" >';
+								    	dataRow += ' <span class="slds-truncate"><a target="_blank" href="{!urlSalesforce}/' + visitsToDate[i].Conta__c +'">' + visitsToDate[i].Conta__r.Name + '</a></span>';
+								    	dataRow += '</td>';
+								    	dataRow += '<td data-label="Status" >';
+								    	dataRow += ' <span class="slds-truncate">' + visitsToDate[i].Status__c + '</span>';
+								    	dataRow += '</td>';
+								    	dataRow += '<td data-label="Type" >';
+								    	dataRow += ' <span class="slds-truncate">' + visitsToDate[i].Tipo_de_Visita__c + '</span>';
+								    	dataRow += '</td>';
+								    	dataRow += '<td data-label="Data da visita" >';
+								    	dataRow += ' <span class="slds-truncate">' + new Date(visitsToDate[i].Data_da_Visita__c) + '</span>';
+								    	dataRow += '</td>';
+								    	dataRow += '</tr>';
+								    	dataRowsVisits += dataRow;
+									}
+								$('#visitTableBody').html('');	
+	        		 			$('#visitTableBody').append(dataRowsVisits);
+	        		 			$('#loadingDiv').css('display','none');
+			                } else if (event.type === 'exception') {
+			                    alert(event.message);
+			                    $('#loadingDiv').css('display','none');
+			                } else {
+			                    alert(event.message);
+			                    $('#loadingDiv').css('display','none');
+			                }
+			            }, 
+			            {escape: true}
+			        );
+	        	}else{
+	        		var selectDateLabel = '{!JSENCODE($Label.LAT_VFP09_Select_A_Date)}';
+	        		alert(selectDateLabel);
+	        	}
+	        }
+	        function loadTaskAssigned(visitId){
+
+
+	        	 tasksNotAssigned = [];
+				 var tasksSelectedJson = [];
+				 visitIdGlobal = visitId;
+
+	        	 $('#loadingDiv').css('display','block');
+
+	        	 // var stringArray = JSON.parse('{!VisitNotAssigned}');
+
+	    	 	 Visualforce.remoting.Manager.invokeAction(
+		            '{!$RemoteAction.LAT_VFC09_TasksAssignment.obtainVisitUnAssigned}',
+		            function(result, event){
+		                if (event.status) {
+		                	var stringArray = result;
+		                	for(var i=0;i<stringArray.length;i++) {
+		                		var t = {'id' : stringArray[i].Id , 'label' : stringArray[i].Subject};
+		                		tasksNotAssigned.push(t);
+		                	}
+		                } else if (event.type === 'exception') {
+		                    alert(event.message);
+		                    $('#loadingDiv').css('display','none');
+		                } else {
+		                     alert(event.message);
+		                     $('#loadingDiv').css('display','none');
+		                }
+		         });
+
+	        	 Visualforce.remoting.Manager.invokeAction(
+			            '{!$RemoteAction.LAT_VFC09_TasksAssignment.loadTaskAssignedRemote}',
+			            visitId, 
+			            function(result, event){
+			                if (event.status) {
+			                	var taskAlreadyAssigned = result;
+			                	var taskSelectedIds = [];
+			                	for(var i=0;i<taskAlreadyAssigned.length;i++) {
+			                		 var t = {'id' : taskAlreadyAssigned[i].taskId , 'label' : taskAlreadyAssigned[i].subject};
+			                		 var idT = taskAlreadyAssigned[i].taskId ;
+			                		 taskSelectedIds.pushidT
+									 tasksSelectedJson.push(t);
+			                	}
+		                		$('[data-aljs="multi-select"]').multiSelect({
+						        	unselectedItems: tasksNotAssigned,
+						        	selectedItems: tasksSelectedJson
+						    	});	
+
+			                	//LOGIC TO Load dynamically assigned and unassigned tasks
+			                	// if($('#ulUnAssigned').children().length != 0 || $('#ulAssigned').children().length){
+									$('#ulAssigned').children().remove();
+									$('#ulUnAssigned').children().remove();
+									var liChildrenAssigned = createLiChildren(tasksSelectedJson);
+									$('#ulAssigned').append(liChildrenAssigned);
+									var liChildrenUnAssigned = createLiChildren(tasksNotAssigned);
+									$('#ulUnAssigned').append(liChildrenUnAssigned);
+			                	// }
+			                	$('#loadingDiv').css('display','none');
+			                } else if (event.type === 'exception') {
+			                    alert(event.message);
+			                    $('#loadingDiv').css('display','none');
+			                } else {
+			                     alert(event.message);
+			                     $('#loadingDiv').css('display','none');
+			                }
+			            }, 
+			            {escape: true}
+			        );
+	        }
+
+	        function saveTasks (multiSelect){
+
+	        	var taskSelectedId = null;
+	        	var visitIdTemp = null;
+
+	        	//This will handle the case of the item is being unasigned or asigned
+	        	//We're creating parameters depending on each case. 
+	        	if(multiSelect == 'assign')
+	        	{
+	        		taskSelectedId = $("body").find("[aria-selected='true']").attr('id');
+	        		var spanName =  $("body").find("[aria-selected='true']").find('span')[1];
+	        		var taskSelectedLabel =  spanName.innerHTML;
+	        		$('#'+taskSelectedId).remove();
+	        		var arrayOfTasks = [{'id' : taskSelectedId , 'label' : taskSelectedLabel}]
+	        		$('#ulAssigned').append(createLiChildren(arrayOfTasks));
+	        		visitIdTemp = visitIdGlobal;
+	        	
+	        	}else
+	        	{
+	        		taskSelectedId = $("body").find("[aria-selected='true']").attr('id');
+	        		var spanName =  $("body").find("[aria-selected='true']").find('span')[1];
+	        		var taskSelectedLabel =  spanName.innerHTML;
+	        		$('#'+taskSelectedId).remove();
+	        	    var arrayOfTasks = [{'id' : taskSelectedId , 'label' : taskSelectedLabel}]
+	        		$('#ulUnAssigned').append(createLiChildren(arrayOfTasks));
+	        		visitIdTemp = null;
+	        	}
+
+
+	        	 $('#loadingDiv').css('display','block');
+	        		Visualforce.remoting.Manager.invokeAction(
+			            '{!$RemoteAction.LAT_VFC09_TasksAssignment.saveListOfTasks}',
+			            taskSelectedId,visitIdTemp,
+			            function(result, event){
+			                if (event.status) {
+		
+			     			  $('#loadingDiv').css('display','none');
+			                } else if (event.type === 'exception') {
+			                   alert(event.message);
+			                    $('#loadingDiv').css('display','none');
+			                } else {
+			                   alert(event.message);
+			                    $('#loadingDiv').css('display','none');
+			                }
+			            }, 
+			            {escape: true}
+			      );
+	        }
+
+	        /**
+	        * Additional function to create li based on the array being passed. This will be used when click on different visits. 
+	        **/
+	        function createLiChildren(arrayOfTasks){
+	        	var liItem = ''; 
+	        	var liCollection = [];
+	        	for(var i = 0 ; i < arrayOfTasks.length ; i++ ){
+	        		liItem += '<li draggable="true" id="'+arrayOfTasks[i].id+'" class="slds-picklist__item slds-has-icon slds-has-icon--left" aria-selected="false" tabindex="0" role="option">';
+	        		liItem += '<span class="slds-truncate"><span>'+arrayOfTasks[i].label+'</span>';
+	        		liItem += '</span>';
+	        		liItem += '</li>';
+	        	}
+	        	return liItem;
+	        }
+
+
+
+
+	        function getDaysInMonth(m, y)
+	        {
+				    // months in JavaScript start at 0 so decrement by 1 e.g. 11 = Dec
+				    --m;
+
+				    // if month is Sept, Apr, Jun, Nov return 30 days
+				    if( /8|3|5|10/.test( m ) ) return 30;
+
+				    // if month is not Feb return 31 days
+				    if( m != 1 ) return 31;
+
+				    // To get this far month must be Feb ( 1 )
+				    // if the year is a leap year then Feb has 29 days
+				    if( ( y % 4 == 0 && y % 100 != 0 ) || y % 400 == 0 ) return 29;
+
+				    // Not a leap year. Feb has 28 days.
+				    return 28;
+		   }
+	    </script>
+
+
+	    <style>
+		    .marginClass {
+		    	margin-left: 10px;
+		    	margin-right: 10px;
+		    }
+		    .multiSelectStyle{
+		    	overflow-x: auto;
+		    	width:100%;
+		    }
+
+			tr.highlighted td {
+				background: #DBF1FF;
+			}
+	    </style>
+
+	</head>
+
+    <div class="slds">
+	    <div class="slds-card">
+		    	<div class="slds-card__header slds-grid">
+		    		<div class="slds-media slds-media--center slds-has-flexi-truncate">
+		    			<div class="slds-media__body">
+		    				<h2 class="slds-text-heading--small slds-truncate">{!$Label.LAT_VFP09_Task_Assignment}</h2>
+		    			</div>
+		    		</div>
+		    	</div>
+				  <div class="slds-card__body">
+				    	<!-- markup for datepicker  -->
+					     <div class="slds-form-element marginClass"  style="height: 84px;">
+								<div class="slds-form--stacked slds-float--left slds-m-right--medium">
+						            <div class="slds-form-element marginClass">
+								    	<label class="slds-form-element__label" for="date">{!$Label.LAT_VFP09_DATE_FROM}</label>
+						                <div class="slds-form-element__control">
+						                    <div class="slds-input-has-icon slds-input-has-icon--right">
+						                        <svg aria-hidden="true" class="slds-input__icon slds-icon-text-default">
+								                    <use  xlink:href="{!URLFOR($Resource.LAT_Sds, 'slds0.8.0/assets/icons/utility-sprite/svg/symbols.svg#event')}"></use>
+								                </svg>
+						                       <input id="date" class="slds-input" type="text" placeholder="{!$Label.LAT_VFP09_Pick_A_Date}" label="Date Picker Label" data-aljs-datepicker-id="date"/>
+						                    </div>
+						                </div>
+						            </div>
+						        </div>
+
+						        <div class="slds-form--stacked slds-float--left">
+						            <div class="slds-form-element marginClass">
+						                <label class="slds-form-element__label" for="date">{!$Label.LAT_VFP09_DATE_TO}</label>
+						                <div class="slds-form-element__control">
+						                    <div class="slds-input-has-icon slds-input-has-icon--right">
+						                         <svg aria-hidden="true" class="slds-input__icon slds-icon-text-default">
+								                    <use  xlink:href="{!URLFOR($Resource.LAT_Sds, 'slds0.8.0/assets/icons/utility-sprite/svg/symbols.svg#event')}"></use>
+								                </svg>
+						                        <input id="date2" class="slds-input" type="text" placeholder="{!$Label.LAT_VFP09_Pick_A_Date}" label="Date Picker Label" data-aljs-datepicker-id="date2"/>
+						                    </div>
+						                </div>
+						            </div>
+						        </div>
+					        </div>
+					         <div class="slds-form-element marginClass" style=" margin-left: 20px;" >
+						        	<button class="slds-button slds-button--neutral" style="width: 422px;" onclick="loadVisitTable();">{!$Label.LAT_VFP09_See_Visits}</button>
+						     </div>
+						    <!-- Here it will be the Data Table with Visits__c ? -->
+						     <div class="slds-form-element marginClass"  style="margin-top: 30px;">
+							     <table class="slds-table slds-table--bordered" id="visitTable">
+							     	  <thead>
+									    <tr class="slds-text--label">
+									      <th class="slds-is-sortable" scope="col">
+									        <span class="slds-truncate">{!$Label.LAT_VFP09_Subject}</span>
+									      </th>
+									       <th scope="col">
+									        <span class="slds-truncate">{!$Label.LAT_VFP09_Client}</span>
+									      </th>
+									      <th scope="col">
+									        <span class="slds-truncate">{!$Label.LAT_VFP09_Status}</span>
+									      </th>
+									      <th scope="col">
+									        <span class="slds-truncate">{!$Label.LAT_VFP09_Type}</span>
+									      </th>
+									      <th scope="col">
+									        <span class="slds-truncate">{!$Label.LAT_VFP09_Visit_Date}</span>
+									      </th>
+									    </tr>
+									  </thead>	
+									  <tbody id="visitTableBody">
+									  </tbody>
+							     </table>
+
+
+							     <div id="loadingDiv" style="display:none;">
+							        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; opacity: 0.25; z-index: 1000; background-color: black;">
+								        &nbsp;
+								    </div>
+								    <div style="position: fixed; left: 0; top: 0; bottom: 0; right: 0; z-index: 1001; margin: 15% 50%">
+								        <div style="display: inline-block; padding: 2px; background-color: #fff; width: 125px;">
+								            <img src="/img/loading.gif" style="float: left; margin: 8px;" />
+								            <span style="display: inline-block; padding: 10px 0px;">{!$Label.LAT_BR_VFP05_00023}</span>
+								        </div>
+								    </div>
+								 </div>
+						     </div>
+						    <div class="slds-form-element--stacked marginClass" style="margin-top: 30px;">
+								<div class="slds-picklist--draggable slds-grid" data-aljs="multi-select">
+								        <div class="slds-form-element" style="width:420px;">
+								            <span class="slds-form-element__label" aria-label="select-1">{!$Label.LAT_VFP09_Task_Unassigned}</span>
+								            <div class="slds-picklist slds-picklist--multi" data-aljs-multi-select="unselected">
+								                <ul id="ulUnAssigned" class="slds-picklist__options slds-picklist__options--multi shown multiSelectStyle" style="width: 400px;"></ul>
+								            </div>
+								        </div>
+
+								        <div class="slds-grid slds-grid--vertical">
+								            <button class="slds-button slds-button--icon-container" data-aljs-multi-select="unselect"  onclick="saveTasks('notAssign');">
+								                <svg aria-hidden="true" class="slds-button__icon">
+								                    <use xlink:href="{!URLFOR($Resource.LAT_Sds, 'slds0.8.0/assets/icons/utility-sprite/svg/symbols.svg#left')}"></use>
+								                </svg>
+								                <span class="slds-assistive-text">Pick list</span>
+								            </button>
+								            <button class="slds-button slds-button--icon-container" data-aljs-multi-select="select" onclick="saveTasks('assign');">
+								                <svg aria-hidden="true" class="slds-button__icon">
+								                    <use xlink:href="{!URLFOR($Resource.LAT_Sds, 'slds0.8.0/assets/icons/utility-sprite/svg/symbols.svg#right')}"></use>
+								                </svg>
+								                <span class="slds-assistive-text">Pick list</span>
+									            </button>
+								        </div>
+								        <div class="slds-form-element" style="margin-left:20px">
+								            <span class="slds-form-element__label" aria-label="select-2">{!$Label.LAT_VFP09_Task_Assigned}</span>
+								            <div class="slds-picklist slds-picklist--multi" data-aljs-multi-select="selected">
+								                <ul id="ulAssigned" class="slds-picklist__options slds-picklist__options--multi shown multiSelectStyle" style="width: 400px; "></ul>
+								            </div>
+								        </div>
+								    </div>
+						    </div>
+				  </div>
+	    </div>
+	</div>
+</html>
+</apex:page>

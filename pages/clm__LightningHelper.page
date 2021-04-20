@@ -1,0 +1,694 @@
+<apex:page lightningStylesheets="true"  controller="clm.LightningHelperController"  applyHtmlTag="false" applyBodyTag="false" docType="html-5.0" showHeader="false" sidebar="false">
+    
+    <script type="text/javascript">
+    
+    
+        sforce.connection.sessionId = '{!$Api.Session_ID}';
+        var app_id = '{!sobjectID}';
+        var org_id = '{!CASESAFEID($Organization.Id)}';
+        var token_id = '{!CLOUD_TOKEN}';
+        var cloud_url = '{!CLOUD_UPLOADURL}';
+        var sizeLim = 25000000;
+        var dz = null;  
+        var delay;
+        var isUploading = true;
+        var checkCount = 0;
+
+        var isSafari = navigator.vendor && navigator.vendor.indexOf('Apple') > -1 &&
+                        navigator.userAgent && !navigator.userAgent.match('CriOS');
+    
+            function showSpinner(){
+                $('#drop_zone').hide()
+                $('#spinner').show()
+            }
+
+            function hideSpinner(){
+                $('#spinner').hide()
+                $('#drop_zone').show()
+            }
+    </script>
+
+    <!-- ЗАГРУЗКЧИК ФАЙЛОВ НА СТРАНИЦЕ ПРЕЗЕНТАЦИИ -->
+    <apex:outputPanel rendered="{!attachmentUploaderRender}">
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'other_resources/dropzone.css')}" /> 
+
+        <script> 
+            window.addEventListener("message", function(event) { 
+                // Handle message
+                // console.log(event.data);
+            }, false);
+        </script>
+
+        <style type="text/css">
+            .dz-message{
+                margin: 3em 0 !important;
+            }
+        </style>
+
+        <apex:includeScript value="/soap/ajax/34.0/connection.js" />
+        <apex:includeScript value="/soap/ajax/34.0/apex.js" />       
+        <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+        <script src="https://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.sfdc_lightning,'other_resources/dropzone.js')}"></script>
+
+        <div id='drop_zone'>
+            <form action="/uploads.php" style="border:none;" class='dropzone' id='MyDropzone'></form>
+        </div>
+        <div id="spinner" style="display:none; ">
+            <img id="spinnerOnClick" style=" margin-left: 50%; height: 40px; margin-top: 7%;" src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/spinners/slds_spinner_brand.gif")}'  />
+            <div style="margin-left: 47%;">
+                {!$Label.attach_downloading}
+            </div>
+        </div>
+
+
+
+
+        <script type="text/javascript">
+
+            function attach(ffile){
+
+
+                var file_cont;
+            
+                var r = new FileReader();
+                r.readAsBinaryString(ffile);
+                r.onload = function(){
+            
+                // console.log('Saving file to Salesforce.com...');
+                
+                var att = new sforce.SObject("Attachment");
+                att.ParentId = app_id;
+                att.ContentType = ffile.type;
+                att.Name = ffile.name;
+                att.body = encode64(r.result);
+
+                // console.log('attachment: ',att);
+
+                var result = sforce.connection.create([att], { 
+                    onSuccess: function(a){
+                        // console.log(a)
+                        if(endsWith(att.Name, '.zip')){
+                            sendToAzure(ffile);
+                        }else{
+                            //var name = $('#file').val(null);
+                            //alert('end')
+                            try{
+                                setTimeout(reloadPage,100)
+                                sendToLC()
+                            }catch(ex){
+                                
+                            }
+                        }
+                    },
+                    onFailure: function(a){
+                        // console.log(a)
+                        alert('Save failed! Please, try again or contact your administrator');
+                        var name = $('#file').val(null);
+                        try{
+                            hideSpinner()
+                            $('#spinner').hide()
+                            $('#drop_zone').show()
+                            //window.box.hide();
+                            //$('#file').remove();
+                        }catch(ex){
+                            
+                        }
+                    }
+                });
+
+                }
+            }
+
+            function sendToAzure(ffile){
+                //$('#save-status').html('Sending file to application server...');
+                //console.log('azure sending');
+                var data = new FormData();
+                
+                var file = ffile;
+                
+                data.append("file", file);                
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", '{!CASESAFEID(sobjectID)}');
+                data.append("action", 'upload-sources');
+                data.append("att_name", file.name);
+                
+                data.append("empty_id", "end");
+
+                // console.log(data);
+
+                
+                var xhr = new XMLHttpRequest();
+            
+                xhr.open("POST", cloud_url, true);
+            
+                xhr.send(data);
+                
+                xhr.onreadystatechange = function(a) {
+                    // console.log(a)
+                    // console.log('xhr:',xhr)
+                    if (xhr.status != 200) { //
+                        console.error("error");
+                        hideSpinner()
+                    } else {
+                        // console.log("success");
+                        // console.log('RELOAD VF PAGE!!!');
+                        sendToLC()
+                        setTimeout(reloadPage,100);
+
+                    }   
+                
+                }
+                
+            }
+
+            function reloadPage(){
+                window.location.href = window.location.href;
+            }
+
+            function encode64(data){  
+            
+                var b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+                var o1, o2, o3, h1, h2, h3, h4, bits, i=0, enc='';
+            
+                do { // pack three octets into four hexets
+                    o1 = data.charCodeAt(i++);
+                    o2 = data.charCodeAt(i++);
+                    o3 = data.charCodeAt(i++);
+            
+                    bits = o1<<16 | o2<<8 | o3;
+            
+                    h1 = bits>>18 & 0x3f;
+                    h2 = bits>>12 & 0x3f;
+                    h3 = bits>>6 & 0x3f;
+                    h4 = bits & 0x3f;
+
+                    enc += b64.charAt(h1) + b64.charAt(h2) + b64.charAt(h3) + b64.charAt(h4);
+                } while (i < data.length);
+            
+                switch( data.length % 3 ){
+                    case 1:
+                        enc = enc.slice(0, -2) + '==';
+                    break;
+                    case 2:
+                        enc = enc.slice(0, -1) + '=';
+                    break;
+                }
+            
+                return enc;
+            }
+            function endsWith(str, suffix) {
+                return str.indexOf(suffix, str.length - suffix.length) !== -1;
+            }
+
+
+        </script>
+
+
+        <script type="text/javascript">
+            $(document).ready(function() { 
+                Dropzone.options.MyDropzone = {
+                    autoProcessQueue : false,
+                    dictDefaultMessage: '{!$Label.attach_dropHere}',
+
+                    init : function() {
+
+                        myDropzone = this; 
+
+                        this.on("drop", function(event) {
+                            showSpinner();
+                            // console.log(myDropzone.files);
+                        });
+                        this.on("addedfile", function(file) { 
+                            // console.log("Added file."); 
+                            // console.log(file)
+                            showSpinner();
+                            attach(file);
+                        });
+                    }
+                };
+            })
+        </script>
+
+
+        <script type="text/javascript">
+            //скрипты взаимодействия с lightning-компонентом 
+            var lexOrigin = "https://{!JSENCODE(MYDOMAIN)}.lightning.force.com";
+
+            function sendToLC() {
+                var message = 'UPLOAD_FINISHED';
+                try{
+                    parent.postMessage(message, lexOrigin);
+                }catch(exc){ console.log(exc)}
+                try{
+                    parent.postMessage(message, lexOrigin.replace('--clm',''));
+                }catch(exc){ console.log(exc)}
+            }
+
+        </script>
+
+    </apex:outputPanel>
+
+
+
+    <!-- КНОПКА RENEW SLIDES НА СТРАНИЦЕ ПРЕЗЕНТАЦИИ -->
+    <apex:outputPanel rendered="{!renewSlidesRender}">
+        
+        <apex:stylesheet value="{!URLFOR($Resource.clm__sfdc_lightning, 'assets/styles/salesforce-lightning-design-system-vf.css')}" />
+
+        <apex:includeScript value="/soap/ajax/34.0/connection.js" />
+        <apex:includeScript value="/soap/ajax/34.0/apex.js" />       
+        <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+        <script src="https://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+        <script src="{!URLFOR($Resource.Settings,'/bower_components/async.js/async.js')}"></script> 
+
+        <script type="text/javascript">
+        /* 
+            JS-ФУНКЦИИ ВЗЯТЫ СО СТРАНИЦЫ APPLICATIONDETAILS
+            В БУДУЩЕМ СЛЕДУЕТ ПЕРЕНЕСТИ ТЕ ФУНКЦИИ, ЧТО ВОЗМОЖНО, 
+            В ОТДЕЛьНЫЙ JS-ФАЙЛ 
+                                        */
+        </script>
+
+         <script type="text/javascript">
+                function showLoader(){ 
+                    $('#renewDialog').hide();
+                    $('#spinner').show();
+                    $('#OK').attr('disabled',true)
+
+
+                    theRenewSlides()
+                }
+
+                function theRenewSlides(){ 
+                
+                    delay = $('#delay-pickList').val();
+                    $('#send-status').html('Processing list of attachments...');
+                
+                    async.waterfall([
+                        function(callback) {
+                            sforce.connection.query("Select Name, Id from Attachment where ParentId=\'" + app_id + "\' and name like \'sources%.zip\' ", {
+                                onSuccess: function(result) {
+                                    callback(null, result);                                                             
+                                },
+                                onFailure: function(err) {
+                                    callback(err);
+                                }
+                            });                 
+                        
+                        },
+                        function(attResult, callback) {
+                            var attachs = attResult.getArray("records");
+                            // console.log('attachs >> ' + attachs.length);
+                            
+                            var processArr = [];
+                            for (var i = 0; i < attachs.length; i++) {
+                                processArr.push(async.apply(theDoSend, attachs[i]));
+                            }
+                            
+                            processArr.push(startUploadingFunc);
+                            processArr.push(updateTemplates);
+                            processArr.push(function(cb) {
+                                async.during(
+                                    function (callback) {
+                                        return callback(null, isUploading);
+                                    },
+                                    function (callback) {
+                                        checkUploadingFunc();
+                                        setTimeout(callback, 1000);
+                                    },
+                                    function (err) {                                   
+                                        renewSlides(cb);
+                                    }
+                                )
+                            });
+                                        
+                            async.series(
+                                processArr,
+                                callback
+                            );
+                            
+                    
+                        }
+                    ], function(err, result) {
+                        if (err) {
+                            console.log(err);
+                            hideSpinner()
+                            setTimeout(cancelAndClose,1000)
+                            //window.box.hide();
+                        } else {
+                            // console.log(result);
+                            //window.box.hide();
+                            cancelAndClose();//it's last action - reload page 
+                        }
+                    });  
+                }          
+            </script>
+
+
+    <script type="text/javascript">
+
+            function renewSlides(cb) {
+                
+                $('#send-status').html('Taking screenshots...');
+                slideParts = 0;
+                sforce.connection.query("Select Id, clm__Order__c from clm__Slide__c where clm__ApplicationId__c='{!sobjectID}'", {
+                    onSuccess: function(result){
+                        records = result.getArray("records");
+                        // console.log('records >> ' + records.length);
+                        
+                        var slideRanges = [];
+                        var slide_ids = [];
+                        var partNum = 1;
+                        for (var i = 0; i<records.length; i++) {
+                            if (i > 0 && (i+1) % 5 == 0) {
+                                slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                                
+                                slide_ids = [];
+                                slide_ids.push(records[i].Id);
+                                partNum++;
+                            } else {
+                                slide_ids.push(records[i].Id);
+                            }
+                        }
+                        
+                        if (0 != slide_ids.length) {
+                            slideRanges.push(async.apply(sendRenewRequest,slide_ids.join(','),partNum));
+                        }
+                        
+                        if (slideRanges.length > 0) {
+                        slideParts = slideRanges.length;
+                            async.series(
+                                slideRanges,
+                                cb
+                            );
+                        } else {
+                            cb();
+                        }
+
+                    },
+                    onFailure: function(err){
+                        // console.log('error >> ', err);
+                        cb();
+                    }
+                });             
+            }
+
+            function sendRenewRequest(slide_ids, i, cb) {
+            
+                var data = new FormData();
+            
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "renew-slides");
+                data.append("slide_ids", slide_ids);
+                data.append("delay", delay * 1000);
+                
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) { //
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb("error " + i);
+                        } else {
+                            // console.log("success " + i + ' of ' + slideParts);
+                            $('#send-status').html('Successfully completed '+ i + ' of ' + slideParts + ' parts');
+                            cb();             
+                        }
+                        
+                    }
+                
+                }
+                
+                
+            }    
+
+            function checkUploadingFunc() {
+                checkCount++;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "check-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) { //
+                            // обработать ошибку
+                            console.error("error " + i);
+                            //cb(err);
+                        } else {
+                        
+                            var data = JSON.parse(this.response);
+                            // console.log("result", data);
+                            isUploading = data.result != "success";                            
+                        }
+                        
+                        //after 1 minute continue
+                        if (checkCount > 60) {
+                            isUploading = false;
+                        }
+                    }
+                
+                }                                                         
+            }
+
+            function theDoSend(attItem, callback) {
+                // console.log('attItem', attItem);
+                $('#send-status').html('Processing file ' + attItem.Name);
+                
+                sforce.connection.query("Select Name, Id, Body from Attachment where Id = \'" + attItem.Id + "\' ", {
+                    onSuccess: function(result) {
+                        
+                        function base64ToFile(base64Data, tempfilename, contentType) {
+                          contentType = contentType || '';
+                          var sliceSize = 1024;
+                          var byteCharacters = atob(base64Data);
+                          var bytesLength = byteCharacters.length;
+                          var slicesCount = Math.ceil(bytesLength / sliceSize);
+                          var byteArrays = new Array(slicesCount);
+                    
+                          for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+                            var begin = sliceIndex * sliceSize;
+                            var end = Math.min(begin + sliceSize, bytesLength);
+                    
+                            var bytes = new Array(end - begin);
+                            for (var offset = begin, i = 0 ; offset < end; ++i, ++offset) {
+                              bytes[i] = byteCharacters[offset].charCodeAt(0);
+                            }
+                            byteArrays[sliceIndex] = new Uint8Array(bytes);
+                          }
+                          var file = new File(byteArrays, tempfilename, { type: contentType });
+                          return file;
+                        }
+                        
+                        var attachs = result.getArray("records");                
+                        var name = attachs[0].Name;
+                        var body = attachs[0].Body; 
+                        
+                        var data = new FormData();
+                    
+                        data.append("cloud_token", token_id);
+                        data.append("org_id", org_id);
+                        data.append("app_id", app_id);
+                        data.append("action", "upload-sources");
+                        data.append("base", "!true");
+                        data.append("scr_delay", delay);
+                        data.append("att_name", name);     
+                        
+                        
+                            
+                        var fileValue = base64ToFile(body, name);
+                        
+                        if (isSafari) {
+                            
+                            var blobFileValue = new Blob([fileValue], {
+                                "type":"application/octet-stream", 
+                                "originalFilename":"sources.zip", 
+                                "name":"sources.zip"
+                            });
+                            
+                            data.append("file", blobFileValue);
+                        } else {
+                            data.append("file", fileValue);
+                        }
+                    
+                        var xhr = new XMLHttpRequest();         
+                        xhr.open("POST", cloud_url, true);           
+                                                
+                        xhr.onreadystatechange = function() {                       
+                            if(xhr.readyState == 4) {                       
+                                if (xhr.status != 200) {//
+                                    // обработать ошибку
+                                    console.error("error");                                 
+                                    callback("error");
+                                } else {
+                                    // console.log("success");                                 
+                                    callback();
+                                }                           
+                            }                       
+                        }
+                        
+                        xhr.send(data);                                     
+                    },
+                    onFailure: function(err) {
+                        if (err) {
+                            callback(err);
+                        }
+                    }
+                });             
+            }
+
+            var files;
+
+            function startUploadingFunc(cb) {
+                checkCount = 0;
+                
+                var data = new FormData();
+                data.append("cloud_token", token_id);
+                data.append("org_id", org_id);
+                data.append("app_id", app_id);
+                data.append("action", "start-uploading");
+
+                var myXhrr = new XMLHttpRequest();
+                myXhrr.open("POST", cloud_url + "?cas="+Math.random(), true);
+                myXhrr.send(data);                  
+                myXhrr.onreadystatechange = function() {
+                    
+                    if(this.readyState == 4) {
+                        if (this.status != 200) { //
+                            // обработать ошибку
+                            console.error("error " + i);
+                            cb("error " + i);
+                        } else {
+                        
+                            cb();                           
+                        }
+                        
+                    }
+                
+                }                                                         
+            }
+
+            function updateTemplates(callback){
+                sendSlideOrderToAzure();
+                $('#send-status').html('Renew slides...');
+                sforce.connection.query("Select Id from clm__Template__c where clm__ApplicationId__c=\'" + app_id + "\'",
+                {
+                    onSuccess: function(result){
+                        
+                        var templates = result.getArray("records");
+                    
+                        sforce.connection.update(templates,
+                            {
+                                onSuccess: function(){
+                                    if (typeof(callback) == "function") {
+                                        callback();
+                                    }
+                                },
+                                onFailure: function(err){
+                                    // console.log('error >> ', err);
+                                    alert('Taking screenshots failed. Please, contact your administrator.');
+                                    if (typeof(callback) == "function") {
+                                        callback();
+                                    }
+                                }
+                            });
+                    },
+                    onFailure: function(err){
+                        // console.log('error >> ', err);
+                        alert('Taking screenshots failed. Please, contact your administrator.');
+                        // console.log('azure sent');
+                        window.location.href = window.location.href ;
+                        if (typeof(callback) == "function") {
+                            callback();
+                        }
+                    }
+                });
+            }   
+
+            function sendSlideOrderToAzure() {
+                
+                sforce.connection.query("Select id, clm__Order__c from clm__Slide__c where clm__ApplicationId__c='{!sobjectID}' and clm__isActive__c=true",
+                {
+                    onSuccess: function(result){
+                        var rec = result.getArray("records");
+                        // console.log('rec >> ',rec);
+                        if (rec.length == 0) {
+                            rec = null;
+                        }
+                        sforce.apex.execute("clm.SenderClass","sendSlideOrderWebservice",{slideList : rec, app_id : '{!sobjectID}' } );
+                    },
+                    onFailure: function(err){
+                        console.error(err);
+                    }
+                });
+
+            }
+
+            //скрипты взаимодействия с lightning-компонентом 
+            var lexOrigin = "https://{!JSENCODE(MYDOMAIN)}.lightning.force.com";
+
+            function cancelAndClose(){ 
+                var message = 'FINISHED';
+                try{
+                    parent.postMessage(message, lexOrigin);
+                }catch(exc){ console.log(exc)}
+                try{
+                    parent.postMessage(message, lexOrigin.replace('--clm',''));
+                }catch(exc){ console.log(exc)} 
+            }
+    </script>
+
+    <div class="slds">   
+
+        <div class="modal-header slds-modal__header">
+            <h2 class="title slds-text-heading--medium" >{!$Label.clm__RenewDialogName}</h2>
+        </div>
+         
+        <div class="slds-form-element slds-m-around--x-large">
+            
+            
+            <div id="renewDialog" class="slds-form-element">
+                <div class="slds-text-align_center" align="center">
+                    <p style="margin-bottom: 20px;">{!$Label.clm__RenewDialogMessage}</p>
+                </div>
+                <label class="slds-form-element__label" for="select-01">{!$Label.ChooseScreenshotDelay}</label>
+                <div class="slds-form-element__control">
+                    <div class=" "> 
+                        <select aura:id="picklistval" id="delay-pickList" class="slds-select" >
+                            <option value='3'>3 {!$Label.clm__Seconds}</option>
+                            <option value='7'>7 {!$Label.clm__Seconds}</option>
+                            <option value='15'>15 {!$Label.clm__Seconds}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="spinner" style="display:none; " align="center">
+                <img id="spinnerOnClick" style=" height: 60px; " src='{!URLFOR($Resource.sfdc_lightning,"/assets/images/spinners/slds_spinner_brand.gif")}'  />
+                <div id="send-status"  style="margin-top: 25px;">
+                    {!$Label.attach_downloading}
+                </div>
+            </div>
+
+        </div>
+        <div style="text-align: right;"> 
+            <button id="OK" onclick="showLoader()" class="slds-button slds-button--neutral">OK</button>
+            <button onclick="cancelAndClose()" class="slds-button">{!$Label.clm__eDetCancelButton}</button>
+        </div> 
+    </div>
+    </apex:outputPanel>
+
+</apex:page>

@@ -1,0 +1,135 @@
+<apex:page controller="ESN_VFC24_CheckInChatterPost" sidebar="false" showChat="false" showHeader="false" standardStylesheets="true">
+
+    <head>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+        <meta charset="utf-8"/>
+        <title>Check-in Post</title>
+  
+        <script type="text/javascript" src="{!URLFOR($Resource.JQuery_JS)}" />
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?libraries=places&v=3.exp&sensor=false"></script>
+        <script type="text/javascript" src="{!URLFOR($Resource.JQueryPlugins_GeolocationCompletion,'/ubilabs-geocomplete-b249b9e/jquery.geocomplete.js')}" />
+        <script type='text/javascript' src='/canvas/sdk/js/publisher.js'/>
+        <link href="{!URLFOR($Resource.CheckIn_Resources,'/postAndCheckin.css')}" rel="stylesheet" type="text/css" />
+            
+        <script type="text/javascript">
+            var $ = jQuery.noConflict();
+            var parentUrl = (window.location != window.parent.location) ? document.referrer: document.location;
+            var map;
+            
+            $(function(){
+               //$(".grayborder").css('padding','0px');
+                var options = {
+                    map: ".map_canvas",
+                    details: "form",
+                    types: ["geocode", "establishment"]
+                };
+                   
+                         
+                $("#inputLoc").geocomplete(options)
+                .bind("geocode:result", function(event, result){
+                    //$.log("Result: " + result.formatted_address);
+                
+                    google.maps.event.trigger($('#inputLoc').data('plugin_geocomplete').map, 'resize');
+                    $("#inputLoc").data('plugin_geocomplete').map.setCenter($("#inputLoc").data('plugin_geocomplete').marker.position);
+                })
+                .bind("geocode:error", function(event, status){
+                    //$.log("ERROR: " + status);
+                })
+                .bind("geocode:multiple", function(event, results){
+                   // $.log("Multiple: " + results.length + " results found");
+                });
+    
+                $("#find").click(function(){
+                    $("#geocomplete").trigger("geocode");
+                });
+            });
+            
+            function saveToController() {
+                var chatterGrpId = ''+getUrlParam('g',parentUrl); // Get the current Chatter group ID, if exist.
+                sharePostLocation($('#locName').val(), $('#inputPost').val(), $('#locLat').val(), $('#locLng').val(), $('#inputLoc').val(), $('#locUrl').val(), chatterGrpId);
+            }
+            
+            function refreshFeed() {
+                Sfdc.canvas.publisher.publish({name : 'publisher.refresh',  payload : {feed: true}});
+            }
+            
+            /*
+             *  Handle a placeholder compatible with IE
+             ****/
+            $(function() {
+                // Execute only when browser is Internet Explorer < v9 //
+                //if($.browser.msie && $.browser.version < 9){
+                
+                    $('.oFormInputText').off('focus');
+                    $('.oFormInputText').off('blur');
+                        
+                    $('.oFormInputText').on('focus', function() {
+                        var $this = $(this);
+                        if($this.attr('title') == $this.val())
+                        {
+                            $this.removeClass('oFormInputTextDefault');
+                            $this.val('');
+                        }
+                    });
+                    
+                    $('.oFormInputText').on('blur', function() {
+                        var $this = $(this);
+                        if($this.val() == '')
+                        {
+                            $this.addClass('oFormInputTextDefault');
+                            $this.val($this.attr('title'));
+                        }
+                    });
+                    
+                    $('.oFormInputText').each(function() {
+                        var $this = $(this);
+                        if($this.attr('title') == $this.val() || $this.val() == '')
+                        {
+                            $this.val($this.attr('title'));
+                            $this.addClass('oFormInputTextDefault');
+                        }
+                    });
+               // }
+            });
+            function getUrlParam(name,url){
+                var results = new RegExp('[\\?&]' + name + '=([^&#]*)').exec(url);
+                if (results==null){
+                   return null;
+                }
+                else{
+                   return results[1] || 0;
+                }
+            }
+            
+        </script>
+    </head>
+    
+    <body>
+        <div class="divContent">
+            <apex:form id="myForm" styleClass="myForm">
+                <input id="locUrl" name="url" type="text" value="" class="inputHidden"/>
+                <input id="locLat" name="lat" type="text" value="" class="inputHidden"/>
+                <input id="locLng" name="lng" type="text" value="" class="inputHidden"/>
+                <input id="locName" name="name" type="text" value="" class="inputHidden"/>
+                                
+                <apex:actionFunction name="sharePostLocation" action="{!sharePostLocation}" reRender="pageMsg" oncomplete="if('{!errMsg}' == ''){  window.top.location.href = parentUrl; }">
+                    <apex:param name="locName" value="locName" assignTo="{!inputLocName}" />
+                    <apex:param name="PostMsg" value="PostMsg" assignTo="{!inputPostMsg}" />
+                    <apex:param name="geolocLat" value="geolocLat" assignTo="{!inputLocLat}" />
+                    <apex:param name="geolocLong" value="geolocLong" assignTo="{!inputLocLng}" />
+                    <apex:param name="geoAddr" value="geoAddr" assignTo="{!inputLocation}" />
+                    <apex:param name="geoUrl" value="geoUrl" assignTo="{!inputLocUrl}" />
+                    <apex:param name="chatterGrp" value="chatterGrp" assignTo="{!inputGroup}" />
+                </apex:actionFunction>
+                
+                <textarea rows="2" id="inputPost" value="{!inputPostMsg}" class="inputPost oFormInputText" title="What are you doing ?" placeholder="What are you doing ?"/>
+                <input name="formatted_address" id="inputLoc" value="{!inputLocation}" class="inputLoc oFormInputText" placeholder="What is your location ?" title="What is your location ?" />
+                
+                <apex:commandButton id="monbouton" value="Share" styleClass="shareBtn" reRender="pageMsg" onclick="saveToController();"/>
+                
+            </apex:form> 
+            <div id="map_canvas" class="map_canvas" style="background-color: rgb(255, 255, 255);"></div>
+            <apex:outputText id="pageMsg" styleClass="pageMsg" value="{!errMsg}"></apex:outputText>
+        </div>  
+    </body>
+</apex:page>

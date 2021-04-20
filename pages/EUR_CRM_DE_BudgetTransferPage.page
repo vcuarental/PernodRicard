@@ -1,0 +1,190 @@
+<!--EUR_CRM_DE_BudgetTransferPage-->
+<apex:page standardController="EUR_CRM_Budget__c" extensions="EUR_CRM_DE_BudgetTransferController">
+
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+
+<script>
+    $j = jQuery.noConflict();
+    var currEl;
+    
+    $j(document).ready(function() {
+        console.log('hello world!');
+        
+        preventReturnKeyPress();
+    });
+    
+    function preventReturnKeyPress(){
+        $j("input,select").keypress(function(e){
+            return e.keyCode!==13;
+        });
+    }
+    
+    function validate(theInput){
+        return /^\d{1,3}(?:(,?)\d{3}(?:\1\d{3})*)?(?:\.\d{1,10})?$/.test(theInput);
+    }
+    function numToCurrency(num) {
+        if (num !== undefined && num !== null && /^-?\d+\.?\d?\d?\d?$/.test('' + num)) {
+            return ('' + num).replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+        }
+        return null;
+    }
+    
+    function updateResultingBalance(){
+        currEl = $j("input.transactionAmount");
+        var txnEl = $j("input.transactionAmount");
+        console.log('TEST:' + txnEl);
+        console.log('TEST:' +txnEl.val());
+        var txnAmount = txnEl.val().replace(/,/g, '');
+        txnAmount = txnAmount?txnAmount:'0';
+        if(txnAmount.charAt(0) == 0 && txnAmount.charAt(1) != '.')
+            txnAmount = Number(txnAmount);
+            
+        if (validate(txnAmount)){
+            txnEl.removeClass('error-input');
+            var currentBalFrom = $j("span.currentBalanceFrom").text();
+            var currentBalTo = $j("span.currentBalanceTo").text();
+            
+            currentBalFrom = (currentBalFrom==undefined)?0:currentBalFrom.replace(/,/g, '');
+            currentBalTo = (currentBalTo==undefined)?0:currentBalTo.replace(/,/g, '');
+            console.log('Test - Current Balance:' + currentBalFrom +'--'+currentBalTo);
+            $j("span.resultingBalanceFrom").text(numToCurrency(Number(currentBalFrom) - Number(txnAmount)));
+            $j("span.resultingBalanceTo").text(numToCurrency(Number(currentBalTo) + Number(txnAmount)));
+        }else{
+            txnEl.addClass('error-input');
+            console.log('bad');
+        }
+    }   
+
+    function startLoading(){
+        $j('#load_scrl').css('top', $j(document).scrollTop() + 200);
+        $j('.loadingBox').show();
+    }
+    
+    function endLoading(){
+        $j('.loadingBox').hide();
+    }
+</script>
+<style>
+input.error-input {border-color: red;}
+</style>
+
+<body>
+
+    <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+    <div id="contentLoading" style="display:none;">
+        <div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    
+    <div id="load_scrl" class="loadingBox loader" style="display:none"><div style="text-align: center;">
+            <p>Loading...
+            <img src="/img/loading.gif" alt="Loading graphic" /></p>
+        </div>
+    </div>
+    <div class="loadingBox overlay"> </div>
+
+    <apex:sectionHeader subtitle="{!$Label.EUR_CRM_Budget_Transfer}" title="{!$ObjectType.EUR_CRM_Budget__c.Label}"/>
+    
+    <apex:form id="mainForm">
+    <apex:actionFunction name="onChangeBudgetFrom" action="{!budgetFromOnChange}" reRender="budgetDisplay" 
+        oncomplete="console.log('Changed Budget From'); preventReturnKeyPress();" status="loading"/> 
+    <apex:actionFunction name="onChangeBudgetTo" action="{!budgetToOnChange}" reRender="budgetDisplay" 
+        oncomplete="console.log('Changed Budget To'); preventReturnKeyPress();" status="loading"/> 
+      
+    <apex:pageBlock id="budgetDisplay">
+        <apex:pageMessages id="pageMsg"></apex:pageMessages>
+        
+        <apex:inputHidden value="{!EUR_CRM_Budget__c.ownerid}"/>
+        <apex:inputHidden value="{!EUR_CRM_Budget__c.EUR_CRM_Fiscal_Year__c}"/>
+        
+        <apex:pageBlockButtons >
+            <apex:commandButton value="{!$Label.EUR_CRM_Save}" action="{!save}"/>
+            <apex:commandButton value="{!$Label.EUR_CRM_Exit}" action="{!cancel}" 
+            immediate="true"
+            status="loading"/>
+        </apex:pageBlockButtons>
+        
+        <apex:pageBlockSection columns="1" id="transferForm">
+            <apex:inputField value="{!budgetTransactionFrom.EUR_CRM_Transfer_From__c}" 
+                rendered="false" required="true" onchange="console.log('About to change budget from'); onChangeBudgetFrom();"/>
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="{!$ObjectType.EUR_CRM_Budget_Transaction__c.fields.EUR_CRM_Transfer_From__c.label}"/>
+                <apex:outputPanel >
+                <div class="requiredInput">
+                    <div class="requiredBlock"></div>
+                    <apex:selectList styleclass="transferFrom" required="false" 
+                    value="{!budgetTransactionFrom.EUR_CRM_Transfer_From__c}" size="1"
+                    onchange="console.log('About to change budget from'); onChangeBudgetFrom();">
+                    <apex:selectOptions value="{!transferorOptions}"/>
+                    </apex:selectList>
+                </div>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            
+            <apex:inputField value="{!budgetTransactionFrom.EUR_CRM_Transfer_To__c}" 
+                rendered="false" required="true" onchange="console.log('About to change budget to'); onChangeBudgetTo();"/>
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="{!$ObjectType.EUR_CRM_Budget_Transaction__c.fields.EUR_CRM_Transfer_To__c.label}"/>
+                <apex:outputPanel >
+                    <div class="requiredInput">
+                        <div class="requiredBlock"></div>
+                        <apex:selectList styleclass="transferTo requiredInput" required="false" 
+                        value="{!budgetTransactionFrom.EUR_CRM_Transfer_To__c}" size="1"
+                        onchange="console.log('About to change budget from'); onChangeBudgetTo();">
+                            <apex:selectOptions value="{!transfereeOptions}"/>
+                        </apex:selectList>
+                    </div>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="{!$ObjectType.EUR_CRM_Budget_Transaction__c.fields.EUR_CRM_Amount__c.label}"/>
+                <apex:outputPanel >
+                    <div class="requiredInput">
+                        <div class="requiredBlock"></div>
+                        <apex:inputText styleclass="transactionAmount requiredInput" value="{!budgetTransactionFrom.EUR_CRM_Amount__c}" 
+                        required="true" onkeyup="updateResultingBalance();" onchange="updateResultingBalance();" style="text-align:right"/>
+                    </div>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            
+            <apex:inputField value="{!budgetTransactionFrom.EUR_CRM_Description__c}"/>
+        </apex:pageBlockSection>
+        
+        <apex:pageBlock rendered="{!IF(OR(budgetTransactionFrom.Id!=null, budgetTransactionTo.Id!=null),true,true)}" id="transferDetails">
+            <apex:pageBlockSection columns="2">
+                <apex:outputText value="{!$Label.EUR_CRM_Transferee_Detail}"/>
+                <apex:outputText value="{!$Label.EUR_CRM_Transferee_Detail}"/>
+                
+                <apex:outputField value="{!budgetFrom.Owner.Name}"/>
+                <apex:outputField value="{!budgetTo.Owner.Name}"/>
+                
+                <apex:outputField value="{!budgetFrom.EUR_CRM_Actual_Budget__c}"/>
+                <apex:outputField value="{!budgetTo.EUR_CRM_Actual_Budget__c}"/>
+                
+                <apex:outputText label="{!$ObjectType.EUR_CRM_Budget__c.fields.EUR_CRM_Current_Balance__c.label}" styleclass="currentBalanceFrom" value="{0, number, ###,###,###,##0}"> 
+                    <apex:param value="{!budgetFrom.EUR_CRM_Current_Balance__c}"/>
+                </apex:outputText>
+                <apex:outputText label="{!$ObjectType.EUR_CRM_Budget__c.fields.EUR_CRM_Current_Balance__c.label}" styleclass="currentBalanceTo" value="{0, number, ###,###,###,##0}"> 
+                    <apex:param value="{!budgetTo.EUR_CRM_Current_Balance__c}"/>
+                </apex:outputText>
+                
+                <apex:outputText styleclass="resultingBalanceFrom" label="{!$Label.EUR_C_RM_Resulting_Balance}" value="{0, number, ###,###,###,##0}">
+                    <apex:param value="{!runningBalanceFrom}"/>
+                </apex:outputText>
+                <apex:outputText styleclass="resultingBalanceTo" label="{!$Label.EUR_C_RM_Resulting_Balance}" value="{0, number, ###,###,###,##0}">
+                    <apex:param value="{!runningBalanceTo}"/>
+                </apex:outputText>
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+        
+    
+    </apex:pageBlock>
+    </apex:form>
+
+</body>
+
+</apex:page>

@@ -1,0 +1,2447 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_TW_PAFPnLReport_Page
+ * Description: 
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2018-09-03       Vincent Lam             Created
+-->
+<apex:page controller="ASI_CRM_TW_PAFPnLReport_PageCtrl" applyBodyTag="false" showheader="false" sidebar="false" >
+
+    <head>
+        <title>TW P&amp;L Report</title>    <!-- Import Library -->
+        <!-- CSS -->
+        <!--<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/main.css')}"/>-->
+        <!--<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/jquery-ui.min.css')}"/>-->
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/bootstrap.min.css')}"/>
+        <!--<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/datatables.min.css')}"/>-->
+        <!--<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/styles/multiple-select.css')}"/>-->
+        <!-- JavaScript -->
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.min.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/bootstrap.min.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/datatables.min.js')}"/>
+        <!--<apex:includeScript value="{!$Resource.ChartJs}"/>-->
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/chart.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/chartjs-plugin-annotation.js')}"/>
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/chartjs-plugin-labels.min.js')}"/>
+        <!--<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/vertical-datatables.js')}"/>-->
+        <!--<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/jquery.knob.min.js')}"/>-->
+        <!--<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_Library, '/lib/multiple-select.js')}"/>-->
+
+    </head>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/treemap.js"></script>
+    <script src="https://code.highcharts.com/modules/broken-axis.js"></script>
+    <!-- Required to convert named colors to RGB -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvg/1.4/rgbcolor.min.js"></script>
+    <!-- Main canvg code -->
+    <script src="https://cdn.jsdelivr.net/npm/canvg/dist/browser/canvg.min.js"></script>
+    
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/export-data.js"></script>
+    
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.js"></script>
+    
+    <script>
+        function preparePrintPDF(){
+            $('body').addClass('savingRecord');
+            
+            let svg_InvestmentComponent = $('#container_InvestmentComponent').children().html();
+            
+            //console.log(document.getElementById("container_InvestmentComponent").toDataURI());
+            
+            $('#canvas_InvestmentComponent').show();
+            //$('#container_InvestmentComponent').html('');
+            //$('#container_InvestmentComponent').hide();
+            canvg(document.getElementById('canvas_InvestmentComponent'), svg_InvestmentComponent);
+            $('#image_InvestmentComponent').prop('src', document.getElementById("canvas_InvestmentComponent").toDataURL());
+            //$('#canvas_InvestmentComponent').remove();
+            $('#image_InvestmentComponent').show();
+            //$('#image_InvestmentComponent').remove();
+            
+            let svg_contractVolume = $('#container_contractVolume').children().html();
+            
+            $('#canvas_contractVolume').show();
+            $('#container_contractVolume').html('');
+            $('#container_contractVolume').hide();
+            canvg(document.getElementById('canvas_contractVolume'), svg_contractVolume);
+            $('#image_contractVolume').prop('src', document.getElementById("canvas_contractVolume").toDataURL());
+            $('#canvas_contractVolume').remove();
+            $('#image_contractVolume').show();
+            $('#image_contractVolume').remove();
+            
+            let svg_marketShare = $('#container_marketShare').children().html();
+            
+            $('#canvas_marketShare').show();
+            $('#container_marketShare').html('');
+            $('#container_marketShare').hide();
+            canvg(document.getElementById('canvas_marketShare'), svg_marketShare);
+            $('#image_marketShare').prop('src', document.getElementById("canvas_marketShare").toDataURL());
+            $('#canvas_marketShare').remove();
+            $('#image_marketShare').show();
+            $('#image_marketShare').remove();
+            
+            $('#dashboardDatatable').remove();
+            
+            
+            var resultHtml = $('#tab_dashboard').html();
+            
+            console.log(resultHtml);
+            //printPDFVF(resultHtml);
+            
+            var element = document.getElementById("tab_dashboard");
+
+            html2canvas(element).then(function(canvas) {
+                // Export the canvas to its data URI representation
+                var base64image = canvas.toDataURL("image/png");
+
+                // Open the image in a new window
+                window.open(base64image , "_blank");
+            });
+        }
+        function redirectPDF(fileId){
+            $('body').removeClass('savingRecord');
+            window.open('/apex/ASI_CRM_TW_PAFPnLReport_PagePDF?fileId='+fileId, '_target');
+        }
+        
+        Chart.defaults.global.defaultFontColor = '#000';
+        Chart.defaults.global.defaultFontStyle = 'bold';
+        
+        const DataHelper = function () {
+            const outputForSales = JSON.parse(`{! list_wrapper_outputForSales_json }`);
+            const detailPnl = JSON.parse(`{! list_wrapper_detailPnL_json }`);
+            const dashboardPnl = JSON.parse(`{! list_wrapper_dashboard_PnL_json }`);
+            const tyTargetTotal = JSON.parse(`{! wrapper_TY_target_total_json }`);//charts
+            const lyActualTotal = JSON.parse(`{! wrapper_LY_actual_total_json }`);//charts
+            const productSummary = JSON.parse(`{! map_wrapper_productCat_json }`);
+            const marketShare = JSON.parse(`{! map_marketShare_json }`);
+            const marketShareDetail = JSON.parse(`{! map_marketShareDetail_json }`);
+            const set_competitor = JSON.parse(`{! set_competitor_json }`);
+
+            console.log(detailPnl);
+            
+            const getOutputForSales = () => outputForSales;
+            const getDetailPnl = () => detailPnl;
+            const getDashboardPnl = () => dashboardPnl;
+            const getTyTargetTotal = () => tyTargetTotal;
+            const getLyActualTotal = () => lyActualTotal;
+            const getProductSummary = () => productSummary;
+            const getMarketShare = () => marketShare;
+            const getMarketShareDetail = () => marketShareDetail;
+            const getCompetitor = () => set_competitor;
+
+            return {
+                getLyActualTotal: getLyActualTotal,
+                getTyTargetTotal: getTyTargetTotal,
+                getDashboardPnl: getDashboardPnl,
+                getDetailPnl: getDetailPnl,
+                getOutputForSales: getOutputForSales,
+                getProductSummary: getProductSummary,
+                getMarketShare: getMarketShare,
+                getMarketShareDetail: getMarketShareDetail,
+                getCompetitor: getCompetitor
+            }
+        }();
+
+        const DatatableHelper = function () {
+            const DEFAULT_CURRENCY_FORMAT = {thousands: ',', decimal: '.', precision: 0, prefix: '$', postfix: null};
+            const DEFAULT_PERCENTAGE_FORMAT = {thousands: ',', decimal: '.', precision: 2, prefix: null, postfix: '%'};
+            const DEFAULT_NUMBER_FORMAT = {thousands: ',', decimal: '.', precision: 0, prefix: null, postfix: null};
+            const DEFAULT_DECIMAL_FORMAT = {thousands: ',', decimal: '.', precision: 2, prefix: null, postfix: null};
+
+            //Extracted from datatable.js
+            const getCurrencyFormat = () => DEFAULT_CURRENCY_FORMAT;
+            const getPercentageFormat = () => DEFAULT_PERCENTAGE_FORMAT;
+            const getNumberFormat = () => DEFAULT_NUMBER_FORMAT;
+            const getDecimalFormat = () => DEFAULT_DECIMAL_FORMAT;
+
+            const formatNumber = (value, numberFormat) => {
+                let thousands = numberFormat.thousands;
+                let decimal = numberFormat.decimal;
+                let precision = numberFormat.precision;
+                let prefix = numberFormat.prefix;
+                let postfix = numberFormat.postfix;
+
+                if (typeof value !== 'number' && typeof value !== 'string') return value;
+
+                let negative = value < 0 ? '-' : '';
+                let flo = parseFloat(value);
+
+                if (isNaN(flo)) return value;
+
+                flo = flo.toFixed(precision);
+                value = Math.abs(flo);
+
+                let intPart = parseInt(value, 10);
+                let floatPart = precision ? decimal + (value - intPart).toFixed(precision).substring(2) : '';
+
+                return negative + (prefix || '') +
+                        intPart.toString().replace(/\B(?=(\d{3})+(?!\d))/g, thousands) +
+                        floatPart + (postfix || '');
+            };
+
+            const currencyRenderer = (data) => formatNumber(data, DatatableHelper.getCurrencyFormat());
+            const percentageRenderer = (data) => formatNumber(data, DatatableHelper.getPercentageFormat());
+            const numberRenderer = (data) => formatNumber(data, DatatableHelper.getNumberFormat());
+            const decimalRenderer = (data) => formatNumber(data, DatatableHelper.getDecimalFormat());
+
+            return {
+                formatNumber: formatNumber,
+                currencyRenderer: currencyRenderer,
+                percentageRenderer: percentageRenderer,
+                numberRenderer: numberRenderer,
+                getCurrencyFormat: getCurrencyFormat,
+                getPercentageFormat: getPercentageFormat,
+                getNumberFormat: getNumberFormat,
+                getDecimalFormat: getDecimalFormat
+            };
+        }();
+
+        const OutputForSalesDatatableHelper = function () {
+            let columnConfig = [
+                {name: 'contractedItemName', data: 'contractedItemName'},
+                {name: 'targetBottle', data: 'targetBottle', render: DatatableHelper.numberRenderer},
+                {name: 'salesValue', data: 'salesValue', render: DatatableHelper.currencyRenderer},
+                {name: 'outletPurchaseAmount', data: 'outletPurchaseAmount', render: DatatableHelper.currencyRenderer},
+                {name: 'var_AnD_cashCost', data: 'var_AnD_cashCost', render: DatatableHelper.currencyRenderer},
+                {name: 'var_AnD_focBottle', data: 'var_AnD_focBottle', render: DatatableHelper.numberRenderer},
+                {name: 'var_AnD_focCost', data: 'var_AnD_focCost', render: DatatableHelper.currencyRenderer},
+                {name: 'con_AnD_cashCost', data: 'con_AnD_cashCost', render: DatatableHelper.currencyRenderer},
+                {name: 'con_AnD_focBottle', data: 'con_AnD_focBottle', render: DatatableHelper.numberRenderer},
+                {name: 'con_AnD_focCost', data: 'con_AnD_focCost', render: DatatableHelper.currencyRenderer},
+                {name: 'totalAnD', data: 'totalAnD', render: DatatableHelper.currencyRenderer},
+                {
+                    name: 'con_tradeAnP_cashCost',
+                    data: 'con_tradeAnP_cashCost',
+                    render: DatatableHelper.currencyRenderer
+                },
+                {
+                    name: 'con_tradeAnP_focBottle',
+                    data: 'con_tradeAnP_focBottle',
+                    render: DatatableHelper.numberRenderer
+                },
+                {name: 'con_tradeAnP_focCost', data: 'con_tradeAnP_focCost', render: DatatableHelper.currencyRenderer},
+                {
+                    name: 'fix_tradeAnP_cashCost',
+                    data: 'fix_tradeAnP_cashCost',
+                    render: DatatableHelper.currencyRenderer
+                },
+                {
+                    name: 'fix_tradeAnP_focBottle',
+                    data: 'fix_tradeAnP_focBottle',
+                    render: DatatableHelper.numberRenderer
+                },
+                {name: 'fix_tradeAnP_focCost', data: 'fix_tradeAnP_focCost', render: DatatableHelper.currencyRenderer},
+                {name: 'fix_mktAnP_cashCost', data: 'fix_mktAnP_cashCost', render: DatatableHelper.currencyRenderer},
+                {name: 'fix_mktAnP_focBottle', data: 'fix_mktAnP_focBottle', render: DatatableHelper.numberRenderer},
+                {name: 'fix_mktAnP_focCost', data: 'fix_mktAnP_focCost', render: DatatableHelper.currencyRenderer},
+                {name: 'pgCost', data: 'pgCost', render: DatatableHelper.currencyRenderer},
+                //{name: 'marketVisit', data: 'marketVisit', render: DatatableHelper.currencyRenderer},
+                {name: 'totalAnP', data: 'totalAnP', render: DatatableHelper.currencyRenderer},
+                {
+                    name: 'var_AnDperBottle',
+                    data: 'var_AnDperBottle',
+                    render: DatatableHelper.currencyRenderer,
+                    className: 'background-green dt-head-center dt-body-right'
+                },
+                {
+                    name: 'cost_AnDBudget',
+                    data: 'cost_AnDBudget',
+                    render: DatatableHelper.currencyRenderer,
+                    className: 'background-green dt-head-center dt-body-right'
+                },
+                {
+                    name: 'shareOfSalesValue',
+                    data: 'shareOfSalesValue',
+                    render: DatatableHelper.percentageRenderer,
+                    className: 'background-orange dt-head-center dt-body-right'
+                },
+                {
+                    name: 'shareOfTradeAnP',
+                    data: 'shareOfTradeAnP',
+                    render: DatatableHelper.percentageRenderer,
+                    className: 'background-orange dt-head-center dt-body-right'
+                }
+            ];
+
+            let columnDefinitions = [
+                {targets: [0], className: 'dt-body-left', cellType: 'th'},
+                {targets: '_all', className: 'dt-head-center dt-body-right'}
+            ];
+
+            let datatableHeaderConfig = [
+                {secondaryTitle: '', title: 'Contracted Item <br/> 合約品項'},
+                {secondaryTitle: '', title: 'Target Volumes (Bottle) <br/> 目標瓶數'},
+                {secondaryTitle: '', title: 'PRT Sales Revenue <br/> PRT 銷售收入'},
+                {secondaryTitle: 'Contracted Target <br/> 合約目標', title: 'OUTLET Purchasing Amount <br/> 店家進貨金額'},
+                {secondaryTitle: '', title: 'Cash Costs <br/> 現金'},
+                {secondaryTitle: '', title: 'FOC Volumes (Bottle) <br/> FOC 瓶數'},
+                {secondaryTitle: 'Variable A&amp;D <br/> 單瓶獎勵', title: 'FOC Costs <br/> FOC 成本'},
+                {secondaryTitle: '', title: 'Cash Costs <br/> 現金'},
+                {secondaryTitle: '', title: 'FOC Volumes (Bottle) <br/> FOC 瓶數'},
+                {secondaryTitle: 'Conditional A&amp;D <br/> 有條件的贊助 - A&amp;D', title: 'FOC Costs <br/> FOC 成本'},
+                {secondaryTitle: 'Total A&D <br/> A&D 加總', title: ''},
+                {secondaryTitle: '', title: 'Cash Costs <br/> 現金'},
+                {secondaryTitle: '', title: 'FOC Volumes (Bottle) <br/> FOC 瓶數'},
+                {
+                    secondaryTitle: 'Conditional Trade A&amp;P <br/> 有條件的贊助 - Trade A&amp;P',
+                    title: 'FOC Costs <br/> FOC 成本'
+                },
+                {secondaryTitle: '', title: 'Cash Costs <br/> 現金'},
+                {secondaryTitle: '', title: 'FOC Volumes (Bottle) <br/> FOC 瓶數'},
+                {secondaryTitle: 'Fixed Trade A&amp;P <br/> 固定贊助 - Trade A&amp;P', title: 'FOC Costs <br/> FOC 成本'},
+                {secondaryTitle: '', title: 'Cash Costs <br/> 現金'},
+                {secondaryTitle: '', title: 'FOC Volumes (Bottle) <br/> FOC 瓶數'},
+                {secondaryTitle: 'Fixed MKT A&amp;P <br/> 固定贊助 - MKT A&amp;P', title: 'FOC Costs <br/> FOC 成本'},
+                {secondaryTitle: 'PG Costs <br/> PG 費用', title: ''},
+                //{secondaryTitle: 'Market Visit', title: ''},
+                {secondaryTitle: 'Total A&P <br/> A&P 加總', title: ''},
+                {secondaryTitle: 'Variable A&D per Bottle <br/> 單瓶獎勵花費', title: ''},
+                {secondaryTitle: 'A&D Budget (w/o VAT) per Bottle <br/> A&D 每瓶預算 (未稅)', title: ''},
+                {secondaryTitle: 'Share of Sales Value <br/>  銷售金額佔比 ', title: ''},
+                {secondaryTitle: 'Share of Trade A&P Trade  <br/> A&P 費用佔比', title: ''}
+            ];
+
+            let datatableConfig = {
+                data: DataHelper.getOutputForSales(),
+                columns: columnConfig,
+                columnDefs: columnDefinitions,
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                scrollX: true,
+                scrollY: true,
+                "fnRowCallback": function (nRow, aData, iDisplayIndex) {
+                    if (aData['contractedItemName'] == "Total") {
+                        $(nRow).addClass('bold');
+                    }
+                }
+            };
+
+            let datatableHeader;
+
+            const getDatatableConfig = () => datatableConfig;
+            const getDatatableHeader = () => datatableHeader;
+
+            const prepareTableHeader = () => {
+                let headerRow1 = '';
+                let headerRow2 = '';
+                let columnSpan = 0;
+
+                datatableHeaderConfig.forEach((header, index) => {
+                    if (!header.secondaryTitle) ++columnSpan;
+
+                    if (!header.title) {
+                        headerRow1 += `<th rowspan="2">${header.secondaryTitle}</th>`;
+                        return;
+                    }
+
+                    if (header.secondaryTitle || index === datatableHeaderConfig.length - 1) {
+                        headerRow1 += `<th colspan="${++columnSpan}">${header.secondaryTitle}</th>`;
+                        columnSpan = 0;
+                    }
+                    headerRow2 += `<th>${header.title}</th>`;
+                });
+                datatableHeader = `<tr>${headerRow1}</tr><tr>${headerRow2}</tr>`;
+            };
+
+            const init = () => {
+                prepareTableHeader();
+            };
+
+            init();
+
+            return {
+                getDatatableConfig: getDatatableConfig,
+                getDatatableHeader: getDatatableHeader
+            };
+        }();
+
+        const DetailPnlDatatableHelper = function () {
+            let transposedDetailPnl = [];
+            let detailPnlTransposedDatatableColumnConfig = [{data: 0}];
+            let datatableHeader;
+
+            let detailPnlDatatableConfig = {
+                data: transposedDetailPnl,
+                columns: detailPnlTransposedDatatableColumnConfig,
+                columnDefs: [
+                    {targets: [0], cellType: 'th', className: 'dt-body-left'},
+                    {targets: '_all', className: 'dt-head-center dt-body-right'}
+                ],
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                scrollX: true,
+                scrollY: true,
+                "fnRowCallback": function (nRow, aData, iDisplayIndex){
+                    if (aData[0] == 'Gross Sales' ||
+                        aData[0] == 'Net Sales' ||
+                        aData[0] == 'Contributive Margin-S/T' ||
+                        aData[0] == 'CATAP-S/T' ||
+                        aData[0] == 'CAAP-S/T'
+                    ){
+                        $(nRow).addClass('background-green');
+                    }else
+                    if (
+                        aData[0] == 'CM/NS %' ||
+                        aData[0] == 'CATAP/NS %' ||
+                        aData[0] == 'CAAP/NS %' ||
+                        aData[0] == 'NS/L'
+                    ){
+                        $(nRow).addClass('background-purple');
+                    }
+                }
+            };
+
+            let detailPnlDatatableColumnConfig = [
+                {name: 'targetBottle', title: 'Contract Target Volumes (Bottle)', data: 'targetBottle', type: 'number'},
+                {name: 'AnDfocBottle', title: 'Outlet A&D FOC (Bottle)', data: 'AnDfocBottle', type: 'number'},
+                {name: 'AnPfocBottle', title: 'Outlet A&P FOC (Bottle)', data: 'AnPfocBottle', type: 'number'},
+                {name: 'PnLBottle', title: 'P&L Volumes (Bottle)', data: 'PnLBottle', type: 'number'},
+                {name: 'PnL9L', title: 'P&L Volumes (9L)', data: 'PnL9L', type: 'decimal'},
+                {name: 'grossSales', title: 'Gross Sales', data: 'grossSales', type: 'currency'},
+                {name: 'salesValueT1', title: 'A&D T1 WS 3% ', data: 'salesValueT1', type: 'currency'},
+                {name: 'salesValueT2', title: 'A&D T2 WS 2%', data: 'salesValueT2', type: 'currency'},
+                {
+                    name: 'salesValueOutletRebate',
+                    title: 'A&D - Contract Rebate %',
+                    data: 'salesValueOutletRebate',
+                    type: 'currency'
+                },
+                {
+                    name: 'var_AnD_outletSupport',
+                    title: 'A&D - Variable Outlet Support',
+                    data: 'var_AnD_outletSupport',
+                    type: 'currency'
+                },
+                {
+                    name: 'confix_AnD_outletSupport',
+                    title: 'A&D - Conditional Outlet Support',
+                    data: 'confix_AnD_outletSupport', type: 'currency'
+                },
+                {name: 'netSales', title: 'Net Sales', data: 'netSales', type: 'currency'},
+                {name: 'COGS', title: 'COGS-S/T', data: 'COGS', type: 'currency'},
+                {name: 'CM', title: 'Contributive Margin-S/T', data: 'CM', type: 'currency'},
+                {
+                    name: 'con_tradeAnP_outletSupport',
+                    title: 'Trade A&P - Conditional Outlet Support',
+                    data: 'con_tradeAnP_outletSupport', type: 'currency'
+                },
+                {
+                    name: 'fix_tradeAnP_outletsupport',
+                    title: 'Trade A&P - Fixed Outlet Support',
+                    data: 'fix_tradeAnP_outletsupport', type: 'currency'
+                },
+                {name: 'pgCost', title: 'Trade A&P - PG Costs (12 hrs)', data: 'pgCost', type: 'currency'},
+                {name: 'marketVisit', title: 'Trade A&P - Market Visit', data: 'marketVisit', type: 'currency'},
+                {name: 'CATAP_ST', title: 'CATAP-S/T', data: 'CATAP_ST', type: 'currency'},
+                {name: 'fix_mktAnP', title: 'Fixed MKT A&P - Cash Costs', data: 'fix_mktAnP', type: 'currency'},
+                {name: 'CAAP_ST', title: 'CAAP-S/T', data: 'CAAP_ST', type: 'currency'},
+                {name: 'CM_NS', title: 'CM/NS %', data: 'CM_NS', type: 'percentage'},
+                {name: 'CATAP_NS', title: 'CATAP/NS %', data: 'CATAP_NS', type: 'percentage'},
+                {name: 'CAAP_NS', title: 'CAAP/NS %', data: 'CAAP_NS', type: 'percentage'},
+                {name: 'NS_L', title: 'NS/L', data: 'NS_L', type: 'number'}
+            ];
+
+
+            const init = () => {
+                prepareTableHeader();
+                transposeTableContent();
+            };
+
+            const prepareTableHeader = () => {
+                let headerRow1 = `<th rowspan="2"></th>`;
+                let headerRow2 = ``;
+
+                DataHelper.getDetailPnl().forEach((item) => {
+                    let subBrandName = item.subBrandName ? item.subBrandName : '';
+                    let contractedItemName = item.contractedItemName ? item.contractedItemName : '';
+
+                    if (subBrandName.length < 1) {
+                        headerRow1 += `<th rowspan="2">${contractedItemName}</th>`;
+                        return;
+                    }
+                    headerRow1 += `<th>${subBrandName}</th>`;
+                    headerRow2 += `<th>${contractedItemName}</th>`;
+                });
+
+                datatableHeader = `<tr>${headerRow1}</tr><tr>${headerRow2}</tr>`;
+            };
+
+            const transposeTableContent = () => {
+                DataHelper.getDetailPnl().forEach((detail, index) => {
+                    if (index === 0) {
+                        detailPnlDatatableColumnConfig.forEach((config, configIndex) => {
+                            if (undefined === transposedDetailPnl[configIndex]) transposedDetailPnl[configIndex] = {};
+                            transposedDetailPnl[configIndex][index] = `${config.title}`;
+                        });
+                    }
+                    detailPnlDatatableColumnConfig.forEach((config, configIndex) => {
+                        //transposedDetailPnl[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getCurrencyFormat());
+                        switch (config['type']) {
+                            case 'number':
+                                transposedDetailPnl[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getNumberFormat());
+                                break;
+                            case 'decimal':
+                                transposedDetailPnl[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getDecimalFormat());
+                                break;
+                            case 'currency':
+                                transposedDetailPnl[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getCurrencyFormat());
+                                break;
+                            case 'percentage':
+                                transposedDetailPnl[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getPercentageFormat());
+                                break;
+                        }
+                    });
+                    detailPnlTransposedDatatableColumnConfig.push({data: index + 1});
+                });
+            };
+
+            const getDatatableConfig = () => detailPnlDatatableConfig;
+            const getDatatableHeader = () => datatableHeader;
+
+            init();
+
+            return {
+                getDatatableConfig: getDatatableConfig,
+                getDatatableHeader: getDatatableHeader
+            };
+        }();
+
+        const DashboardDatatableHelper = function () {
+            let datatableHeader;
+            let datatableColumnConfig = [
+                // {data: '', title: 'TWD @ BFX / 9L'},
+                {data: 'targetBottle', title: 'Sold Volumes', type: 'number'},
+                {data: 'AnDfocBottle', title: 'A&D FOC Volumes', type: 'number'},
+                {data: 'AnPfocBottle', title: 'A&P FOC Volumes', type: 'number'},
+                {data: 'PnL9L', title: 'P&L Volumes (9L)', type: 'number'},
+                {data: 'grossSales', title: 'Gross Sales', type: 'currency'},
+                {data: 'salesValueT1', title: 'A&D - T1 WS 3%', type: 'currency'},
+                {data: 'salesValueT2', title: 'A&D - T2 SWS 2%', type: 'currency'},
+                {data: 'salesValueOutletRebate', title: 'A&D - Contract Rebates', type: 'currency'},
+                // {data: '', title: 'A&D - WS support'},
+                {data: 'var_AnD_outletSupport', title: 'A&D - Outlet Support', type: 'currency'},
+                {data: 'netSales', title: 'Net Sales', type: 'currency'},
+                {data: 'COGS', title: 'COGS-S/T', type: 'currency'},
+                {data: 'CM', title: 'CM-S/T', type: 'currency'},
+                {data: 'tradeAnP_outletSupport', title: 'Trade A&P - Outlet Support', type: 'currency'},
+                {data: 'pgCost', title: 'Trade A&P - PG Costs', type: 'currency'},
+                {data: 'marketVisit', title: 'Trade A&P - Market Visit', type: 'currency'},
+                {data: 'CATAP_ST', title: 'CATAP-S/T', type: 'currency'},
+                {data: 'fix_mktAnP', title: 'MKT A&P - Outlet Support', type: 'currency'},
+                {data: 'CAAP_ST', title: 'CAAP-S/T', type: 'currency'},
+                {data: 'totalInvestment', title: 'Total Investment', type: 'currency'},
+            ];
+            let transposedDatatableColumnConfig = [{data: 0}];
+            let datatableConfig = {
+                columns: datatableColumnConfig,
+                columnDefs: [
+                    {targets: [0], cellType: 'th', className: 'dt-body-left'},
+                    {targets: '_all', className: 'dt-head-center dt-body-right'}
+                ],
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                scrollX: true,
+                scrollY: true
+            };
+            let transposedDatatableConfig = {
+                data: [],
+                columns: transposedDatatableColumnConfig,
+                columnDefs: [
+                    {targets: [0], cellType: 'th', className: 'dt-body-left'},
+                    {targets: [4,5], className: 'dt-body-right lightGrey'},
+                    {targets: '_all', className: 'dt-head-center dt-body-right'}
+                ],
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                scrollX: true,
+                scrollY: true,
+                "fnRowCallback": function (nRow, aData, iDisplayIndex){
+                    if (aData[0] == 'P&L Volumes (9L)'
+                    ){
+                        $(nRow).addClass('bold');
+                    }else
+                    if (
+                        aData[0] == 'Gross Sales' ||
+                        aData[0] == 'Net Sales' ||
+                        aData[0] == 'COGS- S/T' ||
+                        aData[0] == 'CM-S/T' ||
+                        aData[0] == 'CATAP-S/T' ||
+                        aData[0] == 'CAAP-S/T' ||
+                        aData[0] == 'Total Investment'
+                    ){
+                        $(nRow).addClass('background-yellow');
+                        $(nRow).addClass('bold');
+                    }
+                }
+            };
+
+            const getDatatableHeader = () => datatableHeader;
+            const getDatatableConfig = () => transposedDatatableConfig;
+
+            const calculateData = () => {
+
+            };
+
+            const getData = () => {
+                let rawData = DataHelper.getDashboardPnl();
+                console.log(rawData);
+                let data = rawData;
+                data[3] = {};
+                data[4] = {};
+                datatableColumnConfig.forEach((config) => {
+                    data[3][config.data] = data[2][config.data] - data[1][config.data];
+                    data[4][config.data] = data[1][config.data] != 0 ? (data[3][config.data] / data[1][config.data]) * 100 : '';
+                });
+
+                let transposedData = [];
+                data.forEach((detail, index) => {
+                    if (index === 0) {
+                        datatableColumnConfig.forEach((config, configIndex) => {
+                            if (undefined === transposedData[configIndex]) transposedData[configIndex] = {};
+                            transposedData[configIndex][index] = `${config.title}`;
+                        });
+                    }
+                    datatableColumnConfig.forEach((config, configIndex) => {
+                        /*
+                        transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getCurrencyFormat());
+                        */
+                        if (index === 4) {
+                            transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getPercentageFormat());
+                            ;
+                        }else{
+                            switch (config['type']) {
+                                case 'number':
+                                    transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getNumberFormat());
+                                    break;
+                                case 'decimal':
+                                    transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getDecimalFormat());
+                                    break;
+                                case 'currency':
+                                    transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getCurrencyFormat());
+                                    break;
+                                case 'percentage':
+                                    transposedData[configIndex][index + 1] = DatatableHelper.formatNumber(detail[config.data], DatatableHelper.getPercentageFormat());
+                                    break;
+                            }
+                        }
+                    });
+                    transposedDatatableColumnConfig.push({data: index + 1});
+                });
+                transposedDatatableConfig.data = transposedData;
+                datatableConfig.data = data;
+                //@Todo: calculate value and % columns
+            };
+
+            const prepareHeader = () => {
+                let headerRow = `
+                                    <th>TWD @ BFX / 9L</th>
+                                    <th>LY Target</th>
+                                    <th>LY Actual</th>
+                                    <th>TY Target</th>
+                                    <th class="lightGrey">Diff(Value) vs<br/>LY Actual</th>
+                                    <th class="lightGrey">Diff(%)</th>
+                                    `;
+                datatableHeader = `<tr>${headerRow}</tr>`;
+            };
+
+            const init = () => {
+                prepareHeader();
+                getData();
+            };
+
+            init();
+
+            return {
+                getDatatableConfig: getDatatableConfig,
+                getDatatableHeader: getDatatableHeader
+            };
+        }();
+
+        const BridgeAnalysisDatatableHelper = function () {
+            let columnConfig = [
+                {name: 'contractedItemName', data: 'contractedItemName', title: 'Current Period'},
+                {name: 'PnL9L', data: 'PnL9L', title: 'P&L Volumes', render: DatatableHelper.numberRenderer},
+                {name: 'netSales', data: 'netSales', title: 'Net Sales', render: DatatableHelper.numberRenderer},
+                {name: 'COGS', data: 'COGS', title: 'COGS-S/T', render: DatatableHelper.numberRenderer},
+                {name: 'CM', data: 'CM', title: 'Contributive Margin-S/T', render: DatatableHelper.numberRenderer},
+                {name: 'tradeAnP', data: 'tradeAnP', title: 'Trade A&P', render: DatatableHelper.numberRenderer},
+                {name: 'CATAP_ST', data: 'CATAP_ST', title: 'CATAP-S/T', render: DatatableHelper.numberRenderer},
+                {name: 'fix_mktAnP', data: 'fix_mktAnP', title: 'MKT A&P', render: DatatableHelper.numberRenderer},
+                {name: 'CAAP_ST', data: 'CAAP_ST', title: 'CAAP-S/T', render: DatatableHelper.numberRenderer},
+                {name: 'NS_L', data: 'NS_L', title: 'NS/L', render: DatatableHelper.numberRenderer},
+                {name: 'costPerL', data: 'costPerL', title: 'Cost/L', render: DatatableHelper.numberRenderer},
+                {name: 'cmPerL', data: 'cmPerL', title: 'CM/L', render: DatatableHelper.numberRenderer},
+                {name: 'CM', data: 'CM', title: 'Volume Effect', render: DatatableHelper.numberRenderer},
+                // {name: '', data: '', title: 'Price Effect'},
+                // {name: '', data: '', title: 'Cost'},
+                // {name: '', data: '', title: 'Mix'},
+                {name: 'AnP', data: 'AnP', title: 'A&P', render: DatatableHelper.numberRenderer},
+                {name: 'CAAP_ST', data: 'CAAP_ST', title: 'CAAP var.', render: DatatableHelper.numberRenderer}
+            ];
+            let columnDefinitions = [
+                {targets: [0], cellType: 'th', className: 'dt-body-left'},
+                {targets: '_all', className: 'dt-body-right'}
+            ];
+            let datatableConfig = {
+                data: DataHelper.getOutputForSales(),
+                columns: columnConfig,
+                columnDefs: columnDefinitions,
+                paging: false,
+                ordering: false,
+                searching: false,
+                info: false,
+                scrollX: true,
+                scrollY: true,
+                "fnRowCallback": function (nRow, aData, iDisplayIndex) {
+                    if (aData['contractedItemName'] == "Total") {
+                        $(nRow).addClass('bold');
+                    }
+                }
+            };
+            let datatableHeader;
+
+            const getDatatableConfig = () => datatableConfig;
+            const getDatatableHeader = () => datatableHeader;
+            const init = () => {
+                let headerRow = '';
+                datatableConfig.columns.forEach(column => {
+                    headerRow += `<th>${column.title}</th>`;
+                    delete column.title;
+                });
+                datatableHeader = `<tr>${headerRow}</tr>`;
+            };
+
+            init();
+
+            return {
+                getDatatableConfig: getDatatableConfig,
+                getDatatableHeader: getDatatableHeader
+            };
+        }();
+
+        const DashboardChartsHelper = function () {
+
+            const PRIMARY_COLOR = 'rgba(255,99,132,1)';
+            const SECONDARY_COLOR = 'rgba(54, 162, 235, 1)';
+            const COLOR_3 = 'rgba(255, 206, 86, 1)';
+
+            const drawInvestmentComponentChart = () => {
+                const totalOutputForSales = DataHelper.getOutputForSales().find(item => item.contractedItemName === 'Total');
+                const investmentComponentData = [
+                    totalOutputForSales.var_investment,
+                    totalOutputForSales.con_investment,
+                    totalOutputForSales.fix_investment
+                ];
+
+                let context = 'chart1';
+                let data = {
+                    datasets: [{
+                        data: investmentComponentData,
+                        //backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)'],
+                        backgroundColor: ['rgba(255,99,132,1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)'],
+                        borderColor: ['rgba(255,99,132,1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)']
+                    }],
+                    labels: ['Variable', 'Conditional', 'Fixed']
+                };
+
+                let options = {
+                    plugins: {
+                        labels: {
+                            render: 'percentage',
+                            precision: 2,
+                            fontColor: '#FFFFFF'
+                        }
+                    }
+                };
+                //new Chart(context, {type: 'pie', data: data, options: options});
+                
+                Highcharts.chart('container_InvestmentComponent', {
+                    chart: {
+                        plotBackgroundColor: null,
+                        plotBorderWidth: null,
+                        plotShadow: false,
+                        type: 'pie'
+                    },
+                    title: {
+                        text: undefined
+                    },
+                    credits: {
+                        enabled: false
+                    },
+                    tooltip: {
+                        pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
+                    },
+                    legend: {
+                        enabled: false
+                    },
+                    plotOptions: {
+                        pie: {
+                            allowPointSelect: true,
+                            cursor: 'pointer',
+                            dataLabels: {
+                                enabled: true,
+                                format: '<b>{point.name}</b>: {point.percentage:.1f} %',
+                                style: {
+                                    fontSize: 16
+                                }
+                            },
+                            showInLegend: true
+                        }
+                    },
+                    series: [{
+                        name: 'Brands',
+                        colorByPoint: true,
+                        data: [{
+                            name: 'Variable',
+                            y: totalOutputForSales.var_investment,
+                            color: '#7cb5ec'
+                        }, {
+                            name: 'Conditional',
+                            y: totalOutputForSales.con_investment,
+                            color: '#90ed7d'
+                        }, {
+                            name: 'Fixed',
+                            y: totalOutputForSales.fix_investment,
+                            color: '#f7a35c'
+                        }]
+                    }]
+                });
+            };
+
+            const drawMarketShareChart = () => {
+                const dataMarketShare = DataHelper.getMarketShare();
+                console.log(dataMarketShare);
+                
+                let labels = [];
+                let marketShareData = [];
+                Object.keys(dataMarketShare).forEach((item, index) => {
+                    // item = 'whisky', 'wine'
+                    labels.push(item);
+                    marketShareData.push(dataMarketShare[item]);
+                });
+                
+                let context = 'chartMarketShare';
+                let data = {
+                    datasets: [{
+                        data: marketShareData,
+                        /*
+                        //backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)'],
+                        backgroundColor: ['rgba(255,99,132,1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)'],
+                        borderColor: ['rgba(255,99,132,1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)']
+                        */ 
+                        backgroundColor: 'rgba(54, 162, 235, 1)',
+                        label: "Market Share %"
+                    }],
+                    labels: labels
+                };
+
+                let options = {
+                    scales: {
+                       yAxes: [{
+                                display: true,
+                                ticks: {
+                                    min: 0, // minimum value
+                                    max: 100 // maximum value
+                                },
+                                beginAtZero:true
+                       }]
+                    },
+                    plugins: {
+                        labels: {
+                            render: 'value',
+                            precision: 00
+                        }
+                    }
+                };
+                //new Chart(context, {type: 'bar', data: data, options: options});
+                
+                const dataMarketShareDetail = DataHelper.getMarketShareDetail();
+                const set_competitor = DataHelper.getCompetitor();
+                
+                let marketShare_legend = '';
+                let competitorColor = {};
+                let customizedColors = highchartColors;
+                customizedColors.splice(1, 1);
+                Object.keys(set_competitor).forEach((competitor, index) => {
+                    competitorColor[set_competitor[index]] = customizedColors[index];
+                    marketShare_legend +=
+                        '<span><span class="block-small" style="background-color:'+ customizedColors[index] +' !important;"></span> ' + set_competitor[index] + '</span>&nbsp; &nbsp; &nbsp; ';
+                });
+                $('#marketShare_legend').html(marketShare_legend);
+                
+                let marketShareDataDetail = [];
+                let pr_bottle = 0;
+                let total_bottle = 0;
+                Object.keys(dataMarketShareDetail).forEach((productCat, index1) => {
+                    let level1 = {
+                        id: productCat,
+                        sortIndex: index1
+                    }
+                    marketShareDataDetail.push(level1);
+                    Object.keys(dataMarketShareDetail[productCat]).forEach((competitor, index2) => {
+                        if(competitor == 'Pernod Ricard'){
+                            pr_bottle += dataMarketShareDetail[productCat][competitor];
+                        }
+                        total_bottle += dataMarketShareDetail[productCat][competitor];
+                        
+                        let level2 = {
+                            name: competitor,
+                            value: dataMarketShareDetail[productCat][competitor],
+                            parent: productCat,
+                            color: competitorColor[competitor],
+                            sortIndex: -index2
+                        }
+                        marketShareDataDetail.push(level2);
+                    });
+                });
+                
+                /*
+                console.log('check market share');
+                console.log(pr_bottle);
+                console.log(total_bottle);
+                */
+                
+                let marketSharePercent = pr_bottle / total_bottle * 100;
+                marketSharePercent = marketSharePercent.toLocaleString('en-US', {minimumFractionDigits: 0});
+                let marketShareTitle = 'Pernod Ricard Market Share ' + (!isNaN(marketSharePercent) ? marketSharePercent + '%' : '');
+                
+                // highchart marimekko chart
+                $('#container_marketShare').highcharts({
+                    title: {
+                        text: marketShareTitle,
+                        margin: 10
+                    },
+                    credits: {
+                        enabled: false
+                    },
+                    xAxis: {
+                        labels: {
+                            format: '{value}%',
+                            style: {
+                                fontSize: 12,
+                                fontWeight: 'bold',
+                                textOverflow: 'none'
+                            }
+                        },
+                        tickInterval: 10,
+                        tickLength: 5
+                    },
+                    yAxis: {
+                        title: null,
+                        labels: {
+                            format: '{value}%',
+                            style: {
+                                fontSize: 12,
+                                fontWeight: 'bold',
+                                textOverflow: 'none'
+                            }
+                        },
+                        tickInterval: 10,
+                        tickWidth: 1,
+                        tickLength: 5
+                    },
+                    series: [{
+                        type: 'treemap',
+                        layoutAlgorithm: 'stripes',
+                        alternateStartingDirection: true,
+                        levels: [{
+                            level: 1,
+                            borderWidth: 1,
+                            dataLabels: {
+                                enabled: true,
+                                align: 'right',
+                                crop: false,
+                                rotation: 270,
+                                inside: false,
+                                overflow: 'none',
+                                y: 5,
+                                verticalAlign: 'top',
+                                style: {
+                                    fontWeight: 'bold',
+                                    whiteSpace: 'nowrap',
+                                    fontSize: 14
+                                }
+                            }
+                        }, {
+                            level: 2,
+                            borderWidth: 0,
+                            dataLabels: {
+                                enabled: false
+                            }
+                        }],
+                        data: marketShareDataDetail
+                    }]
+                });
+            };
+
+            const drawTableCharts = () => {
+                let dashboardPnl = DataHelper.getDashboardPnl();
+                let ty = dashboardPnl[2];
+                let ly = dashboardPnl[1];
+                /*
+                let roiTableBody = `<tr><td>${ty.roi}</td><td>${ly.roi}</td><td>${ty.roi_channelAve}</td></tr>`;
+                $('#roiTable tbody').append(roiTableBody);
+
+                let catapnsTableBody = `<tr><td>${ty.CATAP_NS}</td><td>${ly.CATAP_NS}</td><td>${ty.CATAP_NS_channelAve}</td></tr>`;
+                $('#catapnsTable tbody').append(catapnsTableBody);
+
+                let caapnsTableBody = `<tr><td>${ty.CAAP_NS}</td><td>${ly.CAAP_NS}</td>`;
+                $('#caapnsTable tbody').append(caapnsTableBody);
+
+                let investmentRationTable = `<tr><td>${ty.investmentRatio}</td><td>${ly.investmentRatio}</td><td>${ty.investmentRatio_channelAve}</td></tr>`;
+                $('#investmentRationTable tbody').append(investmentRationTable);
+                */
+                
+                let class_small = '';
+                let class_big = '';
+                
+                class_small = ty.roi > ly.roi ? 'block-positive' : 'block-negative';
+                class_big = ty.roi > ly.roi ? 'dashboardBlock-positive' : 'dashboardBlock-negative';
+                
+                let roiTableBody = `
+                    <tr>
+                        <td colspan="2">
+                            <div class="${class_big} dashboardBlockMargin">
+                            ${ty.roi}
+                            </div>
+                        </td>
+                        <td rowspan="2" class="dashboardBlockMargin">
+                            <span class="${class_small}"></span> TY Target<br/>
+                            <span class="block-lightGrey"></span> LY Actual<br/>
+                            <span class="block-darkGrey"></span> Channel Ave.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="dashboardBlock-lightGrey dashboardBlockMargin">
+                            ${ly.roi}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="dashboardBlock-darkGrey dashboardBlockMargin">
+                            ${ty.roi_channelAve || 'NA'}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                $('#roiTable tbody').html(roiTableBody);
+
+                class_small = ty.CATAP_NS > ly.CATAP_NS ? 'block-positive' : 'block-negative';
+                class_big = ty.CATAP_NS > ly.CATAP_NS ? 'dashboardBlock-positive' : 'dashboardBlock-negative';
+                
+                let catapnsTableBody = `
+                    <tr>
+                        <td colspan="2">
+                            <div class="${class_big} dashboardBlockMargin">
+                            ${ty.CATAP_NS}
+                            </div>
+                        </td>
+                        <td rowspan="2" class="dashboardBlockMargin">
+                            <span class="${class_small}"></span> TY Target<br/>
+                            <span class="block-lightGrey"></span> LY Actual<br/>
+                            <span class="block-darkGrey"></span> Channel Ave.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="dashboardBlock-lightGrey dashboardBlockMargin">
+                            ${ly.CATAP_NS}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="dashboardBlock-darkGrey dashboardBlockMargin">
+                            ${ty.CATAP_NS_channelAve || 'NA'}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                $('#catapnsTable tbody').append(catapnsTableBody);
+
+                class_small = ty.CAAP_NS > ly.CAAP_NS ? 'block-positive' : 'block-negative';
+                class_big = ty.CAAP_NS > ly.CAAP_NS ? 'dashboardBlock-positive' : 'dashboardBlock-negative';
+                
+                let caapnsTableBody = `
+                    <tr>
+                        <td colspan="2">
+                            <div class="${class_big} dashboardBlockMargin">
+                            ${ty.CAAP_NS}
+                            </div>
+                        </td>
+                        <td rowspan="2" class="dashboardBlockMargin">
+                            <span class="${class_small}"></span> TY Target<br/>
+                            <span class="block-lightGrey"></span> LY Actual
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="dashboardBlock-lightGrey dashboardBlockMargin">
+                            ${ly.CAAP_NS}
+                            </div>
+                        </td>
+                        <td></td>
+                    </tr>
+                `;
+                $('#caapnsTable tbody').append(caapnsTableBody);
+
+                class_small = ty.investmentRatio < ly.investmentRatio ? 'block-positive' : 'block-negative';
+                class_big = ty.investmentRatio < ly.investmentRatio ? 'dashboardBlock-positive' : 'dashboardBlock-negative';
+                                
+                let investmentRationTable = `
+                    <tr>
+                        <td colspan="2">
+                            <div class="${class_big} dashboardBlockMargin">
+                            ${ty.investmentRatio}
+                            </div>
+                        </td>
+                        <td rowspan="2" class="dashboardBlockMargin">
+                            <span class="${class_small}"></span> TY Target<br/>
+                            <span class="block-lightGrey"></span> LY Actual<br/>
+                            <span class="block-darkGrey"></span> Channel Ave.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="dashboardBlock-lightGrey dashboardBlockMargin">
+                            ${ly.investmentRatio}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="dashboardBlock-darkGrey dashboardBlockMargin">
+                            ${ty.investmentRatio_channelAve || 'NA'}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                $('#investmentRationTable tbody').append(investmentRationTable);
+                
+            };
+
+            const drawVolumeSummaryChart = () => {
+                let chartParametersList = [];
+                let productSummary = DataHelper.getProductSummary();
+
+                /*
+                let maxQty = 0;
+                
+                
+                Object.keys(productSummary).forEach((item, index) => {
+                    let summary = productSummary[item];
+                    Object.keys(summary).forEach((s, sIndex) => {
+                        // s = item group name
+                        let tyT = summary[s]['TY_target'];
+                        let lyT = summary[s]['LY_target'];
+                        let lyA = summary[s]['LY_actual'];
+
+                        if(lyT && lyT['targetBottle']>maxQty){
+                            maxQty = lyT['targetBottle'];
+                        }
+                        if(tyT && tyT['targetBottle']>maxQty){
+                            maxQty = tyT['targetBottle'];
+                        }
+                        if(lyA && lyA['targetBottle']>maxQty){
+                            maxQty = lyA['targetBottle'];
+                        }
+                    });
+                    
+                });
+                
+                Object.keys(productSummary).forEach((item, index) => {
+                    // item = 'whisky', 'wine'
+                    let chartParameters = perpareChartParameters();
+                    let summary = productSummary[item];
+                    let config = {};
+                    let tyTData = [];
+                    let lyTData = [];
+                    let lyAData = [];
+                    let labels = [];
+                    Object.keys(summary).forEach((s, sIndex) => {
+                        // s = item group name
+                        let tyT = summary[s]['TY_target'];
+                        let lyT = summary[s]['LY_target'];
+                        let lyA = summary[s]['LY_actual'];
+
+                        labels.push('<b>'+s+'</b>');
+                        // tyData[s] = ty ? ty['targetBottle'] : 0;
+                        // lyData[s] = ly ? ly['targetBottle'] : 0;
+                        tyTData.push(tyT ? tyT['targetBottle'] : 0);
+                        lyTData.push(lyT ? lyT['targetBottle'] : 0);
+                        lyAData.push(lyA ? lyA['targetBottle'] : 0);
+                        
+                    });
+                    
+                    chartParameters.data.labels = labels;
+                    chartParameters.data.datasets = [];
+                    chartParameters.data.datasets.push({data: tyTData, backgroundColor: SECONDARY_COLOR, label: "TY Target"});
+                    chartParameters.data.datasets.push({data: lyTData, backgroundColor: PRIMARY_COLOR, label: "LY Target"});
+                    chartParameters.data.datasets.push({data: lyAData, backgroundColor: COLOR_3, label: "LY Actual"});
+                    chartParameters.options = {
+                        title : {
+                            display: true,
+                            text: item
+                        },
+                        scales: {
+                           xAxes: [{
+                                    display: true,
+                                    ticks: {
+                                        min: 0, // minimum value
+                                        max: maxQty // maximum value
+                                    },
+                                    maxBarThickness : 0.8,
+                                    beginAtZero:true
+                           }]
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+
+                    chartParametersList.push(chartParameters);
+                    let dom = prepareChartContainerDom('volumeChart' + index);
+                    $('#chartContainerPanelBody').append(dom);
+
+                    new Chart('volumeChart' + index, chartParameters);
+                });
+
+                console.log('Product Summary', DataHelper.getProductSummary());
+                */
+                
+                let tyTData = [];
+                let lyTData = [];
+                let lyAData = [];
+                let labels = [];
+                let catLine = [];
+                let plotLines = [];
+                let breaks = [];
+                let chartParameters = perpareChartParameters();
+                Object.keys(productSummary).forEach((item, index) => {
+                    // item = 'whisky', 'wine'
+                    let summary = productSummary[item];
+                    let config = {};
+                    Object.keys(summary).forEach((s, sIndex) => {
+                        // s = item group name
+                        let tyT = summary[s]['TY_target'];
+                        let lyT = summary[s]['LY_target'];
+                        let lyA = summary[s]['LY_actual'];
+
+                        if(sIndex==0){
+                            catLine.push({
+                                drawTime: "afterDatasetsDraw",
+                                type: 'line',
+                                mode: 'horizontal',
+                                scaleID: 'y-axis-0',
+                                value: item,
+                                borderColor: '#000000',
+                                borderWidth: 14,
+                                label: {
+                                  enabled: true,
+                                  content: item
+                                }
+                            });
+                            labels.push(item);
+                            tyTData.push(0);
+                            lyTData.push(0);
+                            lyAData.push(0);
+                            
+                            plotLines.push({
+                                value: labels.length-0.5,
+                                color: '#000000',
+                                width: 3,
+                                label: {
+                                    text: item,
+                                    align: 'center',
+                                    style: {
+                                        fontWeight: 'bold',
+                                        fontSize: 20
+                                    }
+                                },
+                                zIndex: 1000
+                            });
+                            breaks.push({
+                                from: labels.length-1.5,
+                                to: labels.length-0.5,
+                                breakSize: 0.5
+                            });
+                        }
+                        
+                        labels.push(s);
+                        // tyData[s] = ty ? ty['targetBottle'] : 0;
+                        // lyData[s] = ly ? ly['targetBottle'] : 0;
+                        tyTData.push(tyT ? tyT['targetBottle'] : 0);
+                        lyTData.push(lyT ? lyT['targetBottle'] : 0);
+                        lyAData.push(lyA ? lyA['targetBottle'] : 0);
+                        
+                    });
+                });
+                    
+                chartParameters.data.labels = labels;
+                chartParameters.data.datasets = [];
+                chartParameters.data.datasets.push({data: tyTData, backgroundColor: SECONDARY_COLOR, label: "TY Target"});
+                chartParameters.data.datasets.push({data: lyTData, backgroundColor: PRIMARY_COLOR, label: "LY Target"});
+                chartParameters.data.datasets.push({data: lyAData, backgroundColor: COLOR_3, label: "LY Actual"});
+                chartParameters.options = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    annotation: {
+                        annotations: catLine
+                    }
+                }
+
+                chartParametersList.push(chartParameters);
+                let dom = prepareChartContainerDom('volumeChart');
+                $('#chartContainerPanelBody').append(dom);
+
+                //new Chart('volumeChart', chartParameters);
+                
+                
+                Highcharts.chart('container_contractVolume', {
+                    chart: {
+                        type: 'bar'
+                    },
+                    title: {
+                        text: undefined
+                    },
+                    credits: {
+                        enabled: false
+                    },
+                    xAxis: {
+                        categories: labels,
+                        plotLines: plotLines,
+                        breaks: breaks,
+                        labels:{
+                            style: {
+                                fontSize: 14,
+                                fontWeight: 'bold',
+                                textOverflow: 'none'
+                            }
+                        }
+                    },
+                    yAxis: {
+                        title: undefined,
+                        labels:{
+                            style: {
+                                fontSize: 14,
+                                fontWeight: 'bold',
+                                textOverflow: 'none'
+                            }
+                        }
+                    },
+                    legend: {
+                        shadow: false,
+                        itemStyle: {
+                            fontSize: 16
+                        }
+                    },
+                    tooltip: {
+                        shared: true
+                    },
+                    plotOptions: {
+                        bar: {
+                            grouping: false,
+                            shadow: false,
+                            borderWidth: 0
+                        }
+                    },
+                    series: [{
+                        name: 'TY Target',
+                        data: tyTData,
+                        //pointPlacement: -0.2,
+                        pointWidth: 25,
+                        borderWidth: 2,
+                        borderColor: 'rgba(124, 181, 236, 1)',
+                        color: 'rgba(124, 181, 236, 0.5)'
+                    }, {
+                        name: 'LY Target',
+                        data: lyTData,
+                        pointPlacement: 0.0,
+                        pointWidth: 15,
+                        borderWidth: 0,
+                        color: 'rgba(100, 100, 100, 1)'
+                    }, {
+                        name: 'LY Actual',
+                        data: lyAData,
+                        //pointPlacement: 0.2,
+                        pointWidth: 5,
+                        borderWidth: 0,
+                        color: 'rgba(180, 180, 180, 1)'
+                    }]
+                });
+            };
+
+            const prepareChartContainerDom = (chartId) => {
+                let html = `
+                    <div class="chart-container" style="position: relative; height: 800px; width: 700px;">
+                        <canvas id="${chartId}"></canvas>
+                    </div>
+                `;
+                return html;
+            };
+
+            const perpareChartParameters = (type) => {
+                if (!type) type = 'horizontalBar';
+
+                let chartParameters = {};
+                chartParameters.type = type;
+                chartParameters.data = {};
+                chartParameters.options = {};
+                chartParameters.data = {};
+                chartParameters.data.labels = [];
+                chartParameters.data.datasets = [];
+
+                return chartParameters;
+            };
+
+            const init = () => {
+                drawInvestmentComponentChart();
+                drawTableCharts();
+                drawVolumeSummaryChart();
+                drawMarketShareChart();
+            };
+
+            // console.log('Output for sales', DataHelper.getOutputForSales());
+            // console.log('Detail Pnl', DataHelper.getDetailPnl());
+            // console.log('Dashboard Pnl', DataHelper.getDashboardPnl());
+
+            return {
+                init: init
+            };
+        }();
+
+        // console.log(DataHelper.getDetailPnl());
+        // console.log(DataHelper.getDashboardPnl());
+        // console.log(DataHelper.getLyActualTotal());
+        // console.log(DataHelper.getTyTargetTotal());
+        console.log('this year target list', DataHelper.getProductSummary());
+
+        let highchartColors;
+        
+        $(document).ready(function () {
+            
+            highchartColors = Highcharts.getOptions().colors;
+            Highcharts.seriesTypes.treemap.prototype.bindAxes = function() {
+                var treeAxis = {
+                    min: 0,
+                    dataMin: 0,
+                    max: 100,
+                    dataMax: 0
+                };
+
+                Highcharts.Series.prototype.bindAxes.call(this);
+                Highcharts.extend(this.yAxis.options, treeAxis);
+                Highcharts.extend(this.xAxis.options, treeAxis);
+
+            }
+            
+            Highcharts.wrap(Highcharts.Tick.prototype, 'addLabel', function(p) {
+              p.call(this);
+
+              var label = this.label;
+              var labelOptions = this.axis.options.labels;
+
+              if (label && labelOptions.style && labelOptions.style.whiteSpace === 'nowrap') {
+                label.css({
+                  whiteSpace: 'nowrap'
+                });
+              }
+            });
+            
+            DashboardChartsHelper.init();
+            
+            $('#outputForSalesDatatable thead').prepend(OutputForSalesDatatableHelper.getDatatableHeader());
+            $('#outputForSalesDatatable').DataTable(OutputForSalesDatatableHelper.getDatatableConfig());
+
+            $('#detailPLDatatable thead').prepend(DetailPnlDatatableHelper.getDatatableHeader());
+            $('#detailPLDatatable').DataTable(DetailPnlDatatableHelper.getDatatableConfig());
+
+            $('#bridgeAnalysisDatatable thead').prepend(BridgeAnalysisDatatableHelper.getDatatableHeader());
+            $('#bridgeAnalysisDatatable').DataTable(BridgeAnalysisDatatableHelper.getDatatableConfig());
+
+            $('#dashboardDatatable thead').prepend(DashboardDatatableHelper.getDatatableHeader());
+            $('#dashboardDatatable').DataTable(DashboardDatatableHelper.getDatatableConfig());
+
+            $('a[data-toggle="tab"]').click(function (e) {
+                setTimeout(function(){ 
+                    //alert("Hello"); 
+                $('#detailPLDatatable').DataTable().draw();
+                $('#bridgeAnalysisDatatable').DataTable().draw();
+                $('#outputForSalesDatatable').DataTable().draw();
+                $('#dashboardDatatable').DataTable().draw();
+                }, 1);
+            });
+        });
+
+    </script>
+    <body style="width: 100%;">
+    <style>
+        table.dataTable {
+            width: 100%;
+            margin: 0 auto;
+            clear: both;
+            border-collapse: separate;
+            border-spacing: 0
+        }
+
+        table.dataTable thead th, table.dataTable tfoot th {
+            font-weight: bold
+        }
+
+        table.dataTable thead th, table.dataTable thead td {
+            padding: 10px 18px;
+            border-bottom: 1px solid #111
+        }
+
+        table.dataTable thead th:active, table.dataTable thead td:active {
+            outline: none
+        }
+
+        table.dataTable tfoot th, table.dataTable tfoot td {
+            padding: 10px 18px 6px 18px;
+            border-top: 1px solid #111
+        }
+
+        table.dataTable thead .sorting, table.dataTable thead .sorting_asc, table.dataTable thead .sorting_desc, table.dataTable thead .sorting_asc_disabled, table.dataTable thead .sorting_desc_disabled {
+            cursor: pointer;
+            *cursor: hand;
+            background-repeat: no-repeat;
+            background-position: center right
+        }
+
+        table.dataTable thead .sorting {
+            background-image: url("../images/sort_both.png")
+        }
+
+        table.dataTable thead .sorting_asc {
+            background-image: url("../images/sort_asc.png")
+        }
+
+        table.dataTable thead .sorting_desc {
+            background-image: url("../images/sort_desc.png")
+        }
+
+        table.dataTable thead .sorting_asc_disabled {
+            background-image: url("../images/sort_asc_disabled.png")
+        }
+
+        table.dataTable thead .sorting_desc_disabled {
+            background-image: url("../images/sort_desc_disabled.png")
+        }
+
+        table.dataTable tbody tr {
+            background-color: #ffffff
+        }
+
+        table.dataTable tbody tr.selected {
+            background-color: #B0BED9
+        }
+
+        table.dataTable tbody th, table.dataTable tbody td {
+            padding: 8px 10px
+        }
+
+        table.dataTable.row-border tbody th, table.dataTable.row-border tbody td, table.dataTable.display tbody th, table.dataTable.display tbody td {
+            border-top: 1px solid #ddd
+        }
+
+        table.dataTable.row-border tbody tr:first-child th, table.dataTable.row-border tbody tr:first-child td, table.dataTable.display tbody tr:first-child th, table.dataTable.display tbody tr:first-child td {
+            border-top: none
+        }
+
+        table.dataTable.cell-border tbody th, table.dataTable.cell-border tbody td {
+            border-top: 1px solid #ddd;
+            border-right: 1px solid #ddd
+        }
+
+        table.dataTable.cell-border tbody tr th:first-child, table.dataTable.cell-border tbody tr td:first-child {
+            border-left: 1px solid #ddd
+        }
+
+        table.dataTable.cell-border tbody tr:first-child th, table.dataTable.cell-border tbody tr:first-child td {
+            border-top: none
+        }
+
+        table.dataTable.stripe tbody tr.odd, table.dataTable.display tbody tr.odd {
+            background-color: #f9f9f9
+        }
+
+        table.dataTable.stripe tbody tr.odd.selected, table.dataTable.display tbody tr.odd.selected {
+            background-color: #acbad4
+        }
+
+        table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
+            background-color: #f6f6f6
+        }
+
+        table.dataTable.hover tbody tr:hover.selected, table.dataTable.display tbody tr:hover.selected {
+            background-color: #aab7d1
+        }
+
+        table.dataTable.order-column tbody tr > .sorting_1, table.dataTable.order-column tbody tr > .sorting_2, table.dataTable.order-column tbody tr > .sorting_3, table.dataTable.display tbody tr > .sorting_1, table.dataTable.display tbody tr > .sorting_2, table.dataTable.display tbody tr > .sorting_3 {
+            background-color: #fafafa
+        }
+
+        table.dataTable.order-column tbody tr.selected > .sorting_1, table.dataTable.order-column tbody tr.selected > .sorting_2, table.dataTable.order-column tbody tr.selected > .sorting_3, table.dataTable.display tbody tr.selected > .sorting_1, table.dataTable.display tbody tr.selected > .sorting_2, table.dataTable.display tbody tr.selected > .sorting_3 {
+            background-color: #acbad5
+        }
+
+        table.dataTable.display tbody tr.odd > .sorting_1, table.dataTable.order-column.stripe tbody tr.odd > .sorting_1 {
+            background-color: #f1f1f1
+        }
+
+        table.dataTable.display tbody tr.odd > .sorting_2, table.dataTable.order-column.stripe tbody tr.odd > .sorting_2 {
+            background-color: #f3f3f3
+        }
+
+        table.dataTable.display tbody tr.odd > .sorting_3, table.dataTable.order-column.stripe tbody tr.odd > .sorting_3 {
+            background-color: whitesmoke
+        }
+
+        table.dataTable.display tbody tr.odd.selected > .sorting_1, table.dataTable.order-column.stripe tbody tr.odd.selected > .sorting_1 {
+            background-color: #a6b4cd
+        }
+
+        table.dataTable.display tbody tr.odd.selected > .sorting_2, table.dataTable.order-column.stripe tbody tr.odd.selected > .sorting_2 {
+            background-color: #a8b5cf
+        }
+
+        table.dataTable.display tbody tr.odd.selected > .sorting_3, table.dataTable.order-column.stripe tbody tr.odd.selected > .sorting_3 {
+            background-color: #a9b7d1
+        }
+
+        table.dataTable.display tbody tr.even > .sorting_1, table.dataTable.order-column.stripe tbody tr.even > .sorting_1 {
+            background-color: #fafafa
+        }
+
+        table.dataTable.display tbody tr.even > .sorting_2, table.dataTable.order-column.stripe tbody tr.even > .sorting_2 {
+            background-color: #fcfcfc
+        }
+
+        table.dataTable.display tbody tr.even > .sorting_3, table.dataTable.order-column.stripe tbody tr.even > .sorting_3 {
+            background-color: #fefefe
+        }
+
+        table.dataTable.display tbody tr.even.selected > .sorting_1, table.dataTable.order-column.stripe tbody tr.even.selected > .sorting_1 {
+            background-color: #acbad5
+        }
+
+        table.dataTable.display tbody tr.even.selected > .sorting_2, table.dataTable.order-column.stripe tbody tr.even.selected > .sorting_2 {
+            background-color: #aebcd6
+        }
+
+        table.dataTable.display tbody tr.even.selected > .sorting_3, table.dataTable.order-column.stripe tbody tr.even.selected > .sorting_3 {
+            background-color: #afbdd8
+        }
+
+        table.dataTable.display tbody tr:hover > .sorting_1, table.dataTable.order-column.hover tbody tr:hover > .sorting_1 {
+            background-color: #eaeaea
+        }
+
+        table.dataTable.display tbody tr:hover > .sorting_2, table.dataTable.order-column.hover tbody tr:hover > .sorting_2 {
+            background-color: #ececec
+        }
+
+        table.dataTable.display tbody tr:hover > .sorting_3, table.dataTable.order-column.hover tbody tr:hover > .sorting_3 {
+            background-color: #efefef
+        }
+
+        table.dataTable.display tbody tr:hover.selected > .sorting_1, table.dataTable.order-column.hover tbody tr:hover.selected > .sorting_1 {
+            background-color: #a2aec7
+        }
+
+        table.dataTable.display tbody tr:hover.selected > .sorting_2, table.dataTable.order-column.hover tbody tr:hover.selected > .sorting_2 {
+            background-color: #a3b0c9
+        }
+
+        table.dataTable.display tbody tr:hover.selected > .sorting_3, table.dataTable.order-column.hover tbody tr:hover.selected > .sorting_3 {
+            background-color: #a5b2cb
+        }
+
+        table.dataTable.no-footer {
+            border-bottom: 1px solid #111
+        }
+
+        table.dataTable.nowrap th, table.dataTable.nowrap td {
+            white-space: nowrap
+        }
+
+        table.dataTable.compact thead th, table.dataTable.compact thead td {
+            padding: 4px 17px 4px 4px
+        }
+
+        table.dataTable.compact tfoot th, table.dataTable.compact tfoot td {
+            padding: 4px
+        }
+
+        table.dataTable.compact tbody th, table.dataTable.compact tbody td {
+            padding: 4px
+        }
+
+        table.dataTable th.dt-left, table.dataTable td.dt-left {
+            text-align: left
+        }
+
+        table.dataTable th.dt-center, table.dataTable td.dt-center, table.dataTable td.dataTables_empty {
+            text-align: center
+        }
+
+        table.dataTable th.dt-right, table.dataTable td.dt-right {
+            text-align: right
+        }
+
+        table.dataTable th.dt-justify, table.dataTable td.dt-justify {
+            text-align: justify
+        }
+
+        table.dataTable th.dt-nowrap, table.dataTable td.dt-nowrap {
+            white-space: nowrap
+        }
+
+        table.dataTable thead th.dt-head-left, table.dataTable thead td.dt-head-left, table.dataTable tfoot th.dt-head-left, table.dataTable tfoot td.dt-head-left {
+            text-align: left
+        }
+
+        table.dataTable thead th.dt-head-center, table.dataTable thead td.dt-head-center, table.dataTable tfoot th.dt-head-center, table.dataTable tfoot td.dt-head-center {
+            text-align: center
+        }
+
+        table.dataTable thead th.dt-head-right, table.dataTable thead td.dt-head-right, table.dataTable tfoot th.dt-head-right, table.dataTable tfoot td.dt-head-right {
+            text-align: right
+        }
+
+        table.dataTable thead th.dt-head-justify, table.dataTable thead td.dt-head-justify, table.dataTable tfoot th.dt-head-justify, table.dataTable tfoot td.dt-head-justify {
+            text-align: justify
+        }
+
+        table.dataTable thead th.dt-head-nowrap, table.dataTable thead td.dt-head-nowrap, table.dataTable tfoot th.dt-head-nowrap, table.dataTable tfoot td.dt-head-nowrap {
+            white-space: nowrap
+        }
+
+        table.dataTable tbody th.dt-body-left, table.dataTable tbody td.dt-body-left {
+            text-align: left
+        }
+
+        table.dataTable tbody th.dt-body-center, table.dataTable tbody td.dt-body-center {
+            text-align: center
+        }
+
+        table.dataTable tbody th.dt-body-right, table.dataTable tbody td.dt-body-right {
+            text-align: right
+        }
+
+        table.dataTable tbody th.dt-body-justify, table.dataTable tbody td.dt-body-justify {
+            text-align: justify
+        }
+
+        table.dataTable tbody th.dt-body-nowrap, table.dataTable tbody td.dt-body-nowrap {
+            white-space: nowrap
+        }
+
+        table.dataTable, table.dataTable th, table.dataTable td {
+            box-sizing: content-box
+        }
+
+        .dataTables_wrapper {
+            position: relative;
+            clear: both;
+            *zoom: 1;
+            zoom: 1
+        }
+
+        .dataTables_wrapper .dataTables_length {
+            float: left
+        }
+
+        .dataTables_wrapper .dataTables_filter {
+            float: right;
+            text-align: right
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            margin-left: 0.5em
+        }
+
+        .dataTables_wrapper .dataTables_info {
+            clear: both;
+            float: left;
+            padding-top: 0.755em
+        }
+
+        .dataTables_wrapper .dataTables_paginate {
+            float: right;
+            text-align: right;
+            padding-top: 0.25em
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            box-sizing: border-box;
+            display: inline-block;
+            min-width: 1.5em;
+            padding: 0.5em 1em;
+            margin-left: 2px;
+            text-align: center;
+            text-decoration: none !important;
+            cursor: pointer;
+            *cursor: hand;
+            color: #333 !important;
+            border: 1px solid transparent;
+            border-radius: 2px
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current, .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+            color: #333 !important;
+            border: 1px solid #979797;
+            background-color: white;
+            background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #fff), color-stop(100%, #dcdcdc));
+            background: -webkit-linear-gradient(top, #fff 0%, #dcdcdc 100%);
+            background: -moz-linear-gradient(top, #fff 0%, #dcdcdc 100%);
+            background: -ms-linear-gradient(top, #fff 0%, #dcdcdc 100%);
+            background: -o-linear-gradient(top, #fff 0%, #dcdcdc 100%);
+            background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%)
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.disabled, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active {
+            cursor: default;
+            color: #666 !important;
+            border: 1px solid transparent;
+            background: transparent;
+            box-shadow: none
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            color: white !important;
+            border: 1px solid #111;
+            background-color: #585858;
+            background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #585858), color-stop(100%, #111));
+            background: -webkit-linear-gradient(top, #585858 0%, #111 100%);
+            background: -moz-linear-gradient(top, #585858 0%, #111 100%);
+            background: -ms-linear-gradient(top, #585858 0%, #111 100%);
+            background: -o-linear-gradient(top, #585858 0%, #111 100%);
+            background: linear-gradient(to bottom, #585858 0%, #111 100%)
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button:active {
+            outline: none;
+            background-color: #2b2b2b;
+            background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #2b2b2b), color-stop(100%, #0c0c0c));
+            background: -webkit-linear-gradient(top, #2b2b2b 0%, #0c0c0c 100%);
+            background: -moz-linear-gradient(top, #2b2b2b 0%, #0c0c0c 100%);
+            background: -ms-linear-gradient(top, #2b2b2b 0%, #0c0c0c 100%);
+            background: -o-linear-gradient(top, #2b2b2b 0%, #0c0c0c 100%);
+            background: linear-gradient(to bottom, #2b2b2b 0%, #0c0c0c 100%);
+            box-shadow: inset 0 0 3px #111
+        }
+
+        .dataTables_wrapper .dataTables_paginate .ellipsis {
+            padding: 0 1em
+        }
+
+        .dataTables_wrapper .dataTables_processing {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 40px;
+            margin-left: -50%;
+            margin-top: -25px;
+            padding-top: 20px;
+            text-align: center;
+            font-size: 1.2em;
+            background-color: white;
+            background: -webkit-gradient(linear, left top, right top, color-stop(0%, rgba(255, 255, 255, 0)), color-stop(25%, rgba(255, 255, 255, 0.9)), color-stop(75%, rgba(255, 255, 255, 0.9)), color-stop(100%, rgba(255, 255, 255, 0)));
+            background: -webkit-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.9) 25%, rgba(255, 255, 255, 0.9) 75%, rgba(255, 255, 255, 0) 100%);
+            background: -moz-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.9) 25%, rgba(255, 255, 255, 0.9) 75%, rgba(255, 255, 255, 0) 100%);
+            background: -ms-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.9) 25%, rgba(255, 255, 255, 0.9) 75%, rgba(255, 255, 255, 0) 100%);
+            background: -o-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.9) 25%, rgba(255, 255, 255, 0.9) 75%, rgba(255, 255, 255, 0) 100%);
+            background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.9) 25%, rgba(255, 255, 255, 0.9) 75%, rgba(255, 255, 255, 0) 100%)
+        }
+
+        .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing, .dataTables_wrapper .dataTables_paginate {
+            color: #333
+        }
+
+        .dataTables_wrapper .dataTables_scroll {
+            clear: both
+        }
+
+        .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody {
+            *margin-top: -1px;
+            -webkit-overflow-scrolling: touch
+        }
+
+        .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > thead > tr > th, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > thead > tr > td, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > tbody > tr > th, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > tbody > tr > td {
+            vertical-align: middle
+        }
+
+        .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > thead > tr > th > div.dataTables_sizing, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > thead > tr > td > div.dataTables_sizing, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > tbody > tr > th > div.dataTables_sizing, .dataTables_wrapper .dataTables_scroll div.dataTables_scrollBody > table > tbody > tr > td > div.dataTables_sizing {
+            height: 0;
+            overflow: hidden;
+            margin: 0 !important;
+            padding: 0 !important
+        }
+
+        .dataTables_wrapper.no-footer .dataTables_scrollBody {
+            border-bottom: 1px solid #111
+        }
+
+        .dataTables_wrapper.no-footer div.dataTables_scrollHead table.dataTable, .dataTables_wrapper.no-footer div.dataTables_scrollBody > table {
+            border-bottom: none
+        }
+
+        .dataTables_wrapper:after {
+            visibility: hidden;
+            display: block;
+            content: "";
+            clear: both;
+            height: 0
+        }
+
+        @media screen and (max-width: 767px) {
+            .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_paginate {
+                float: none;
+                text-align: center
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                margin-top: 0.5em
+            }
+        }
+
+        @media screen and (max-width: 640px) {
+            .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter {
+                float: none;
+                text-align: center
+            }
+
+            .dataTables_wrapper .dataTables_filter {
+                margin-top: 0.5em
+            }
+        }
+
+        .background-green {
+            background-color: #9EFFA2 !important;
+        }
+
+        .background-orange {
+            background-color: #FFE49E !important;
+        }
+
+        .background-yellow {
+            background-color: #F8FF9E !important;
+        }
+
+        .background-purple {
+            background-color: #EE9EFF !important;
+        }
+
+        .bold {
+            font-weight: bold;
+        }
+        
+        .dashboardCellPadding {
+            padding: 5px;
+        }
+
+        /*
+        #outputForSalesDatatable tbody tr:last-child {
+            font-weight: bold !important;
+        }*/
+        
+        .panel{
+            page-break-inside: avoid;
+        }
+        
+        .tableCell-blue{
+            background-color: #9EDDFF;
+        }
+        
+        .dashboardBlock-thisYear{
+            background-color: rgba(255,99,132,1) !important;
+            color: #FFFFFF !important;
+            text-align: center !important;
+            font-size: 24px !important;
+            font-weight: bold !important;
+        }
+        .dashboardBlock-lastYear{
+            background-color: rgba(57, 196, 65, 1) !important;
+            text-align: center !important;
+            font-weight: bold !important;
+        }
+        .dashboardBlock-average{
+            background-color: rgba(255, 206, 86, 1) !important;
+            text-align: center !important;
+            font-weight: bold !important;
+        }
+        .dashboardBlockMargin {
+            padding: 5px !important;
+            font-size: 16px !important;
+        }
+        .block-thisYear{
+            background-color: rgba(255,99,132,1) !important;
+            width: 10px !important;
+            height: 10px !important;
+            display: inline-block !important;
+        }
+        .block-lastYear{
+            background-color: rgba(57, 196, 65, 1) !important;
+            width: 10px !important;
+            height: 10px !important;
+            display: inline-block !important;
+        }
+        .block-average{
+            background-color: rgba(255, 206, 86, 1) !important;
+            width: 10px !important;
+            height: 10px !important;
+            display: inline-block !important;
+        }
+        .dashboardBlock-darkGrey{
+            background-color: #646464 !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            color: #FFFFFF !important;
+            font-size: 24px !important;
+        }
+        .dashboardBlock-lightGrey{
+            background-color: #B4B4B4 !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            color: #FFFFFF !important;
+            font-size: 24px !important;
+        }
+        .dashboardBlock-positive{
+            background-color: rgba(57, 196, 65, 1) !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            font-size: 40px !important;
+            color: #FFFFFF !important;
+        }
+        .dashboardBlock-negative{
+            background-color: rgba(255,99,132,1) !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            font-size: 40px !important;
+            color: #FFFFFF !important;
+        }
+        .block-darkGrey{
+            background-color: #646464 !important;
+            width: 15px !important;
+            height: 15px !important;
+            display: inline-block !important;
+        }
+        .block-lightGrey{
+            background-color: #B4B4B4 !important;
+            width: 15px !important;
+            height: 15px !important;
+            display: inline-block !important;
+        }
+        .block-positive{
+            background-color: rgba(57, 196, 65, 1) !important;
+            width: 15px !important;
+            height: 15px !important;
+            display: inline-block !important;
+        }
+        .block-negative{
+            background-color: rgba(255,99,132,1) !important;
+            width: 15px !important;
+            height: 15px !important;
+            display: inline-block !important;
+        }
+        .block-small{
+            width: 15px !important;
+            height: 15px !important;
+            display: inline-block !important;
+        }
+        
+        .panel-primary>.panel-heading {
+            color: #fff !important;
+            background-color: #337ab7 !important;
+            border-color: #337ab7 !important;
+        }
+        .lightGrey {
+            color: #BCBCBC !important;
+        }
+        
+        .savingRecord .fullScreenLoading{
+            display : block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba( 255, 255, 255, .8 ) 
+                         url('{!URLFOR($Resource.ASI_CRM_SG_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+        
+    </style>
+    
+    <div class="fullScreenLoading"></div>
+    
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation">
+            <a href="#tab1" aria-controls="tab1" role="tab" data-toggle="tab">Output for Sales</a>
+        </li>
+        <li role="presentation">
+            <a href="#tab2" aria-controls="tab2" role="tab" data-toggle="tab">Detail PnL</a>
+        </li>
+        <li role="presentation" class="active">
+            <a href="#tab3" aria-controls="tab3" role="tab" data-toggle="tab">Dashboard</a>
+        </li>
+        <li role="presentation">
+            <a href="#tab4" aria-controls="tab4" role="tab" data-toggle="tab">Bridge Analysis</a>
+        </li>
+    </ul>
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane" id="tab1">
+            <table id="outputForSalesDatatable" class="display compact cell-border nowrap" style="width: 100%">
+                <thead></thead>
+            </table>
+        </div>
+        <div role="tabpanel" class="tab-pane" id="tab2">
+            <table id="detailPLDatatable" class="display compact cell-border nowrap" style="width: 100%">
+                <thead></thead>
+            </table>
+        </div>
+        <div role="tabpanel" class="tab-pane active" id="tab3">
+            <input type="button" class="btn" value="Print PDF" onclick="preparePrintPDF();" style="display:none;"/>
+            
+            <div  id="tab_dashboard" style="width: 210mm;">
+            <!--
+            <table style="width:100%">
+                <colgroup>
+                    <col style="width:35%" />
+                    <col style="width:65%" />
+                </colgroup>
+                <tbody>
+                    <tr>
+                        <td class="dashboardCellPadding">
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">BA Comment</div>
+                                <div class="panel-body" id="BAComment">
+                                    <apex:outputText value="{!SUBSTITUTE(JSENCODE(BAComment),'\n','<br/>')}" escape="false" />
+                                </div>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Investment Component</div>
+                                <div class="panel-body">
+                                    <div class="chart-container" style="position: relative; width:500px;">
+                                        <canvas id="chart1"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">ROI</div>
+                                <table id="roiTable" class="table">
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">CATAP/NS %</div>
+                                <table id="catapnsTable" class="table">
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">CAAP/NS %</div>
+                                <table id="caapnsTable" class="table">
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Investment Ratio %</div>
+                                <table id="investmentRationTable" class="table">
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Market Share</div>
+                                <div class="panel-body">
+                                    <div class="chart-container" style="position: relative; width:500px;">
+                                        <canvas id="chartMarketShare"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="dashboardCellPadding">
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">PnL Summary</div>
+                                <div class="panel-body">
+                                    <table id="dashboardDatatable" class="display compact cell-border nowrap" style="width: 100%">
+                                        <thead></thead>
+                                    </table>
+                                </div>
+                            </div>
+                            <br/>
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Contract Volume Chart</div>
+                                <div id="chartContainerPanelBody" class="panel-body">
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            -->
+            <table style="width:100%">
+                <colgroup>
+                    <col style="width:20%" />
+                    <col style="width:40%" />
+                    <col style="width:40%" />
+                </colgroup>
+                <tbody>
+                    <tr>
+                        <td class="dashboardCellPadding" colspan="3">
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Basic Information - {!pafNo}</div>
+                                <table class="table">
+                                    <colgroup>
+                                        <col style="width:13%" />
+                                        <col style="width:20%" />
+                                        <col style="width:13%" />
+                                        <col style="width:20%" />
+                                        <col style="width:13%" />
+                                        <col style="width:20%" />
+                                    </colgroup>
+                                    <tbody>
+                                        <tr>
+                                            <td class="bold tableCell-blue">Outlet Name</td>
+                                            <td class="bold">{!outletName}</td>
+                                            <td class="bold tableCell-blue">Contract Period</td>
+                                            <td class="bold">{!contractStartDate} ~ {!contractEndDate}</td>
+                                            <td class="bold tableCell-blue">Commitment #</td>
+                                            <td class="bold">{!commitmentNo}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="bold tableCell-blue">Region</td>
+                                            <td class="bold">{!region}</td>
+                                            <td class="bold tableCell-blue">Outlet Grade</td>
+                                            <td class="bold">{!outletGrade}</td>
+                                            <td class="bold tableCell-blue">Sales Representative</td>
+                                            <td class="bold">{!salesRep}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="bold tableCell-blue">Channel</td>
+                                            <td class="bold">{!channel}</td>
+                                            <td class="bold tableCell-blue">Sub Channel</td>
+                                            <td class="bold">{!subChannel}</td>
+                                            <td class="bold tableCell-blue">Outlet Type</td>
+                                            <td class="bold">{!outletType}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="dashboardCellPadding">
+                            <div class="panel panel-primary" style="height: 370px;">
+                                <div class="panel-heading">Investment Component</div>
+                                <div class="panel-body">
+                                    <!--
+                                    <div class="chart-container" style="position: relative; width:400px;">
+                                        <canvas id="chart1"></canvas>
+                                    </div>
+                                    -->
+                                    <div id="container_InvestmentComponent" style="min-width: 400px; max-width: 600px; height: 310px; margin: 0 auto"></div>
+                                    <canvas id="canvas_InvestmentComponent" style="min-width: 400px; max-width: 600px; height: 310px; margin: 0 auto; display:none"></canvas>
+                                    <img id="image_InvestmentComponent" style="min-width: 400px; max-width: 600px; height: 310px; margin: 0 auto; display:none" />
+                                </div>
+                            </div>
+                            <div class="panel panel-primary" style="height: 195px;">
+                                <div class="panel-heading">ROI</div>
+                                <table id="roiTable" class="table">
+                                    <colgroup>
+                                        <col style="width:25%" />
+                                        <col style="width:25%" />
+                                        <col style="width:50%" />
+                                    </colgroup>
+                                    <!--
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    -->
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary" style="height: 195px;">
+                                <div class="panel-heading">CATAP/NS %</div>
+                                <table id="catapnsTable" class="table">
+                                    <colgroup>
+                                        <col style="width:25%" />
+                                        <col style="width:25%" />
+                                        <col style="width:50%" />
+                                    </colgroup>
+                                    <!--
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    -->
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary" style="height: 195px;">
+                                <div class="panel-heading">CAAP/NS %</div>
+                                <table id="caapnsTable" class="table">
+                                    <colgroup>
+                                        <col style="width:25%" />
+                                        <col style="width:25%" />
+                                        <col style="width:50%" />
+                                    </colgroup>
+                                    <!--
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                    </tr>
+                                    </thead>
+                                    -->
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="panel panel-primary" style="height: 195px;">
+                                <div class="panel-heading">Investment Ratio %</div>
+                                <table id="investmentRationTable" class="table">
+                                    <colgroup>
+                                        <col style="width:25%" />
+                                        <col style="width:25%" />
+                                        <col style="width:50%" />
+                                    </colgroup>
+                                    <!--
+                                    <thead>
+                                    <tr>
+                                        <th>TY Target</th>
+                                        <th>LY Actual</th>
+                                        <th>Channel Ave.</th>
+                                    </tr>
+                                    </thead>
+                                    -->
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </td>
+                        <td class="dashboardCellPadding">
+                            <div class="panel panel-primary" style="height: 680px;">
+                                <div class="panel-heading">P&amp;L Summary</div>
+                                <div class="panel-body">
+                                    <table id="dashboardDatatable" class="display compact cell-border nowrap" style="width: 100%">
+                                        <thead></thead>
+                                    </table>
+                                </div>
+                            </div>
+                            <!--
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Market Share</div>
+                                <div class="panel-body">
+                                    <div class="chart-container" style="position: relative; width:600px;">
+                                        <canvas id="chartMarketShare"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            -->
+                            <div class="panel panel-primary" style="height: 530px;">
+                                <div class="panel-heading">Market Share</div>
+                                <div class="panel-body">
+                                    <div id="container_marketShare" style="width:600px;"></div>
+                                    <canvas id="canvas_marketShare" style="width:600px; display:none"></canvas>
+                                    <img id="image_marketShare" style="width:600px; display:none" />
+                                </div>
+                                <div id="marketShare_legend" style="padding: 0px 20px 5px 20px; font-weight: bold;"></div>
+                            </div>
+                        </td>
+                        <td class="dashboardCellPadding">
+                            <!--
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">Contract Volume Chart</div>
+                                <div id="chartContainerPanelBody" class="panel-body">
+                                </div>
+                            </div>
+                            -->
+                            <div class="panel panel-primary" style="height: 1230px;">
+                                <div class="panel-heading">Contract Volume Chart</div>
+                                <div id="container_contractVolume" style="height: 1165px; width:700px;"></div>
+                                <canvas id="canvas_contractVolume" style="height: 1165px; width:700px; display:none"></canvas>
+                                <img id="image_contractVolume" style="height: 1165px; width:700px; display:none" />
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="dashboardCellPadding" colspan="3">
+                            <div class="panel panel-primary">
+                                <div class="panel-heading">BA Comment</div>
+                                <div class="panel-body" id="BAComment">
+                                    <apex:outputText value="{!SUBSTITUTE(SUBSTITUTE(JSENCODE(BAComment),'\r\n','<br/>'),'\'','&#39;')}" escape="false" />
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            </div>
+            
+            
+
+
+        </div>
+        <div role="tabpanel" class="tab-pane" id="tab4">
+            <table id="bridgeAnalysisDatatable" class="display compact cell-border nowrap" style="width: 100%">
+                <thead></thead>
+            </table>
+        </div>
+    </div>
+    
+    
+        <apex:form >
+            <apex:actionFunction name="printPDFVF" action="{!printPDF}"  onComplete="redirectPDF('{!returnFileId}');">
+                <apex:param name="resultHTML" value=""/>
+            </apex:actionFunction>
+        </apex:form>
+    </body>
+</apex:page>

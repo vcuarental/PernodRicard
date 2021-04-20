@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Approved_Notification_To_Vendor</fullName>
+        <description>SIR Approved Notification to Vendor</description>
+        <protected>false</protected>
+        <recipients>
+            <type>creator</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_SIR_Approved_Email</template>
+    </alerts>
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Approving_Notification_To_Buyer</fullName>
+        <description>SIR Approving Notification to Buyer</description>
+        <protected>false</protected>
+        <recipients>
+            <field>ASI_CTY_CN_Vendor_SIR_ApprovalUser__c</field>
+            <type>userLookup</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_SIR_Approving_Email</template>
+    </alerts>
+    <alerts>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Rejected_Notification_To_Vendor</fullName>
+        <description>SIR Rejected Notification to Vendor</description>
+        <protected>false</protected>
+        <recipients>
+            <type>creator</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_CTY_CN_Vendor_EmailTemplate/ASI_CTY_CN_Vendor_SIR_Rejected_Email</template>
+    </alerts>
+    <alerts>
+        <fullName>ASI_MFM_CN_POSM_Notify_OP2</fullName>
+        <ccEmails>posm@pernod-ricard.com</ccEmails>
+        <description>ASI_MFM_CN_POSM_Notify_OP2</description>
+        <protected>false</protected>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail1__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail2__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail3__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail4__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail5__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail6__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail7__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <field>ASI_MFM_OperationTeamEmail8__c</field>
+            <type>email</type>
+        </recipients>
+        <recipients>
+            <recipient>patrick.yan@pernod-ricard.com</recipient>
+            <type>user</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>ASI_MFM_CN_Email_Templates/ASI_MFM_CN_POSM_Operation_Notification2</template>
+    </alerts>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Approval_Confirmed</fullName>
+        <description>Update SIR Approval Status Field To Confirmed</description>
+        <field>ASI_CTY_CN_Vendor_SIR_Approval_Status__c</field>
+        <literalValue>Confirmed</literalValue>
+        <name>Update SIR Approvl Status To Confirmed</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Approval_Recall</fullName>
+        <field>ASI_CTY_CN_Vendor_SIR_Approval_Status__c</field>
+        <literalValue>Recall</literalValue>
+        <name>Update SIR Approvl Status To Recall</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Approval_Rejected</fullName>
+        <description>ASI_CTY_CN_Vendor_SIR_Approval_Rejected</description>
+        <field>ASI_CTY_CN_Vendor_SIR_Approval_Status__c</field>
+        <literalValue>Rejected</literalValue>
+        <name>Update SIR Approvl Status To Rejected</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Notification</fullName>
+        <field>ASI_MFM_NotificationtoOperation__c</field>
+        <literalValue>1</literalValue>
+        <name>Update SIR Notification To True</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_PPL_Notification</fullName>
+        <field>ASI_MFM_Notification_to_Operation__c</field>
+        <literalValue>1</literalValue>
+        <name>Update SIR PPL Notification To True</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+        <targetObject>ASI_MFM_PO_POSM_Line_Number__c</targetObject>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_PendingConfirm</fullName>
+        <description>ASI_CTY_CN_Vendor_Update_SIR_Approvl_Status_PendingConfirm</description>
+        <field>ASI_CTY_CN_Vendor_SIR_Approval_Status__c</field>
+        <literalValue>Pending Confirm</literalValue>
+        <name>Update SIR Approvl Status PendingConfirm</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Status_Confirmed</fullName>
+        <description>Update SIR Status To Confirmed</description>
+        <field>ASI_MFM_Status__c</field>
+        <literalValue>Confirmed</literalValue>
+        <name>Update SIR Status To Confirmed</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CTY_CN_Vendor_SIR_Status_NoConfirm</fullName>
+        <description>Update SIR Status To Pending Confirm</description>
+        <field>ASI_MFM_Status__c</field>
+        <literalValue>Pending Confirm</literalValue>
+        <name>Update SIR Status To Pending Confirm</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>true</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_MFM_CN_Uncheck_OP_Notification_Flag2</fullName>
+        <field>ASI_MFM_NotificationtoOperation__c</field>
+        <literalValue>0</literalValue>
+        <name>ASI_MFM_CN_Uncheck_OP_Notification_Flag2</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Literal</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_CTY_CN_Vendor_SIR_PPL_Notification_Rule</fullName>
+        <actions>
+            <name>ASI_CTY_CN_Vendor_SIR_PPL_Notification</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_Stock_In_Request__c.ASI_CTY_CN_Vendor_SIR_Approval_Status__c</field>
+            <operation>equals</operation>
+            <value>Confirmed</value>
+        </criteriaItems>
+        <description>SIR PPL Notification Rule</description>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+    <rules>
+        <fullName>ASI_MFM_CN_POSM_Notification_To_OP2</fullName>
+        <actions>
+            <name>ASI_MFM_CN_POSM_Notify_OP2</name>
+            <type>Alert</type>
+        </actions>
+        <actions>
+            <name>ASI_MFM_CN_Uncheck_OP_Notification_Flag2</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_MFM_Stock_In_Request__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>CN Stock In Request</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_MFM_Stock_In_Request__c.ASI_MFM_NotificationtoOperation__c</field>
+            <operation>equals</operation>
+            <value>True</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

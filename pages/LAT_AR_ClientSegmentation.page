@@ -1,0 +1,193 @@
+<apex:page lightningStyleSheets="true" standardController="Account" extensions="LAT_AR_ClientSegmentationController">
+  
+<html xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>Crear Cliente</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <apex:slds />
+  </head>
+  
+  <body class="slds-scope">
+    <div class="slds">
+      <div class="slds-page-header">
+        <div class="slds-grid">
+          <div class="slds-col slds-has-flexi-truncate">
+            <div class="slds-media slds-no-space slds-grow">
+              <div class="slds-media__figure">
+                <svg aria-hidden="true" class="slds-icon slds-icon-standard-account">
+                  <use xlink:href="{!URLFOR($Asset.SLDS, 'assets/icons/standard-sprite/svg/symbols.svg#account')}"></use>
+                </svg>
+              </div>
+              <div class="slds-media__body">
+                <p class="slds-text-title_caps slds-line-height_reset">Nuevo Cliente</p>
+                <h1 class="slds-page-header__title slds-m-right_small slds-align-middle slds-truncate" title="New Account">Informacion</h1>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> 
+      <div class="slds">
+        <div class="content">          
+          <apex:form >              
+            <apex:actionStatus id="myStatus" onstop="uncheckOptions()">
+              <apex:facet name="start">
+                <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_BR_VFP05_00023}"/>
+                <!-- Label.LAT_BR_VFP05_00023 = Espere... -->
+              </apex:facet>
+            </apex:actionStatus>
+              
+            <apex:pageBlock mode="edit" id="panel">              
+              <apex:pageMessages id="msg" />
+              <apex:pageBlockSection columns="1">
+                <apex:inputField value="{! newAccount.Name }" rendered="{!isNew}"/>
+                <apex:outputField value="{! newAccount.Name }" rendered="{!!isNew}"/>
+                <apex:inputField value="{! newAccount.CNPJ__c }" required="true" />
+                <apex:inputCheckbox value="{! isOpenBottle }" label="El cliente comercializa botella abierta" rendered="{!isNew}"/> 
+              </apex:pageBlockSection>
+              <br/><br/>
+              
+              <p class="slds-text-title_caps slds-m-left_large {!IF((isNew),'slds-hide','')}">Selecciona la opción que corresponda:</p>
+              <apex:variable var="index" value="{!0}" /> 
+              <apex:repeat value="{!questions}" var="qst" id="question" rendered="{!!isNew}">
+                <apex:pageBlockSection rendered="{!AND(index <= actualLevel, qst.showQuestion)}" >
+                  <apex:outputLabel value="{! qst.question }" />
+                  <apex:selectRadio value="{! qst.response }" onchange="showNextLevel(this, {!index}, '{!qst.label}', {!actualLevel}, {!maxLevel-1}, {!isOpenBottle})" styleClass="options" disabled="{!index < actualLevel}" >
+                    <apex:selectOptions value="{!items}" />  
+                  </apex:selectRadio><p/>
+                </apex:pageBlockSection>
+                <apex:variable var="index" value="{!index+1}"/>
+              </apex:repeat>
+
+              <apex:pageBlockButtons rendered="{!isNew}">
+                <apex:commandButton value="Cancelar" action="{!cancel}" styleClass="slds-button slds-button_neutral" />
+                <apex:commandButton value="Siguiente" action="{!saveAccount}" oncomplete="uncheckOptions();" styleClass="slds-button slds-button_brand" rendered="{!isNew}" rerender="panel" status="myStatus"/>
+              </apex:pageBlockButtons>
+              <apex:pageBlockButtons rendered="{!!isNew}">
+                <apex:commandButton value="Cancelar" action="{!cancel}" styleClass="slds-button slds-button_neutral" />
+                <a onclick="setResponse(this);" class="nextButton slds-button slds-button_brand" disabled="true">Siguiente</a>
+                <a onclick="setParams(this);" class="saveButton slds-button slds-button_brand" disabled="true">Guardar</a>
+              </apex:pageBlockButtons>
+            </apex:pageBlock>
+            
+            <apex:actionFunction name="nextLevelFunction" action="{!nextLevel}" rerender="panel" status="myStatus" oncomplete="uncheckOptions ();" >
+              <apex:param name="questionLabel" value="" assignTo="{!questionLabel}"/>
+              <apex:param name="response" value="" assignTo="{!response}"/>
+            </apex:actionFunction>                  
+            <apex:actionFunction name="updateAccountFunction" action="{!updateAccountAR}" rerender="panel" status="myStatus" >
+              <apex:param name="questionLabel" value="" assignTo="{!questionLabel}"/>
+              <apex:param name="response" value="" assignTo="{!response}"/>
+            </apex:actionFunction>
+          </apex:form>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
+<script type="text/javascript">
+  var question, answer;
+  function setResponse(button) {
+    if (button.getAttribute('disabled')) return false;
+    nextLevelFunction(question, answer);
+  }
+    
+  function setParams(button) {
+    if (button.getAttribute('disabled')) return false;
+    updateAccountFunction(question, answer);
+  }
+
+  function showNextLevel(item, index, qst, level, maxLevel, isOpenBottle) {
+    var nextButtons = document.getElementsByClassName('nextButton');
+    var saveButtons = document.getElementsByClassName('saveButton');
+      
+    // Set values to store decision
+    question = qst;
+    answer = item.value;
+    
+    if (level == maxLevel) {
+      showSaveButton(nextButtons, saveButtons);
+    } else {
+      if (isOpenBottle) {
+        if (item.value == 'true') { 
+          showSaveButton(nextButtons, saveButtons);
+        } else {
+          showNextButton(nextButtons, saveButtons);
+        }
+      } else {
+        if (level < 2) {
+          showNextButton(nextButtons, saveButtons);
+        } else {
+          switch (question) {
+            case "LAT_AR_Level4_1OffTrade":
+            case "LAT_AR_Level4_2OffTrade":
+            case "LAT_AR_Level6_1OffTrade":
+              if (item.value == 'true') { 
+                showNextButton(nextButtons, saveButtons);
+              } else {
+                showSaveButton(nextButtons, saveButtons);
+              }
+              break;
+            case "LAT_AR_Level4_3OffTrade":
+            case "LAT_AR_Level4_4OffTrade":
+            case "LAT_AR_Level5_2OffTrade":
+            case "LAT_AR_Level5_3OffTrade":
+            case "LAT_AR_Level6_4OffTrade":
+              showNextButton(nextButtons, saveButtons);
+              break;
+            case "LAT_AR_Level5_1OffTrade":
+            case "LAT_AR_Level5_6OffTrade":
+            case "LAT_AR_Level6_2OffTrade":
+            case "LAT_AR_Level6_3OffTrade":
+            case "LAT_AR_Level6_5OffTrade":
+            case "LAT_AR_Level6_6OffTrade":
+            case "LAT_AR_Level7_1OffTrade":
+            case "LAT_AR_Level7_3OffTrade":
+            case "LAT_AR_Level8_1OffTrade":
+              showSaveButton(nextButtons, saveButtons);
+              break;              
+            case "LAT_AR_Level5_4OffTrade":              
+            case "LAT_AR_Level5_5OffTrade":
+            case "LAT_AR_Level7_2OffTrade":
+              if (item.value == 'true') {   
+                showSaveButton(nextButtons, saveButtons);
+              } else {
+                showNextButton(nextButtons, saveButtons);
+              }
+              break;
+            default:
+              console.log(question);
+          }
+        }
+      }
+    }
+  }
+
+  function showNextButton(nextButtons, saveButtons) {      
+    for(var i=0; i<nextButtons.length ; i++){
+      nextButtons[i].removeAttribute("disabled");
+    }
+    for(var i=0; i<saveButtons.length ; i++){
+      saveButtons[i].setAttribute("disabled", "disabled");
+    }
+  }
+  function showSaveButton(nextButtons, saveButtons) {      
+    for(var i=0; i<nextButtons.length ; i++){
+      nextButtons[i].setAttribute("disabled", "disabled");
+    }
+    for(var i=0; i<saveButtons.length ; i++){
+      saveButtons[i].removeAttribute("disabled");
+    }
+  }
+
+  function uncheckOptions(){ 
+    var w = document.getElementsByClassName('options');   
+    if (w.length > 0) {
+      var radio = w[w.length-1].getElementsByTagName('input');
+      radio[0].checked = false; 
+      radio[1].checked = false; 
+    }
+  } 
+</script>
+</apex:page>

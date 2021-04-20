@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fieldUpdates>
+        <fullName>ASI_CRM_MY_Update_Region_ContractTarget</fullName>
+        <field>ASI_CRM_Branch__c</field>
+        <formula>ASI_CRM_Contract__r.ASI_CRM_Branch__c</formula>
+        <name>ASI_CRM_MY_Update_Region_ContractTarget</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <fieldUpdates>
+        <fullName>ASI_CRM_SG_TargetCaseDefaultUpdate</fullName>
+        <field>ASI_CRM_TargetCase__c</field>
+        <formula>0.01</formula>
+        <name>ASI_CRM_SG_TargetCaseDefaultUpdate</name>
+        <notifyAssignee>false</notifyAssignee>
+        <operation>Formula</operation>
+        <protected>false</protected>
+        <reevaluateOnChange>false</reevaluateOnChange>
+    </fieldUpdates>
+    <rules>
+        <fullName>ASI_CRM_SG_TargetCaseDefault</fullName>
+        <actions>
+            <name>ASI_CRM_SG_TargetCaseDefaultUpdate</name>
+            <type>FieldUpdate</type>
+        </actions>
+        <active>true</active>
+        <criteriaItems>
+            <field>ASI_CRM_ContractTarget__c.RecordTypeId</field>
+            <operation>equals</operation>
+            <value>Contract Target (SG),Contract Target Simulation (SG)</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>ASI_CRM_ContractTarget__c.ASI_CRM_TargetCase__c</field>
+            <operation>equals</operation>
+            <value>0</value>
+        </criteriaItems>
+        <triggerType>onCreateOrTriggeringUpdate</triggerType>
+    </rules>
+</Workflow>

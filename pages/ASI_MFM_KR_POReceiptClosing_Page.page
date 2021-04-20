@@ -1,0 +1,994 @@
+<apex:page controller="ASI_MFM_KR_PORC_Controller" sidebar="false" readOnly="true" title="PO Receipt Closing Page" docType="html-5.0"  >
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        
+        <!--------------------------------------------------   Added by Kammy on 3 Mar 2016 Start:--------------------------------------------------------------->
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap-theme.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, 'bootstrap.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, 'build.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.min.css')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" /> 
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+       <!---- <apex:includeScript value="{!URLFOR($Resource.ASI_JS_FixedColumns_V3_2_1, 'FixedColumns-3.2.1/js/dataTables.fixedColumns.min.js')}" />---->
+         <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/currency.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/formatted-numbers.js')}" />
+        
+        <!--------------------------------------------------   Added by Kammy on 3 Mar 2016 End. --------------------------------------------------------------->
+        <script>
+        $j = jQuery.noConflict();
+        var table;
+        var PlanList=[];
+        var PostGLDate;
+        var CurrentMon;
+        $j.fn.dataTable.Api.register( 'sum()', function ( ) {
+            return this.flatten().reduce( function ( a, b ) {
+                if ( typeof a === 'string' ) {
+                    a = a.replace(/[^\d.-]/g, '') * 1;
+                }
+                if ( typeof b === 'string' ) {
+                    b = b.replace(/[^\d.-]/g, '') * 1;
+                }
+                
+                return a + b;
+            }, 0 );
+        } );
+        
+        $j.fn.dataTable.ext.search.push(
+            function( settings, data, dataIndex ) {
+                var min = parseFloat( $j('#min').val().replace(/\,/g,''), 10 );
+                var max = parseFloat( $j('#max').val().replace(/\,/g,''), 10 );
+                var age = parseFloat(data[17].replace(/\,/g,''))|| 0; 
+                
+                 var minpo = parseFloat( $j('#minpo').val().replace(/\,/g,''), 10 );
+                var maxpo = parseFloat( $j('#maxpo').val().replace(/\,/g,''), 10 );
+                var poamount = parseFloat(data[19].replace(/\,/g,''))|| 0;   //var age = parseFloat( data[15] ) || 0; // use data for the age column
+                //console.log('Min Amount: '+min + '   Max Amount   :   '+ max+ 'Now value'+ age);//console.log('F: Min Amount: '+minpo + '   F: Max Amount   :   '+ maxpo+ 'Now value'+poamount );
+                if ( ( isNaN( min ) && isNaN( max ) && isNaN( minpo ) && isNaN( maxpo )) ||
+                    ( isNaN( minpo ) && isNaN( maxpo ) && isNaN( min ) && age <= max ) ||
+                    ( isNaN( minpo ) && isNaN( maxpo ) && min <= age   && isNaN( max ) ) ||
+                    (isNaN( minpo ) && isNaN( maxpo ) &&  min <= age   && age <= max ) ||
+                    ( isNaN( min) && isNaN( max) && isNaN( minpo ) && poamount <= maxpo ) ||
+                    ( isNaN( min) && isNaN( max) && minpo <= poamount   && isNaN( maxpo ) ) || 
+                    (isNaN( min ) && isNaN( max) &&  minpo <= poamount   && poamount<= maxpo) ||
+                    (isNaN( min ) && age <= max &&  minpo <= poamount   && poamount<= maxpo) ||
+                    (min <= age   && isNaN( max )  &&  minpo <= poamount   && poamount<= maxpo) ||
+                    (min <= age   && age <= max  &&  minpo <= poamount   && poamount<= maxpo) || 
+                    (min <= age   && age <= max  &&   isNaN( minpo )   && poamount<= maxpo)||
+                    (min <= age   && age <= max  &&  minpo <= poamount   && isNaN( maxpo )) )
+                {
+                    return true;
+                }
+                return false;
+            }
+        );
+        
+        $j(document).ready(function(){
+            
+            PostGLDate='{!PostGLDate.ASI_MFM_Post_G_L_Date__c}';
+            setResultTable(true); 
+            
+            init();
+            CurrentMon='{!CurrentMonth}';
+            /* $j('#min, #max,#minpo, #maxpo').keyup( function() {
+                console.log('Enter calculate!!');
+                table.draw();
+                calculateSum();
+            } ); */             
+        });
+        
+      
+        
+        function init(){
+            createplanlist();
+            $j('[data-toggle="tooltip"]').tooltip(); 
+            calculateSum();
+            clearalert();
+        }
+        
+        $j(document).on('mousemove', function(e){
+            $j('#loadtext').css({
+                left:  e.pageX,
+                top:   e.pageY
+            }); 
+        });
+        
+     
+        function setResultTable(newTable){
+            table = $j('#dt_LineItems').DataTable({ 
+                "bDestroy":true,
+                "bAutoWidth":false,
+                "pagingType": "full_numbers",
+                "dom": '<<t>ip>',
+                "iDisplayLength":50, 
+                "order": [],
+                "columnDefs": [{ 
+                    "targets": 0, //checkbox
+                    "searchable": false,
+                    "orderable": false
+                },{ 
+                    "targets": 6, //checkbox
+                    "searchable": false,
+                    "orderable": false
+                },{ 
+                    "targets": -2, //checkbox
+                    "searchable": false,
+                    "orderable": false
+                },{ 
+                    "targets": 1, //Map Key
+                    "searchable": false,
+                    "visible": false
+                },{
+                    "render": function ( data, type, row ) {
+                         return formatNumber(data); 
+                    },
+                    "targets": 18,
+                    type: 'currency'
+                },{
+                    "render": function ( data, type, row ) {
+                         return formatNumber(data); 
+                    },
+                    "targets": 19,
+                    type: 'currency'
+                }]
+                
+            });
+        }
+        
+        function formatNumber(n) {
+            var  n = parseFloat(Math.round(n * 100) / 100).toFixed(2);
+            return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        function showdetails(theId, e){
+            var tr = e.closest('tr');
+            var row = table.row( tr );
+            if ( row.child.isShown() ) {
+                row.child.hide();
+            }else{
+                row.child( format(row.data()) ).show();
+            }
+            
+            if(e.textContent==='-'){
+                 e.textContent='+'; 
+            }else{
+                 e.textContent='-';
+                
+            }
+            
+         
+        };
+        
+        // Add Commas in number               showspan
+        function addCommas(nStr) 
+        { 
+            nStr += '';
+            x = nStr.split('.');
+            x1 = x[0];
+            x2 = x.length > 1 ? '.' + x[1] : '';
+            var rgx = /(\d+)(\d{3})/;
+            while (rgx.test(x1)) {
+                x1 = x1.replace(rgx, '$1' + ',' + '$2');
+            }
+            return x1 + x2;
+        }
+        
+        
+        function POReceiptClosing(){ // close po receipt 
+            var updatelist=[];
+           
+            var hiddenJsonData =  $j('#PORClinediv').html() 
+            var $mapParentChildren = JSON.parse(hiddenJsonData);  // var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(mapPORClineJSON)}');
+            
+            for (var key in $mapParentChildren) {
+                for (i = 0; i <$mapParentChildren[key].length; i++) {
+                    updatelist.push($mapParentChildren[key][i].Id);
+                }
+            }
+            
+            
+             //console.log( $j('#PostGLDatediv span').html());
+            PostGLDate= $j('#PostGLDatediv span').html();
+            //console.log(PostGLDate);
+            if(isNaN(PostGLDate)){
+                clearalert();
+                progressinfo('alert-info','alertMeg','Working in progress now. Please wait . Thank you....');
+                //construct POST G/L Date
+                var temp =new Date(PostGLDate);
+                var postgldateyear=new Date(PostGLDate).getFullYear();
+                var postgldatemonth=new Date(PostGLDate).getMonth();
+                var postgldatedate=new Date(PostGLDate).getDate();
+                
+                console.log('POST GL DATE: '+postgldateyear+postgldatemonth+postgldatedate);
+                
+                 Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ASI_MFM_KR_PORC_Controller.poReceiptClose}',updatelist ,CurrentMon,postgldateyear,postgldatemonth,postgldatedate
+                    , showresult
+                    , {escape: true}
+                );  
+            }else{
+                 showmessage('alertMeg','Please input Post G/L Date!');
+            }
+            
+        }
+        
+        
+        function showresult(result, event){
+           
+            if (event.status) {
+                if (result) {
+                    clearalert();
+                    var inhtml='<div class="alert ';
+                    if(result.indexOf('Success') > -1){
+                        //console.log('Contain Save Success ');
+                        inhtml+=' alert-success ';
+                    }else{
+                        //console.log('Not Contain Save Success ');// 'alert-info  
+                        inhtml+=' alert-warning ';
+                    }
+                     inhtml+=' fade in "> <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a> '+result+'</div>';
+                    $j('#alertMeg').html(inhtml);
+                }
+            }else{
+                var inhtml='<div class="alert alert-danger fade in "> <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a> '+event.message+'</div>';
+                $j('#alertMeg').html(inhtml);
+            }
+            calculateSum();
+        }
+        
+        function progressinfo(divtype,divid,message){
+            var inhtml='<div class="alert '+divtype+'  fade in "><i class="fa fa-refresh fa-spin"></i>  '+message+'</div>';
+            $j('#'+divid).html(inhtml);
+        }
+        
+        function uncheckflag(){
+            progressinfo('alert-info','alertMeg','Working in progress now. Please wait . Thank you....');
+            var updatelist=[];
+             var hiddenJsonData =  $j('#maplinediv').html() 
+            var $mapParentChildren = JSON.parse(hiddenJsonData);
+            // var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(maplineJSON)}');
+            for (var key in $mapParentChildren) {
+                if($mapParentChildren[key].Plan.ASI_MFM_Email_Notification__c){
+                    updatelist.push($mapParentChildren[key].Plan.Id);
+                }
+            }
+            $j(".Inputcheckbox").each(function(){ 
+                $j(this).prop( "checked", false );
+            });   
+             Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_PORC_Controller.uncheckallflag}',updatelist
+                , showresult
+                , {escape: true}
+            ); 
+            calculateSum();
+        }
+        
+        //check checkbox in table
+        function createplanlist(){
+             var hiddenJsonData =  $j('#maplinediv').html() 
+            var $mapParentChildren = JSON.parse(hiddenJsonData);
+            // var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(maplineJSON)}');
+            for (var key in $mapParentChildren) {
+                /*
+                $j(".PRPOcheckbox").each(function(){ 
+                    if(key==$j(this).attr('map-id')){
+                        //console.log(key +'  ||   '+$mapParentChildren[key].PRPONeeded);
+                        if($mapParentChildren[key].PRPONeeded){
+                            $j(this).prop( "checked", true );
+                        }
+                    }
+                    
+                 });
+                */
+                $j(".Inputcheckbox").each(function(){ 
+                    if( $mapParentChildren[key].Plan.Id==$j(this).attr('plan-id')){
+                        if($mapParentChildren[key].Plan.ASI_MFM_Email_Notification__c){
+                            $j(this).prop( "checked", true );
+                        }
+                    }
+                });
+                
+            }
+        }
+        
+        
+        function RunReport(){
+             progressinfo('alert-info','alertMeg','Working in progress now. Please wait . Thank you....');
+            var pllist=[];
+            PlanList=[];
+           $j(".Inputcheckbox").each(function(){ 
+               if(pllist.indexOf($j(this).attr('plan-id'))==-1){
+                   pllist.push($j(this).attr('plan-id'));
+                   var tempplan = new ASI_MFM_Plan__c();
+                   tempplan.Id = $j(this).attr('plan-id');
+                   tempplan.ASI_MFM_Email_Notification__c = $j(this).is(':checked');
+                   PlanList.push(tempplan);
+               }
+            });
+            
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.ASI_MFM_KR_PORC_Controller.updatePlan}',PlanList 
+                , showReportResult
+                , {escape: true}
+            );  
+            
+        }
+        
+        //Clear message
+        function clearalert(){
+            var inhtml='';
+            $j('#alertMeg').html(inhtml);
+        }
+        
+        function showReportResult(result, event){
+            
+            if (event.status) {
+                if (result) {
+                    clearalert();
+                    if(result.substring(1, 13)==='Save Success'){
+                        var ReportId = "{!$Setup.ASI_MFM_Report__c.ASI_MFM_KR_Plan_Email_Notification__c}";
+                        window.onload = window.setTimeout(redirect(ReportId),5000);
+                    }else{
+                        var inhtml='<div class="alert alert-info fade in "> <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a> '+result+'</div>';
+                        $j('#alertMeg').html(inhtml);
+                    }
+                }
+                
+            }
+            
+        }
+        
+        //redirect page: Open a URL in a new tab 
+        function redirect(urlid){//window.location.href='/'+urlid;
+            window.open('/'+urlid,'_blank');
+        }
+        
+        // click Plan check box
+        function checkPlanbox(planid,checkaction){
+            clearalert();
+            $j(".Inputcheckbox").each(function(){ 
+                if($j(this).attr('plan-id')==planid){
+                    if(checkaction){
+                        $j(this).prop( "checked", true );
+                    }else{
+                        $j(this).prop( "checked", false );
+                    }
+                }
+            });
+        }
+        
+        
+        function format(d){
+            
+            clearalert();
+            var tablehtml='<table class="bs table table-condensed table-hover"><tr style="font-weight:bold;"><td>JDE Accruals</td><td>PO Receipt Line</td><td>PO</td><td>PO Line</td><td>Plan Line</td><td>Customer</td><td>Venue(Where)</td><td>Receipt Date</td><td>Remark</td><td>Status</td><td style="text-align:right;">PO Receipt Amount</td></tr>';
+            // var $mapParentChildren = jQuery.parseJSON('{!JSENCODE(mapPORClineJSON)}');//console.log($mapParentChildren[d[2]]); //console.log(d[1]);
+			
+             var hiddenJsonData =  $j('#PORClinediv').html() 
+            var $mapParentChildren = JSON.parse(hiddenJsonData);  
+            
+            
+            //  console.log(d[1]);
+            //console.log($mapParentChildren);
+            for (i = 0; i <$mapParentChildren[d[1]].length; i++) {
+                tablehtml+='<tr>';
+                
+                if($mapParentChildren[d[1]][i].ASI_MFM_ACC_Verify__c){
+                  tablehtml+='<td> <div class="checkbox checkbox-primary"><input type="checkbox" class="styled" checked disabled /> <label></label> </div></td> ';
+                }else{
+                   tablehtml+='<td> <div class="checkbox checkbox-primary"><input type="checkbox" class="styled" disabled /> <label></label> </div></td> ';
+                }
+                
+                tablehtml+= '<td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].Id+'">'+$mapParentChildren[d[1]][i].Name+'</a></td>';
+                tablehtml+='</td><td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].ASI_MFM_PO_Line_Item__c+'">'+$mapParentChildren[d[1]][i].ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.Name+'</a></td>';
+                tablehtml+='</td><td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__c+'">'+$mapParentChildren[d[1]][i].ASI_MFM_PO_Line_Item__r.Name+'</a></td>';
+                
+                if(typeof $mapParentChildren[d[1]][i].ASI_MFM_Plan_Line_Item__c==="undefined"){
+                    tablehtml+='<td>';
+                }else{
+                    tablehtml+='</td><td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].ASI_MFM_Plan_Line_Item__c+'">'+$mapParentChildren[d[1]][i].ASI_MFM_Plan_Line_Item__r.Name+'</a></td>';
+                }
+                
+                if(typeof $mapParentChildren[d[1]][i].ASI_MFM_AccountsAdditionalField__c==="undefined"){
+                    tablehtml+='<td>';
+                }else{
+                    tablehtml+='</td><td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].ASI_MFM_AccountsAdditionalField__c+'">'+$mapParentChildren[d[1]][i].ASI_MFM_AccountsAdditionalField__r.Name+'</a></td>';
+                }
+                
+                if(typeof $mapParentChildren[d[1]][i].ASI_MFM_Venue_Where__c==="undefined"){
+                    tablehtml+='<td>';
+                }else{
+                    tablehtml+='</td><td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/'+$mapParentChildren[d[1]][i].ASI_MFM_Venue_Where__c+'">'+$mapParentChildren[d[1]][i].ASI_MFM_Venue_Where__r.Name+'</a></td>';
+                }
+                tablehtml+='</td><td>'+$mapParentChildren[d[1]][i].ASI_MFM_Receipt_Date__c;
+                
+                if(typeof $mapParentChildren[d[1]][i].ASI_MFM_Remark__c==="undefined"){
+                    tablehtml+='<td>';
+                }else{
+                    tablehtml+='<td>'+$mapParentChildren[d[1]][i].ASI_MFM_Remark__c;
+                }
+                 tablehtml+='<td>'+$mapParentChildren[d[1]][i].ASI_MFM_PO_Receipt__r.ASI_MFM_Status__c;
+                
+                tablehtml+= '</td><td style="font-weight:bold;text-align:right;">'+addCommas($mapParentChildren[d[1]][i].ASI_MFM_Receipt_Amount_in_Local_Currency__c)+
+                    '</td></tr>';
+                
+            }
+            
+            tablehtml+='</table>';
+            return tablehtml;  
+        }
+        
+        
+          
+        function CalculateColumn(colName){//console.log('=================='+colName);
+            var sumcount=0;
+            $j(colName).each(function() {
+                
+                var NumNow= parseFloat( $j(this).html().replace(/\s/g, '').replace(/\,/g,''), 10 );//console.log($j(this).html()+'   ||   '+NumNow);
+                sumcount=sumcount+NumNow;
+            }); // console.log(sumcount); 
+            return sumcount;
+        }
+        
+        
+        
+        function calculateSum(){
+            
+            $j('#TotalPlanAmount').html(ChangeNumberDisplay(CalculateColumn('.PlanAmount')));
+            
+             $j('#TotalPOAmount').html(ChangeNumberDisplay(CalculateColumn('.POAmount') ));
+            $j('#TotalM1Amount').html(ChangeNumberDisplay(CalculateColumn('.M1Amount') ));
+            $j('#TotalMTDAmount').html(ChangeNumberDisplay(CalculateColumn('.MTDAmount') ));
+            $j('#PlanBalance').html(ChangeNumberDisplay(CalculateColumn('.PlanAmt') ));
+            $j('#POBalance').html(ChangeNumberDisplay( CalculateColumn('.POBal')));
+            
+             /*   ;
+             $j('#TotalPlanAmount').html(ChangeNumberDisplay(table.column( 14 ).data().sum()));
+           
+             $j('#TotalPOAmount').html(ChangeNumberDisplay(table.column( 15 ).data().sum()));
+            $j('#TotalM1Amount').html(ChangeNumberDisplay(table.column( 16 ).data().sum()));
+            $j('#TotalMTDAmount').html(ChangeNumberDisplay(table.column( 17 ).data().sum()));
+            $j('#PlanBalance').html(ChangeNumberDisplay(table.column( 18).data().sum()));
+            $j('#POBalance').html(ChangeNumberDisplay(table.column( 19).data().sum()));
+           */
+        }
+        
+        function ChangePostGLDate(e){
+        	PostGLDate=e.value;
+        	//check Null
+        	if(isNaN(PostGLDate)){
+        	    clearalert();
+        	}else{
+        	    //show error message 
+        	     showmessage('alertMeg','Please input Post G/L Date!');
+        	}
+        
+        }
+        
+        
+        function showmessage(divid,message){
+            var inhtml='<div class="alert alert-danger fade in "> '+message+'</div>';
+            $j('#'+divid).html(inhtml);
+        }
+
+        function ChangeNumberDisplay(num){//One million = 1000000
+            var BackNumber;
+            if(num>1000000){//console.log(num);
+                var tempnum=(Math.round(num/1000000)).toFixed(0);//console.log(addCommas(tempnum));
+                BackNumber=addCommas(tempnum)+'M';
+                //var temp=(Math.round(num/1000000)).toFixed(0).replace(/(\d)(?=(\d{3})+\.)/g, '$1,');
+                //BackNumber=temp.toString()+'M';
+            }else{
+                BackNumber=num.toFixed(2).replace(/(\d)(?=(\d{3})+\.)/g, '$1,');
+            }//console.log(BackNumber);
+            return BackNumber;
+        }
+        
+        function BeforeSearch(){
+            var selectSection= document.getElementById("selectDiv").children[0];
+            var selectOpt = selectSection.options; 
+            CurrentMon= selectOpt[selectSection.selectedIndex].value;
+           
+        }
+
+        
+        function ASI_MFM_Plan__c(){//Note the field names are case-sensitive
+            this.Id = null; //set a value here if you need to update or delete 
+            this.ASI_MFM_Email_Notification__c = null; //the field names must match the API names 
+        }
+                 
+        </script>
+        <style>
+             .dateFormat{
+            display:none;
+            }       
+            .headerNum {
+            text-align: right;
+            }
+            .headerCen {
+            text-align: center !important;
+            }
+            .numberAmount{
+            text-align:right;
+            font-weight:bold;
+            }
+            .boldstyle{
+             font-weight:bold;
+            }
+            
+             .boxed {
+            border-radius: 5px;
+            background-color: #46b8da; /*Add a background color to the box*/
+            text-align:center; /*Align the text to the center*/
+            color:#ffffff;
+            }
+             
+            
+        </style>
+    </head>
+    <body> 
+        
+        
+        <apex:form id="allform" > 
+            <div class="container-fluid" style="margin:0;">
+                <div class="bs row">  
+                    <div class="bs col-xs-12">
+                        
+                        <div class="bs col-xs-12 col-sm-6 col-md-8">
+                            <apex:outputPanel styleclass="bs" style="height:300px" >
+                                <div class="panel panel-primary" >
+                                    <div class="panel-heading">
+                                        <h5>
+                                            PO Receipt Closing
+                                        </h5>
+                                    </div>
+                                    
+                                    
+                                    
+                                    <div id="alertMeg"></div>
+                                    
+                                    <div class="panel-body" style=" padding-top: 2px; padding-bottom: 1px;">
+                                        
+                                        <div class="bs row">
+                                        <!-- Text input style="width:7em;" -->
+                                        
+                                            
+                                            
+                                            <div class="col-md-1" style="padding-left: 5x;padding-right: 3px;" >
+                                                <apex:outputLabel style="font-weight:bold;" >Fiscal Year:</apex:outputLabel>
+                                                <div class="form-group divsearch"  >
+                                                    <apex:selectList id="fiscalyear" value="{!Fiscal_Years}" size="1" styleClass="form-control searchcss input-sm" >
+                                                        <apex:selectOption itemValue="FY1213" itemLabel="FY1213"/>
+                                                        <apex:selectOption itemValue="FY1314" itemLabel="FY1314"/>
+                                                        <apex:selectOption itemValue="FY1415" itemLabel="FY1415"/>
+                                                        <apex:selectOption itemValue="FY1516" itemLabel="FY1516"/>
+                                                        <apex:selectOption itemValue="FY1617" itemLabel="FY1617"/>
+                                                        <apex:selectOption itemValue="FY1718" itemLabel="FY1718"/>
+                                                        <apex:selectOption itemValue="FY1819" itemLabel="FY1819"/>
+                                                        <apex:selectOption itemValue="FY1920" itemLabel="FY1920"/>
+                                                        <apex:selectOption itemValue="FY2021" itemLabel="FY2021"/>
+                                                        <apex:selectOption itemValue="FY2122" itemLabel="FY2122"/>
+                                                        <apex:selectOption itemValue="FY2223" itemLabel="FY2223"/>
+                                                    </apex:selectList>    
+                                                </div>
+                                                
+                                            </div>
+                                            
+                                            
+                                            <div class="col-md-1">
+                                                <apex:outputLabel style="font-weight:bold;" >Month:</apex:outputLabel>
+                                                <div class="form-group" id="selectDiv"  >
+                                                    <apex:selectList id="selectList1" value="{!CurrentMonth}" size="1" styleClass="form-control searchcss input-sm">
+                                                        <apex:selectOption itemValue="1" itemLabel="Jan"/>
+                                                        <apex:selectOption itemValue="2" itemLabel="Feb"/>
+                                                        <apex:selectOption itemValue="3" itemLabel="Mar"/>
+                                                        <apex:selectOption itemValue="4" itemLabel="Apr"/>
+                                                        <apex:selectOption itemValue="5" itemLabel="May"/>
+                                                        <apex:selectOption itemValue="6" itemLabel="June"/>
+                                                        <apex:selectOption itemValue="7" itemLabel="July"/>
+                                                        <apex:selectOption itemValue="8" itemLabel="Aug"/>
+                                                        <apex:selectOption itemValue="9" itemLabel="Sep"/>
+                                                        <apex:selectOption itemValue="10" itemLabel="Oct"/>
+                                                        <apex:selectOption itemValue="11" itemLabel="Nov"/>
+                                                        <apex:selectOption itemValue="12" itemLabel="Dec"/>
+                                                    </apex:selectList>
+                                                </div>
+                                                
+                                                
+                                            </div>
+                                            
+                                            
+                                            <div class="col-md-1">
+                                                <apex:outputLabel style="font-weight:bold;" >Status:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:selectList id="BAV1" value="{!SelectStatus}" size="1" styleClass="form-control searchcss input-sm">
+                                                        <apex:selectOption itemValue="" itemLabel=" "/>
+                                                        <apex:selectOption itemValue="Approved" itemLabel="Approved"/>
+                                                        <apex:selectOption itemValue="Closed" itemLabel="Closed"/>
+                                                    </apex:selectList>
+                                                </div>
+                                                
+                                            </div>
+                                            
+                                            <div class="col-md-1">
+                                                <apex:outputLabel style="font-weight:bold;" >A&amp;P Type:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:selectList id="selectList2" value="{!selectedAPType}" size="1" styleClass="form-control searchcss input-sm">
+                                                        <apex:selectOption itemValue="" itemLabel=" "/>
+                                                        <apex:selectOption itemValue="A&D" itemLabel="A&D"/>
+                                                        <apex:selectOption itemValue="Media A&P" itemLabel="Media A&P"/>
+                                                        <apex:selectOption itemValue="Other A&P" itemLabel="Other A&P"/>
+                                                        <apex:selectOption itemValue="Trade A&P" itemLabel="Trade A&P"/>
+                                                    </apex:selectList>
+                                                </div>
+                                                
+                                                
+                                            </div>
+                                            
+                                            <div class="col-md-2">
+                                                <apex:outputLabel style="font-weight:bold;" >Company</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:selectList id="selectList4" value="{!CompanyFilter}" size="1" styleClass="form-control searchcss input-sm" >
+                                                        <apex:selectOption itemValue="222" itemLabel="PRK"/>
+                                                        <apex:selectOption itemValue="286" itemLabel="PRKI"/>
+                                                    </apex:selectList>
+                                                </div>
+                                                
+                                            </div>
+                                            
+                                            
+                                            <div class="col-md-2">
+                                                <apex:outputLabel style="font-weight:bold;" >PR/PO Needed?</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:selectList id="selectList3" value="{!PRPONeed}" size="1" styleClass="form-control searchcss input-sm" >
+                                                        <apex:selectOption itemValue="Yes" itemLabel="Yes"/>
+                                                        <apex:selectOption itemValue="No" itemLabel="No"/>
+                                                    </apex:selectList>
+                                                </div>
+                                                
+                                            </div>
+                                            
+                                            <div class="col-md-2">
+                                                <apex:outputLabel style="font-weight:bold;">Sub-Brand Code:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!SBCode}"  styleClass="form-control searchcss input-sm" html-placeholder="Sub-Brand" />
+                                                </div>
+                                            </div> 
+                                            
+                                            <div class="col-md-2">
+                                                <apex:outputLabel style="font-weight:bold;">Plan Requester:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!PlanRequester}"  styleClass="form-control searchcss input-sm" html-placeholder="Requester" />
+                                                   
+                                                </div>
+                                            </div>
+                                            
+                                          
+                                    </div>
+                                         
+                                    </div>
+                                    
+                                    <div class="bs row panel-body" style=" padding-top: 1px; padding-bottom: 1px; " >
+                                       
+                                            
+                                            
+                                        <div class="col-md-2" >
+                                            <div class="panel panel-primary" >
+                                              <div class="panel-heading" style="padding: 2px 2px; text-align: center;" >Post G/L Date</div>
+                                                <div class="panel-body" id="PostGLDatediv"> <apex:outputField value="{!PostGLDate.ASI_MFM_Post_G_L_Date__c}"  styleClass="form-control searchcss input-sm PostGLDate " /></div>
+                                            </div>
+                                        </div>
+                                        
+                                           <div class="col-md-1">
+                                                <div class="form-group">
+                                                    
+                                                    <apex:commandButton value="Search"
+                                                                        styleClass="bs btn btn-primary"
+                                                                        action="{!runSearch}"
+                                                                        status="ActionStatus"
+                                                                        onclick="BeforeSearch();table.page.len( -1 ).draw(false);"
+                                                                        oncomplete="setResultTable(true);init();"
+                                                                        rerender="SaveSuccessPart,allform,results,SaveFailPart" /> 
+                                                    
+                                                </div>
+                                            </div>
+                                            
+                                            
+                                        <!---
+                                        <div class="col-xs-2">
+                                            <div class="form-group divsearch boxed">
+                                                <apex:outputLabel style="font-weight:bold; text-align:left; ">Post G/L Date:</apex:outputLabel>
+                                                <br/>
+                                                <apex:outputField value="{!PostGLDate.ASI_MFM_Post_G_L_Date__c}"  styleClass="form-control searchcss input-sm PostGLDate " />
+                                            </div>
+                                        </div>
+                                        -->
+                                        
+                                       
+                                         <div class="col-md-1">
+                                            <div class="form-group">
+                                                <button type="button" data-toggle="tooltip"  title="ETL Report: If cannot open report , please allow pop-ups in your browser." data-placement="bottom"  class="btn btn-info" onclick="clearalert();window.onload = window.setTimeout(redirect('{!$Setup.ASI_MFM_Report__c.ASI_MFM_KR_PO_Receipt_Verify_Report__c}'),5000);">ETL Report</button>
+                                            </div>
+                                        </div>
+                                         
+                                        <div class="col-md-2">
+                                            <div class="form-group">
+                                                <button type="button" data-toggle="tooltip"  title="If cannot open report , please allow pop-ups in your browser." data-placement="bottom"  class="btn btn-info" onclick="clearalert();RunReport();">Email Alert Report</button>
+                                            </div>
+                                        </div>
+                                        
+                                        
+                                        <div class="col-md-2">
+                                            <div class="form-group">
+                                                <button type="button" data-toggle="tooltip"  data-placement="bottom"   title="Uncheck All the flags" class="btn btn-info" onclick="uncheckflag();">Uncheck Checkbox</button>
+                                                
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-2">
+                                            <div class="form-group">
+                                                <button type="button" data-toggle="modal"  data-placement="bottom"    title="Close this month PO Receipt" class="btn btn-info" data-target="#PORCModal" >PO Receipt Closing</button>    
+                                            </div>
+                                        </div>
+                                        
+                                        
+                                        
+                                      <div class="modal fade" id="PORCModal" role="dialog">
+                                        <div class="modal-dialog  modal-sm">
+                                        
+                                          <!-- Modal content-->
+                                          <div class="modal-content">
+                                            <div class="modal-header">
+                                              <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                              <h4 class="modal-title">Precess PO Receipt Closing</h4>
+                                            </div>
+                                            <div class="modal-body">
+                                              <p>Close all PO receipt Line in this month, OK?</p>
+                                            </div>
+                                            <div class="modal-footer">
+                                               <button type="button" class="btn btn-default" data-dismiss="modal" onclick="POReceiptClosing();" >Confirm</button> 
+                                              <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                            </div>
+                                          </div>
+                                         </div>
+                                          </div> 
+                                          
+                                    </div>
+                                    
+                                    
+                                </div>
+                            </apex:outputPanel>
+                        </div>    
+                        
+                        <div class="bs col-xs-6 col-md-2" >
+                            <apex:outputPanel styleclass="bs" style="height:300px" >
+                                <div class="panel panel-primary" >
+                                    <div class="panel-heading">
+                                        <h5>
+                                            D Column Filtering
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="panel-body">
+                                        <div class="bs row">
+                                            <!-- Text input-->
+                                            <div class="control-group">
+                                                <div class="col-xs-6 col-sm-6">
+                                                    <div class="form-group">
+                                                        <apex:outputLabel style="font-weight:bold;text-align: center;" >Minimum <br/> PO Receipt <br/> Amount:</apex:outputLabel>
+                                                        <input type="text" id="min" name="min" Class="form-control searchcss input-sm" onkeyup="table.draw();calculateSum();" />
+                                                    </div>
+                                                </div> 
+                                                
+                                                <div class="col-xs-6 col-md-6">
+                                                    <div class="form-group">
+                                                        <apex:outputLabel style="font-weight:bold;text-align: center;" >Maximum <br/>PO Receipt <br/> Amount:</apex:outputLabel>
+                                                        <input type="text" id="max" name="max" Class="form-control searchcss input-sm" onkeyup="table.draw();calculateSum();" />
+                                                    </div>
+                                                </div> 
+                                                
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    
+                                    <div class="bs row panel-body" >
+                                        <div class="col-xs-1">
+                                             <p/>
+                                        </div>
+                                    </div>
+                                   
+                                </div>
+                            </apex:outputPanel>
+                        </div>
+                        
+                        <div class="bs col-xs-6 col-md-2" >
+                            <apex:outputPanel styleclass="bs" style="height:300px" >
+                                <div class="panel panel-primary" >
+                                    <div class="panel-heading">
+                                        <h5>
+                                            F Column Filtering
+                                        </h5>
+                                    </div>
+                                    
+                                    <div class="panel-body">
+                                        <div class="bs row">
+                                            <!-- Text input-->
+                                            <div class="control-group">
+                                                
+                                                <div class="col-xs-6 col-sm-6">
+                                                    <div class="form-group">
+                                                        <apex:outputLabel style="font-weight:bold;text-align: center;" > Minimum PO <br/> Balance  <br/>vs. <br/>PO receipt:</apex:outputLabel>
+                                                        <input type="text" id="minpo" name="minpo" Class="form-control searchcss input-sm" onkeyup="table.draw();calculateSum();" />
+                                                    </div>
+                                                </div> 
+                                                
+                                                <div class="col-xs-6 col-sm-6">
+                                                    <div class="form-group">
+                                                        <apex:outputLabel style="font-weight:bold;text-align: center;" > Maximum PO <br/> Balance  <br/>vs.<br/> PO receipt:</apex:outputLabel>
+                                                        <input type="text" id="maxpo" name="maxpo" Class="form-control searchcss input-sm" onkeyup="table.draw();calculateSum();" />
+                                                    </div>
+                                                </div> 
+                                                
+                                            </div>
+                                            
+                                        </div>
+                                    </div>
+                                     <div class="bs row panel-body" >
+                                        <div class="col-xs-1">
+                                             <p/>
+                                        </div>
+                                    </div>
+                                    
+                                </div>
+                            </apex:outputPanel>
+                        </div>
+                        
+                        
+                    </div>
+                     
+                    <div style="display: none" id="PORClinediv">
+                        {!mapPORClineJSON}
+                    </div>
+                    
+                    <div style="display: none" id="maplinediv">
+                        {!maplineJSON}
+                    </div>
+                    <div class="bs col-xs-12">
+                        <apex:outputPanel styleclass="bs panel-primary" id="results">
+                            <table width="100%" border="0" id="dt_LineItems" class="hover table-striped responsive no-wrap display compact " >
+                                <thead>
+                                    <tr>
+                                        <th>Action</th>
+                                        <th>MapKey</th>
+                                        <th>Plan Code</th>
+                                        <th>Plan <br/> Description</th>
+                                        <th>Sub-Brand <br/>Code</th>
+                                        <th>Sub-Brand<br/> Description</th>
+                                        <th>PR/PO<br/> Needed</th>
+                                        <th>Project Code <br/>Description</th>
+                                        <th>Project Activity<br/>  Group</th>
+                                        <th>A&amp;P Type</th>
+                                        <th>Start Date</th>
+                                        <th>End  Date</th>
+                                        <th>Requester</th>
+                                        <th>Plan Status</th>
+                                        <th class="headerCen">Plan Amount<br/>(YTD)<br/>A</th>
+                                        <th  class="headerCen">PO Amount<br/>(YTD)<br/>B</th>
+                                        <th  class="headerCen">PO Receipt <br/>(M-1 YTD)<br/>C</th>
+                                        <th  class="headerCen">PO Receipt <br/>(MTD)<br/>D</th>
+                                        <th  class="headerCen">Plan <br/>Balance vs.<br/> PO receipt<br/>(E=A-C-D)</th>
+                                        <th  class="headerCen">PO <br/>Balance vs. <br/>PO receipt<br/>(F=B-C-D)</th>
+                                        <th>Email <br/>Notification</th>
+                                         <th>Email Address</th>
+                                    </tr>
+                                </thead>
+                                
+                                <tbody>
+                                    <apex:repeat value="{!lineItemMap}" var="PId">
+                                        <tr>
+                                           
+                                            <td>
+                                                <spam style="{!IF(lineItemMap[PId].HasPOReceipt=true,'','display:none')}">
+                                                    <button  id="showline" styleClass="IdExpandButton" onClick="showdetails('{!PId}', this);" style="padding: 5px;line-height:7px; width:20px;" type="button" class="bs btn btn-default"><span id="showspan">+</span>
+                                                    </button>
+                                                </spam>
+                                            </td>
+                                            <td>{!PId}</td>
+                                            <td><a target="_blank" href="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!lineItemMap[PId].Plan.Id}" >{!lineItemMap[PId].Plan.name}</a></td>
+                                            <td>{!lineItemMap[PId].Plan.ASI_MFM_Plan_Name__c}</td>
+                                            <td>{!lineItemMap[PId].SubBrand.ASI_MFM_Sub_brand_Code__c}</td>  
+                                            <td>{!lineItemMap[PId].SubBrand.name}</td>  
+                                            <td class="headerCen" >
+                                                <div style="{!IF(lineItemMap[PId].PRPONeeded,'display:none;','')} ">
+                                                    <div class="checkbox checkbox-primary">
+                                                        <input type="checkbox" disabled="disabled"  />
+                                                        <label></label>
+                                                    </div>
+                                                </div>  
+                                                <div style="{!IF(lineItemMap[PId].PRPONeeded,'','display:none;')}" >
+                                                    <div class="checkbox checkbox-primary">
+                                                        <input type="checkbox" checked="checked" disabled="disabled" />
+                                                        <label></label>
+                                                    </div>
+                                                </div>  
+                                            </td>
+                                            <td>{!lineItemMap[PId].ProjectCode.name}</td>  
+                                            <td>{!lineItemMap[PId].ProjectCode.ASI_MFM_Activity_Group__c}</td> 
+                                            <td>{!lineItemMap[PId].APCode.ASI_MFM_AP_Type__c}</td>  
+                                            <td><apex:outputText value="{0, date, MMMM d','  yyyy}"><apex:param value="{!lineItemMap[PId].Plan.ASI_MFM_Start_Date__c}" /> </apex:outputText></td>  
+                                            <td><apex:outputText value="{0, date, MMMM d','  yyyy}"><apex:param value="{!lineItemMap[PId].Plan.ASI_MFM_End_Date__c}" /> </apex:outputText></td>  
+                                           <td>{!lineItemMap[PId].Requester}</td>
+                                            <td>{!lineItemMap[PId].Plan.ASI_MFM_Status__c}</td>  
+                                            <td  class="numberAmount PlanAmount"><apex:outputText value="{0, number, ###,###,###,###,##0.00}" ><apex:param value="{!lineItemMap[PId].PlanAmount}" /></apex:outputText></td> 
+                                            <td  class="numberAmount POAmount"><apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!lineItemMap[PId].POAmount}" /></apex:outputText></td> 
+                                            <td  class="numberAmount M1Amount"><apex:outputText value="{0, number, ###,###,###,###,##0.00}" ><apex:param value="{!lineItemMap[PId].POReceiptAmountM}" /></apex:outputText></td> 
+                                            <td  class="numberAmount MTDAmount"><!--{!lineItemMap[PId].POReceiptAmount}--> <apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!lineItemMap[PId].POReceiptAmount}" /></apex:outputText></td> 
+                                            <td  class="numberAmount PlanAmt">{!lineItemMap[PId].PlanAmount-lineItemMap[PId].POReceiptAmountM-lineItemMap[PId].POReceiptAmount}</td> 
+                                            <td  class="numberAmount POBal">{!lineItemMap[PId].POAmount-lineItemMap[PId].POReceiptAmountM-lineItemMap[PId].POReceiptAmount}<!----<apex:outputText value="{0, number, ###,###,###,###,##0.00}"><apex:param value="{!lineItemMap[PId].POAmount-lineItemMap[PId].POReceiptAmountM-lineItemMap[PId].POReceiptAmount}" /></apex:outputText>---></td> 
+                                            <td class="headerCen" >
+                                                 <div class="checkbox checkbox-primary">
+                                                    <input type="checkbox" class="Inputcheckbox" plan-id="{!lineItemMap[PId].Plan.Id}" map-id="{!PId}" id= "{!PId}" onclick="checkPlanbox('{!lineItemMap[PId].Plan.Id}',$j(this).is(':checked'))"  /> 
+                                                     <label for="{!PId}"></label>
+                                                </div>
+                                            </td>
+                                            <td class="headerCen" >
+                                                <a href="mailto:{!lineItemMap[PId].EmailAddress}?Subject={!lineItemMap[PId].Plan.name}-%20{!lineItemMap[PId].Plan.ASI_MFM_Plan_Name__c}" target="_top">{!lineItemMap[PId].EmailAddress}</a>
+                                            </td>
+                                        </tr>
+                                    </apex:repeat>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan ="13" ></td>
+                                        <td class="boldstyle">Total:</td>
+                                        <td class="numberAmount"><div id="TotalPlanAmount"> </div></td>
+                                        <td class="numberAmount"><div id="TotalPOAmount"> </div></td>
+                                        <td class="numberAmount"><div id="TotalM1Amount"> </div></td>
+                                        <td class="numberAmount"><div id="TotalMTDAmount"> </div></td>
+                                        <td class="numberAmount"><div id="PlanBalance"> </div></td>
+                                        <td class="numberAmount"><div id="POBalance"> </div></td>
+                                        
+                                        <td></td>
+                                         <td></td>
+                                    </tr>
+                                </tfoot>
+                                
+                            </table>
+                            
+                            
+                        </apex:outputPanel>
+                    </div>
+                    
+                </div>
+            </div>
+        </apex:form>
+        
+        
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus> 
+        
+        
+        
+    </body>
+    
+    
+</apex:page>

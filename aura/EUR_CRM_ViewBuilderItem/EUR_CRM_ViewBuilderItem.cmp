@@ -1,0 +1,192 @@
+<aura:component >
+    <aura:attribute name="mode" type="String" default="create"/>
+    <aura:attribute name="item" type="Object" required="true" />
+    <aura:attribute name="items" type="List" access="global" description="The tree data"/>
+    <aura:attribute name="level" type="Integer" required="true" />
+    <aura:attribute name="branchIndex" type="String"/>
+    <aura:attribute name="config" type="Map" default="{}" />
+    <aura:attribute name="selectable" type="Boolean" default="false" />
+    <aura:attribute name="draggable" type="Boolean" default="false" />
+    <aura:attribute name="changeable" type="Boolean" default="false" />
+    <aura:attribute name="isDynamic" type="Boolean" default="false" />
+    <!-- Catalog is template RT, should show additional fields -->
+    <aura:attribute name="isTemplate" type="Boolean" default="false" />
+    <!-- Catalog is transfer RT, should show additional fields on top of template -->
+    <aura:attribute name="isTransfer" type="Boolean" default="false" />
+     <!-- Catalog is return RT, should hide packaging -->
+    <aura:attribute name="isReturn" type="Boolean" default="false" />
+    <!-- Object containing field labels for PBIs -->
+    <aura:attribute name="pbiFieldLabels" type="Object" access="public"/>
+    
+    <aura:attribute name="pageNo" type="Integer" default="1" access="private" />
+    <aura:attribute name="perPage" type="Integer" default="30" access="private" />
+    
+    <aura:attribute name="isDynamicDraggable" type="Boolean" default="false" />
+    <aura:attribute name="viewName" type="String" access="global"/>
+    <aura:attribute name="hierarchyDepth" type="Integer" default="1"/>
+
+    <aura:attribute name="droppedItems" type="List"/>
+
+    <aura:attribute name="label" type="String" access="private" />
+    <aura:attribute name="collapsed" type="Boolean" access="private" />
+    <aura:attribute name="sapCode" type="String" access="private" />
+    <aura:attribute name="itemIdentifier" type="String" access="private" />
+    <aura:attribute name="checked" type="Boolean" access="private" />
+    <aura:attribute name="children" type="List" access="private" />
+    <aura:attribute name="childrenShown" type="List" access="private" />
+    <aura:attribute name="toggleExpandIcon" type="String" access="private" default="utility:chevrondown" />
+    <aura:attribute name="onToggleExpand" type="Aura.Action" access="private" default="{!c.onToggleExpand}" />
+    <!-- Template delivery dates -->
+    <aura:attribute name="templDelDates" type="String[]" access="public" />
+    
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:handler name="render" value="{!this}" action="{!c.onRender}"/>
+    <aura:handler name="actionFieldChange" event="c:EUR_CRM_OP_ActionFieldChange" action="{!c.onActionFieldChange}"/>
+
+    <aura:registerEvent name="productsDropEvent" type="c:EUR_CRM_ProductsDropEvent"/>
+    <aura:registerEvent name="addCategoryEvent" type="c:EUR_CRM_AddCategoryEvent"/>
+    <aura:registerEvent name="hierarchyChangeEvent" type="c:EUR_CRM_HierarchyChangeEvent"/>
+    <aura:registerEvent name="viewItemsInputChangeEvent" type="c:EUR_CRM_ViewItemsInputChangeEvent"/>
+
+    <aura:method name="setDroppedItems" action="{!c.setDroppedItems}" access="public"
+                 description="Method to set droppedItems from parent component">
+        <aura:attribute name="droppedItems" type="List"/>
+    </aura:method>
+    
+    <aura:method name="doValidate" action="{!c.doValidate}" access="public"
+                 description="Method to force item validation">
+     </aura:method>
+     
+    <div class="slds-is-relative">
+    
+    
+    <li role="treeitem" aria-level="{!v.level}" class="treeItem">
+        <!-- Node/leaf -->
+        <div data-id="{!v.label}" class="slds-tree__item" draggable="{!v.mode == 'create' ? true : false}" ondragstart="{!c.dragCategory}" ondragover="{!c.onDragOver}" ondrop="{!c.dropCategory}">
+            <button class="slds-button slds-m-right--x-small" onclick="{!v.onToggleExpand}">
+                <lightning:icon iconName="{!v.toggleExpandIcon}" size="xx-small" class="slds-button__icon slds-button__icon--small" />
+            </button>
+            <aura:if isTrue="{!v.mode == 'create'}">
+                <div class="slds-form-element slds-m-around--x-small" onmouseover="{!c.onMouseOver}" onmouseleave="{!c.onMouseLeave}">
+                    <div class="slds-form-element__control" ondrop="{! c.onPreventDrop}" ondragenter="{! c.onPreventDragEnter}" ondragstart="{! c.onPreventDrop}">
+                        <ui:inputText aura:id="branchName" label=" " value="{!v.label}" placeholder="{!v.level == 1 ? $Label.c.EUR_CRM_CG_Branch : $Label.c.EUR_CRM_CG_SubBranch}" change="{!c.updateInputInHierarchy}" size="20" maxlength="20" />
+                    </div>
+                </div>
+                <button class="slds-button slds-p-bottom--xx-small" onclick="{!c.addCategory}">
+                    <lightning:icon class="slds-button__icon--small" title="{!$Label.c.EUR_CRM_CG_AddCategory}" iconName="utility:new" size="xx-small"/>
+                </button>
+                <button class="slds-button slds-p-bottom--xx-small" onclick="{!c.increaseDepth}">
+                    <lightning:icon class="slds-button__icon--small" title="{!$Label.c.EUR_CRM_CG_IncreaseDepth}" iconName="utility:macros" size="xx-small"/>
+                </button>
+                <button class="slds-button slds-p-bottom--xx-small" onclick="{!c.removeCategory}">
+                    <lightning:icon class="slds-button__icon--small" title="{!$Label.c.EUR_CRM_CG_RemoveCategory}" iconName="utility:delete" size="xx-small"/>
+                </button>
+                <aura:set attribute="else">
+                    <div tabindex="-1" class="slds-p-around--x-small slds-truncate unselectable">{!v.label}</div>
+                </aura:set>
+            </aura:if>
+        </div>
+        <!-- Sub tree -->
+        <ul aura:id="subTree" class="slds-tree" role="tree" aria-labelledby="treeheading" aria-activedescendant="tree0-node1">
+            <aura:if isTrue="{! !empty(v.childrenShown)}"> 
+                <aura:iteration items="{!v.childrenShown}" var="childItem" indexVar="subBranchIndex">
+                    <span>
+                        <c:EUR_CRM_ViewBuilderItem aura:id="viewBuilderItemCmp"
+                            item="{!childItem}"
+                            items="{!v.items}"
+                            templDelDates="{!v.templDelDates}"
+                            pbiFieldLabels="{!v.pbiFieldLabels}"
+                            level="{!v.level + 1}"
+                            config="{!v.config}"
+                            branchIndex="{!v.branchIndex + '-' + subBranchIndex}"
+                            viewName="{!v.viewName}"
+                            isDynamic="{!v.isDynamic}"
+                            isTemplate="{! v.isTemplate}"
+                            isTransfer="{! v.isTransfer}"
+                            isReturn="{! v.isReturn}"
+                            hierarchyDepth="{!v.hierarchyDepth}"
+                            mode="{!v.mode}"/>
+                    </span>
+                </aura:iteration>
+                <aura:set attribute="else">
+                    <div class="slds-card slds-m-around--small" ondragover="{!c.onDragOver}" ondrop="{!c.onDrop}">
+                        <div class="{!'slds-card__header slds-grid' + (v.mode == 'create' ? '' : ' slds-hide')}">{!$Label.c.EUR_CRM_CG_HierarchyBody}</div>
+                        <div class="products-container">
+                            <!-- Performance fix to render children only when section expanded -->
+                            <aura:if isTrue="{!!v.collapsed}">
+                                <aura:iteration items="{!v.droppedItems}" var="item" start="{! (v.pageNo * v.perPage) - v.perPage }" end="{! v.pageNo * v.perPage }" indexVar="p">
+                                    
+                                        <aura:if isTrue="{!v.mode == 'create'}">
+                                            <div class="slds-grid slds-wrap slds-grid_pull-padded slds-has-divider--bottom slds-p-bottom_x-small slds-m-bottom_x-small slds-m-horizontal_x-small" aura:id="product" data-id="{!item.product.Id}">
+                                                <div class="{!'slds-size--1-of-12 slds-medium-size--1-of-12 slds-large-size--1-of-12 slds-align--absolute-center ' + (!v.isDynamic ? 'slds-show' : 'slds-hide')}">
+                                                    <div>
+                                                        <div class="slds-size--1-of-1">
+                                                            <lightning:buttonIcon iconName="utility:up" name="{!item.product.Id}" variant="bare" onclick="{!c.moveItemUp}"  />
+                                                            
+                                                        </div>
+                                                        <div class="slds-size--1-of-1">
+                                                            <lightning:buttonIcon iconName="utility:down" name="{!item.product.Id}" variant="bare" onclick="{!c.moveItemDown}"  />
+                                                            
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="{!'slds-p-horizontal_small center-vertical-align slds-hyphenate ' + (v.isDynamic ? 'slds-size--11-of-12 slds-medium-size--11-of-12 slds-large-size--11-of-12' : 'slds-size--4-of-12 slds-medium-size--4-of-12 slds-large-size--4-of-12')}">
+                                                    <div class="{!'overflowHidden ' + (v.isDynamic ? 'slds-hide' : 'slds-show')}">
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.ProductSAPcode) ? 'slds-hide' : 'slds-hide slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_SAPCode}: {!item.product.ProductSAPcode}</div>
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.NationalCode) ? 'slds-hide' : 'slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_NationalCode}: {!item.product.NationalCode}</div>
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.EAN) ? 'slds-hide' : 'slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_EANCode}: {!item.product.EAN}</div>
+                                                    </div>
+                                                    <ui:outputText title="{!$Label.c.EUR_CRM_CG_ProductName}" value="{!item.product.Name}"/>
+                                                </div>
+                                                <aura:if isTrue="{!not(empty(item.product.dynamicfields))}">
+                                                <div class="{!'slds-p-horizontal_small center-vertical-align slds-hyphenate ' + (v.isDynamic ? 'slds-size--11-of-12 slds-medium-size--11-of-12 slds-large-size--11-of-12' : 'slds-size--4-of-12 slds-medium-size--4-of-12 slds-large-size--4-of-12')}">
+                                                    <aura:iteration items="{!item.product.dynamicfields}" var="dynamicfield" >
+                                                        <c:EUR_CRM_OP_DynamicFieldGeneration name="{!item.product.Id}" fieldValue="{!dynamicfield}" objName="EUR_CRM_ProductCatalogItem__c" isForTable="{!false}"/>
+                                                    </aura:iteration>
+                                                </div>
+                                                </aura:if>
+
+                                                <!-- TEMPLATE DELIVERY DATE PACKAGING - REMOVED -->
+                                                    
+                                               
+                                                
+                                                <div class="{!'slds-size--1-of-12 slds-medium-size--1-of-12 slds-large-size--1-of-12' + (!v.isDynamic ? ' slds-align_absolute-center' : '')}">
+                                                    <lightning:buttonIcon iconName="utility:close" name="{!item.product.Id}" variant="bare" onclick="{!c.removeItem}" alternativeText="{!$Label.c.EUR_CRM_Remove}" />
+                                                </div>
+                                            </div>
+                                            <aura:set attribute="else">
+                                                <div class="slds-box slds-box_x-small slds-m-around--small view-box unselectable">
+                                                    <div class="{!'overflowHidden ' + (v.isDynamic ? 'slds-hide' : 'slds-show')}">
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.ProductSAPcode) ? 'slds-hide' : 'slds-hide slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_SAPCode}: {!item.product.ProductSAPcode}</div>
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.NationalCode) ? 'slds-hide' : 'slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_NationalCode}: {!item.product.NationalCode}</div>
+                                                        <div class="{!'slds-text-color_weak slds-size--1-of-1 ' + (empty(item.product.EAN) ? 'slds-hide' : 'slds-show--inline-block')}">{!$Label.c.EUR_CRM_CG_EANCode}: {!item.product.EAN}</div>
+                                                    </div>
+                                                    <ui:outputText title="{!$Label.c.EUR_CRM_CG_ProductName}" value="{!item.product.Name}"/>
+                                                </div>
+                                            </aura:set>
+                                        </aura:if>
+                                </aura:iteration>
+                                
+                                <aura:if isTrue="{! and( and ( v.droppedItems.length , v.droppedItems.length > v.perPage ), v.droppedItems) }">
+                                    <!-- PAGINATION -->
+                                    <div class="slds-align_absolute-center slds-p-bottom_small">            
+                                       <lightning:button disabled="{! lessthanorequal(v.pageNo,1)}" label="Back" onclick="{! c.doPrevious }" /> 
+                                       {! v.pageNo}/{!((v.droppedItems.length - mod( v.droppedItems.length , v.perPage ) ) / v.perPage) + 1 }
+                                       <lightning:button disabled="{! greaterthanorequal( (v.pageNo * v.perPage), v.droppedItems.length)}" label="Next" onclick="{! c.doNext }" />
+                                   </div>
+                                </aura:if>
+                                
+                            </aura:if>
+                        </div>
+                    </div>
+                </aura:set>
+            </aura:if>
+        </ul>
+    </li>
+    
+    <!-- SPINNER -->
+    <lightning:spinner aura:id="spinner" class="slds-hide" alternativeText="spinner" variant="brand" size="large"/>
+    </div>
+    
+    
+</aura:component>

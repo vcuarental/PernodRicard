@@ -1,0 +1,376 @@
+<apex:page controller="ASI_MFM_CAP_CN_BudgetViewCtrl" docType="html-5.0" sidebar="false"   >
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>        
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, 'build.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.min.css')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}" />
+        
+        <script>
+        $(document).ready(function(){
+            $('[data-toggle="tooltip"]').tooltip(); 
+        });
+        </script>
+        
+        <style type="text/css">
+            div.hid {display: none;}
+            /* highlight results */ 
+            .ui-autocomplete span.hl_results {
+            background-color: #ffff66;
+            }
+            
+            /* loading - the AJAX indicator */
+            .ui-autocomplete-loading {
+            background: white url('/img/loading.gif') right center no-repeat;
+            }
+            
+            
+            .ui-autocomplete-input{ 
+            //border-left: 3px solid darkred !important;    
+            }
+            
+            .ui-autocomplete {
+            height: 200px;
+            overflow-y: auto;
+            /* prevent horizontal scrollbar */
+            overflow-x: hidden;
+            overflow:auto;
+            /* add padding to account for vertical scrollbar */
+            padding-right: 20px;
+            left: 0;
+            }
+            /* IE 6 doesn't support max-height
+            * we use height instead, but this forces the menu to always be this tall
+            */
+            *html .ui-autocomplete {
+            height: 200x;
+            }
+            
+            
+            .searchcss {
+            width:100% !important;
+            height:29px !important;
+            }       
+            
+            .style-1 input[type="text"] {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+            width:80%;
+            color: #555;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ccc;
+            
+            }
+        </style>
+        
+        
+    </head>
+    <body>
+        <apex:form id="CalForm">
+            <div class="container-fluid" style="margin:0;">
+                <div class="bs row">
+                    
+                    <!-- for recalc -->
+                    <div class="modal fade" tabindex="-1" role="dialog" id="myModal" style="display:none;">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    <h3 class="modal-title">Warning</h3>
+                                </div>
+                                <div class="modal-body">
+                                    <p style="font-size:15px;">
+                                        If no selected Fiscal Year, system will default it as current fiscal year<br/>
+                                        Please click "Execute" to start recalculation process
+                                    </p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                                    <apex:commandButton value="Execute"
+                                                        styleClass="btn btn-primary"
+                                                        action="{!executeRecalc}"
+                                                        >  
+                                    </apex:commandButton>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- for reverse -->
+                    <div class="modal fade" tabindex="-1" role="dialog" id="myModal2" style="display:none;">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    <h3 class="modal-title">Warning</h3>
+                                </div>
+                                <div class="modal-body">
+                                    <p style="font-size:15px;">
+                                        This Process will reverse all accrual lines within selected Fiscal Year to budget.
+                                        Please click "Execute" to start recalculation process
+                                    </p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                                    <apex:commandButton value="Execute"
+                                                        styleClass="btn btn-primary"
+                                                        action="{!executeReverse}"
+                                                        >  
+                                    </apex:commandButton>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <apex:outputPanel styleclass="bs col-xs-12" id="SearchPart" >
+                        <div class="panel panel-primary " >
+                            <div class="panel-heading">
+                                <h5>
+                                    Budget List View
+                                </h5>
+                            </div>
+                            
+                            <div class="control-group panel-body ">
+                                <div class="bs row">
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;" >Fiscal Year:</apex:outputLabel>
+                                        <div class="form-group divsearch style-1" >
+                                            <apex:selectList id="fiscalyear" value="{!Fiscal_Years}" size="1"  styleClass="form-control input-sm" >
+                                                <apex:selectOptions value="{!fiscalYearOptions}" />
+                                            </apex:selectList>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-2">
+                                        <apex:outputLabel style="font-weight:bold;">Expense Type:</apex:outputLabel>
+                                        <div class="form-group divsearch style-1" >
+                                            <apex:inputField value="{!TempPO.ASI_MFM_Expense_Type__c}"  html-placeholder="Expense Type"  />
+                                        </div>
+                                    </div>
+                                    
+                                    
+                                    <div class="col-md-6">
+                                        <apex:commandButton value="Search" 
+                                                            style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding: 6px 12px; margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;" 
+                                                            action="{!runSearch}"
+                                                            status="ActionStatus"
+                                                            rerender="myButtons,DataTB,SearchPart">  
+                                        </apex:commandButton>
+                                        
+                                        <div style="width:15px;display: inline-block;">
+                                            
+                                        </div>
+                                        
+                                        <button style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding: 6px 12px; margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;" 
+                                                onclick="$('#myModal').modal('show')"
+                                                type="button"
+                                                data-toggle="tooltip"
+                                                title="To recalculate all budgets remaining with selected Fiscal Year"
+                                                >
+                                            Recalculate
+                                        </button>
+                                        
+                                        <div style="width:15px;display: inline-block;">
+                                            
+                                        </div>
+                                        
+                                        <button style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding: 6px 12px; margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;" 
+                                                onclick="$('#myModal2').modal('show')"
+                                                type="button"
+                                                data-toggle="tooltip"
+                                                title="To reverse all accrual amount before today."
+                                                >
+                                            Reverse Budget
+                                        </button>
+                                    </div>
+                                </div>
+                                <apex:actionRegion >
+                                    <apex:actionPoller rerender="statusPanel" interval="5"/>
+                                    <apex:outputPanel id="statusPanel">
+                                        <apex:repeat value="{!statusMsgs}" var="statusMsg">
+                                            <apex:outputText style="color:red;" value="{!statusMsg}" /><br />
+                                        </apex:repeat>
+                                    </apex:outputPanel>
+                                </apex:actionRegion>
+                            </div>
+                        </div>
+                    </apex:outputPanel> 
+                </div>
+                
+                <div class="bs row">  
+                    <div class="bs col-xs-12">
+                        <apex:outputPanel id="DataTB" >
+                            <table width="100%" border="0"  class="table " id="ResultTable"  >
+                                <thead>
+                                    <th>
+                                        <apex:commandLink value="Budget" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Fiscal Year" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_PO_Fiscal_Year__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    <th>
+                                        <apex:commandLink value="Department" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Department__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Region" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_BU_Code__r.Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    <th>
+                                        <apex:commandLink value="Expense Type" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Expense_Type__r.Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="LE" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_LE__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Status" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Status__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Amount" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_CN_Amount_Ex__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Remainging Amount" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Remaining_Budget__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Paid Amount" action="{!toggleSort}" status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Actual_Paid_Amount__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                    
+                                    <th>
+                                        <apex:commandLink value="Budget Owner" action="{!toggleSort}"  status="ActionStatus" rerender="myButtons,DataTB,SearchPart">
+                                            <apex:param name="sortField" value="ASI_MFM_Budget_Owner__r.Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </th>
+                                </thead>
+                                <tbody>
+                                    <apex:repeat value="{!POList}" var="item">
+                                        <tr> 
+                                            <td>
+                                                <apex:outputLink value="/{!item.Id}" target="_blank">{!item.Name}</apex:outputLink>
+                                            </td>
+                                            <td>
+                                                {!item.ASI_MFM_PO_Fiscal_Year__c}
+                                            </td>
+                                            <td>
+                                                {!item.ASI_MFM_Department__c}
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="/{!item.ASI_MFM_BU_Code__c}" target="_blank">{!item.ASI_MFM_BU_Code__r.Name}</apex:outputLink>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="/{!item.ASI_MFM_Expense_Type__c}" target="_blank">{!item.ASI_MFM_Expense_Type__r.Name}</apex:outputLink>
+                                            </td>
+                                            <td>
+                                                {!item.ASI_MFM_LE__c}
+                                            </td>
+                                            <td>
+                                                {!item.ASI_MFM_Status__c}
+                                            </td>
+                                            <td>
+                                                <apex:outputField value="{!item.ASI_MFM_CN_Amount_Ex__c}"></apex:outputField>
+                                            </td>
+                                            <td>
+                                                <apex:outputField value="{!item.ASI_MFM_Remaining_Budget__c}"></apex:outputField>
+                                            </td>
+                                            <td>
+                                                <apex:outputField value="{!item.ASI_MFM_Actual_Paid_Amount__c}"></apex:outputField>
+                                            </td>
+                                            <td>
+                                                <apex:outputLink value="/{!item.ASI_MFM_Budget_Owner__c}" target="_blank">{!item.ASI_MFM_Budget_Owner__r.Name}</apex:outputLink>
+                                            </td>
+                                        </tr>
+                                    </apex:repeat>
+                                </tbody>
+                            </table>
+                        </apex:outputPanel>
+                    </div>
+                </div>
+                
+                
+                <div class="bs row">
+                    <apex:outputPanel id="myButtons" style="{!IF(POList.size!=0, '','display:none')}"  >
+                        <div style='float:left; padding-left:10px;'>
+                            
+                            
+                            <apex:commandButton style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding: 3px 6px; margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;"
+                                                action="{!Beginning}"  
+                                                status="ActionStatus" 
+                                                title="Beginning" 
+                                                value="<<"
+                                                disabled="{!disablePrevious}"
+                                                reRender="myButtons,DataTB" />
+                            &nbsp;&nbsp;
+                            <apex:commandButton style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding:3px 6px; margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;"
+                                                action="{!Previous}" status="ActionStatus"  title="Previous" value="<" disabled="{!disablePrevious}" reRender="myButtons,DataTB" />
+                            &nbsp;&nbsp;
+                            <apex:commandButton style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding:3px 6px;  margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;"
+                                                action="{!Next}" status="ActionStatus"  title="Next" value=">" disabled="{!disableNext}" reRender="myButtons,DataTB" />
+                            &nbsp;&nbsp;
+                            <apex:commandButton style="color: #fff; background-color: #5cb85c; border-color: #4cae4c;user-select: none; background-image: none; border: 1px solid transparent; border-radius: 4px; display: inline-block; padding:3px 6px;  margin-bottom: 0; font-size: 14px; font-weight: normal; line-height: 1.42857143; text-align: center; white-space: nowrap; vertical-align: middle; -ms-touch-action: manipulation; touch-action: manipulation;"
+                                                action="{!End}" status="ActionStatus"   title="End" value=">>" disabled="{!disableNext}" reRender="myButtons,DataTB" /> 
+                            
+                        </div>
+                        
+                        <div style='float:right; padding-right:10px;'>
+                            Showing Page # <b>{!pageNumber}</b> of <b>{!totalPages}</b>    |     Record # <b>{!start_index}</b> - <b>{!end_index}</b>  of <b>{!total_size}</b> 
+                        </div>
+                        
+                        
+                    </apex:outputPanel>
+                </div>
+            </div>
+            
+            
+            
+        </apex:form>
+        
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus> 
+    </body>
+</apex:page>

@@ -1,0 +1,286 @@
+<apex:page controller="ASI_CRM_JP_InputPaymentItemsControllerV2" sideBar="false">
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
+    <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.min.js"></script>-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-form-validator/2.3.26/jquery.form-validator.min.js"></script>
+
+    <!--Provides DataTableService and DataTableUtil-->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_DataTable)}"/>
+    <script>
+        const RECORD_TYPE_OPT_REBATE = '{! RECORD_TYPE_OPT_REBATE }';
+        const RECORD_TYPE_OPT_AP = '{! RECORD_TYPE_OPT_AP }';
+
+        const recordType = '{! recordType }';
+
+        const apEntPicklistSelectOption= JSON.parse(`{! JSENCODE(apEntPicklistSelectOptionString) }`);
+    </script>
+
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css"/>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/jquery-form-validator/2.3.26/theme-default.min.css"/>
+    <style>
+        .dataTableSearchForm {
+            margin-right: 100%;
+            width: 100%;
+            max-width: 1250px;
+            float: left;
+        }
+
+        .dataTableSearchForm .searchElementContainer {
+            float: left;
+            min-width: 300px;
+            margin: 8px 4px;
+        }
+
+        .dataTableSearchForm .searchElementContainer label {
+            display: inline-block;
+            min-width: 120px;
+            margin: 2px;
+            font-weight: bold;
+        }
+
+        .dataTableSearchForm input[type="button"] {
+            margin: 4px;
+        }
+
+        [id$=dataTableSpinner] {
+            position: absolute;
+            overflow: auto;
+            background: #222;
+            height: 100%;
+            z-index: 1000;
+            width: 100%;
+            opacity: 0.5;
+        }
+
+    </style>
+
+    <c:ASI_CRM_JP_PaymentInvoiceDetail paymentInvoice="{! paymentInvoice }" isCashRebate=""/>
+
+    <script>
+        'use strict';
+
+        const invoiceLineItemConfig = DataTableUtil.initializeConfigObject('invoiceLineItemDataTable');
+
+        (function () {
+            'use strict';
+
+            const inputFieldRenderer = (data, type, row, meta) => {
+                const fieldApiName = DataTableUtil.getFieldApiNameFromMeta(meta);
+                const value = DataTableService.resolveValue(data);
+
+                return `<input type="text" onchange="updateDataTableValue(this.parentNode.parentNode, '${invoiceLineItemConfig.componentId}', '${fieldApiName}', this.value)" value="${value}" />`;
+            };
+
+            const selectFieldRenderer = (data, type, row, meta) => {
+                const fieldApiName = DataTableUtil.getFieldApiNameFromMeta(meta);
+                const value = DataTableService.resolveValue(data);
+                console.log(value);
+                // return `<input type="text" onchange="updateDataTableValue(this.parentNode.parentNode, '${invoiceLineItemConfig.componentId}', '${fieldApiName}', this.value)" value="${value}" />`;
+
+                let element = `<select onchange="updateDataTableValue(this.parentNode.parentNode, '${invoiceLineItemConfig.componentId}', '${fieldApiName}', this.value)">`;
+                element += `<option>--None--</option>`;
+                Object.keys(apEntPicklistSelectOption).forEach(picklistValue => {
+                    element += `<option value="${picklistValue}" ${picklistValue === value ? 'selected="selected"' : ''}>${picklistValue}</option>`;
+                });
+                element += `</select>`;
+
+                return element;
+            };
+
+            const numberInputFieldRenderer = (data, type, row, meta) => {
+                const fieldApiName = DataTableUtil.getFieldApiNameFromMeta(meta);
+                const value = DataTableService.formatNumber(data);
+
+                return `<input type="text" onchange="updateDataTableValue(this.parentNode.parentNode, '${invoiceLineItemConfig.componentId}', '${fieldApiName}', this.value)" value="${value}" />`;
+            };
+
+            const textareaFieldRenderer = (data, type, row, meta) => {
+                const fieldApiName = DataTableUtil.getFieldApiNameFromMeta(meta);
+                const value = DataTableService.resolveValue(data);
+
+                return `<textarea onchange="updateDataTableValue(this.parentNode.parentNode, '${invoiceLineItemConfig.componentId}', '${fieldApiName}', this.value)">${value}</textarea>`;
+            };
+
+            const actionColumnRenderer = (data, type, row, meta) => {
+                const rowIndex = DataTableUtil.getRowIndexFromMeta(meta);
+                let actionDom = `<a href="#" onclick="${invoiceLineItemConfig.componentId}_callApexCloneRecord('${rowIndex}'); return false;" class="dataTableAction">Clone</a>`;
+                actionDom += ` | <a href="#" onclick="${invoiceLineItemConfig.componentId}_callApexDeleteRecord('${rowIndex}'); return false;" class="dataTableAction">Delete</a>`;
+                return actionDom;
+            };
+
+            const purchaseLineItemLinkRenderer = (data, type, row, meta) => {
+                return `<a href="/${row.ASI_CRM_Purchase_Contract_Line_Item__c}">${data}</a>`;
+            };
+
+            const columnConfigs = [];
+
+            if (recordType === RECORD_TYPE_OPT_REBATE) {
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Action}', 'null', actionColumnRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Contract_Line_Item}', 'ASI_CRM_Purchase_Contract_Line_Item__r.Name', purchaseLineItemLinkRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('Rebate Type', 'ASI_CRM_Rebate_Type__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_Sys_BS_Retailer_Ship_To__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_SYS_Outlet__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算単価', 'ASI_CRM_Actual_Unit_Cost__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算数量', 'ASI_CRM_Actual_Quantity__c', numberInputFieldRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算金額', 'ASI_CRM_Actual_Amount__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('調整金額', 'ASI_CRM_Adjustment_Amount__c', numberInputFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_SO_Remark}', 'ASI_CRM_Remarks__c', textareaFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('Invoice Ref No.', 'ASI_CRM_Invoice_Ref_No__c', inputFieldRenderer));
+            } else if (recordType === RECORD_TYPE_OPT_AP) {
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Action}', 'null', actionColumnRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Contract_Line_Item}', 'ASI_CRM_Purchase_Contract_Line_Item__r.Name', purchaseLineItemLinkRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_Sys_BS_Retailer_Ship_To__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_SYS_Outlet__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__c'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('実施結果', 'ASI_CRM_Sales_Result__c', numberInputFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算単価', 'ASI_CRM_Actual_Unit_Cost__c', numberInputFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算数量', 'ASI_CRM_Actual_Quantity__c', numberInputFieldRenderer, '80px'));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算金額', 'ASI_CRM_Actual_Amount__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('調整金額', 'ASI_CRM_Adjustment_Amount__c', numberInputFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_SO_Remark}', 'ASI_CRM_Remarks__c', textareaFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('Invoice Ref No.', 'ASI_CRM_Invoice_Ref_No__c', inputFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('A&P/Ent./F&D', 'ASI_CRM_A_P_Entertainment_F_D_Code__c', selectFieldRenderer));
+            }
+            invoiceLineItemConfig.columns = columnConfigs;
+
+        })();
+    </script>
+
+    <apex:pageBlock >
+        <apex:messages />
+    </apex:pageBlock>
+    <c:ASI_CRM_JP_DataTable componentId="invoiceLineItemDataTable" title="{!$Label.ASI_CRM_JP_Invoice_Line_Item}"
+                            recordId="{!$CurrentPage.parameters.id}" sObjectName="ASI_CRM_Payment_Invoice_Line_Item__c"
+                            selectFields="ASI_CRM_Purchase_Contract_Line_Item__r.Name, ASI_CRM_Purchase_Contract_Line_Item__c, ASI_CRM_Rebate_Type__c, ASI_CRM_Sys_BS_Retailer_Ship_To__c, ASI_CRM_Outlet_Code__c, ASI_CRM_SYS_Outlet__c, ASI_CRM_Item_Group__c, ASI_CRM_Actual_Unit_Cost__c, ASI_CRM_Actual_Quantity__c, ASI_CRM_Actual_Amount__c, ASI_CRM_Adjustment_Amount__c, ASI_CRM_Remarks__c, ASI_CRM_Invoice_Ref_No__c, RecordTypeId, ASI_CRM_Sys_Representative_SKU__c, ASI_CRM_SKU_Selection__c, ASI_CRM_Sys_Representative_SKU_Id__c, ASI_CRM_Sys_Alternative_SKU__c, ASI_CRM_Sys_Alternative_SKU_Id__c, ASI_CRM_A_P_Entertainment_F_D_Code__c, ASI_CRM_Sales_Result__c"
+                            customCriteria="{! paymentLineItemCustomCriteria }" enableActionButtons="true"
+                            temporaryRows="{! addedInvoiceLineItemsJsonString }"/>
+
+    <script>
+        'use strict';
+
+        const contractLineItemConfig = DataTableUtil.initializeConfigObject('contractLineItemDataTable');
+
+        function addInvoiceLineItem(rowId) {
+            c_addInvoiceLineItem(rowId);
+        }
+
+        function addAllInvoiceLineItem() {
+            const data = DataTableUtil.getDataTableData('contractLineItemDataTable', true);
+            const ids = data.map(row => row.Id);
+            c_addAllInvoiceLineItem(JSON.stringify(ids));
+        }
+
+        function appendRecordsToDataTable(addedRecordsJsonString) {
+            let addedRecords = JSON.parse(addedRecordsJsonString);
+            addedRecords.forEach(row => row.isAdded = true);
+            DataTableUtil.appendData('invoiceLineItemDataTable', addedRecords);
+        }
+
+        (function () {
+            'use strict';
+
+            const contractLineAddButtonRenderer = (data, type, row, meta) => {
+                return `<a href="#" onclick="addInvoiceLineItem('${row.Id}'); return false;">Add</a>`
+            };
+
+            const itemGroupLinkRenderer = (data, type, row, meta) => {
+                return `<a href="/${row.ASI_CRM_Item_Group__c}">${data}</a>`;
+            };
+            
+         	const payToLinkRenderer = (data, type, row, meta) => {
+                return `<a href="/${row.ASI_CRM_Pay_To__c}">${data}</a>`;
+            };
+         
+    		const purchaseContractLinkRenderer = (data, type, row, meta) => {
+                return `<a href="/${row.ASI_CRM_Purchase_Contract__c}">${data}</a>`;
+            };
+    
+    		const a_pDescLinkRenderer = (data, type, row, meta) => {
+                return `<a href="/${row.ASI_CRM_AP_Code__c}">${data}</a>`;
+            };
+    
+            const columnConfigs = [];
+            const searchConfigs = [];
+
+            if (recordType === RECORD_TYPE_OPT_REBATE) {
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Action}', 'null', contractLineAddButtonRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('Ref No.', 'Name', ''));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('販促費/リベート申請', 'ASI_CRM_Purchase_Contract__r.Name', purchaseContractLinkRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('リベートタイプ', 'ASI_CRM_Rebate_Type__c', ''));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Owner}', 'ASI_CRM_Owner__c', ''));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_BS_Retailer_Ship_To__c', '', '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_Outlet__c', '', '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__r.Name', itemGroupLinkRenderer, '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('店頭価格', 'ASI_CRM_RSP_before_Rebate__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('ﾘﾍﾞｰﾄ後店頭価格', 'ASI_CRM_RSP_after_Rebate__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('目標本数', 'ASI_CRM_Target_Volume_Unit__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('申請単価', 'ASI_CRM_Unit_Price__c', DataTableService.numberFieldRenderer, '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('支払い先コード', 'ASI_CRM_Pay_To__r.Name', payToLinkRenderer));
+
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('申請番号', 'ASI_CRM_Purchase_Contract__r.Name', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_BS_Retailer_Ship_To__c', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_Outlet__c', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('支払い先コード', 'ASI_CRM_Pay_To__r.Name', 'text', '{! paymentInvoice.ASI_CRM_Pay_To__r.Name }'));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Contract_Owner}', 'ASI_CRM_Owner__c', 'text', '{! $User.FirstName } {! $User.LastName }'));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__r.Name', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('申請単価', 'ASI_CRM_Unit_Price__c', 'compare', ''));
+            } else if (recordType === RECORD_TYPE_OPT_AP) {
+
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Action}', 'null', contractLineAddButtonRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('Ref No.', 'Name', ''));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('販促費/リベート申請', 'ASI_CRM_Purchase_Contract__r.Name', purchaseContractLinkRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Owner}', 'ASI_CRM_Owner__c', ''));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_BS_Retailer_Ship_To__c', '', '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_Outlet__c', '', '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('A&P Code', 'ASI_CRM_Sys_AP_Code__c', a_pDescLinkRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__r.Name', itemGroupLinkRenderer, '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('目標本数', 'ASI_CRM_Target_Volume__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('条件', 'ASI_CRM_Condition__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('申請数量', 'ASI_CRM_Quantity__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('申請単価', 'ASI_CRM_Unit_Price__c', DataTableService.numberFieldRenderer, '', true));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('申請額', 'ASI_CRM_Promotion_Amount__c', DataTableService.numberFieldRenderer));
+                columnConfigs.push(DataTableUtil.createColumnConfigItem('精算済額', 'ASI_CRM_Amount_Paid__c', DataTableService.numberFieldRenderer));
+
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('申請番号', 'ASI_CRM_Purchase_Contract__r.Name', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_RetailShipTo_Code}', 'ASI_CRM_BS_Retailer_Ship_To__c', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Indirect_Rebate_Outlet_Name}', 'ASI_CRM_Outlet__c', 'text', ''));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Contract_Owner}', 'ASI_CRM_Owner__c', 'text', '{! $User.FirstName } {! $User.LastName }'));
+                searchConfigs.push(DataTableUtil.createSearchConfigItem('{!$Label.ASI_CRM_JP_Item_Group}', 'ASI_CRM_Item_Group__r.Name', 'text', ''));
+            }
+            contractLineItemConfig.columns = columnConfigs;
+            contractLineItemConfig.searchFields = searchConfigs;
+            contractLineItemConfig.paging = true;
+        })();
+
+    </script>
+
+    <apex:form >
+        <apex:actionFunction name="c_addInvoiceLineItem" action="{! addPaymentInvoiceLineItem }"
+                             oncomplete="appendRecordsToDataTable('{! JSENCODE(addedInvoiceLineItemsJsonString) }')">
+            <apex:param name="purchaseContractLineItemId" value=""/>
+        </apex:actionFunction>
+        <apex:actionFunction name="c_addAllInvoiceLineItem" action="{! addAllPaymentInvoiceLineItem }"
+                             oncomplete="appendRecordsToDataTable('{! JSENCODE(addedInvoiceLineItemsJsonString) }')">
+            <apex:param name="purchaseContractLineItemIds" value=""/>
+        </apex:actionFunction>
+    </apex:form>
+    <c:ASI_CRM_JP_DataTable componentId="contractLineItemDataTable" title="{!$Label.ASI_CRM_JP_Contract_Line_Item}"
+                            recordId="{!$CurrentPage.parameters.id}"
+                            sObjectName="ASI_CRM_Purchase_Contract_Line_Item__c"
+                            selectFields="Id, Name, ASI_CRM_Purchase_Contract__r.Name, ASI_CRM_Rebate_Type__c, ASI_CRM_Owner__c, ASI_CRM_AP_Code__c, ASI_CRM_Sys_AP_Code__c, ASI_CRM_BS_Retailer_Ship_To__c, ASI_CRM_Outlet__c, ASI_CRM_Item_Group__r.Name, ASI_CRM_RSP_before_Rebate__c, ASI_CRM_RSP_after_Rebate__c, ASI_CRM_Target_Volume_Unit__c, ASI_CRM_Target_Volume__c, ASI_CRM_Condition__c, ASI_CRM_Quantity__c, ASI_CRM_Unit_Price__c, ASI_CRM_Pay_To__c, ASI_CRM_Pay_To__r.Name, ASI_CRM_Promotion_Amount__c, ASI_CRM_Amount_Paid__c"
+                            customCriteria="{! contractLineItemCustomCriteria }"
+                            enableSearch="true" enableSort="true"
+    />
+
+    <script>
+        (function () {
+            'use strict';
+
+            DataTableService.initialize(invoiceLineItemConfig, contractLineItemConfig);
+        })();
+    </script>
+</apex:page>

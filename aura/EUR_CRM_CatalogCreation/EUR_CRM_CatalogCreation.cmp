@@ -1,0 +1,408 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,force:lightningQuickAction,lightning:actionOverride,force:hasRecordId,force:hasSObjectName" access="global" controller="EUR_CRM_CatalogCreationCmpController">
+
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+    <aura:attribute name="catalogHeaderInfo" type="Map" access="private"/>
+    <aura:attribute name="action" type="String" access="private" description="new, edit or clone action for catalog generation process"/>
+    <aura:attribute name="catalog" type="EUR_CRM_ProductCatalog__c" default="{ 'sobjectType': 'EUR_CRM_ProductCatalog__c' }"/>
+    <!-- Object containing field labels by object -->
+    <aura:attribute name="catalogFieldLabels" type="Object" access="private"/>
+
+    <!-- Iteration of available order type picklist values -->
+    <aura:attribute name="orderTypes" type="Object" access="private"/>
+    <aura:attribute name="sharingBtnState" type="Boolean" default="false" />
+
+    <aura:attribute name="productsDataMaster" type="List" access="private"/>
+    <aura:attribute name="products" type="List" access="private"/>
+    <aura:attribute name="dynamicProductData" type="List" access="private"/>
+    <aura:attribute name="loadedProducts" type="List" access="private"/>
+    <aura:attribute name="dynamicLowestSelectedLevel" type="Map" access="public"/>
+ 
+    <aura:attribute name="treeHeader" type="String" default="{!$Label.c.EUR_CRM_CG_ProductHierarchy}" access="private"/>
+    <aura:attribute name="treeItems" type="List" access="private"/>
+    <aura:attribute name="hierarchyBuildingItems" type="Map" access="private"/>
+    <aura:attribute name="selectedTreeItems" type="List" access="private"/>
+    <aura:attribute name="hierarchyBuildingSettings" type="List" access="private"/>
+    <aura:attribute name="hierarchyViews" type="List" access="public" default="[]"/>
+    <aura:attribute name="hierarchyDepths" type="Map" access="private"/>
+    <aura:attribute name="droppedItems" type="Map" access="private"/>
+    <aura:attribute name="activeView" type="String" access="private"/>
+    <aura:attribute name="hierarchyFields1" type="List" access="private"/>
+    <aura:attribute name="hierarchyFields2" type="List" access="private"/>
+    <aura:attribute name="oneViewMode" type="Boolean" access="private" default="false"/>
+    <aura:attribute name="treeConfig" type="Map" default="{
+        'labelProperties': ['LevelName'],
+        'expandProperties': ['SubLevels'],
+        'itemIdentifier' : ['Id'],
+        'sapCode' : ['ProductSAPcode'],
+        'nationalCode' : ['NationalCode'],
+        'eanCode' : ['EAN'],
+        'checked' : ['checked'],
+        'dropped' : ['dropped'],
+        'collapsed' : ['collapsed'],
+        'isSelectable': true,
+        'isNodeSelectionEnabled': true,
+        'expandLevel': 2}"/>
+
+    <aura:attribute name="currentStep" type="Integer" access="private" default="1"/>
+    <aura:attribute name="isDynamic" type="Boolean" access="public"/>
+    <aura:attribute name="isReturn" type="Boolean" access="public" default="false"/>
+    <!-- Flag to indicate whether context catalog is template record type -->
+    <aura:attribute name="isTemplate" type="Boolean" access="private" default="false"/>
+    <!-- Flag to indicate whether context catalog is transfer record type -->
+    <aura:attribute name="isTransfer" type="Boolean" access="private" default="false"/>
+    <!-- Flag to indicate whether context catalog is direct order record type -->
+    <aura:attribute name="isOrder" type="Boolean" access="private" default="false"/>
+    <!-- Flag to indicate whether context catalog is POSM record type -->
+    <aura:attribute name="isPOSM" type="Boolean" access="private" default="false"/>
+    <!-- Flag to indicate whether context catalog is presales order type -->
+    <aura:attribute name="isPresales" type="Boolean" access="private" default="false"/>
+    <!-- Constant with presales Order Type API name -->
+    <aura:attribute name="presalesAPIName" type="String" access="private" default="Presales"/>
+    <!-- Flag to indicate that view name updated, user should navigate to products step, so products get updated -->
+    <aura:attribute name="doUpdateProducts" type="Boolean" access="private" default="false"/>
+    <!-- Flag to indicate that the valid from date has passed -->
+    <aura:attribute name="hasBegun" type="Boolean" access="public" default="false"/>
+    <!-- Current date in GMT -->
+    <aura:attribute name="today" type="Date" access="private" /> 
+    
+    <aura:attribute name="accountGroups" type="List" access="public" default="[]"/>
+    <aura:attribute name="openGroupModal" type="Boolean" access="public" default="false"/>
+    <aura:attribute name="newAccountGroupData" type="Object"/>
+
+    <aura:attribute name="errorMessage" type="Object" access="public"/>
+    <aura:attribute name="fieldMessage" type="Object" access="public"/>
+
+    <aura:attribute name="productDisplayData" type="Object" access="private"/>
+    <aura:attribute name="isOpenProductsPopup" type="Boolean" access="private" default="false"/>
+    <aura:attribute name="productsImport" type="String" access="private" default="prod-sap"/>
+    <!-- Attribute to contain tree nodes selected for drag and drop -->
+    <aura:attribute name="draggedProducts" type="List" access="public" default="[]"/>
+    <!-- Attribute to store passed in RecordTypeId -->
+    <aura:attribute name="recordTypeId" type="String" access="public"/>
+    <!-- Attribute to store relevant record type Developer Name -->
+    <aura:attribute name="recordTypeDevName" type="String" access="private"/>
+    <!-- Attribute to indicate if list view is to be shown instead of hierarchy -->
+    <aura:attribute name="isListView" type="Boolean" access="private" default="false"/>
+    <!-- Template delivery dates -->
+    <aura:attribute name="templDelDates" type="String[]" access="public" />
+    <!-- Search field delay timer -->
+    <aura:attribute name="timer" type="Integer"/>
+    <!-- Attribute for hiding product panel on step 3  -->
+    <aura:attribute name="isPPanelClosed" type="Boolean" access="private" default="false"/>
+
+    
+    <aura:handler name="alertMessageEvent" event="c:EUR_CRM_AlertMessageEvent" action="{!c.alertMessageEvent}"/>
+    <aura:handler name="productsDropEvent" event="c:EUR_CRM_ProductsDropEvent" action="{!c.dropEvent}"/>
+    <aura:handler name="hierarchyChangeEvent" event="c:EUR_CRM_HierarchyChangeEvent" action="{!c.updateHierarchy}"/>
+    <!-- <aura:handler name="groupCreateEvent" event="c:groupCreateEvent" action="{!c.reviewGroupEvent}"/>  -->
+    <aura:handler name="changeDynamicLevelSelectionEvent" event="c:EUR_CRM_ChangeDynamicLevelSelectionEvent" action="{!c.changeDynamicLevelSelectionEvent}"/>
+    <aura:handler name="changeCollapsedItems" event="c:EUR_CRM_ChangeCollapsedItems" action="{!c.addCollapsedItem}"/>
+    <aura:handler name="itemSelectionEvent" event="c:EUR_CRM_ItemSelectionEvent" action="{!c.setSelectedItemsEvent}"/>
+    <aura:handler name="itemSelectionEventFromTree" event="c:EUR_CRM_ItemSelectionEvent" action="{!c.setSelectedItemsEvent}"/>
+    <!-- Handler to process tree nodes selected for drag and drop -->
+    <aura:handler name="selectDragNode" event="c:EUR_CRM_SelectDragNodeEvent" action="{!c.onSelectDragNode}"/> 
+    <aura:handler name="viewItemsInputChangeEvent" event="c:EUR_CRM_ViewItemsInputChangeEvent" action="{!c.viewItemsInputChangeEvent}"/>
+    <!-- LIBRARIES -->
+    <lightning:notificationsLibrary aura:id="msgs"/>
+    
+    <ui:outputText class="slds-hide" value="{!v.catalog.OrderType__c}"/>
+    <ui:outputText class="slds-hide" value="{!v.catalog.ReturnReason__c}"/>
+    
+    <!--HEADER-->
+    <div class="slds-page-header">
+        <div class="slds-grid">
+            <div class="slds-col slds-has-flexi-truncate">
+                <div class="slds-media slds-no-space slds-grow">
+                    <div class="slds-media__figure">
+                        <lightning:icon size="medium" iconName="{!v.catalogHeaderInfo.catalogIconName}" />
+                    </div>
+                    <div class="slds-media__body">
+                        <p class="slds-text-title--caps slds-line-height--reset">{!$Label.c.EUR_CRM_CG_ComponentLabel}</p>
+                        <h1 class="slds-page-header__title slds-m-right--small slds-align-middle slds-truncate" title="{!v.catalogHeaderInfo.catalogLabel}">{!v.catalogHeaderInfo.catalogLabel}</h1>
+                    </div>
+                </div>
+            </div>
+            <div class="slds-col slds-no-flex slds-grid slds-align-top">
+                <lightning:buttonGroup >
+                    <lightning:button iconName="utility:close" onclick="{!c.cancel}" name="close" label="{!$Label.c.EUR_CRM_Cancel}"/>
+                    <lightning:button onclick="{!c.share}" name="sharing" label="{!$Label.c.EUR_CRM_CG_Sharing}" variant="{!v.sharingBtnState ? 'brand' : 'neutral'}"/>
+                    <lightning:button iconName="utility:chevronleft" class="{!v.currentStep != 1 ? ' slds-show' : ' slds-hide'}" onclick="{!c.prevStep}" name="prevStep" label="{!$Label.c.EUR_CRM_Back}"/>
+                    <lightning:button aura:id="nextStep" iconName="utility:chevronright" class="{!v.currentStep != 3 ? ' slds-show' : ' slds-hide'}" onclick="{!c.nextStep}" name="nextStep" label="{!$Label.c.EUR_CRM_Next}" disabled="true"/>
+                    <lightning:button iconName="utility:package" class="{!and(v.catalog.Id != null, v.currentStep == 1) ? ' slds-show' : ' slds-hide'}" disabled="{! v.doUpdateProducts}" onclick="{!c.saveHeader}" name="saveHeader" label="{!$Label.c.EUR_CRM_Save}"/>
+                    <lightning:button iconName="utility:package" class="{!v.currentStep == 3 ? ' slds-show' : ' slds-hide'}" onclick="{!c.save}" name="save" label="{!$Label.c.EUR_CRM_Save}"/>
+                </lightning:buttonGroup>
+            </div>
+        </div>
+    </div>
+    <!--/HEADER-->
+    <!--SHARING-->
+    <div class="slds-m-top--small slds-hide" aura:id="sharingContainer">
+        <div class="slds-panel slds-grid slds-grid--vertical slds-nowrap">
+            <div class="slds-panel__section">
+                <c:EUR_CRM_ManualSharing parentId="{!v.recordId}" aura:id="sharing" shareObjectType="EUR_CRM_ProductCatalog__Share" /> 
+            </div>
+        </div>
+    </div>
+    <!--/SHARING-->
+
+    
+    <div class="slds-panel slds-grid slds-grid--vertical slds-nowrap slds-m-top--small slds-m-bottom--medium">
+        <div aura:id="step1" class="{!'slds-panel__section ' + (v.currentStep == 1 ? 'slds-show' : 'slds-hide')}">
+
+            <h3 class="slds-section-title--divider">{!$Label.c.EUR_CRM_CG_Step1}</h3>
+
+            <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                <ui:inputText aura:id="catalogName" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.Name || 'Catalog Name'}" value="" required="true" size="80" maxlength="80"/>
+            </div>
+            <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                <ui:inputDate aura:id="startDateField" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_ValidFrom__c || 'Start Date'}" displayDatePicker="true" required="true" change="{! c.checkHasBegun}"/>
+            </div>
+            <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                <ui:inputDate aura:id="endDateField" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_ValidTo__c || 'End Date'}" displayDatePicker="true" required="true"/>
+            </div>
+
+            <!-- @edit: PZ - 05.04.18 Order type is controlled by RT -->
+            <!-- @edit: PZ - 24.04.18 Order type is no longer controlled by RT -->
+            <!-- @edit: PZ - 26.06.18 Order type is again controlled by RT -->
+            <!-- Order type is set automatically, so is hidden from layout -->
+            <aura:if isTrue="{! true}">
+                <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium slds-hide">
+                    <span class="required">*</span>
+                    <label class="form-element__label" for="catalogOrderType">{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_OrderType__c || 'Order Type'}</label>
+                    <ui:inputSelect aura:id="catalogOrderType" value="{!v.catalog.OrderType__c}" class="slds-input" multiple="true"  >
+                        <aura:iteration items="{!v.orderTypes}" var="oType">
+                                <ui:inputSelectOption text="{!oType.value}" label="{!oType.label}"/>
+                        </aura:iteration> 
+                    </ui:inputSelect>
+                </div>
+            </aura:if>
+            
+            <aura:if isTrue="{! and( v.isOrder || v.isTemplate , v.catalog.OrderType__c == 'Presales')}">
+                <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                    <ui:inputDate aura:id="pricingDateField" value="{! v.catalog.FuturePricingDate__c}" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_FuturePricingDate__c || 'Pricing Date'}" displayDatePicker="true" required="true"/>
+                </div>
+            </aura:if>
+            
+            <!-- @edit: PZ - 30.01.18 Suppress required Return reason -->
+            <!-- @edit: PZ - 16.04.18 Bring back Return reason -->
+            <div class="{!'slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium slds-has-error' + (v.isReturn ? '' : ' slds-hide')}">
+                <span class="required">*</span>
+                <label class="form-element__label" for="catalogReturnReason">{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_ReturnReason__c || 'Return Reason'}</label>
+                <force:inputField aura:id="catalogReturnReason" value="{!v.catalog.EUR_CRM_ReturnReason__c}"/>
+                <div class="{!!empty(v.fieldMessage.ReturnReason__c) ? 'slds-form-element__help' : 'slds-hidden'}">{!$Label.c.EUR_CRM_EmptyFieldError}</div>
+            </div>
+            <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                <ui:inputText aura:id="viewName1" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_ViewName1__c || 'View Name 1'}" value="" required="true" size="40" maxlength="40"/>
+            </div>
+            <aura:if isTrue="false">
+                <!-- Hide view 2 -->
+                <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                    <ui:inputText aura:id="viewName2" label="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_ViewName2__c || 'View Name 2'}" change="{! c.viewNameChange}" value="" size="40" maxlength="40"/>
+                </div>
+            </aura:if>
+            
+            <!-- Account group lookup -->
+            <div class="slds-form-element__control slds-p-horizontal--small slds-size--1-of-1 slds-large-size--1-of-3 slds-m-around--medium">
+                <c:EUR_CRM_Lookup aura:id="accountGroup"
+                        objectAPIName="EUR_CRM_Account_Target_Group__c"
+                        tObjType="EUR_CRM_ProductCatalog__c"
+                        placeholder="Search groups"
+                        isEdit="true"
+                        required="true"
+                        fieldLabel="{!v.catalogFieldLabels.EUR_CRM_ProductCatalog__c.EUR_CRM_AccountGroupId__c || 'Account Group:'}"
+                        filter=""
+                    />
+            </div>
+
+            
+        </div>
+        <!-- Selecting products step -->
+        <div aura:id="step2" class="{!'slds-panel__section ' + (v.currentStep == 2 ? 'slds-show' : 'slds-hide')}">
+            <lightning:input label="hiddenField" name="hiddenField" aura:id="hidden" class="slds-assistive-text"/>
+            <h3 class="slds-section-title--divider slds-m-bottom--medium">{!$Label.c.EUR_CRM_CG_Step2}</h3>
+
+            <div class="slds-grid">
+                <div class="{!'slds-form-element slds-size--1-of-4 slds-large-size--1-of-4 slds-p-around--medium' + (or(v.isDynamic, v.productDisplayData.productBrands.length le 1) ? ' slds-hide' : '')}">
+                    <ui:inputSelect aura:id="productBrands" label="{!$Label.c.EUR_CRM_CG_BrandFilter}" multiple="true" change="{!c.productsFilterChange}">
+                        <ui:inputSelectOption text="All" label="{!$Label.c.EUR_CRM_CG_AllBrands}" value="true"/>
+                        <aura:iteration items="{!v.productDisplayData.productBrands}" var="brand">
+                            <ui:inputSelectOption text="{!brand}" label="{!brand}"/>
+                        </aura:iteration>
+                    </ui:inputSelect>
+                </div>
+               <!-- PLV/NON-PLV has no sense with data structure, so is hidden -->
+                <div class="{!'slds-form-element slds-size--2-of-4 slds-large-size--2-of-4 slds-p-around--medium slds-hide' + (v.isDynamic ? ' slds-hide' : '')}">
+                    <span class="slds-form-element__label">{!$Label.c.EUR_CRM_CG_ProductsFiltering}</span>
+                    <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_AllProducts}" name="prod-All" aura:id="filters" checked="{!v.productDisplayData.filter == 'All'}" onchange="{!c.productsFilterChange}"/>
+                    <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_NonPLVProducts}" name="prod-CompanyProduct" aura:id="filters" checked="{!v.productDisplayData.filter == 'CompanyProduct'}" onchange="{!c.productsFilterChange}"/>
+                    <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_PLVProducts}" name="prod-POSMaterial" aura:id="filters" checked="{!v.productDisplayData.filter == 'POSMaterial'}" onchange="{!c.productsFilterChange}"/>
+                </div>
+                
+                <div class="slds-form-element slds-size--1-of-4 slds-large-size--1-of-4 slds-p-around--medium slds-float--right">
+                    <lightning:input class="hide-toggleLabels slds-hide" aura:id="hierarchyView" type="toggle" label=" " name="hierarchyViewChange" onchange="{!c.switchView}"/>
+                </div>
+                
+            </div>
+
+            <div class="{!'slds-form-element__control slds-size--2-of-3 slds-large-size--1-of-3 slds-m-around--medium' + (v.isDynamic ? ' slds-hide' : '')}">
+                <button class="slds-button slds-button--neutral" aria-live="assertive" onclick="{!c.openProductSelectionModal}">
+            <span class="slds-text-not-selected">
+            <lightning:icon class="slds-button__icon--small slds-m-right--x-small" iconName="utility:download" size="xx-small"/>{!$Label.c.EUR_CRM_CG_SelectProductsByCode}</span>
+                </button>
+            </div>
+
+            <div class="slds-popover slds-nubbin--left slds-theme--info slds-m-left--medium" role="dialog">
+                <div class="slds-popover__body">{!$Label.c.EUR_CRM_CG_HelperLabel}</div>
+            </div>
+
+            <lightning:input label="hiddenField" name="hiddenField" aura:id="hiddenProduct" class="slds-assistive-text"/>
+            <c:EUR_CRM_Tree aura:id="treeCmp"
+                    header="{!v.treeHeader}"
+                    items="{!v.treeItems}"
+                    config="{!v.treeConfig}"
+                    isDynamic="{!v.isDynamic}"
+                    selectable="true"
+            />
+            <div class="{!'slds-align_absolute-center slds-m-around--medium' + (v.productDisplayData.productsCount gt v.productDisplayData.productsCountToShow ? '' : ' slds-hide')}">
+                <ui:outputText class="slds-m-right--small" value="{!v.productDisplayData.productsPagMessage}"/>
+                <lightning:button aura:id="step2first" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsCurrentPage eq 1 ? 'disabled' : ''}" onclick="{!c.first}">{!$Label.c.EUR_CRM_First}</lightning:button>
+                <lightning:button aura:id="step2prev" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsCurrentPage eq 1 ? 'disabled' : ''}" onclick="{!c.previous}">{!$Label.c.EUR_CRM_Previous}</lightning:button>
+                <lightning:button aura:id="step2next" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsCount - v.productDisplayData.productsCurrentPage * v.productDisplayData.productsCountToShow le 0 ? 'disabled' : ''}" onclick="{!c.next}">{!$Label.c.EUR_CRM_Next}</lightning:button>
+                <lightning:button aura:id="step2last" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsCount - v.productDisplayData.productsCurrentPage * v.productDisplayData.productsCountToShow le 0 ? 'disabled' : ''}" onclick="{!c.last}">{!$Label.c.EUR_CRM_Last}</lightning:button>
+            </div>
+        </div>
+
+        <!-- Building new catalog hierarchy step -->
+        <div aura:id="step3" class="{!'slds-panel__section ' + (v.currentStep == 3 ? 'slds-show' : 'slds-hide')}">
+
+            <h3 class="slds-section-title--divider slds-m-bottom--medium">{!$Label.c.EUR_CRM_CG_Step3}</h3>
+
+            <div class="{! 'slds-float--left slds-p-around--small slds-is-relative' + (v.isPPanelClosed ? ' displayNone' :  ' slds-size--1-of-2')}" style="height:800px; overflow:auto;">
+                <div class="slds-grid">
+                    <div class="{!'slds-form-element slds-size--1-of-3 slds-large-size--1-of-3 slds-p-around--medium' + (or(v.isDynamic, v.productDisplayData.selectedProductBrands.length le 1) ? ' slds-hide' : '')}">
+                        <ui:inputSelect aura:id="selectedProductBrands" label="{!$Label.c.EUR_CRM_CG_BrandFilter}" multiple="true" change="{!c.productsFilterChange}">
+                            <ui:inputSelectOption text="All" label="{!$Label.c.EUR_CRM_CG_AllBrands}" value="true"/>
+                            <aura:iteration items="{!v.productDisplayData.selectedProductBrands}" var="brand">
+                                <ui:inputSelectOption text="{!brand}" label="{!brand}"/>
+                            </aura:iteration>
+                        </ui:inputSelect>
+                    </div>
+                    <!--
+                        Radio boxes to filter products for only PLV/non-PLV choosing
+                    -->
+                    <!-- PLV/NON-PLV has no sense with data structure, so is hidden -->
+                    <div class="{!'slds-form-element slds-size--1-of-3 slds-large-size--1-of-3 slds-p-around--medium slds-hide' + (v.isDynamic ? ' slds-hide' : '')}">
+                        <span class="slds-form-element__label">{!$Label.c.EUR_CRM_CG_ProductsFiltering}</span>
+                        <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_AllProducts}" name="selectedProd-All" aura:id="selectedFilters" checked="{!v.productDisplayData.selectedFilter == 'All'}" onchange="{!c.productsFilterChange}"/>
+                        <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_NonPLVProducts}" name="selectedProd-CompanyProduct" aura:id="selectedFilters" checked="{!v.productDisplayData.selectedFilter == 'CompanyProduct'}" onchange="{!c.productsFilterChange}"/>
+                        <lightning:input type="radio" label="{!$Label.c.EUR_CRM_CG_PLVProducts}" name="selectedProd-POSMaterial" aura:id="selectedFilters" checked="{!v.productDisplayData.selectedFilter == 'POSMaterial'}" onchange="{!c.productsFilterChange}"/>
+                    </div>
+                    <div class="{!'slds-form-element slds-size--1-of-3 slds-large-size--1-of-3 slds-p-around--medium slds-float--right' + (v.oneViewMode ? ' slds-hide': '')}">
+                        <lightning:input class="hide-toggleLabels" aura:id="hierarchyListView" type="toggle" label="{!$Label.c.EUR_CRM_CG_ListView}" name="hierarchyListViewChange" checked="{! v.isListView}" onchange="{!c.switchListView}"/>
+                        <lightning:input class="hide-toggleLabels slds-hide" aura:id="hierarchySelectedView" type="toggle" label=" " name="hierarchySelectedViewChange" onchange="{!c.switchSelectedProductsView}"/>  
+                    </div>
+                    
+                </div>
+                <!-- Search input --> 
+                <div ondrop="{! c.onPreventDrop}" ondragenter="{! c.onPreventDragEnter}" >
+                    <lightning:input aura:id="productSearch" class="{! v.isDynamic ? ' slds-hide' : '' }" type="search" label="Product Search" value="{!v.productDisplayData.searchFilter}" onchange="{!c.productsFilterChangeDelayed}"/>
+                </div>
+              
+                <lightning:input label="hiddenField" name="hiddenField" aura:id="hiddenSelectedProduct" class="slds-assistive-text"/>
+                <c:EUR_CRM_Tree aura:id="selectedTreeCmp"
+                        header="{!v.treeHeader}"
+                        items="{!v.selectedTreeItems}"
+                        config="{!v.treeConfig}"
+                        isDynamic="{!v.isDynamic}"
+                        draggedProducts="{!v.draggedProducts}"
+                        draggable="true"
+                        isSelectAllProductChbxShown="false"/>
+                        
+                <div class="{!'slds-align_absolute-center slds-m-around--medium' + (v.productDisplayData.productsSelectedCount gt v.productDisplayData.productsSelectedCountToShow ? '' : ' slds-hide')}">
+                    <ui:outputText class="slds-m-right--small" value="{!v.productDisplayData.productsSelectedPagMessage}"/>
+                    <lightning:button aura:id="step3first" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsSelectedCurrentPage eq 1 ? 'disabled' : ''}" onclick="{!c.first}">{!$Label.c.EUR_CRM_First}</lightning:button>
+                    <lightning:button aura:id="step3prev" class="slds-button slds-button_brand" disabled="{!v.productDisplayData.productsSelectedCurrentPage eq 1 ? 'disabled' : ''}" onclick="{!c.previous}">{!$Label.c.EUR_CRM_Previous}</lightning:button>
+                    <lightning:button aura:id="step3next" class="slds-button slds-button_brand" disabled="{!(v.productDisplayData.productsSelectedCount - v.productDisplayData.productsSelectedCurrentPage * v.productDisplayData.productsSelectedCountToShow le 0) ? 'disabled' : ''}" onclick="{!c.next}">{!$Label.c.EUR_CRM_Next}</lightning:button>
+                    <lightning:button aura:id="step3last" class="slds-button slds-button_brand" disabled="{!(v.productDisplayData.productsSelectedCount - v.productDisplayData.productsSelectedCurrentPage * v.productDisplayData.productsSelectedCountToShow le 0) ? 'disabled' : ''}" onclick="{!c.last}">{!$Label.c.EUR_CRM_Last}</lightning:button>
+                </div>
+                
+            </div>
+            <div class="{! 'slds-float--left slds-p-around--small' + (v.isPPanelClosed ? ' slds-size--2-of-2' :  ' slds-size--1-of-2')}" style="height:800px; overflow:auto;">
+                <h4 class="slds-text-heading--label slds-m-around--medium" id="treeheading">{!$Label.c.EUR_CRM_CG_HierarchySettings}</h4>
+                
+                <div class="slds-tabs--scoped">
+                    <div class="slds-grid slds-grid--align-spread">
+                        <ul class="slds-tabs--scoped__nav overflowHidden" role="tablist">
+                            <aura:iteration items="{!v.hierarchyViews}" var="view" indexVar="index">
+                                <li aura:id="viewTab" class="{!'slds-tabs--scoped__item overflowHidden' + (v.activeView == view ? ' slds-is-active' : '')}" role="presentation">
+                                    <a class="slds-tabs--scoped__link" href="javascript:void(0);" role="tab" tabindex="0" aria-selected="true" aria-controls="{!'tab-scoped-' + index}" id="{!'tab-scoped-' + index + '__item'}" title="{!view}" onclick="{!c.selectTab}">{!view}</a>
+                                </li>
+                            </aura:iteration>
+                        </ul>
+                    </div>
+                    <div class="slds-is-relative">
+                    
+                    
+                    <!-- COLLAPSE CONTROL -->
+                    <div class="slider" style="top:0px;left:0px;position:absolute;width:20px;height:100%;" onclick="{! c.doToggleProductPanel }">
+                        <lightning:buttonIcon class="bIcon" aura:id="bIcon" iconName="utility:left" variant="bare" alternativeText="Collapse" />
+                    </div>
+                    <!-- /COLLAPSE CONTROL -->
+                    <aura:iteration items="{!v.hierarchyViews}" var="view" indexVar="index">
+                        <!-- removed style="overflow:auto;" to avoid datepickers being hidden-->
+                        <div aura:id="viewTabContent" id="{!'tab-scoped-' + index}" class="{!'slds-tabs--scoped__content ' + (v.activeView == view ? 'slds-show' : 'slds-hide')}" role="tabpanel" aria-labelledby="{!'tab-scoped-' + index + '__item'}">
+                            <!-- Optimization for not rendering invisible view builders -->
+                            <aura:if isTrue="{!v.activeView == view}">
+                                <c:EUR_CRM_ViewBuilder aura:id="viewBuilderCmp"
+                                           header="{!view + ' ' + $Label.c.EUR_CRM_CG_ViewBuilderSection}"
+                                           pbiFieldLabels="{!v.catalogFieldLabels.PriceBookItem__c}"
+                                           items="{!v.hierarchyBuildingItems}"
+                                           templDelDates="{!v.templDelDates}"
+                                           config="{!v.treeConfig}"
+                                           isDynamic="{!v.isDynamic}"
+                                           isTemplate="{!v.isTemplate}"
+                                           isTransfer="{!v.isTransfer}"
+                                           isReturn="{!v.isReturn}"
+                                           hierarchyDepths="{!v.hierarchyDepths}"
+                                           viewName="{!view}"/>
+                            </aura:if>
+                        </div>
+                    </aura:iteration>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer slds-modal__footer">
+        <lightning:buttonGroup >
+            <lightning:button iconName="utility:close" onclick="{!c.cancel}" name="close" label="{!$Label.c.EUR_CRM_Cancel}"/>
+            <lightning:button iconName="utility:chevronleft" class="{!v.currentStep != 1 ? ' slds-show' : ' slds-hide'}" onclick="{!c.prevStep}" name="prevStep" label="{!$Label.c.EUR_CRM_Previous}"/>
+            <lightning:button aura:id="nextStep" iconName="utility:chevronright" class="{!v.currentStep != 3 ? ' slds-show' : ' slds-hide'}" onclick="{!c.nextStep}" name="nextStep" label="{!$Label.c.EUR_CRM_Next}" disabled="true"/>
+            <lightning:button iconName="utility:package" class="{!and(v.catalog.Id != null, v.currentStep == 1) ? ' slds-show' : ' slds-hide'}" onclick="{!c.saveHeader}" name="saveHeader" label="{!$Label.c.EUR_CRM_Save}"/>
+            <lightning:button iconName="utility:package" class="{!v.currentStep == 3 ? ' slds-show' : ' slds-hide'}" onclick="{!c.save}" name="save" label="{!$Label.c.EUR_CRM_Save}"/>
+        </lightning:buttonGroup>
+    </div>
+
+    <!-- Modal for displaying page error messages -->
+    <c:EUR_CRM_AlertDialog error="{!v.errorMessage}"/>
+   
+    <!-- START Modal for selection products by SAP ids -->
+    <div role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-describedby="modal-wrapper" class="{!'slds-modal' + (v.isOpenProductsPopup ? ' slds-fade-in-open' : '')}">
+        <div class="slds-modal__container">
+            <div class="slds-modal__content slds-p-around_medium" aura:id="accountSection">
+                <div class="slds-form-element">
+                    <ui:inputTextArea aura:id="productsInfo" required="true" label="{!$Label.c.EUR_CRM_CG_LoadProductsByIdsLabel}" class="field" value="" rows="5"/>
+                </div>
+            </div>
+            <footer class="slds-modal__footer">
+                <lightning:button class="slds-button slds-button_neutral" label="{!$Label.c.EUR_CRM_Cancel}" onclick="{!c.closeProductSelectionModal}"/>
+                <lightning:button name="products" aura:id="getRecordsButton" variant="brand" class="slds-button slds-button_brand" label="{!$Label.c.EUR_CRM_Add}" onclick="{!c.selectProductsBySAPIds}"/>
+            </footer>
+        </div>
+    </div>
+    <div class="{!'slds-backdrop' + (v.isOpenProductsPopup ? ' slds-backdrop--open' : '')}"></div>
+    <!-- END Modal -->
+
+    <lightning:spinner aura:id="spinner" class="slds-hide" alternativeText="spinner" variant="brand" size="large"/>
+
+</aura:component>

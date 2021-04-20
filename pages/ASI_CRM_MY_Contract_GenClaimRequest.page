@@ -1,0 +1,877 @@
+<apex:page showHeader="true" sidebar="true" controller="ASI_CRM_MY_Contract_GenClaimRequest_Ctrl">
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, 'styles/jquery-ui1.10.4.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_DataTables, 'css/jquery.dataTables.css')}" /> 
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_MY_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+	
+
+
+    <style type="text/css">
+        div.hid {display: none;}
+        /* highlight results */ 
+        .ui-autocomplete span.hl_results {
+        background-color: #ffff66;
+        }
+        
+        /* loading - the AJAX indicator */
+        .ui-autocomplete-loading {
+        background: white url('/img/loading.gif') right center no-repeat;
+        }
+        
+        
+        .ui-autocomplete-input{ 
+        //border-left: 3px solid darkred !important;    
+        }
+        
+        .ui-autocomplete {
+        height: 200px;
+        overflow-y: auto;
+        /* prevent horizontal scrollbar */
+        overflow-x: hidden;
+        overflow:auto;
+        /* add padding to account for vertical scrollbar */
+        padding-right: 20px;
+        left: 0;
+        }
+        /* IE 6 doesn't support max-height
+        * we use height instead, but this forces the menu to always be this tall
+        */
+        *html .ui-autocomplete {
+        height: 200x;
+        }
+    </style>
+
+    <script type="text/javascript">
+        var contactList = [];
+        var sourceList =[];
+        $(document).ready(function(){
+            sourceList={!JSONContract};
+            setUpContractData();
+            contractAutoComplete();
+            changeRequestType(); 
+        
+            $(".cls_CalculatedFOCTable").DataTable();
+
+            $(".cls_CalculatedPaymentTable").DataTable();
+
+        });
+    
+        
+
+        function initUnUsedDataTable(){
+            $(".cls_CalculatedFOCTable").DataTable();
+            $(".cls_CalculatedPaymentTable").DataTable();
+        }
+        function initSpecificDataTable(){
+            $(".cls_RelatedCalcFOCTable").DataTable();
+            $(".cls_RelatedCalcCashTable").DataTable();
+            $(".cls_newFOCTable").DataTable();
+            $(".cls_ProceededCalcFOCTable").DataTable();
+            $(".cls_newPaymentTable").DataTable();
+            $(".cls_ProceededCalcPaymentTable").DataTable();
+        }
+        function setUpContractData(){
+            if (sourceList) {
+                for(var i = 0; i < sourceList.length ; i++){
+                    var contract = {
+                        label : sourceList[i].Name,
+                        value : sourceList[i].Id
+                    };
+                    contactList.push(contract);
+                }
+
+                //console.log(contactList);
+            }
+        }
+        function contractAutoComplete (){
+            if (contactList) {
+                $("[id*='input_contractTxt']").autocomplete({
+                    source : contactList,
+                    minLength: 0,
+                    select : function( event, ui ) {    
+                        event.preventDefault();
+                        $(this).val(ui.item.label);
+                        $("[id*='input_contractId']").val(ui.item.value);
+                    },
+                    focus : function(event, ui){
+                        event.preventDefault();
+                        $(this).val(ui.item.label);
+                        $("[id*='input_contractId']").val(ui.item.value);
+                    }
+
+                })
+                .click(function(){
+                    $(this).autocomplete("search",$(this).val());
+                });
+            }
+        }
+
+        function selectContract(contractName, contractId,genType, incentiveType){
+            $("[id*='input_contractTxt']").val(contractName);
+            $("[id*='input_contractId']").val(contractId);
+            if(genType==='{!CASH_OPTION}'){
+                $("[id*='input_requestType']").val('{!CASH_OPTION}');
+            }else if(genType==='{!FOC_OPTION}'){
+                $("[id*='input_requestType']").val('{!FOC_OPTION}');
+            }
+
+            $("[id*='input_contractId']").focus();
+            
+            if(incentiveType == 'Volume Incentive'){
+                $("[id*='incentive_panel']").css('display','');
+                $("[id*='incentive_label']").css('display','');
+             	$("[id*='input_incentiveType']").val('{!VOLUME_OPTION}');
+            }
+            else if(incentiveType == 'Other Incentive'){
+                $("[id*='incentive_panel']").css('display','');
+                $("[id*='incentive_label']").css('display','');
+                $("[id*='input_incentiveType']").val('{!OTHER_OPTION}');
+            }
+            else{
+                $("[id*='incentive_panel']").css('display','none');
+                $("[id*='incentive_label']").css('display','none');
+            }
+			
+        }
+    
+        function changeRequestType(){   
+            
+            var reuqest_type = $("[id*='input_requestType']").val();
+            if(reuqest_type == 'FOC'){
+                // for FOC 
+                //'{!isShowIncentiveOption}' = false;
+                $("[id*='incentive_panel']").css('display','none');
+                $("[id*='incentive_label']").css('display','none');
+            }
+            else{
+                // for Cash
+                //'{!isShowIncentiveOption}' = true;
+                $("[id*='incentive_panel']").css('display','');
+                $("[id*='incentive_label']").css('display','');
+            }
+        }
+
+        function previewValidation(){
+            //Check Contract Id:
+            var isValid = true;
+            var conTxt = $("[id*='input_contractTxt']").val();
+            var conId = $("[id*='input_contractId']").val();
+            if(conTxt == '' || conTxt == null){
+                isValid = false;
+                alert('Contract is missing. Please select first.');
+                $("[id*='input_contractTxt']").focus();
+                return isValid;
+            }
+            var foundMath = false;
+            for(var i=0; i<contactList.length; i++){
+                if((contactList[i].label===conTxt && contactList[i].value!=conId) || (contactList[i].label!=conTxt && contactList[i].value===conId)) {
+
+                    if(contactList[i].label===conTxt && (conId=='' || conId==null)){
+                        //If has input text, but id is null, copy the right id for it:
+                        conId=contactList[i].value;
+                        $("[id*='input_contractId']").val(conId);
+                    }else {
+                        isValid = false;    
+                        break;
+                    }
+                }else if(contactList[i].label===conTxt && contactList[i].value===conId){
+                    foundMath = true;
+                    break;
+                }
+            }
+            if(foundMath ==false){
+                isValid = false;
+            }
+            if(isValid== false){
+                alert('Invalid Contract. Please re-select.');
+                $("[id*='input_contractTxt']").focus();
+                return false;
+            }
+
+            return isValid;
+        }
+
+        function saveValidation(){
+            //Check Contract Id:
+            var isValid = true;
+            var conTxt = $("[id*='input_contractTxt']").val();
+            var conId = $("[id*='input_contractId']").val();
+            if(conTxt == '' || conTxt == null){
+                isValid = false;
+                alert('Contract is missing. Please select first.');
+                $("[id*='input_contractTxt']").focus();
+                return isValid;
+            }
+            var foundMath = false;
+            for(var i=0; i<contactList.length; i++){
+                if((contactList[i].label===conTxt && contactList[i].value!=conId) || (contactList[i].label!=conTxt && contactList[i].value===conId)) {
+
+                    if(contactList[i].label===conTxt && (conId=='' || conId==null)){
+                        //If has input text, but id is null, copy the right id for it:
+                        conId=contactList[i].value;
+                        $("[id*='input_contractId']").val(conId);
+                    }else {
+                        isValid = false;    
+                        break;
+                    }
+                }else if(contactList[i].label===conTxt && contactList[i].value===conId){
+                    foundMath = true;
+                    break;
+                }
+            }
+            if(foundMath ==false){
+                isValid = false;
+            }
+            if(isValid== false){
+                alert('Invalid Contract. Please re-select.');
+                $("[id*='input_contractTxt']").focus();
+                return false;
+            }else {
+                var reqstType = $("[id*='input_requestType']").val();
+                var fromYear = $("[id*='input_fromYear']").val();
+                var fromMonth = $("[id*='input_fromMonth']").val();
+                var toYear = $("[id*='input_toYear']").val();
+                var toMonth = $("[id*='input_toMonth']").val();
+                
+                
+                if(confirm('Please confirm if you want to generate "'+reqstType+'"" request for contract ("'+conTxt+'") for period "from '+fromYear+'-'+fromMonth+' to '+toYear+'-'+toMonth+'" ?')  ==true){
+                    //proceedGeneration();
+                    return true;
+                }else {
+                    isValid =false;
+                    return false;
+                }
+            }
+
+            return isValid;
+        }
+
+        function noenter(ev)  {
+            if (window.event && window.event.keyCode == 13 || ev.which == 13) {
+                //doSearchAF();
+                $("[id*='btn_proceed']").focus();
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+
+        function addHighlightStyle(){
+            //alert($("[id*='relatedPgeBlkTitle']").find('.pbHeader').find('.pbTitle').find('.mainTitle').html());
+            $("[id*='relatedPgeBlkTitle']").find('.pbHeader').find('.pbTitle').find('.mainTitle').attr('style', 'color:red;');
+            
+        }
+  
+    </script>
+
+
+
+    <apex:actionStatus id="idStatus" >
+        <apex:facet name="start">
+            <c:ASI_CRM_LoadingStatus BackColor="#ffffff"
+                                    borderColor="#6B6B6B"
+                                    borderSize="1"
+                                    height="50px"
+                                    width="150px"
+                                    margintop="-25px"
+                                    marginleft="-60px"
+                                    ImageUrl="{!$Resource.ASI_CRM_loadingStatus}"
+                                    Message=" Processing ..."/>
+        </apex:facet>
+    </apex:actionStatus>
+
+    <apex:sectionHeader title="Request Generation" subtitle="FOC / Cash Request" />
+	<apex:form id="theInputForm">
+	<apex:pageBlock title="Criteria for Generation">
+		<apex:pageBlockButtons location="top">
+			
+            <!--<apex:commandButton value="Proceed To Gen"   onclick="saveValidation();" reRender="input_contractTxt"/>
+            <apex:actionFunction name="proceedGeneration" action="{!proceedGeneration}" reRender="theInputForm" oncomplete="contractAutoComplete();"  />-->
+            <apex:commandButton value="Preview Related Records" reRender="theInputForm,relatedRcdSection"  onclick="if(!previewValidation()){return false;}" oncomplete="contractAutoComplete();initSpecificDataTable();addHighlightStyle(); changeRequestType();" action="{!previewRelatedCalcRecords}"  id="btn_preview" status="idStatus"/>
+            <apex:commandButton value="Proceed To Gen" reRender="theInputForm,relatedRcdSection,pgeBlk_outstandingRecord"  onclick="if(!saveValidation()){return false;}" oncomplete="contractAutoComplete();initSpecificDataTable();addHighlightStyle();initUnUsedDataTable();changeRequestType();" action="{!genRequest}"  id="btn_proceed" status="idStatus"/>
+            
+        	<!--<apex:commandButton value="Refresh"/>-->
+		</apex:pageBlockButtons>
+
+		<apex:pageMessages />
+
+		<apex:pageBlockSection title="Type for Generation:">
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="Request Type"></apex:outputLabel>
+                <apex:outputPanel >
+                    <apex:selectList onchange="changeRequestType();" value="{!selectedType}"  multiselect="false" size="1" required="true" id="input_requestType">
+                        <apex:selectOption itemValue="{!FOC_OPTION}" itemLabel="FOC"/>
+                        <apex:selectOption itemValue="{!CASH_OPTION}" itemLabel="Cash Payment"/>
+                    </apex:selectList> 
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel id="incentive_label" value="Payment Incentive Type"></apex:outputLabel>
+                <apex:outputPanel id="incentive_panel">
+                    <apex:selectList value="{!selectedIncentiveType}" multiselect="false"  size="1" required="true" id="input_incentiveType">
+                        <apex:selectOption itemValue="{!ALL_OPTION}" itemLabel="All"/>
+                        <apex:selectOption itemValue="{!VOLUME_OPTION}" itemLabel="Volume Incentive"/>
+                        <apex:selectOption itemValue="{!OTHER_OPTION}" itemLabel="Other Incentive"/>
+                    </apex:selectList> 
+                </apex:outputPanel>    
+            </apex:pageBlockSectionItem>
+		</apex:pageBlockSection>
+
+
+		<apex:pageBlockSection title="Select Contract & Period To Gen:" >
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="Contract" />
+                <apex:outputPanel styleClass="requiredInput" layout="block">
+                    <apex:outputPanel styleClass="requiredBlock" layout="block" />
+                    <apex:inputText value="{!contractTxt}" id="input_contractTxt" required="true" onkeypress="return noenter(event);"/>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem >
+                <div id="input_contractSelect" />
+                <apex:inputHidden value="{!contractId}" id="input_contractId" />
+            </apex:pageBlockSectionItem>
+
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="Date From"></apex:outputLabel>
+                <apex:outputPanel >
+                    <apex:outputPanel style="margin-right: 5px;">
+                        <apex:outputLabel value="Year "></apex:outputLabel>
+                         <apex:selectList value="{!selectedFromYear}" multiselect="false" size="1" id="input_fromYear">
+                         	<apex:selectOptions value="{!fromYearOptions}" />
+                     	</apex:selectList>
+                    </apex:outputPanel>
+                   <apex:outputPanel >
+                        <apex:outputLabel value="Month "></apex:outputLabel>
+                        <apex:selectList value="{!selectedFromMonth}" multiselect="false" size="1" id="input_fromMonth">
+                         	<apex:selectOptions value="{!monthOptions}" />
+                     	</apex:selectList>
+                	</apex:outputPanel>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem >
+                <apex:outputLabel value="Date To"></apex:outputLabel>
+                <apex:outputPanel >
+                    <apex:outputPanel style="margin-right: 5px;">
+                        <apex:outputLabel value="Year "></apex:outputLabel>
+                         <apex:selectList value="{!selectedToYear}" multiselect="false" size="1" id="input_toYear">
+                         	<apex:selectOptions value="{!toYearOptions}" />
+                     	</apex:selectList>
+                    </apex:outputPanel>
+                   <apex:outputPanel >
+                        <apex:outputLabel value="Month "></apex:outputLabel>
+                          <apex:selectList value="{!selectedToMonth}" multiselect="false" size="1" id="input_toMonth">
+                         	<apex:selectOptions value="{!monthOptions}" />
+                     	</apex:selectList>
+                    </apex:outputPanel>
+                </apex:outputPanel>
+            </apex:pageBlockSectionItem>
+            <apex:pageBlockSectionItem helpText="If ticked, system will gen 1 request for 1 month within selected period; If not, system will gen 1 request for the whole period.">
+                <apex:outputLabel value="Claim Reuqest By Month?" />
+                <apex:inputCheckbox value="{!genMonthly}" />
+            </apex:pageBlockSectionItem>
+        </apex:pageBlockSection>
+    </apex:pageBlock>
+    </apex:form>
+
+    <!-- *********Related Records Section ***********-->
+    <apex:outputPanel id="relatedRcdSection" >
+    <apex:pageBlock title="Related Records"  rendered="{!showRelatedSection}" id="relatedPgeBlkTitle">
+        <apex:pageBlockSection columns="1" title="Related Calculated {!if(selectedType == FOC_OPTION,'FOC','Payment')} Records" rendered="{!showRelatedRcd}">
+            <apex:dataTable value="{!l_RelatedCalcFOCLine}" var="RelatedFOCline"  id="RelatedCalcFOCTable" styleClass="cls_RelatedCalcFOCTable"  rendered="{!selectedType == FOC_OPTION}">
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Calculated_FOC__r.ASI_CRM_Customer__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__c}" />
+                </apex:column>
+                <!--
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['Name'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.Name}" />
+                </apex:column>
+                -->
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Calculated_FOC__r.ASI_CRM_Year__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Calculated_FOC__r.ASI_CRM_Month__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Original_SKU__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Original_SKU__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_SKU__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_FOC__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC_WS__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_FOC_WS__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_ExcessQuantity__c}" />
+                </apex:column>
+                <!--
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Remain__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain_WS__c'].label}</apex:facet>
+                    <apex:outputField value="{!RelatedFOCline.ASI_CRM_Remain_WS__c}" />
+                </apex:column>
+                -->
+            </apex:dataTable>
+
+
+            <apex:dataTable value="{!l_RelatedCalcPaymentLine}" var="calcPaymentLine"  id="RelatedCalcCashTable" styleClass="cls_RelatedCalcCashTable"  rendered="{!selectedType == CASH_OPTION}">
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Customer__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Contract__c}" />
+                </apex:column>
+                <!--
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['Name'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.Name}" />
+                </apex:column>
+                -->
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Year__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Month__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Incentive_Type__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Incentive_Type__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_SKU__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SetupCode__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_SetupCode__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Actual_Volume__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Actual_Volume__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Cash__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Cash__c}" />
+                </apex:column>
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_ExcessQuantity__c}" />
+                </apex:column>
+                <!--
+                <apex:column >
+                    <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Target_Volume__c'].label}</apex:facet>
+                    <apex:outputField value="{!calcPaymentLine.ASI_CRM_Target_Volume__c}" />
+                </apex:column>
+                -->
+            </apex:dataTable>
+        </apex:pageBlockSection>
+
+        <!-- *********New Generated FOC Record Section ***********-->
+        <apex:pageBlockSection title="FOC:" rendered="{!showNewFOCRecords }" columns="1">
+            <apex:pageBlockSection title="New Generated FOC" columns="1">
+
+                <apex:dataTable value="{!l_newAllFOCLine}" var="foc" id="newFOCTable" styleClass="cls_newFOCTable" >
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Free_Goods_Request__c.fields['ASI_CRM_Outlet__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Request_Order__r.ASI_CRM_Outlet__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Free_Goods_Request__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Request_Order__r.ASI_CRM_Contract__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_FOC_Request_Order__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Request_Order__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Free_Goods_Request__c.fields['ASI_CRM_Date_From__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Request_Order__r.ASI_CRM_Date_From__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Free_Goods_Request__c.fields['ASI_CRM_Date_To__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Request_Order__r.ASI_CRM_Date_To__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_FOC_SKU__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_SKU__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_FOC_Issued_Qty__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Issued_Qty__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_CRM_SetupCode__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_CRM_SetupCode__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_CRM_Min_SP__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_CRM_Min_SP__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_CRM_Bottle_Value__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_CRM_Bottle_Value__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_FOC_Request_Item__c.fields['ASI_FOC_Remark__c'].label}</apex:facet>
+                        <apex:outputField value="{!foc.ASI_FOC_Remark__c}" />
+                    </apex:column>
+                </apex:dataTable>
+            </apex:pageBlockSection>
+
+            <!-- *********Proceeded Calc FOC Record Section ***********-->
+            <apex:pageBlockSection title="Proceeded Calc FOC" columns="1">
+                <apex:dataTable value="{!l_ProceededCalcFOCLine}" var="calcFOCLine"  id="ProceededCalcFOCTable" styleClass="cls_ProceededCalcFOCTable" >
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Customer__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__c}" />
+                    </apex:column>
+                    <!--
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['Name'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.Name}" />
+                    </apex:column>
+                    -->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Year__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Month__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Original_SKU__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Original_SKU__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_SKU__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_FOC__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC_WS__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_FOC_WS__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_ExcessQuantity__c}" />
+                    </apex:column>
+                    <!--
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Remain__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain_WS__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcFOCLine.ASI_CRM_Remain_WS__c}" />
+                    </apex:column>
+                    -->
+                </apex:dataTable>
+            </apex:pageBlockSection>
+        </apex:pageBlockSection>
+
+        <!-- *********New Generated Payment Record Section ***********-->
+        <apex:pageBlockSection title="Payment:" rendered="{!showNewCashRecords }" columns="1">
+            <apex:pageBlockSection title="New Generated Payment" columns="1">
+
+                <apex:dataTable value="{!l_newAllPaymentLine}" var="payment" id="newPaymentTable" styleClass="cls_newPaymentTable" >
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['ASI_CRM_CN_OutletWS__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__r.ASI_CRM_CN_OutletWS__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['ASI_TH_CRM_Contract__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Contract__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['Name'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['ASI_CRM_Date_From__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__r.ASI_CRM_Date_From__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['ASI_CRM_Date_To__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__r.ASI_CRM_Date_To__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequest__c.fields['ASI_CRM_Incentive_Type__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Payment_Request__r.ASI_CRM_Incentive_Type__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_SKU__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_CN_Actual_Vol__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_CN_Actual_Vol__c}" />
+                    </apex:column>
+                    <!--
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_CN_Target_BT__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_CN_Target_BT__c}" />
+                    </apex:column>
+                -->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_SetupCode__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_SetupCode__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_TH_CRM_Amount__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_Amount__c}" />
+                    </apex:column>
+                    <!--
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_TH_CRM_COA__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_TH_CRM_COA__c}" />
+                    </apex:column>
+                -->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_CN_AC_Code__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_CN_AC_Code__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_TH_CRM_PaymentRequestLineItem__c.fields['ASI_CRM_Remark__c'].label}</apex:facet>
+                        <apex:outputField value="{!payment.ASI_CRM_Remark__c}" />
+                    </apex:column>
+                </apex:dataTable>
+            </apex:pageBlockSection>
+
+            <!-- *********Proceeded Calc Payment Section ***********-->
+            <apex:pageBlockSection title="Proceeded Calc Payment" columns="1">
+                <apex:dataTable value="{!l_ProceededCalcPaymentLine}" var="calcPaymentLine"  id="ProceededCalcPaymentTable" styleClass="cls_ProceededCalcPaymentTable" >
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Customer__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Contract__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['Name'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.Name}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Year__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Month__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Incentive_Type__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Incentive_Type__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_SKU__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SetupCode__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_SetupCode__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Actual_Volume__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Actual_Volume__c}" />
+                    </apex:column>
+                    <!--
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Target_Volume__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Target_Volume__c}" />
+                    </apex:column>
+                -->
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Cash__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_Cash__c}" />
+                    </apex:column>
+                    <apex:column >
+                        <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                        <apex:outputField value="{!calcPaymentLine.ASI_CRM_ExcessQuantity__c}" />
+                    </apex:column>
+                </apex:dataTable>
+            </apex:pageBlockSection>
+        </apex:pageBlockSection>
+    </apex:pageBlock>
+    </apex:outputPanel>
+	
+    <apex:pageBlock title="Outstanding FOC / Payment"  id="pgeBlk_outstandingRecord">
+    
+    <!-- *********Outstanding Calc FOC Line: ***********-->
+    <apex:pageBlockSection title="Calculated FOC Not Gen Request Yet" columns="1">
+        <!--
+    	<apex:pageBlockTable value="{!l_UnusedCalcFOCLine}" var="FOCLine" >
+    		<apex:column  value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Customer__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__c}" />
+    		<apex:column  value="{!FOCLine.Name}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Year__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Month__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_SKU__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_FOC__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_FOC_WS__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_Remain__c}" />
+    		<apex:column  value="{!FOCLine.ASI_CRM_Remain_WS__c}" />
+    	</apex:pageBlockTable>
+        -->
+        <apex:dataTable value="{!l_UnusedCalcFOCLine}" var="FOCLine" id="CalculatedFOCTable"  styleClass="cls_CalculatedFOCTable" >
+           <apex:column >
+                <apex:facet name="header">Action</apex:facet>
+                <apex:outputLink value="#" onclick="selectContract('{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__r.name}','{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__c}','{!FOC_OPTION}');">Select Contract</apex:outputLink>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Customer__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Contract__c}" />
+            </apex:column>
+            <!--
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['Name'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.Name}" />
+            </apex:column>
+            -->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Year__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Calculated_FOC__r.ASI_CRM_Month__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Original_SKU__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Original_SKU__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_SKU__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_FOC__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_FOC_WS__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_FOC_WS__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_ExcessQuantity__c}" />
+            </apex:column>
+            <!--
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Remain__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_FOC_Line__c.fields['ASI_CRM_Remain_WS__c'].label}</apex:facet>
+                <apex:outputField value="{!FOCLine.ASI_CRM_Remain_WS__c}" />
+            </apex:column>
+        -->
+        </apex:dataTable>
+	</apex:pageBlockSection>
+
+    <!-- *********Outstanding Calc Payment Line: ***********-->
+    <apex:pageBlockSection title="Calculated Payment Not Gen Request Yet" columns="1">
+        <apex:dataTable value="{!l_UnusedCalcPaymentLine}" var="calcPaymentLine" id="CalculatedPaymentTable"  styleClass="cls_CalculatedPaymentTable" >
+            <apex:column >
+                <apex:facet name="header">Action</apex:facet>
+                <apex:outputLink value="#" onclick="selectContract('{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Contract__r.name}','{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Contract__c}','{!CASH_OPTION}', '{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Incentive_Type__c}');">Select Contract</apex:outputLink>
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Customer__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Customer__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Contract__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Contract__c}" />
+            </apex:column>
+            <!--
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['Name'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.Name}" />
+            </apex:column>
+            -->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Year__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Year__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Month__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Month__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment__c.fields['ASI_CRM_Incentive_Type__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Calculated_Payment__r.ASI_CRM_Incentive_Type__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SKU__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_SKU__c}" />
+            </apex:column>
+            
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_SetupCode__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_SetupCode__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Actual_Volume__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Actual_Volume__c}" />
+            </apex:column>
+            <!--
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Target_Volume__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Target_Volume__c}" />
+            </apex:column>
+        -->
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_Cash__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_Cash__c}" />
+            </apex:column>
+            <apex:column >
+                <apex:facet name="header">{!$ObjectType.ASI_CRM_Calculated_Payment_Item__c.fields['ASI_CRM_ExcessQuantity__c'].label}</apex:facet>
+                <apex:outputField value="{!calcPaymentLine.ASI_CRM_ExcessQuantity__c}" />
+            </apex:column>
+        </apex:dataTable>
+    </apex:pageBlockSection>
+    
+    
+	</apex:pageBlock>
+	
+</apex:page>

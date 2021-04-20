@@ -1,0 +1,840 @@
+<apex:page standardController="ASI_KOR_POSM_Order_Detail__c" sidebar="false" extensions="ASI_MFM_KR_POSMManageAllController2"  docType="html-5.0" action="{!init}" recordSetVar="posmReqDetails"> 
+    <head>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_AddOn_CSS_V3_3_2, '/bower_components/Font-Awesome/css/font-awesome.css')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Angular_V1_5_7, 'JS/angular-datatables.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        
+    </head>
+    
+    <style type="text/css">
+        div.hid {display: none;}
+        
+        .ui-autocomplete span.hl_results {
+        background-color: #ffff66;
+        }
+        
+        .ui-autocomplete-loading {
+        background: white url('/img/loading.gif') right center no-repeat;
+        }
+        
+        
+        .ui-autocomplete-input{ 
+        border-left: 3px solid darkred !important;    
+        }
+        
+        .ui-autocomplete {
+        height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overflow:auto;
+        padding-right: 20px;
+        left: 0;
+        }
+        *html .ui-autocomplete {
+        height: 200x;
+        }
+        
+        
+        .bs.panel-heading.div-size {
+        border-radius: 10px;
+        }
+        
+        .required {
+        border-left: 3px solid darkred !important;  
+        }
+        
+        .ui-helper-hidden-accessible { display:none !important;} 
+        
+        .ui-helper-hidden-accessible { position: absolute; left:-999em !important;}
+        input:-moz-read-only { /* For Firefox */
+        background-color: Gainsboro;
+        }
+        
+        input:read-only {
+        background-color: Gainsboro;
+        }
+        
+        
+        #loadingpart {
+        display: block;
+        position: absolute;
+        top: -30;
+        left: 0;
+        z-index: 100;
+        //width: 100vw;
+        height: 100vh;
+        background-color: rgba(192, 192, 192, 0.5);
+        background-image: url("/img/loading.gif");
+        background-repeat: no-repeat;
+        background-position: 5%;
+        }
+        
+        .warning-background{
+        color: #fff; 
+        background: #f2dede
+        }
+        
+    </style>
+    <script type="text/javascript">
+    var app = angular.module('MyApp',['datatables']);  
+    var POSMProductList=[];
+    var VenueList=[];
+    var SubBrand = [];
+    var VenueSQL=' WHERE RecordType.DeveloperName = \'ASI_KOR_Venue\' and ASI_KOR_Venue_Status__c =  \'Active\' and owner.ASI_KOR_User_Branch_Code__c  = \''+'{!Branch}'+'\'';
+    $(document).ready(function() {// console.log('document  ready '); // console.log( '{!$Label.ASI_MFM_KR_POSMManageAllVenueSQL}' ); // ASI_KOR_VF_ATTACH_ERR_NO_FILE ASI_MFM_KR_PORC
+        if('{!$Label.ASI_MFM_KR_POSMManageAllVenueSQL}'){
+            VenueSQL='{!$Label.ASI_MFM_KR_POSMManageAllVenueSQL}';
+            VenueSQL+=' and owner.ASI_KOR_User_Branch_Code__c  = \''+'{!Branch}'+'\'';
+        }
+        //console.log('Now venue SQL '+VenueSQL);
+    });
+    
+    
+    
+    app.factory('GetMasterData',function($q,$rootScope){  
+        var factory = {};  
+        
+        factory.getData = function(ObjectName,SQLStatement,whereClause){  
+            var deferred = $q.defer();  
+            RemoteGetMasterData(function(result){  
+                $rootScope.$apply(function(){  
+                    deferred.resolve(result);  
+                });  
+            }, ObjectName,SQLStatement,whereClause);  
+            return deferred.promise;  
+        }  
+        return factory;  
+    });
+    
+    function RemoteGetMasterData(callback, ObjectName,SQLStatement,whereClause){  
+        
+        Visualforce.remoting.Manager.invokeAction(  
+            '{!$RemoteAction.ASI_MFM_KR_POSMManageAllController2.findList}', ObjectName,SQLStatement,whereClause,
+            callback,  
+            {escape: false}  
+        );
+    }
+    
+    
+    app.controller('myController',function($scope,GetMasterData,DTOptionsBuilder, DTColumnDefBuilder){  
+        //Data 
+        $scope.ResultData;
+        $scope.deleteList=[]; 
+        
+        $scope.dtOptions = DTOptionsBuilder.newOptions()
+        .withDisplayLength(20)
+        .withOption('bLengthChange', false).withDOM('C<"clear">lrtip').withOption('preDrawCallback', function(settings) {
+        }).withOption('drawCallback', function(settings) {
+            initalizePOSMProductAutoComplete(SubBrand,POSMProductList);
+            initalizeVenueAutoComplete(VenueList);
+            if( document.getElementById("NewLineBtn").disabled ){
+                document.getElementById("NewLineBtn").disabled = false;
+                changepage();
+            }
+        });
+        
+        $scope.dtColumnDefs = [
+            DTColumnDefBuilder.newColumnDef(0).notSortable(),DTColumnDefBuilder.newColumnDef(1).notSortable(),DTColumnDefBuilder.newColumnDef(2),DTColumnDefBuilder.newColumnDef(3).notSortable(),
+            DTColumnDefBuilder.newColumnDef(4).notSortable(),DTColumnDefBuilder.newColumnDef(5).notSortable(),DTColumnDefBuilder.newColumnDef(6).notSortable(),
+            DTColumnDefBuilder.newColumnDef(7).notSortable(),DTColumnDefBuilder.newColumnDef(8).notSortable(),DTColumnDefBuilder.newColumnDef(9).notSortable(),
+            DTColumnDefBuilder.newColumnDef(10).notSortable(),DTColumnDefBuilder.newColumnDef(11).notSortable(),DTColumnDefBuilder.newColumnDef(12).notSortable(),
+            DTColumnDefBuilder.newColumnDef(13).notSortable(),DTColumnDefBuilder.newColumnDef(14).notSortable()
+        ];
+        $scope.dtInstance = {};
+        $scope.goToLastPage = function() {//console.log('------------goToLastPage-------------');//console.log($scope.dtInstance.DataTable);
+            $scope.dtInstance.DataTable.page('last').draw(false);//console.log($scope.dtInstance.DataTable);
+            clearalert();
+        };
+        
+        $scope.ChangeItemUpdateList = function(ItemId,ProductId,InfoObject) {
+            //change venue information in ResultData      console.log('Enter : '+ItemId + ' || '+ProductId);      console.log(InfoObject); 
+            for(var i=0; i<$scope.ResultData.length;i++){
+                if($scope.ResultData[i].Id===ItemId){//console.log('**Find**');
+                    if(InfoObject.ASI_MFM_Available_Qty__c){
+                        $scope.ResultData[i].AvailableQuantity=InfoObject.ASI_MFM_Available_Qty__c;
+                    } 
+                  
+                    if(InfoObject.ASI_MFM_Product_Owner__r){
+                        $scope.ResultData[i].ProductOwner=InfoObject.ASI_MFM_Product_Owner__r.Name;
+                    }
+                }
+            }//End of for loop 
+            
+        };
+        
+        
+        
+       $scope.ClearItemMasterValue= function(ItemId){
+           for(var i=0; i<$scope.ResultData.length;i++){
+               if($scope.ResultData[i].Id===ItemId){
+                    $scope.ResultData[i].ASI_KOR_Item_Name__c='';
+                    $scope.ResultData[i].ItemName='';
+                    $scope.ResultData[i].ProductOwner='';
+                    $scope.ResultData[i].AvailableQuantity='';
+               }
+           }
+       };
+        
+        $scope.ClearVenueData= function(ItemId){
+            for(var i=0; i<$scope.ResultData.length;i++){
+                if($scope.ResultData[i].Id===ItemId){
+                    $scope.ResultData[i].VenueCode='';
+                    $scope.ResultData[i].VenueCapa='';
+                    $scope.ResultData[i].SalesRep='';
+                    $scope.ResultData[i].ASI_MFM_Total_PRK_Capa__c='';
+                    $scope.ResultData[i].Branch='';
+                }
+            }
+        };
+        
+        $scope.ChangeVenueUpdateList = function(ItemId,VenueId,InfoObject) {
+            //change venue information in ResultData    console.log('Enter : '+ItemId + ' || '+VenueId);   console.log(InfoObject); //console.log($scope.ResultData);
+            for(var i=0; i<$scope.ResultData.length;i++){//console.log($scope.ResultData[i].Id);
+                if($scope.ResultData[i].Id===ItemId){
+                    
+                    $scope.ResultData[i].ASI_MFM_Total_PRK_Capa__c=0;
+                    $scope.ResultData[i].SalesRep=InfoObject.Owner.Name;
+                    
+                    if(InfoObject.Owner.ASI_KOR_User_Branch_Name__c && InfoObject.Owner.ASI_KOR_User_Branch_Code__c){
+                        $scope.ResultData[i].Branch=InfoObject.Owner.ASI_KOR_User_Branch_Name__c+'('+InfoObject.Owner.ASI_KOR_User_Branch_Code__c+')';
+                    }
+                    if(InfoObject.ASI_KOR_Customer_Code__c){
+                        $scope.ResultData[i].VenueCode=InfoObject.ASI_KOR_Customer_Code__c;
+                    }
+                    if(InfoObject.ASI_KOR_Venue_Capacity__c){
+                        $scope.ResultData[i].VenueCapa=InfoObject.ASI_KOR_Venue_Capacity__c;
+                    }
+                    if(InfoObject.ASI_KOR_Venue_Tot_PR_KOR_Whisky_CAPA__c){
+                        $scope.ResultData[i].ASI_MFM_Total_PRK_Capa__c+=InfoObject.ASI_KOR_Venue_Tot_PR_KOR_Whisky_CAPA__c;
+                    }
+                    if(InfoObject.ASI_KOR_Venue_Tot_PRK_White_Spirits_CAPA__c){
+                        $scope.ResultData[i].ASI_MFM_Total_PRK_Capa__c+=InfoObject.ASI_KOR_Venue_Tot_PRK_White_Spirits_CAPA__c;
+                    }
+                    if(InfoObject.ASI_KOR_Venue_PR_Korea_Vodka_CAPA__c){
+                        $scope.ResultData[i].ASI_MFM_Total_PRK_Capa__c+=InfoObject.ASI_KOR_Venue_PR_Korea_Vodka_CAPA__c;
+                    }
+                }
+            }
+            
+        };
+        
+        $scope.ResultData =GetResultData();
+        
+        GetMasterData.getData('ASI_KOR_POSM_Product__c','Id,Name,ASI_MFM_Sub_Brand__c,ASI_MFM_Sub_Brand__r.Name,ASI_MFM_Available_Qty__c,ASI_MFM_Competitor_Brand__c,ASI_MFM_Product_Owner__r.Name ',' WHERE RecordType.DeveloperName = \'ASI_KOR_POSM_Product\' and ASI_MFM_Item_Category__c = \'Brand MKT\'  and ASI_MFM_Active__c =true ').then(function(result){  
+            SubBrand=[];
+            POSMProductList = []; // POSM Product
+            var TempList = [];
+            for (var i = 0; i < result.length; i++) {//console.log(result[i]);
+                var posmProductName = new Object();
+                posmProductName.label =  htmlEncode(result[i]["Name"]);
+                posmProductName.value =  htmlEncode(result[i]["Id"]);
+                posmProductName.description = htmlEncode(result[i]["ASI_MFM_Sub_Brand__r"]["Name"]);//posmProductName.price = htmlEncode(result[i]["ASI_MFM_UnitCost__c"]);posmProductName.UOM = htmlEncode(result[i]["ASI_KOR_UOM__c"]);
+                posmProductName.Obj=result[i];
+                POSMProductList.push(posmProductName);
+                
+                //SB-List
+                
+                var SubBrandValue = new Object();
+                SubBrandValue.label =  htmlEncode(result[i]["ASI_MFM_Sub_Brand__r"]["Name"]);
+                SubBrandValue.value =  htmlEncode(result[i]["ASI_MFM_Sub_Brand__c"]);
+                
+                //Filter out duplicate record in SB-List
+                if(TempList.indexOf(SubBrandValue.label) == -1 ){  
+                    TempList.push(SubBrandValue.label);
+                    SubBrand.push(SubBrandValue);
+                }
+                
+            }
+            //POSMProductList=POSMPList;console.log(SubBrand);
+            initalizePOSMProductAutoComplete(SubBrand,POSMProductList);
+        }); //end of getting ASI_KOR_POSM_Product__c  data 
+        
+        
+        
+        
+        GetMasterData.getData('Account','Id,Name,Owner.Name,Owner.ASI_KOR_User_Branch_Name__c,Owner.ASI_KOR_User_Branch_Code__c,ASI_KOR_Customer_Code__c,ASI_KOR_Venue_Capacity__c,ASI_KOR_Venue_Tot_PR_KOR_Whisky_CAPA__c,ASI_KOR_Venue_Tot_PRK_White_Spirits_CAPA__c,ASI_KOR_Venue_PR_Korea_Vodka_CAPA__c',VenueSQL).then(function(result){  
+            console.log('Enter!!! ACCOUNT');
+            var AccountList = [];
+            for (var i = 0; i < result.length; i++) {// console.log(result[i]);
+                var acc = new Object();
+                acc.label =  htmlEncode(result[i]["Name"])+'('+result[i]["ASI_KOR_Customer_Code__c"]+')'; //console.log(result[i]["ASI_KOR_Customer_Code__c"]);
+                acc.value =  htmlEncode(result[i]["Id"]);
+                acc.Obj=result[i];
+                console.log(acc.Obj.Owner.ASI_KOR_User_Branch_Code__c);
+                AccountList.push(acc);
+                
+            }
+            console.log(result.length+'End get Account data ');
+            VenueList=AccountList;
+            initalizeVenueAutoComplete(VenueList);
+        }); //end of getting Account   data 
+        
+        
+        
+        $scope.SaveFun= function() {
+            document.getElementById('loadingpart').style.display='';
+            SystemInfo('alert-info','InfoMeg','<i class="fa fa-refresh fa-spin"></i>','Working in progress now. Please wait . Thank you....');//console.log($scope.ResultData);
+            var headerId='{!posmReqHeader.Id}';
+            var RTID='{!RecordTypeID}';
+            var pllist=[],Checking={IsPass:true, ErrorMesg:'Error, Can not Save! Please check following error message:<br/>'};
+            
+            for(var i=0; i<$scope.ResultData.length;i++){
+                $scope.ResultData[i]=DataChecking($scope.ResultData[i], i+1);
+                if($scope.ResultData[i].Failed){
+                    Checking.IsPass=false;
+                    Checking.ErrorMesg+=$scope.ResultData[i].Message+'<br/>';
+                }
+                var TempPlanLine = new ASI_KOR_POSM_Order_Detail__c($scope.ResultData[i],headerId,RTID);//console.log(TempPlanLine);
+                pllist.push(TempPlanLine);
+            }//End of for
+            
+            if(Checking.IsPass){//Passconsole.log('-----------Enter Save-----------------');console.log(pllist);
+                InterfaceDB(pllist, $scope.deleteList);
+            }else{//
+                //change Font Awesome, the iconic font and CSS toolkit
+                SystemInfo('alert-danger','InfoMeg','<i class="fa fa-times" aria-hidden="true"></i>',Checking.ErrorMesg);
+                document.getElementById('loadingpart').style.display='none';
+            }
+            
+        };
+        
+        //Add new line function 
+        $scope.AddNewLine= function() {
+            document.getElementById('loadingpart').style.display='';
+            document.getElementById("NewLineBtn").disabled = true;
+            var tempID=$scope.ResultData.length+1;
+            
+            $scope.ResultData.push({Id:'New_'+tempID});
+        };
+        
+        //delete function 
+        $scope.deleteFun= function(lineId) {// 
+            if(lineId.slice(0,4)!='New_'){
+                $scope.deleteList.push(lineId);
+            }// console.log($scope.deleteList);
+            var ListOrder, PID=lineId;
+            
+            for(var i=0;i< $scope.ResultData.length;i++){
+                if($scope.ResultData[i].Id==PID){
+                    ListOrder=i;
+                }
+            }
+            if(!isNaN(ListOrder)){
+                $scope.ResultData.splice(ListOrder, 1);
+            }
+        };//end of deleting function 
+        
+    });//*********End of  app.controller ***************************************
+    
+    
+    
+    
+    //***************************************** Function ********************************************************************************
+    
+    function initalizePOSMProductAutoComplete(InputSB,InputItemList){
+        $(".SBClass").autocomplete({
+            source:InputSB, 
+            response: function(event, ui) {
+                if(ui.content.length===0){ 
+                    console.log("No result found");
+                }
+            },
+            minLength: 0,
+            scroll: true,
+            change: function (event, ui) {
+                if (!ui.item) {
+                    this.value = '';
+                    $(this).next().next().children().val('');
+                    $(this).next().next().children().trigger('input');
+                }
+            },select: function(event, ui){//console.log('change ! '+ui.item.label);
+                var ele = $($(this)[0].outerHTML);
+                var currentid = ele.attr('html-data-id');
+                console.log(currentid+ 'SB change ! '+ui.item.label);
+                ClearItemMaster(currentid);
+                $(this).val(ui.item.label);
+                $(this).trigger('input');
+                $(this).next().next().children().val(ui.item.value);
+                $(this).next().next().children().trigger('input');
+                event.preventDefault();
+            }, focus: function(event, ui){
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            }  
+            
+        }).focus(function () {
+            $(this).autocomplete("search", "");
+        });
+        
+        
+        $(".ItemNameClass").autocomplete({
+            source:InputItemList, 
+            search: function(event, ui) {
+                var ele = $($(this)[0].outerHTML);
+                var currentid = ele.attr('html-data-id');//console.log($(this)[0].outerHTML); console.log(typeof $(this)[0].outerHTML);console.log( $(this)[0].attr('html-data-id'));
+
+                var sValue = $('#SubBrand_manageAll_' + currentid + '_input input').val();//console.log(sValue);
+                var aSearch = [];
+                $(InputItemList).each(function(iIndex, sElement) {//console.log(sElement.description+' Test:  '+sElement.label);
+                    if(sElement.description==sValue){
+                        aSearch.push(sElement);
+                    }
+                });    
+                $(this).autocomplete('option', 'source', aSearch);
+            },
+            minLength: 0,
+            scroll: true,
+            response: function(event, ui) {
+                if(ui.content.length===0){ 
+                    console.log("No result found");
+                }
+            },
+            change: function (event, ui) {
+                if (!ui.item) {
+                     var ele = $($(this)[0].outerHTML);
+                     var currentid = ele.attr('html-data-id');
+                     
+                     ClearItemMaster(currentid);
+                    this.value = '';
+                    $(this).next().next().children().val('');
+                    $(this).next().next().children().trigger('input');
+                }
+            },select: function(event, ui){// 
+                var ele = $($(this)[0].outerHTML);
+                var currentid = ele.attr('html-data-id');
+                //console.log(currentid+'Item  ++change ! '+ui.item.label);
+                ChangeItemMaster(currentid,ui.item.value,ui.item.Obj);
+                
+                $(this).val(ui.item.label);
+                $(this).trigger('input');
+                $(this).next().next().children().val(ui.item.value);
+                $(this).next().next().children().trigger('input');
+                event.preventDefault();
+            }, focus: function(event, ui){
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            }  
+            
+        }).focus(function () {
+            $(this).autocomplete("search", "");
+        });
+        
+        
+    }
+    
+    function initalizeVenueAutoComplete(InputList){
+        $(".VenueNameClass").autocomplete({
+            source:InputList, 
+            response: function(event, ui) {
+                if(ui.content.length===0){ 
+                    console.log("No result found");
+                }
+            }, 
+            minLength: 0,
+            autoFocus: true,
+            scroll: true,
+            change: function (event, ui) {
+                if (!ui.item) {
+                    var ele = $($(this)[0].outerHTML);
+                    var currentid = ele.attr('html-data-id');
+                    clearVenue(currentid);
+                    console.log('Clear');
+                    this.value = '';
+                    $(this).next().next().children().val('');
+                    $(this).next().next().children().trigger('input');
+                }
+            },select: function(event, ui){// 
+                var ele = $($(this)[0].outerHTML);
+                var currentid = ele.attr('html-data-id');//
+                //console.log(ui.item.Obj);
+                ChangeVenue(currentid,ui.item.value,ui.item.Obj);
+                $(this).val(ui.item.label);
+                $(this).trigger('input');
+                $(this).next().next().children().val(ui.item.value);
+                $(this).next().next().children().trigger('input');
+                event.preventDefault();
+            }, focus: function(event, ui){
+                $(this).val(ui.item.label);
+                event.preventDefault();
+            }  
+            
+        }).focus(function () {
+            $(this).autocomplete("search", "");
+        });
+        
+    }
+    
+    function ClearItemMaster(ItemId){
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+        scope.$apply(function () {
+            scope.ClearItemMasterValue(ItemId);
+        });
+    
+    }
+    
+    function clearVenue(ItemId){
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+         scope.$apply(function () {
+            scope.ClearVenueData(ItemId);
+        });
+    }
+    
+    function ChangeVenue(ItemId,VenueId,InfoObject){ //console.log(ItemId + ' || '+VenueId);
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+        scope.$apply(function () {
+            scope.ChangeVenueUpdateList(ItemId,VenueId,InfoObject);
+        });
+    }
+    
+    function ChangeItemMaster(ItemId,ProductId,InfoObject){//ChangeItemUpdateList
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+        scope.$apply(function () {
+            scope.ChangeItemUpdateList(ItemId,ProductId,InfoObject);
+        });
+    }
+    
+    function InterfaceDB(UpsertLines, deleteLines){
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.ASI_MFM_KR_POSMManageAllController2.UpdateLineItem}',UpsertLines ,deleteLines
+            , showResult
+            , {escape: true}
+        );  
+    }
+    
+    function showResult(result, event){
+        if (event.status) {
+            if (result) {
+                console.log(result);
+                clearalert();
+                
+                if(result.substring(0, 12)==='Save Success'){
+                    console.log(result);
+                    BackHeader();
+                }
+            }
+        }
+    }
+    
+    //Checking per line data Available
+    function DataChecking(InputObject, SequenceNum){
+        
+        InputObject.Message='';
+        if(!InputObject.ASI_MFM_Venue__c ){//&& typeof InputObject.ASI_MFM_Venue__c !='undefined'
+            InputObject.Failed=true;
+            InputObject.Message+='Line '+SequenceNum+': Please select Venue.';
+        }else if(!InputObject.ASI_KOR_Item_Name__c){
+             InputObject.Failed=true;
+            InputObject.Message+='Line '+SequenceNum+': Please select Item Master.';
+        }else if(!InputObject.ASI_KOR_Quantity__c){
+           InputObject.Failed+=true;
+            InputObject.Message+='Line '+SequenceNum+':  Quantity can not be null.';
+        }else if(!InputObject.ASI_MFM_Competitor_Brand__c){
+            InputObject.Failed+=true;
+            InputObject.Message+='Line '+SequenceNum+':  Competitor Brand can not be Blank.';
+        }else{
+            InputObject.Failed=false;
+        }
+       
+        return InputObject;
+    }
+    
+    
+    function htmlEncode( input ) {
+        var e = document.createElement('div');
+        e.innerHTML = input;
+        return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+    }
+    
+    
+    //Show infomation for user when updating/ deleting records
+    function SystemInfo(divtype,divid,icondiv,message){
+        
+        var inhtml='<div class="alert '+divtype+'  fade in ">'+icondiv+'  '+message+'</div>';
+        $('#'+divid).html(inhtml);
+    }
+    
+    function NewLineAdded(){//console.log('add NewLineAdded ! ');
+        var scope = angular.element(document.getElementById("MainWrap")).scope();
+        scope.$apply(function () {
+            scope.goToLastPage();
+        });
+        //$("#id_of_button").click(); 
+    }
+    
+    
+    function changepage(){
+        setTimeout(function(){ NewLineAdded(); }, 10); 
+    }
+    
+    function clearalert(){
+        $('#InfoMeg').html('');
+        document.getElementById('loadingpart').style.display='none';
+    }
+    
+    //init: for loop all Plan line result 
+    function GetResultData (){ 
+        var ReturnData=jQuery.parseJSON('{!JSENCODE(POSMDetailJSON)}'); 
+        for(var i=0;i<ReturnData.length;i++){
+            
+            //Item Master
+            if(typeof ReturnData[i].ASI_KOR_Item_Name__r != 'undefined'){
+                ReturnData[i].ItemName=ReturnData[i].ASI_KOR_Item_Name__r.Name;
+                
+                if(ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Available_Qty__c){
+                    ReturnData[i].AvailableQuantity=ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Available_Qty__c;
+                } 
+               
+                if(ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Product_Owner__r){
+                     ReturnData[i].ProductOwner=ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Product_Owner__r.Name;
+                }
+            }
+            
+            if(typeof ASI_KOR_SubBrand__r!= 'undefined'){
+                ReturnData[i].SubBrandName=ReturnData[i].ASI_KOR_SubBrand__r.Name;
+            }else if(typeof  ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Sub_Brand__r != 'undefined' ){
+                ReturnData[i].SubBrandName=ReturnData[i].ASI_KOR_Item_Name__r.ASI_MFM_Sub_Brand__r.Name;
+            }
+            
+            if(ReturnData[i].ASI_KOR_UOM__c){
+                ReturnData[i].VenueImage=ReturnData[i].ASI_KOR_UOM__c; // console.log('VenueImage : '+ReturnData[i].ASI_KOR_UOM__c);
+            }//ASI_KOR_Supplier__r.Owner.ASI_KOR_User_Branch_Name__c,ASI_KOR_Supplier__r.Owner.ASI_KOR_User_Branch_Code__c,
+            
+            //Venue
+            if(typeof ReturnData[i].ASI_MFM_Venue__r != 'undefined'){
+                ReturnData[i].VenueName =ReturnData[i].ASI_MFM_Venue__r.Name;
+                ReturnData[i].SalesRep=ReturnData[i].ASI_MFM_Venue__r.Owner.Name;
+                
+                if(ReturnData[i].ASI_MFM_Venue__r.Owner.ASI_KOR_User_Branch_Name__c && ReturnData[i].ASI_MFM_Venue__r.Owner.ASI_KOR_User_Branch_Code__c){
+                    ReturnData[i].Branch=ReturnData[i].ASI_MFM_Venue__r.Owner.ASI_KOR_User_Branch_Name__c+'('+ReturnData[i].ASI_MFM_Venue__r.Owner.ASI_KOR_User_Branch_Code__c+')';
+                }
+                if(ReturnData[i].ASI_MFM_Venue__r.ASI_KOR_Customer_Code__c ){
+                    ReturnData[i].VenueCode=ReturnData[i].ASI_MFM_Venue__r.ASI_KOR_Customer_Code__c;
+                }
+                if(ReturnData[i].ASI_MFM_Venue__r.ASI_KOR_Venue_Capacity__c){
+                    ReturnData[i].VenueCapa=ReturnData[i].ASI_MFM_Venue__r.ASI_KOR_Venue_Capacity__c;
+                }
+                //PRKCapa
+            }
+            
+            
+            //VenueImage
+            //for checking use 
+            ReturnData[i].Failed=false;//console.log(ReturnData[i]);
+        }
+        return ReturnData;
+        
+    } 
+    
+    function ASI_KOR_POSM_Order_Detail__c(InputObject,headerId,RTID){//Note the field names are case-sensitive the field names must match the API names
+        if( InputObject.Id.slice(0,4)!='New_'){
+            this.Id=InputObject.Id;
+        }///console.log('changes : '+InputObject.ASI_MFM_Venue__c);this.ASI_MFM_Venue__c=InputObject.ASI_MFM_Venue__c;
+        this.ASI_KOR_POSM_Order_Request__c =headerId;
+        this.RecordTypeId=RTID;
+        this.ASI_KOR_Item_Name__c=InputObject.ASI_KOR_Item_Name__c;
+        
+        this.ASI_KOR_Quantity__c=InputObject.ASI_KOR_Quantity__c;
+        this.ASI_MFM_Venue__c=InputObject.ASI_MFM_Venue__c;
+		this.ASI_KOR_SubBrand__c=InputObject.ASI_KOR_SubBrand__c;
+        this.ASI_MFM_KR_C_S__c=InputObject.ASI_MFM_KR_C_S__c;
+        this.ASI_KOR_Remarks__c=InputObject.ASI_KOR_Remarks__c;
+        this.ASI_MFM_Competitor_Brand__c=InputObject.ASI_MFM_Competitor_Brand__c;
+        this.ASI_KOR_Ship_To_Address__c=InputObject.ASI_KOR_Ship_To_Address__c;
+    }
+    
+    
+    </script>
+    
+    <apex:form id="KR_Header" styleclass="objectFormCls">
+        <apex:actionfunction name="BackHeader" action="{!BackHeader}" />
+        <div id="HeaderForm" class="bs container-fluid">
+            
+            <div class="bs row">
+                <div class="bs col-md-12" >
+                    <div class="bs col-md-8">
+                        
+                        <apex:outputPanel id="paymentDetailPanel"> 
+                            <div class="panel panel-primary" >
+                                <div class="bs panel-heading">
+                                    <h5 class="bs panel-title">Brand POSM Header Information</h5>
+                                </div>
+                                <div class="bs panel-body">                                           
+                                    <div class="bs table-responsive" >     
+                                        <table class="bs table">
+                                            <tbody>  
+                                                <tr>
+                                                    <td><apex:outputLabel value="POSM Order Number" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                                    <td><apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!posmReqHeader.ID}" target="_blank">
+                                                        <apex:outputField value="{!posmReqHeader.Name}"></apex:outputField>
+                                                        </apex:outputLink>
+                                                    </td>
+                                                    <td><apex:outputLabel value="Request Date" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                                    <td><apex:outputField value="{!posmReqHeader.ASI_KOR_Requested_Date__c}"></apex:outputField>
+                                                    </td>
+                                                </tr>  
+                                                <tr>
+                                                    <td><apex:outputLabel value="Comment" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                                    <td><apex:outputLabel value="{!posmReqHeader.ASI_KOR_Comment__c}" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                                    <td><apex:outputLabel value="Status" styleclass="control-label" style="color: #4a4a56; font-size: 9pt; vertical-align: middle; padding-right: 10px;"/></td>
+                                                    <td><apex:outputField value="{!posmReqHeader.ASI_KOR_Status__c}" ></apex:outputField></td>                              
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </apex:outputPanel>
+                    </div>
+                </div>
+                
+            </div>    
+            
+            <div class="bs row">
+                <div class="col-md-12" >     
+                    
+                    <apex:outputPanel id="LinePanel">
+                        <div class="panel panel-primary" >
+                            <div class="panel-heading" >
+                                <h3 class="bs panel-title">POSM Line Items </h3>
+                            </div>  
+                            <div class="bs panel-body">
+                                <div id="InfoMeg"></div>
+                                <div ng-app="MyApp">
+                                    <div id="MainWrap"  ng-controller="myController">
+                                        <div id="loadingpart" style="display:none;width: 100vw;"></div>
+                                        &nbsp;
+                                        <span style="{!IF(posmReqHeader.ASI_KOR_Status__c=='Draft', '', 'display:none')}">
+                                        <button  id="NewLineBtn" type="button" 
+                                                ng-click="AddNewLine();"  
+                                                ng-disabled="NewLineDisabled"
+                                                class="btn btn-primary btn-sm searchbtn" >
+                                            <span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add New Line
+                                        </button> 
+                                        </span>
+                                        &nbsp;
+                                        <span style="{!IF(posmReqHeader.ASI_KOR_Status__c=='Draft', '', 'display:none')}">
+                                            <button  type="button" ng-click="SaveFun();"  class="btn btn-success btn-sm searchbtn"  >
+                                            <span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span> Save All
+                                        </button> 
+                                        &nbsp;
+                                            
+                                        </span>
+                                        
+                                        <apex:commandButton styleClass="bs btn btn-default btn-sm "
+                                                            style="font-weight: bold"
+                                                            value="Cancel"
+                                                            action="{!cancel}" 
+                                                            html-data-loading-text="Loading..."
+                                                            html-formnovalidate="formnovalidate"/>
+                                        
+                                        <table id="dt_LineItems"  datatable="ng" dt-options="dtOptions" dt-column-defs="dtColumnDefs" dt-instance="dtInstance" class="table table-hover">
+                                            
+                                            <thead>
+                                                <tr>
+                                                    <th> </th>
+                                                    <th>Sub Brand</th>
+                                                    <th>Item Master</th>
+                                                    <th>Owner</th>
+                                                    <th>Available<br/>Quantity</th>
+                                                    <th>Quanity</th>
+                                                    <th>Replace of competitor <br/>High Value POS</th>
+                                                    <th>Venue Name<br/>(업소명)</th>
+                                                    <th>Venue Code<br/>(업소코드)</th>
+                                                    <th>Branch <br/>(지점)</th>
+                                                    <th>Sales Rep<br/>(담당자)</th>
+                                                    <th>Venue image</th>
+                                                    <th>Venue Capa</th>
+                                                    <th>Total<br/>  PRK Capa </th>
+                                                    <th>Target Sales Volume</th>
+                                                    <th>Remark</th>
+                                                    <th>Ship To Address</th>
+                                                </tr>
+                                            </thead>
+                                            
+                                            <tbody>
+                                                <tr ng-repeat="Items in ResultData" data-ng-style="Items.Failed && {'background':'#f2dede'}">
+                                                    <td>
+                                                        <button type="button"   ng-click="deleteFun(Items.Id);" 
+                                                                class="bs btn btn-default btn-round pull-left btn-xs"
+                                                                style="border: none;background-color: transparent;" > 
+                                                            <span  class="bs glyphicon glyphicon-trash"  style="color:red;font-size: 18px;" aria-hidden="true"></span>
+                                                        </button>
+                                                    </td>
+                                                    
+                                                    <td  id="SubBrand_manageAll_{{Items.Id}}_input"  >
+                                                        <input  type="text" name="SBName"
+                                                               class="SBClass"
+                                                               ng-value="Items.SubBrandName" ng-model="Items.SubBrandName" html-data-id="{{Items.Id}}" /> 
+                                                        <div  class="hid" >
+                                                            <input  type="text" name="SBBrandId"  ng-value="Items.ASI_KOR_SubBrand__c"   ng-model="Items.ASI_KOR_SubBrand__c" /> 
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td>
+                                                        <input type="text" name="Item_Name"
+                                                               class="ItemNameClass"
+                                                               ng-value="Items.ItemName" ng-model="Items.ItemName" html-data-id="{{Items.Id}}"   /> 
+                                                        <div class="hid">
+                                                            <input  type="text" name="ItemNameId"  ng-value="Items.ASI_KOR_Item_Name__c"   ng-model="Items.ASI_KOR_Item_Name__c" /> 
+                                                        </div>
+                                                    </td>
+                                                    <td>{{Items.ProductOwner}}  </td>
+                                                    <td>{{Items.AvailableQuantity}} </td>
+                                                    <td><input type="number" name="Available_Quantity" class="required" ng-model="Items.ASI_KOR_Quantity__c" /> </td>
+                                                    
+                                                    <td>
+                                                    <input  type="text" ng-value="Items.ASI_MFM_Competitor_Brand__c"  class="required"  ng-model="Items.ASI_MFM_Competitor_Brand__c" /> 
+                                                    </td>
+                                                    
+                                                    <td><input type="text" name="Venue_Name"
+                                                               class="VenueNameClass"
+                                                               ng-value="Items.VenueName" ng-model="Items.VenueName" html-data-id="{{Items.Id}}"  /> 
+                                                        <div class="hid">
+                                                            <input  type="text" name="VenueNameId"  ng-value="Items.ASI_MFM_Venue__c"   ng-model="Items.ASI_MFM_Venue__c" /> 
+                                                        </div>
+                                                    </td>
+                                                    
+                                                    <td>{{Items.VenueCode}}</td>
+                                                    <td>{{Items.Branch}}</td>
+                                                    <td>{{Items.SalesRep}}</td>
+                                                    <td>{{Items.VenueImage}}</td>
+                                                    <td>{{Items.VenueCapa}}</td>
+                                                    <td>{{Items.ASI_MFM_Total_PRK_Capa__c}}</td>
+                                                    
+                                                    <td> <input  type="number"  ng-value="Items.ASI_MFM_KR_C_S__c"   ng-model="Items.ASI_MFM_KR_C_S__c"  /> </td>
+                                                    <td> <input  type="text" ng-value="Items.ASI_KOR_Remarks__c"   ng-model="Items.ASI_KOR_Remarks__c" /> </td>
+                                                     <td>
+                                                         <textarea rows="2" cols="50" ng-value="Items.ASI_KOR_Ship_To_Address__c"   ng-model="Items.ASI_KOR_Ship_To_Address__c" />
+                                                          <!--   <input  type="text" ng-value="Items.ASI_KOR_Ship_To_Address__c"   ng-model="Items.ASI_KOR_Ship_To_Address__c" /> -->
+                                                    </td>
+                                                    
+                                                    
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </apex:outputPanel>
+                    
+                </div>
+            </div>
+        </div>
+    </apex:form>
+</apex:page>

@@ -1,0 +1,118 @@
+<apex:page controller="project_cloud.GlobalActionTimeEntryController" showHeader="false">
+
+	<c:include_jquery />
+	<apex:includeScript value="/canvas/sdk/js/publisher.js" />
+	<apex:includeScript value="{!URLFOR($Resource.project_cloud__jquery_plugins_zip, '/stopwatch/jquery.stopwatch.js')}" />
+	<apex:stylesheet value="{!URLFOR($Resource.project_cloud__jquery_plugins_zip, '/quickentry/style.css')}" />
+	<apex:stylesheet value="{!URLFOR($Resource.project_cloud__ccprojex_customui, '/globalActions/timeEntry/style.css')}" />
+
+	<apex:pageMessages id="messages" />
+
+	<apex:form id="form" styleClass="ccpe_global-action_time-entry" rendered="{!NOT(ISBLANK(workableId))}">
+		<div id="ccpe_global-action_time-entry">
+			<table id="ccpe_global-action_time-entry_inputs">
+				<tbody>
+					<tr>
+						<th scope="row">
+							<apex:outputLabel for="entryDate" value="{!$ObjectType.project_cloud__Work__c.fields.project_cloud__Date__c.label}" />
+						</th>
+						<td>
+							<apex:inputField id="entryDate" value="{!entry.project_cloud__Date__c}" />
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<apex:outputLabel for="entryTime" value="{!$ObjectType.project_cloud__Work__c.fields.project_cloud__HHmm__c.label}" />
+						</th>
+						<td>
+							<apex:inputText id="entryTime" value="{!entry.project_cloud__HHmm__c}" styleClass="ccpe_copy_minutes_workTime ccpe_ghostText" tabindex="1" />
+							<span class="dateFormat">[&nbsp;<a id="ccpe_copy_minutes" href="javascript:;">00:00:00</a>&nbsp;]</span>
+							<span class="dateFormat">
+								<a id="ccpe_pause_minutes" href="javascript:;" class="stopwatch-action stopwatch-play-pause">&nbsp;</a>
+								<a id="ccpe_reset_minutes" href="javascript:;" class="stopwatch-action stopwatch-reset">&nbsp;</a>
+							</span>
+						</td>
+					</tr>
+					<apex:repeat var="f" value="{!$ObjectType.project_cloud__Work__c.FieldSets.project_cloud__Quick_Entry}">
+						<apex:outputPanel layout="none" rendered="{!$ObjectType.project_cloud__Work__c.fields[f].Accessible}">
+							<tr>
+								<th scope="row">
+									<apex:outputLabel for="fieldset_field" value="{!f.label}" />
+								</th>
+								<td>
+									<apex:inputField id="fieldset_field" value="{!entry[f]}" />
+								</td>
+							</tr>
+						</apex:outputPanel>
+					</apex:repeat>
+				</tbody>
+			</table>
+		</div>
+		<div id="ccpe_global-action_time-entry_buttons">
+			<span class="ccpe_global-action_time-entry_button-wrapper">
+				<apex:commandButton id="createEntryButton2" value="Create and Close" action="{!createTimeEntry}" styleClass="button" rerender="messages" oncomplete="window.close();" rendered="{!$CurrentPage.parameters.popup != null}" style="margin-right:10px;"/>
+				<apex:commandButton id="createEntryButton" value="Create Time Entry" action="{!createTimeEntry}" styleClass="button" rerender="messages" oncomplete="Sfdc.canvas.publisher.publish({name : 'publisher.refresh', payload : {feed:true}}); " />
+			</span>
+		</div>
+		<script type="text/javascript">
+			var __sfdcSessionId = '{!GETSESSIONID()}';
+		</script>
+		<script src="/soap/ajax/28.0/connection.js" type="text/javascript"></script>
+		<script type="text/javascript">
+			//overwrite the saleforce function so the focus is not put on the hours input field
+			function setFocusOnLoad() {}
+	
+			jQuery(document).ready(function($) {
+				try {
+					var stopwatch = $("#ccpe_copy_minutes").stopwatch({startTime: {!entryStartTime}}).stopwatch("start");
+
+					$("#ccpe_copy_minutes").click(function() {
+						var workTime = $(".ccpe_copy_minutes_workTime");
+						workTime.removeClass('ccpe_ghostText');
+						var timeText = $(this).html();
+						timeText = timeText.substring(0, timeText.lastIndexOf(":"));
+						workTime.val(timeText);
+					});
+					$("#ccpe_pause_minutes").click(function() {
+						stopwatch.stopwatch("toggle");
+						$(this).toggleClass("stopwatch-paused");
+					});
+					$("#ccpe_reset_minutes").click(function() {
+						stopwatch.stopwatch("reset");
+					});
+
+					$("#ccpe_global-action_time-entry_inputs").delegate("input", "focus", function() {
+						var self = $(this);
+						if(self.hasClass("ccpe_ghostText")) {
+							self.removeClass("ccpe_ghostText");
+							self.val("");
+						}
+					});
+				} catch(err) {}
+			});
+		</script>
+	</apex:form>
+	<!--
+	//Saving a work stub has been disabled
+	//The reason is that the quick entry and global action may interfere with one another
+	//And Global Action time entry creation may not be used by all users. 
+	$(window).bind('beforeunload', function(e) {
+		try {
+			var elapsedTime = stopwatch.stopwatch("getTime");
+			var stub = new sforce.SObject("{!JSENCODE(ns)}Work_Stub__c");
+			if(stopwatch.stopwatch("isActive")) {
+				//stopwatch is active set the Date__c value as now minus any time the stopwatch has.
+				stub.{!JSENCODE(ns)}Date__c = sforce.internal.dateTimeToString(new Date(new Date().getTime() - elapsedTime));
+				stub.{!JSENCODE(ns)}Time__c = null;
+			} else {
+				//stopwatch has been paused, set the Time__c value of the paused stopwatch
+				stub.{!JSENCODE(ns)}Date__c = null;
+				stub.{!JSENCODE(ns)}Time__c = elapsedTime;
+			}
+			stub.{!JSENCODE(ns)}Parent__c = "{!workableId}";
+			result = sforce.connection.upsert("{!JSENCODE(ns)}Parent__c", [stub]);
+		} catch(err) {}
+	});
+	-->
+
+</apex:page>

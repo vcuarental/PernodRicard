@@ -1,0 +1,962 @@
+<apex:page controller="ASI_MFM_JP_POVerifyController"  docType="html-5.0" sidebar="false" action="{!initBAVerify}" >
+    <header>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>  
+        <!---<apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Datatable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/css/SimpleTable.css')}" />
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"/>
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.1/jquery-ui.min.js"/>  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Datatable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />  
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Datatable, ' DataTables-1.10.7/media/js/jquery.dataTables.js')}" />  
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/currency.js')}" />
+        
+        --->
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Datatable_V1_10_7, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_Bootstrap_V3_3_5, 'dist/css/SimpleTable.css')}" /> 
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_JS_JqueryUI_V1_11_4,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_JQuery_V1_9_1, 'js/jquery-ui.min.js')}" />
+
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_DataTables_V1_10_11, 'DataTables-1.10.11/media/js/jquery.dataTables.min.js')}" /> 
+  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/dist/js/currency.js')}" /> 
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_JS_Plug_in_for_JQuery_V1_0_0, 'ASI_JS_plug_in_for_jQuery/numericInput.min.js')}" /> 
+        
+
+        <script type="text/javascript">     
+            
+            $j = jQuery.noConflict();
+        
+        $j(document).ready(function(){
+            setResultTable(true);
+        });
+        var info;
+        var currentRecordStart = null;
+        var currentRecordEnd = null;
+        var currentPageNumber = null; 
+        var datatableILength = 50;
+        var api; 
+        var table ;
+        
+        var aismfm = aismfm  || {};
+        aismfm.component = aismfm.component || {};
+        
+        
+        aismfm.component.BADFFunction = function(){
+            function init() {
+                $j('.headerCen_input input').change();
+                $j('.ReceiptDate_input input').change();
+                $j('.Amount_input input').change();
+                $j('.Remark_input textarea').change();
+                $j('.apCode input').change();
+            }
+            return {
+                init: init
+            };
+        }();        
+        
+        
+        $j(document).on('mousemove', function(e){
+            $j("#loadtext").css({
+                left:  e.pageX,
+                top:   e.pageY
+            });
+        });
+        
+        function checkApproveDelete(obj,opposeId){
+            if($j(obj).is(':checked')){
+                $j(obj).parent().parent().find("[id*="+opposeId+"]").attr('checked', !$j(obj).is(':checked'));
+            }
+        }
+        
+        function checkAll(obj,opposeObjId,checkAllId,opposeId){    
+            $j("[id*="+checkAllId+"]").each(function(){
+                $j(this).attr('checked', $j(obj).is(':checked'));
+            });
+            
+            $j("#"+opposeObjId).attr('checked', false);
+            $j("[id*="+opposeId+"]").each(function(){
+                $j(this).attr('checked', false);
+            });        
+        }
+        function openAccountWin(id){
+            window.open("/"+id);
+        }
+        
+        
+            function formatNumber(n) {
+                return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            }
+                           
+        
+             function updateHiddenJsonData(id){
+                  var hiddenJsonData = $j('input[id$=hiddenBlock]').val();  
+                  var obj = JSON.parse(hiddenJsonData);  
+                  var updatedObject = [];
+                  
+                  $j.each(obj, function(){  
+                       if(this.recordId == id){  
+                           this.Verify = $j('#Verify_' + this.recordId + '_chkbox input').is(':checked');
+                           this.ReceiptDate = $j('#ReceiptDate_' + this.recordId + '_datefield input').val()?  $j('#ReceiptDate_' + this.recordId + '_datefield input').val() :null;
+                           this.Amount = $j('#Amount_' + this.recordId + '_numberfield input').val()?  $j('#Amount_' + this.recordId + '_numberfield input').val() :null;
+                           this.Remark = $j('#Remark_' + this.recordId + '_textfield textarea').val()?  $j('#Remark_' + this.recordId + '_textfield textarea').val() :null;
+                           this.apCode =  $j('#apCode_' + this.recordId + '_lkupfield input').val()?  $j('#apCode_' + this.recordId + '_lkupfield input').val() :null; 
+                       }  
+                  });  
+                  var objString = JSON.stringify(obj);
+                 //  console.log(objString); 
+                  $j('input[id$=hiddenBlock]').val(objString);  
+             }  
+             
+        
+        
+        function setResultTable(newTable){
+            /*
+            var columns = [
+                { "data": "Verify", "bSortable": false, sDefaultContent: "n/a"  },
+                { "data": "Plan_Number" ,sDefaultContent: "false"},
+                { "data": "PO_Number", sDefaultContent: "n/a"  },
+                { "data": "POL" , sDefaultContent: "n/a" },
+                { "data": "PO_Receipt" , sDefaultContent: "n/a" },
+                { "data": "Currency" , sDefaultContent: "n/a" },
+                { "data": "Supplier", sDefaultContent: "n/a"  },
+                { "data": "Receipt_Date" ,"bSortable": false, sDefaultContent: "n/a" },
+                { "data": "Original_PO_Amount", sDefaultContent: "n/a"  },
+                { "data": "Remaining_PO_Amount" , sDefaultContent: "n/a" },
+                { "data": "Remaining_Receipt_Balance" , sDefaultContent: "n/a" },
+                { "data": "Receipt_Amount" , "bSortable": false, sDefaultContent: "n/a" },
+                { "data": "Receipt_Amount_with_Tax" ,  sDefaultContent: "n/a" },
+                { "data": "Verified_Receipt_Amount", sDefaultContent: "n/a"  },
+                { "data": "Receipt_Remark","bSortable": false, sDefaultContent: "n/a"  },
+                { "data": "AC_Code", sDefaultContent: "n/a"  },
+                { "data": "AP_Code", sDefaultContent: "n/a"  },
+                { "data": "SubBrand_Code", sDefaultContent: "n/a"  },
+                { "data": "Customer", sDefaultContent: "n/a"  },
+                { "data": "POLine_Description", sDefaultContent: "n/a"  },
+                { "data": "Creator", sDefaultContent: "n/a"  }
+            ];
+            */
+             table =  $j("#dt_PoLineItems").on( 'init.dt', function () {
+                    currentRecordStart = 0;
+                    currentRecordEnd = datatableILength; 
+             } ).DataTable({ "bAutoWidth":false,
+                                                         //"aoColumns": columns,
+                                                         "bDestroy": true,
+                                                         "bAutoWidth":false,
+                                                         "iDisplayLength":50, 
+                                                         "pagingType": "full_numbers",
+                                                         "dom": '<<t>ip>',
+                            							  "order": [],
+                                                         "bLengthChange": false,
+                                                            "columnDefs": [ { 
+                                                                "targets": 0, //checkbox
+                                                                "searchable": false,
+                                                                "orderable": false
+                                                            },{ 
+                                                                "targets": 1, //checkbox
+                                                                "searchable": false,
+                                                                "orderable": false
+                                                            },
+                                                            { 
+                                                                "targets": -5, //Remark
+                                                                "searchable": false,
+                                                                "orderable": false
+                                                            },
+                                                            { 
+                                                                "targets": 6, //AP Code
+                                                                "searchable": false,
+                                                                "orderable": false
+                                                            },
+                                                            { 
+                                                              "visible": false,   //Currency 
+                                                              "targets": 12
+                                                            }
+                                                                           /*,
+                                                            {
+                                                             "render": function ( data, type, row ) {
+                                                               return formatNumber(data) +' '+ row[12] + ''; //for Orginal Amount
+                                                            },
+                                                              "targets": 15,
+                                                              type: 'currency'
+                                                            },
+                                                            {
+                                                             "render": function ( data, type, row ) {
+                                                               return formatNumber(data) +' '+ row[12] + ''; //for Remaining Amount
+                                                            },
+                                                              "targets": 16,
+                                                              type: 'currency'
+                                                            },
+                                                            {
+                                                             "render": function ( data, type, row ) {
+                                                               return formatNumber(data) +' '+ row[12] + ''; //for Remaining Receipt Balance
+                                                            },
+                                                              "targets": 17,
+                                                              type: 'currency'
+                                                            }*/
+                                                            ],
+                                                         //"dom": 'rt<"clear">',
+                                                         "fnDrawCallback": function() {
+                                                             api = this.api();
+                                                             $j('.numberAmount input').change();
+                                                             $j('.headerCen input').change();
+                                                             $j('.headerCen_input input').change();
+                                                             $j('.ReceiptDate_input input').change();
+                                                             $j('.Amount_input input').change();
+                                                             $j('.apCode input').change(); 
+                                                             $j('.Remark_input textarea').change();
+                                                             
+                                                                 
+                                  $j('#checkall').click(function(event) {  //on click :  check all data
+                                                            var checked = this.checked;
+                                                            api.column(0).nodes().to$().each(function(index) {    
+                                                                if (checked) {
+                                                                     $j(this).find('.Chkbox').each(function() {    
+                                                                
+                                                                        var currentRow = $j(this).attr('data-row');
+                                                                        var celllineId = $j(this).attr('data-id');
+                                                                        
+                                                                        if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                                             $j(this).prop( "checked",true); 
+                                                                             updateHiddenJsonData(celllineId);
+                                                                            
+                                                                        }
+                                                                         
+                                                                    }); 
+                                                                } else {
+                                                                     
+                                                                     $j(this).find('.Chkbox').each(function() {    
+                                                                
+                                                                        var currentRow = $j(this).attr('data-row');
+                                                                        var celllineId = $j(this).attr('data-id');
+                                                                        if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                                              $j(this).prop( "checked",false); 
+                                                                              
+                                                                        }
+                            
+                                                                    }); 
+                                                                }
+                                                                //resultTable.cell(index, 0).data($j(this).html());
+                                                            });    
+                                                            //resultTable.draw();
+                                                            
+                                                        });    
+
+
+                                                         }
+                                                        });
+            table.rows().every( function () {
+                var d = this.data();
+                // console.log(d);
+            });
+            
+            
+            table.on('click', '.chkApprove', function(e){
+                var data = table.row( $j(this).parents('tr') ).data();
+                console.log(data[0]);
+
+            });                                  
+            
+            
+              $j("#dt_PoLineItems").on( 'page.dt', function () {
+                    
+                   info = table.page.info();
+                    
+                    if(info){
+                        currentPageNumber = info.page;
+                        currentRecordStart = info.start? info.start: 0;
+                        currentRecordEnd = info.end ?  info.end: 0;
+                        console.log('info');
+                    }      
+                } );
+            
+            
+            
+            
+            $j('a.toggle-vis').on( 'click', function (e) {
+                // $j('<button style="background-color: #d0e4fe;">Show</button>').appendTo($j(this)).click(function () {
+                //  var column_index = $j(this).parent().index()+1;
+                // });
+                
+                e.preventDefault();
+                
+                // Get the column API object
+                var column = table.column( $j(this).attr('data-column') );
+                
+                // Toggle the visibility
+                column.visible( ! column.visible() );
+                if(!column.visible()){
+                    $j(this).addClass('changecss');
+                }
+                else{
+                    $j(this).removeClass('changecss');
+                }
+            } );                                  
+            
+            
+            $j('#showAll').on('click',function(e){
+                e.preventDefault();
+                var columNum = 0; 
+                table.columns().every( function () {
+                    table.column(columNum).visible(true);
+                    
+                    columNum++;
+                });
+                console.log('changecssNow');
+                $j('#tc1,#tc2').removeClass('changecss');
+                table.columns.adjust().draw( false ); // adjust column sizing and redraw             
+            });
+            
+            function confirm_save() {
+                table.page.len( -1 ).draw();
+                
+                var data = table.rows().data();
+                table.rows().invalidate().draw();
+                
+                if(!confirm('Do you want to proceed?')){return false;}
+            }
+           
+            $j('#checkall2').click(function(event) {  //on click :  check all data
+                var checked =  $j(this).is( ":checked" ) ;
+                table.column(0).nodes().to$().each(function(index) {    
+                    if (checked) {
+                        $j(this).find('.Chkbox').prop('checked',true);
+                    } else {
+                        $j(this).find('.Chkbox').prop('checked',false);       
+                    }
+                    table.cell(index, 0).data($j(this).html());
+                });    
+                table.draw();
+            });
+                    
+
+        }
+        
+        </script>
+        <style>
+            .dateFormat{
+            display:none;
+            }    
+            th { 
+            white-space: nowrap; 
+            }
+            
+            .headerNum {
+            text-align: right;
+            }
+            .headerCen {
+            text-align: center;
+            }
+            .numberAmount{
+            text-align:right;
+            font-weight:bold;
+            }
+            .PosRight{
+            text-align:right;
+            }
+            div#dt_PoLineItems_filter{
+            float:left;
+            text-align:right;
+            }
+            tfoot input {
+            width: 100%;
+            padding: 3px;
+            box-sizing: border-box;
+            display: table-header-group;
+            }
+            .changecss{
+            background-color: #d0e4fe ;
+            color: #C0C0C0 !important;
+            }
+            
+            
+            
+            .btn-custom {
+            background-color: hsl(195, 79%, 43%) !important;
+            background-repeat: repeat-x;
+            filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#56c5eb", endColorstr="#1798c4");
+            background-image: -khtml-gradient(linear, left top, left bottom, from(#56c5eb), to(#1798c4));
+            background-image: -moz-linear-gradient(top, #56c5eb, #1798c4);
+            background-image: -ms-linear-gradient(top, #56c5eb, #1798c4);
+            background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #56c5eb), color-stop(100%, #1798c4));
+            background-image: -webkit-linear-gradient(top, #56c5eb, #1798c4);
+            background-image: -o-linear-gradient(top, #56c5eb, #1798c4);
+            background-image: linear-gradient(#56c5eb, #1798c4);
+            border-color: #1798c4 #1798c4 hsl(195, 79%, 38%);
+            color: #333 !important;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.33);
+            -webkit-font-smoothing: antialiased;
+            }
+            
+            
+        </style>
+    </header>
+    <body>
+        <div class="container-fluid">
+            <apex:pageMessages id="errors" />
+            <div class="bs row" style="margin:0;">
+                <div class="bs col-xs-12">  
+                    <apex:form id="VerifyForm" >
+                        <apex:outputPanel styleclass="bs" >
+                            <div class="panel panel-primary" >
+                                <div class="panel-heading">
+                                    <h5>
+                                        JP JDE Accruals
+                                    </h5>
+                                </div>
+                                   
+                                <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                  <strong>Error,Can not Save!</strong><br/>
+                                    <apex:outputText escape="false" value="{!Msg}"/>
+                                </div>  
+                                <div class="alert alert-danger fade in" style="{!IF(SearchPermission,'display:none;','')}"  id="SearchFailPart">
+                                    <apex:outputText escape="false" value="{!Msg}"/>
+                                </div>  
+                                
+                                <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                    <strong>Save Success!</strong> 
+                                    <apex:outputText escape="false" value="{!Msg}"/>
+                                </div>    
+                        
+                                
+                                
+                                
+                                
+                                <div class="panel-body control-group">
+                                    <div class="bs row">
+                                        <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;" >Verify:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:selectList id="BAV2" value="{!OwnerVerify}" size="1" styleClass="form-control searchcss input-sm">
+                                                    <apex:selectOption itemValue="" itemLabel=" "/>
+                                                    <apex:selectOption itemValue="Checked" itemLabel="Checked"/>
+                                                    <apex:selectOption itemValue="Unchecked" itemLabel="Unchecked"/>
+                                                </apex:selectList>
+                                            </div>
+                                        </div>
+                                        
+                                          <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">Responsible By:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!Userfilter}"  styleClass="form-control searchcss input-sm" html-placeholder="Responsible By"  />
+                                            </div>
+                                        </div> 
+                                        
+                                        
+                                        <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">Plan ID:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!Plan_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="Plan ID"  />
+                                            </div>
+                                        </div>   
+                                        
+                                        <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">PO ID:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!PO_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="Plan"  />
+                                            </div>
+                                        </div> 
+                                        
+                                         <div class="col-xs-1"  style="display:none">
+                                            <apex:outputLabel style="font-weight:bold;">PO Line ID:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!POLine_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="PO Line"  />
+                                            </div>
+                                        </div> 
+                                        
+                                           <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">PO Receipt Line ID:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!PORL_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="PO Receipt Line"  />
+                                            </div>
+                                        </div> 
+                                        
+                                        
+                                         
+                                       <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;" >Fiscal Year:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:selectList id="fiscalyear" value="{!Fiscalyear}" size="1" styleClass="form-control searchcss input-sm">
+                                                    <apex:selectOption itemValue="FY1213" itemLabel="FY1213"/>
+                                                    <apex:selectOption itemValue="FY1314" itemLabel="FY1314"/>
+                                                    <apex:selectOption itemValue="FY1415" itemLabel="FY1415"/>
+                                                    <apex:selectOption itemValue="FY1516" itemLabel="FY1516"/>
+                                                    <apex:selectOption itemValue="FY1617" itemLabel="FY1617"/>
+                                                    <apex:selectOption itemValue="FY1718" itemLabel="FY1718"/>
+                                                    <apex:selectOption itemValue="FY1819" itemLabel="FY1819"/>
+                                                    <apex:selectOption itemValue="FY1920" itemLabel="FY1920"/>
+                                                    <apex:selectOption itemValue="FY2021" itemLabel="FY2021"/>
+                                                    <apex:selectOption itemValue="FY2122" itemLabel="FY2122"/>
+                                                    <apex:selectOption itemValue="FY2223" itemLabel="FY2223"/>
+                                                </apex:selectList>
+                                           </div>
+                                      </div>
+                                        
+                                        
+                                           <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">Supplier Name:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputText value="{!Suppl}"  styleClass="form-control searchcss input-sm" html-placeholder="Supplier Name"  />
+                                            </div>
+                                        </div> 
+                                        
+                                        
+                                                
+                                        
+                                           <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">Receipt Date From:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputField value="{!fromDate.ASI_MFM_Receipt_Date__c}"  styleClass="form-control searchcss input-sm" html-placeholder="Receipt Date From"  />
+                                            </div>
+                                        </div> 
+                                        
+                                         <div class="col-xs-1">
+                                            <apex:outputLabel style="font-weight:bold;">Receipt Date To:</apex:outputLabel>
+                                            <div class="form-group divsearch">
+                                                <apex:inputField value="{!toDate.ASI_MFM_Receipt_Date__c}"  styleClass="form-control searchcss input-sm" html-placeholder="Receipt Date To"  />
+                                            </div>
+                                        </div> 
+                                        
+                                        
+                                         
+                                    </div>
+                                    
+                                    <div class="bs row">
+                                         <div class="col-xs-1">  
+                                            <div class="form-group divsearch"> 
+                                                <apex:outputLink styleClass="bs btn btn-info btn-sm "
+                                                                 target="_blank"
+                                                                 value="/{!ReportFolderId}"> 
+                                                    Report Folder             
+                                                </apex:outputLink>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-xs-1">      
+                                             <div class="form-group divsearch">
+                                                     <apex:commandButton value="Search"
+                                                                    styleClass="bs btn btn-default btn-sm "
+                                                                    action="{!runSearch}"
+                                                                    onclick="table.page.len( -1 ).draw(false);"
+                                                                    oncomplete=" setResultTable(true);"
+                                                                    status="ActionStatus"
+                                                                    rerender="results,pagination,SummaryPage,hiddenJsonData,debug,SaveFailPart,SaveSuccessPart,VerifyForm" />
+                                            </div>
+                                        </div>     
+                                         
+                                       
+                                        <div class="col-xs-1">
+                                            <div class="form-group divsearch">
+                                                <apex:outputLabel style="font-weight:bold; text-align:left; ">Post G/L Date:</apex:outputLabel>
+                                                <apex:inputField value="{!PostGLDate.ASI_MFM_Post_G_L_Date__c}"  styleClass="form-control searchcss input-sm" html-placeholder="Post G/L Date"  />
+                                            </div>
+                                        </div> 
+                                        
+                                        
+                                        
+                                        <div class="col-xs-1">  
+                                                <div class="form-group divsearch">
+                                                    <apex:commandButton value="Save"
+                                                                    styleClass="bs btn btn-success btn-sm "
+                                                                    action="{!save}"
+                                                                    onclick="table.page.len( -1 ).draw(false);"
+                                                                    oncomplete=" setResultTable(true);"
+                                                                    status="ActionStatus"
+                                                                    rerender="results,pagination,SummaryPage,hiddenJsonData,debug,SaveFailPart,SaveSuccessPart,VerifyForm" />
+                                            </div>
+                                        </div>
+                                                                                                                  
+                                    </div>
+                                   
+                                </div>
+                            </div>
+                            
+                        </apex:outputPanel>
+                        
+                        
+                        <apex:outputPanel id="hiddenJsonData">  
+                            <apex:inputHidden id="hiddenBlock" value="{!jsonDataMinimal}" />  
+                        </apex:outputPanel>  
+                        
+                        <apex:outputPanel styleclass="bs panel-primary" id="results">
+                            <div>
+                                
+                                <button type="button" class="bs btn btn-success btn-sm" id="showAll">Show All</button>
+                                Toggle Column:     
+                                <a class="toggle-vis " data-column="1" id="tc1">Marketing PO Delivered</a>-
+                                <a class="toggle-vis " data-column="2" id="tc1">Plan ID</a>-
+                                <a class="toggle-vis" data-column="3" id="tc1">PO ID</a>-
+                                <a class="toggle-vis" data-column="4" id="tc1">PO Receipt Line ID</a>-
+                                <a class="toggle-vis" data-column="5" id="tc1">Fiscal Year</a>- 
+                                <a class="toggle-vis" data-column="6" id="tc1">AP Code</a>-
+                                <a class="toggle-vis" data-column="7" id="tc1">A/C Code</a>-
+                                <a class="toggle-vis" data-column="8" id="tc1">Sub-brand Code</a>-
+                                <a class="toggle-vis" data-column="9" id="tc1">Customer</a>-
+                                <a class="toggle-vis" data-column="10" id="tc1">Supplier</a>-
+                                <a class="toggle-vis" data-column="11" id="tc1">PO Line Description</a>- 
+                                <a class="toggle-vis" data-column="13" id="tc1">Receipt Date</a>-
+                                <a class="toggle-vis" data-column="14" id="tc1">G/L Date</a>-
+                                <a class="toggle-vis" data-column="15" id="tc1">Original PO Amount</a>-
+                                <a class="toggle-vis" data-column="16" id="tc1">PO Paid Amount</a>-
+                                <a class="toggle-vis" data-column="17" id="tc1">Remaining PO Amount</a>-
+                                <a class="toggle-vis" data-column="18" id="tc1">Receipt Amount</a>-
+                                <a class="toggle-vis" data-column="19" id="tc1">PO Receipt Balance Amount</a>-
+                                <a class="toggle-vis" data-column="20" id="tc1">Receipt Remark</a>-
+                                <a class="toggle-vis" data-column="21" id="tc1">ETL</a>-
+                                <a class="toggle-vis" data-column="22" id="tc1">ETL Date</a>-
+                                <a class="toggle-vis" data-column="23" id="tc1">Post G/L Date</a>-
+                                <a class="toggle-vis" data-column="24" id="tc1">Responsible By</a> 
+                            </div>
+                              
+                            
+                            <br/> 
+                        <table width="100%" border="0" id="dt_PoLineItems" class="hover table-striped responsive no-wrap display compact">
+                            <thead>
+                                <tr>
+                                    <th class="no-sort" >
+                                        Verify<br/>
+                                        <input type="checkbox" id="checkall"/>
+                                    </th>
+                                    <th>Marketing PO Delivered</th>
+                                    <th>Plan ID</th>
+                                    <th>PO ID</th>
+                                   <!---- <th>PO Line ID</th>---------------->
+                                    <th>PO Receipt Line ID</th>
+                                    <th>Fiscal Year</th>
+                                    <th>AP Code</th>
+                                    <th>A/C Code</th>
+                                    <th>Sub-Brand Code</th>
+                                    <th>Customer</th>
+                                    <th>Supplier</th>
+                                    <th>PO Line Description</th>
+                                    <th>Currency</th>
+                                    <th>Receipt Date</th>
+                                    <th>G/L Date</th>
+                                    <th>Original PO Amount(JPY)</th>
+                                    <th>PO Paid Amount(JPY)</th>
+                                    <th>Remaining PO Amount(JPY)</th>
+                                    <th>PO Receipt Amount(JPY)</th>
+                                    <th>PO Receipt Balance Amount(JPY)</th>
+                                    <th>Receipt Remark</th>
+                                    <th>ETL</th>
+                                    <th>ETL Date</th>
+                                    <th>Post G/L Date</th>
+                                    <th>Responsible By</th>
+                                </tr> 
+                            </thead>
+                            
+                            <apex:variable value="{!0}" var="i"/>
+                            
+                            <tbody>
+                                <apex:repeat value="{!LineItem}" var="line">
+                                    <apex:variable var="lineId" value="{!line.Id}" />
+                                    <apex:variable var="i" value="{!i+1}"/>
+                                    <tr>
+                                        <td class="headerCen_input headerCen" id="Verify_{!line.id}_chkbox" >
+                                            <apex:inputfield value="{!line.ASI_MFM_ACC_Verify__c}"
+                                                             styleClass="Chkbox"
+                                                             html-data-id="{!line.id}"
+                                                             html-data-row="{!i}"
+                                                             onchange="updateHiddenJsonData('{!line.id}')">
+                                            </apex:inputfield>
+                                        </td>
+                                        <td class="headerCen" ><apex:outputField value="{!line.ASI_MFM_Marketing_Verify__c}"></apex:outputField></td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.ASI_MFM_Plan__c}"></apex:outputField></td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__c}"></apex:outputField></td>
+                                       <!-------------------- <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__c}"></apex:outputField></td>------------>
+                                        <td>
+                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!line.id}" target="_blank">
+                                                <apex:outputField value="{!line.name}"></apex:outputField>
+                                            </apex:outputLink>
+                                        </td>
+                                        <td>{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.ASI_MFM_PO_Fiscal_Year__c }</td>
+                                        
+                                        <td  class="apCode" id="apCode_{!line.id}_lkupfield">
+                                            <apex:inputField value="{!line.ASI_MFM_AP_Code__c}" html-data-id="{!line.id}"  onchange="updateHiddenJsonData('{!line.id}')"  ></apex:inputField>
+                                            
+                                        </td>
+                                        
+                                       <td><apex:outputField value="{!line.ASI_MFM_A_C_Code_temp__c}"></apex:outputField></td>
+                                        
+                                        <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_Sub_brand_Code__c}"></apex:outputField></td>
+                                        <td>{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_Customer_Name__r.name}</td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.ASI_MFM_Supplier_Name__c}"></apex:outputField></td>
+                                        <td>{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_List_Item_Description__c}</td>
+                                        
+                                        <td>{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.ASI_MFM_Currency__c}</td>
+                                        <td class="ReceiptDate_input" id="ReceiptDate_{!line.id}_datefield" >
+                                            <apex:inputfield value="{!line.ASI_MFM_Receipt_Date__c}"  required="True" html-placeholder="Date"  onchange="updateHiddenJsonData('{!line.id}')"  />
+                                           
+                                        </td>
+                                           <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_G_L_Date__c}"></apex:outputField></td>
+                                        <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_Amount__c}"></apex:outputField></td>
+                                        <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_Paid_Amount__c}"></apex:outputField></td>
+                                        <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_Remaining_Balance__c}"></apex:outputField></td>
+                                        
+                                        
+                                        <td class="Amount_input" id="Amount_{!line.id}_numberfield" style="overflow:hidden;" >
+                                            <apex:inputField value="{!line.ASI_MFM_Amount__c}" html-placeholder="Amount"  required="True" onchange="updateHiddenJsonData('{!line.id}')"   ></apex:inputField>
+
+                                        </td>
+                                        <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_PO_Receipt_Balance_Amount__c}"></apex:outputField></td>
+                                        
+                                        <td  class="Remark_input" id="Remark_{!line.id}_textfield" >
+                                            <apex:inputfield value="{!line.ASI_MFM_Remark__c}"   html-placeholder="Remark" onchange="updateHiddenJsonData('{!line.id}')"  />
+                                             
+                                        </td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_ETL__c}"></apex:outputField></td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_ETL_Date__c}"></apex:outputField></td>
+                                        <td><apex:outputField value="{!line.ASI_MFM_Post_G_L_Date__c}"></apex:outputField></td>
+                                        <td>{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__r.ASI_MFM_Responsible_By__r.name}</td>
+                                    </tr>
+                                </apex:repeat>
+                            </tbody>
+                        </table>
+                        
+                        
+                    </apex:outputPanel>
+                    
+                    
+                    <apex:outputPanel style="width:100%;" layout="block" id="pagination">
+                     
+                        <!----
+                        <table style="width: 100%;" >
+                        <tr>
+                        <td idth="33%" >&nbsp;</td>
+                        <td width="33%" style="text-align:center;">
+                        <apex:commandButton value="<<" action="{!firstPage}" style="height:25px; margin: 5px; line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=1,True,False)}" />
+                        <span style="height:1px">&nbsp;&nbsp;</span>
+                        <apex:commandButton value="< Previous" action="{!prevPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=1,True,False)}" />
+                        <span style="height:1px">&nbsp;</span>
+                        <apex:commandButton value="Next >" action="{!nextPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=maxPageNum,True,False)}"/>
+                        <span style="height:1px">&nbsp;&nbsp;</span>
+                        <apex:commandButton value=">>" action="{!lastPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=maxPageNum,True,False)}" />
+                        </td>
+                        <td width="33%" style="text-align:right;">
+                        Page: &nbsp;
+                        <apex:outputText value="{!newPageNum}"  /> 
+                        of {!maxPageNum}
+                        </td>
+                        </tr>
+                        </table>
+                        ---> 
+                                   
+                        <script type="text/javascript">
+                        /*
+                       var columns = [
+                                { "data": "Verify", "bSortable": false, sDefaultContent: "n/a"  },
+                                { "data": "Plan_Number" ,sDefaultContent: "false"},
+                                { "data": "PO_Number", sDefaultContent: "n/a"  },
+                                { "data": "POL" , sDefaultContent: "n/a" },
+                                { "data": "PO_Receipt" , sDefaultContent: "n/a" },
+                            	{ "data": "Currency" , sDefaultContent: "n/a" },
+                                { "data": "Supplier", sDefaultContent: "n/a"  },
+                                { "data": "Receipt_Date" ,"bSortable": false, sDefaultContent: "n/a" },
+                                { "data": "Original_PO_Amount", sDefaultContent: "n/a"  },
+                                { "data": "Remaining_PO_Amount" , sDefaultContent: "n/a" },
+                                { "data": "Remaining_Receipt_Balance" , sDefaultContent: "n/a" },
+                                { "data": "Receipt_Amount" , "bSortable": false, sDefaultContent: "n/a" },
+                                { "data": "Receipt_Amount_with_Tax" ,  sDefaultContent: "n/a" },
+                                { "data": "Verified_Receipt_Amount", sDefaultContent: "n/a"  },
+                                { "data": "Receipt_Remark","bSortable": false, sDefaultContent: "n/a"  },
+                                { "data": "AC_Code", sDefaultContent: "n/a"  },
+                                { "data": "AP_Code", sDefaultContent: "n/a"  },
+                                { "data": "SubBrand_Code", sDefaultContent: "n/a"  },
+                                { "data": "Customer", sDefaultContent: "n/a"  },
+                                { "data": "POLine_Description", sDefaultContent: "n/a"  },
+                           		{ "data": "Creator", sDefaultContent: "n/a"  }
+                            ];
+                            
+                        var table = $j('#dt_PoLineItems').DataTable({  "bAutoWidth":false,
+                                                                    "aoColumns": columns,
+                                                                     "bDestroy": true,
+                                                                     "iDisplayLength":10, 
+                                                                     "bLengthChange": false,
+                                                                     //"dom": 'rt<"clear">',
+                                                                     "fnDrawCallback": function() {
+                                                                         $j('.numberAmount input').change();
+                                                                         $j('.headerCen input').change();
+                                                                         //alert( 'DataTables has rexdrawn the table' );
+                                                                         
+                                                                     }
+                                                                    });
+                        table.rows().every( function () {
+                            var d = this.data();
+                            // console.log(d);
+                        });
+                        
+                        
+                        table.on('click', '.chkApprove', function(e){
+                            var data = table.row( $j(this).parents('tr') ).data();
+                            console.log(data[0]);
+                            ///alert( data[0] );
+                            
+                            //return false; 
+                        });                                  
+                        
+                        
+                        $j('a.toggle-vis').on( 'click', function (e) {
+                            // $j('<button style="background-color: #d0e4fe;">Show</button>').appendTo($j(this)).click(function () {
+                            //  var column_index = $j(this).parent().index()+1;
+                            // });
+                            
+                            e.preventDefault();
+                            
+                            // Get the column API object
+                            var column = table.column( $j(this).attr('data-column') );
+                            
+                            // Toggle the visibility
+                            column.visible( ! column.visible() );
+                            if(!column.visible()){
+                                $j(this).addClass('changecss');
+                                }
+                            else{
+                                $j(this).removeClass('changecss');
+                                }
+                        } );                                  
+                       
+                        
+                        $j('#showAll').on('click',function(e){
+                            e.preventDefault();
+                            var columNum = 0; 
+                            table.columns().every( function () {
+                                table.column(columNum).visible(true);
+                                
+                                columNum++;
+                            });
+                            console.log('changecssNow');
+                            $j('#tc1,#tc2').removeClass('changecss');
+                            table.columns.adjust().draw( false ); // adjust column sizing and redraw             
+                        });
+                        
+                        function confirm_save() {
+                            
+                            
+                            table.page.len( -1 ).draw();
+                            
+                            var data = table.rows().data();
+                            
+                            console.log(data);
+                            
+                            // Invalidate and redraw all rows
+                            table
+                            .rows()
+                            .invalidate()
+                            .draw();
+                            //return confirm('Do you want to proceed?');
+                            
+                            if(!confirm('Do you want to proceed?')){return false;}
+                        }
+                        
+                        $j('#checkall2').click(function(event) {  //on click :  check all data
+                            var checked = this.checked;
+                            table.column(0).nodes().to$().each(function(index) {    
+                                if (checked) {
+                                    $j(this).find('.Chkbox').attr('checked', 'checked');
+                                    //alert('Checked!');
+                                } else {
+                                    $j(this).find('.Chkbox').removeAttr('checked');            
+                                }
+                                table.cell(index, 0).data($j(this).html());
+                            });    
+                            table.draw();
+                        });
+                        */
+                        /*
+                        $j('#checkall2').click(function(event) {   // check all in one page
+                             $j('#dt_PoLineItems tbody input[type="checkbox"]').prop('checked', this.checked);
+                            table.draw();
+                        });
+                        */
+                        </script>
+                    </apex:outputPanel>
+                    <!---
+                    <apex:outputPanel id="debugPanel" >
+                        <div>
+                            <p>Heap: {!heapSize} / {!heapLimit}</p>
+                            <p>DML: {!queryIssued} / {!queryLimit}</p>
+                            <p>Query: {!dmlIssued} / {!dmlLimit}</p>
+                        </div>
+                    </apex:outputPanel>
+                    --->
+                    
+                    <apex:outputPanel styleclass="bs panel-primary" id="Summary">
+                        <script type="text/javascript">
+                        /*
+                        
+                        google.load("visualization", "1", {packages:["corechart"]});
+                        google.setOnLoadCallback(drawChart);
+                        function drawChart() {
+                            
+                            var data = google.visualization.arrayToDataTable([
+                                ['Sub-Brand Name', 'PO Receipt Amount'],
+                                ['ABERLOUR_12YO-AR2',     110000],
+                                ['ABSOLUT APEACH-AAP',      20000],
+                                ['ABSOLUT FLAVOURS 2013-2-AF4',  2000]
+                            ]);
+                            
+                            var options = {
+                                title: 'Summary'
+                            };
+                            
+                            var chart = new google.visualization.PieChart(document.getElementById('piechart'));
+                            
+                            chart.draw(data, options);
+                        }
+                        */
+                        </script>
+                        
+                        <!---
+                        <div class="bs row" style="margin:0;">
+                            <div class="bs col-xs-6">  
+                                <div id="table_div"></div>
+                            </div>
+                            <div class="bs col-xs-6">  
+                              <div id="piechart" style="width: 900px; height: 500px;"></div>
+                            </div>    
+                        </div>
+                    
+                    
+                    --->
+                    </apex:outputPanel>
+                    
+                    
+                </apex:form>
+                
+                <apex:actionstatus id="ActionStatus">
+                    <apex:facet name="start">
+                        <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                             height: 100%; width:100%; opacity:0.65;"> 
+                            <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                                &nbsp;&nbsp;&nbsp;
+                                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                                <span class="waitingDescription">Please Wait...</span>
+                            </div>
+                        </div>
+                    </apex:facet>
+                </apex:actionstatus> 
+            </div>
+        </div>
+    </div>    
+</body>
+
+
+
+<!--
+<apex:pageBlock title="Debug - SOQL" id="debug">
+<apex:outputText value="{!debugSoql}" />     
+</apex:pageBlock>
+-->
+
+</apex:page>

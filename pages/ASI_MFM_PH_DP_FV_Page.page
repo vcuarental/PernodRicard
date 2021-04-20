@@ -1,0 +1,1150 @@
+<apex:page controller="ASI_MFM_PH_FV_Controller"   docType="html-5.0" sidebar="false" action="{!initDP}" >
+    
+       <header>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_PH_Datatable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/css/SimpleTable.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_PH_Jqueryui,'jquery-ui-1.11.4.custom/jquery-ui.css')}"/>
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/jquery.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library,  'dist/js/jquery-ui.min.js')}" />  
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/calx_js/numeral.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/jquery-calx-2.2.3.min.js')}" />               
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/typeahead.bundle.js')}" />
+
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Datatable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/numericInput.min.js')}" />
+        
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/CurrencyUtil.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_PH_Library, 'dist/js/currency.js')}" />
+
+
+        <style>
+            .dateFormat{
+            display:none;
+            }             
+           .bs.panel-heading.div-size {
+           border-radius: 10px;
+           }
+           
+           body {
+           font-family: Arial;
+           font-size: 9pt;
+           }
+           
+           th { 
+           white-space: nowrap; 
+           }    
+ 
+            .divbssearch{
+            padding-top:-1px !important;
+            }
+            .divsearch{
+            margin-right: 35px !important;
+            }
+
+            .divsearchlg{
+            margin-right: 30px !important;
+            }            
+            .searchcss {
+            width:150% !important;
+            height:29px !important;
+            }
+            
+            th { 
+            white-space: nowrap; 
+            }
+            
+            .headerNum {
+            text-align: right;
+            }
+            .headerCen {
+            text-align: center;
+            }
+            .numberAmount{
+            text-align:right;
+            font-weight:bold;
+            }
+            .PosRight{
+            text-align:right;
+            }
+            div#dt_PoLineItems_filter{
+            float:left;
+            text-align:right;
+            }
+            tfoot input {
+            width: 100%;
+            padding: 3px;
+            box-sizing: border-box;
+            display: table-header-group;
+            }
+            .changecss{
+            background-color: #d0e4fe ;
+            color: #C0C0C0 !important;
+            }
+
+        </style>
+        
+        
+        <script type="text/javascript">     
+            
+            $j = jQuery.noConflict();
+
+            var resultTable = null;
+            var PHForm = null;
+            var initBaseCurreny = null;
+            var invoiceNumberPrev;
+            var invoiceNumberCurrent;
+            var info;
+            var currentRecordStart = null;
+            var currentRecordEnd = null;
+            var currentPageNumber = null; 
+            var ACCodes = [];
+            var ACCodeEngine = null;
+            var ACCodeRecordTypeName = null;
+            var datatableILength = 15;
+            
+            
+            var aismfm = aismfm  || {};
+            aismfm.component = aismfm.component || {};
+                                    					
+                                    					
+            aismfm.component.FVDFFunction = function(){
+    
+              function init() {
+                  $j('.headerCen_input input').change();
+                  $j('.invoiceNumber input').change();
+                  $j('.invoiceDate input').change();
+                  $j('.glDate input').change();
+                  $j('.APremark textarea').change();
+                  $j('.invoiceDueDate input').change();
+                  $j('.acCode input').change();
+                  $j('.recharge input').change();
+                  $j('.taxrate select').change();
+              }
+    						                                					    
+             return {
+                 init: init
+             };
+            }();        
+
+
+        function initPHPage(config) {
+            if (config) {
+                PHForm  = config.PHForm; 
+                ACCodeRecordTypeName=config.ACCodeRecordTypeName;
+                initBaseCurreny = config.initBaseCurreny;
+                setResultTable(true);
+                 
+            }
+
+           
+        }      
+        
+        
+             function updateHiddenJsonData(id){
+                  var hiddenJsonData = $j('input[id$=hiddenBlock]').val();  
+                  var obj = JSON.parse(hiddenJsonData);  
+                  var updatedObject = [];
+                  
+                  $j.each(obj, function(){  
+                       if(this.recordId == id){  
+
+                           this.FVerify = $j('#FVerify_' + this.recordId + '_chkbox input').is(':checked');
+                           this.glDateStr  = $j('#gl_' + this.recordId + '_datefield input').val()?  $j('#gl_' + this.recordId + '_datefield input').val() :null; 
+                           this.invoiceDateStr   = $j('#invoiceDate_' + this.recordId + '_datefield input').val()?  $j('#invoiceDate_' + this.recordId + '_datefield input').val() :null; 
+                           this.invoiceNumber = $j('#invoiceNo_' + this.recordId + '_textfield input').val()?  $j('#invoiceNo_' + this.recordId + '_textfield input').val() :null; 
+                           this.APremark = $j('#APremarks_' + this.recordId + '_textfield input').val()?  $j('#APremarks_' + this.recordId + '_textfield input').val() :null; 
+                           this.vat = $j('#taxrate_' + this.recordId + '_textfield select').val()?  $j('#taxrate_' + this.recordId + '_textfield select').val() :null; 
+                           
+                           //this.comments = $j('#comments_' + this.recordId + '_textfield textarea').val()?  $j('#comments_' + this.recordId + '_textfield textarea').val() :null;  confirmed no need to use comment field 
+                           this.acCode =  $j('#acCode_' + this.recordId + '_lkupfield input').val()?  $j('#acCode_' + this.recordId + '_lkupfield input').val() :null; 
+                           this.invoiceDueDateStr   = $j('#invoiceDueDate_' + this.recordId + '_datefield input').val()?  $j('#invoiceDueDate_' + this.recordId + '_datefield input').val() :null; 
+                           this.recharge = $j('#recharge_' + this.recordId + '_chkbox input').is(':checked');
+                           
+                           //console.log(this.recordId + '|' + this.recharge + '|' + this.invoiceNumber);
+                       }   
+                  });  
+                  var objString = JSON.stringify(obj);   
+                 
+                  console.log(objString); 
+                  
+                  $j('input[id$=hiddenBlock]').val(objString);  
+             }  
+             
+            function retrieveACCode() {
+                
+                var whereClause =   ' WHERE RecordType.DeveloperName = \''+ ACCodeRecordTypeName + '\' '
+                console.log('Finding Sub-Brands : '+ whereClause);
+                
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ASI_MFM_PH_FV_Controller.findSObjects}','ASI_MFM_A_C_Code__c', whereClause 
+                    , callbackACcode
+                    , {escape: true, timeout: 10000}
+                );       
+            }
+
+
+            function callbackACcode(result, event){
+                if (event.status) {
+                    if (result) {
+                
+                        ACCodes = [];
+                        var size = result.length;
+                        for (var i = 0; i < size; i++) {
+    
+                            //Subbrand
+                            var ac = new Object();
+                            ac.label =  htmlEncode(result[i]["Name"]);
+                            ac.value =  htmlEncode(result[i]["Id"]);
+                            ACCodes.push(ac);
+                            
+                            ACCodes.push(ac);
+                        }
+                    }
+                } else {
+                    // TODO: Handle error
+                    //displayErrorMsg(event.message);
+                }   
+                initalizeAutoCompleteComponent();
+            }
+        
+           
+            function initalizeAutoCompleteComponent() {
+              if(ACCodes){
+                  
+                  
+                  
+              }   
+            }
+            
+            
+            function setResultTable(newTable){
+
+                var invoiceNumberPrev;
+                var invoiceNumberCurrent;
+            
+                
+                resultTable =  $j("#dt_PaymentLineItems").on( 'init.dt', function () {
+                    
+                    //console.log( 'Redraw occurred at: '+new Date().getTime() );
+                    currentRecordStart = 0; //init value 
+                    currentRecordEnd = datatableILength; //max length (iDisplayLength)
+                    //console.log(currentRecordStart);    
+                   
+                    
+                } ).DataTable({              
+                    "bDestroy":true,
+                    "bAutoWidth":false,
+                    "pagingType": "full_numbers",
+                    "dom": '<<t>ip>',
+                    "iDisplayLength": datatableILength,
+                    "order": [],
+                    "columnDefs": [ { 
+                                     "targets": 0, //checkbox
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    { 
+                                     "targets": 1, // Recharge
+                                     "searchable": false,
+                                     "orderable": false,
+                                     "visible": false
+                                    },
+                                    { 
+                                     "targets": -1, //comment
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    { 
+                                     "targets": 5, //ac code
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    { 
+                                     "targets": 8,//invoice number 
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    { 
+                                     "targets": 9, //invoice date
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    { 
+                                     "targets": 10, //Gl date
+                                     "searchable": false,
+                                     "orderable": false
+                                    },
+                                    {
+                                     "render": function ( data, type, row ) {
+                                       return formatNumber(data) +' '+ row[11] + ''; //for Payment Amount
+                                    },
+                                      "targets": -7,
+                                      type: 'currency'
+                                    },
+                                    {
+                                     "render": function ( data, type, row ) {
+                                       return formatNumber(data) +' '+ row[11] + ''; //for Payment Amount with Tax
+                                    },
+                                      "targets": -5, 
+                                      type: 'currency'
+                                    },
+                                    { 
+                                      "visible": false,   //Currency 
+                                      "targets": 11
+                                    }
+                                    
+                                    
+                    ],
+                    
+                     "initComplete": function(settings, json) {
+                             buttonAction();
+                        //console.log( 'DataTables has finished its initialisation.' );
+                     },
+                    
+                    "fnDrawCallback": function() {    
+                                                     
+                                                      var api = this.api();
+                                                      
+                                                      $j('.headerCen_input input').change();
+                                                      $j('.invoiceNumber input').change();
+                                                      $j('.invoiceDate input').change();
+                                                      $j('.glDate input').change();
+                                                      $j('.APremark input').change();
+                                                      $j('.invoiceDueDate input').change();
+                                                      $j('.acCode input').change(); 
+                                                      $j('.recharge input').change();
+                        							$j('.taxrate select').change();
+                                                                                        
+                                                      $j('.invoiceNumber input').on("focus", function() {
+                                                                            if($j(this).val()){
+                                                                                $j(this).data("previous-value", $j(this).val());
+                                                                            }
+                                                                            }).change(function () {
+                                                                            invoiceNumberPrev = $j(this).data("previous-value");
+                                                                            var invoiceNumberCurrent = $j(this).val();
+                                                                                 $j('.invoiceNumber input').each(function() {
+                                                                                     var celllineId = $j(this).attr('data-id');
+                                                                                     if( invoiceNumberCurrent && invoiceNumberPrev){
+                                                                                         if($j(this).val() == invoiceNumberPrev){
+                                                                                         $j(this).val(invoiceNumberCurrent);
+                                                                                         updateHiddenJsonData(celllineId);
+                                                                                        }
+                                                                                     }
+                                                                                     
+                                                                                 });
+                                                    });    
+                        
+                           
+                        
+                        $j('.headerCen_input input').on('click', function (event) {
+                            
+                            var rechargeV =$j(this).is( ":checked" ) ;
+                            
+                            console.log(rechargeV);
+                            var paymentId = $j(this).attr('data-payment');
+                            var invoiceId = $j(this).attr('data-invoice');
+                            var lineId = $j(this).attr('data-id');
+                            
+                            if(rechargeV){
+                                
+                                $j(this).prop( "checked",true);
+                            }else{
+                                $j(this).prop( "checked",false);
+                            }
+                            updateHiddenJsonData(lineId); 
+                            
+                            
+                            //$j('.recharge input').each(function() {
+                            
+                            api.column(0).nodes().to$().each(function(index) {  
+                                
+                                // console.log(rechargeV);
+                                
+                                $j(this).find('.Chkbox').each(function() {    
+                                    
+                                    var paymentCellId = $j(this).attr('data-payment');
+                                    var invoiceCellId = $j(this).attr('data-invoice');
+                                    var celllineId = $j(this).attr('data-id');
+                                    
+                                    //console.log(celllineId);
+                                    
+                                    
+                                    if( paymentCellId && paymentId && invoiceCellId && invoiceId){
+                                        if(paymentCellId == paymentId && invoiceCellId == invoiceId && celllineId!==lineId){
+                                            
+                                            console.log(celllineId + '|' + lineId);
+                                            
+                                            if(rechargeV) {  $j(this).prop( "checked",true);  updateHiddenJsonData(celllineId); }
+                                            else {  $j(this).prop( "checked",false); updateHiddenJsonData(celllineId); } 
+                                        }
+                                    }
+                                });
+                                
+                                //api.cell(index, 1).data($j(this).html());
+                            });
+                            
+                        }); 
+                        
+                        
+                        
+                        
+                        
+                        
+                                                      $j('.recharge input').on("focus", function() {
+
+                                                                            }).change(function () {
+                                                                                
+                                                                            var rechargeV = $j(this).is(':checked');
+                                                                            
+                                                                            
+                                                                            //console.log(rechargeV);
+                                                                            var paymentId = $j(this).attr('data-payment');
+                                                                            var lineId = $j(this).attr('data-id');
+                                                                            
+                                                                            
+                                                                            $j('.recharge input').each(function() {
+                                                        
+                                                                                  
+                                                                                  var paymentCellId = $j(this).attr('data-payment');
+                                                                                  var celllineId = $j(this).attr('data-id');
+                                                                                  
+                                                                                     if( paymentCellId && paymentId){
+                                                                                         if(paymentCellId == paymentId){
+                                                                                            console.log(celllineId);
+                                                                                            if(rechargeV) {$j(this).prop('checked', true); $j(this).checked =true; updateHiddenJsonData(celllineId); }
+                                                                                            else { $j(this).prop('checked', false); $j(this).checked =false;updateHiddenJsonData(celllineId); } 
+                                                                                        }
+                                                                                     }
+
+                                                                                 });
+                                                    }); 
+                                                    
+                                                                        
+                    }
+                     
+                });
+                
+                
+                $j("#dt_PaymentLineItems").on( 'page.dt', function () {
+                    
+                   info = resultTable.page.info();
+                    
+                    if(info){
+                        currentPageNumber = info.page;
+                        currentRecordStart = info.start? info.start: 0;
+                        currentRecordEnd = info.end ?  info.end: 0;
+                    }                    
+                     
+                      buttonAction();    
+                } );
+    
+               
+                
+                if(newTable==false){
+                } 
+                   
+                
+            }      
+            
+            function formatNumber(n) {
+                
+                 
+                var  n = parseFloat(Math.round(n * 100) / 100).toFixed(2);
+                
+                return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            }
+            
+            function buttonAction(){
+
+                     $j('a.toggle-vis').on( 'click', function (e) {
+                                                
+                                                e.preventDefault();
+                                                console.log("fire");
+                                                
+                                                // Get the column API object
+                                                var column = resultTable.column( $j(this).attr('data-column') );
+                                                
+                                                // Toggle the visibility
+                                                column.visible( ! column.visible() );
+                                                if(!column.visible()){
+                                                    $j(this).addClass('changecss');
+                                                    }
+                                                else{
+                                                    $j(this).removeClass('changecss');
+                                                    }
+                                            } );    
+                                            
+                                            $j('#showAll').on('click',function(e){
+                                                e.preventDefault();
+                                                var columNum = 0; 
+                                                resultTable.columns().every( function () {
+                                                    resultTable.column(columNum).visible(true);
+                                                    
+                                                    columNum++;
+                                                });
+                                                console.log('changecssNow');
+                                                $j('#tc1,#tc2').removeClass('changecss');
+                                                resultTable.columns.adjust().draw( false ); // adjust column sizing and redraw             
+                                            });  
+                                            
+                                            
+                                         $j('#checkall').click(function(event) {  //on click :  check all data for FV Verify
+                                            var checked = this.checked;
+                                            resultTable.column(0, {page:'current'} ).nodes().to$().each(function(index) {    
+                                                if (checked) {
+                                                     $j(this).find('.Chkbox').each(function() {    
+                                                        var celllineId = $j(this).attr('data-id');
+                                                        var currentRow = $j(this).attr('data-row');
+                                                       // if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                            $j(this).attr('checked', 'checked'); 
+                                                            updateHiddenJsonData(celllineId);
+                                                       // }
+            
+                                                    }); //alert('Checked!');
+                                                } else {
+                                                     
+                                                     $j(this).find('.Chkbox').each(function() {    
+                                                         var celllineId = $j(this).attr('data-id');
+                                                         var currentRow = $j(this).attr('data-row');
+                                                      //  if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                             $j(this).removeAttr('checked');  
+                                                             updateHiddenJsonData(celllineId);
+                                                      //  }
+            
+                                                    }); 
+                                                }
+                                                resultTable.cell(index, 0).data($j(this).html());
+                                            });    
+                                         }); 
+
+
+                             $j('#Rechargeall').click(function(event) {  //on click :  check all data for Recharge All
+                                var checked = this.checked;
+                                resultTable.column(1, {page:'current'} ).nodes().to$().each(function(index) {    
+                                    if (checked) {
+                                         $j(this).find('.Chkbox').each(function() {    
+                                            var celllineId = $j(this).attr('data-id');
+                                            var currentRow = $j(this).attr('data-row');
+                                          //  if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                $j(this).attr('checked', 'checked'); 
+                                                updateHiddenJsonData(celllineId);
+                                           // }
+
+                                        }); //alert('Checked!');
+                                    } else {
+                                         
+                                         $j(this).find('.Chkbox').each(function() {    
+                                             var celllineId = $j(this).attr('data-id');
+                                             var currentRow = $j(this).attr('data-row');
+                                          //  if(currentRow && currentRow>currentRecordStart && currentRow<=currentRecordEnd ){
+                                                 $j(this).removeAttr('checked');  
+                                                 updateHiddenJsonData(celllineId);
+                                         //   }
+
+                                        }); 
+                                    }
+                                    resultTable.cell(index, 1).data($j(this).html());
+                                }); 
+                             }); //resultTable.draw();
+                    
+            
+            }
+                        
+                        
+            $j(document).ready(function(){
+
+                initPHPage({
+                    PHForm : "ASI_MFM_PH_DP",
+                    ACCodeRecordTypeName : '{!a_c_code_RecordType_Developer_Name}',
+                    initBaseCurreny : "PHP"
+                });                
+
+
+   
+            });
+            
+            
+
+            
+            $j(document).on('mousemove', function(e){
+                $j("#loadtext").css({
+                    left:  e.pageX,
+                    top:   e.pageY
+                });
+            });
+          
+            function openAccountWin(id){
+                window.open("/"+id);
+            }
+       
+        </script>
+        
+
+    </header>
+    
+    
+    <body>
+        
+        
+        
+
+        
+        
+        <apex:form id="DPFVerifyForm" styleClass="DPFVerifyFormCls">
+             <div class="container-fluid" style="margin:0;">
+                <div class="bs row">
+                    <apex:outputPanel styleclass="bs col-xs-12">
+                            <div class="panel panel-primary " >
+                            
+                                <div class="panel-heading">
+                                    <h5>
+                                        Finance Verification (Duty Paid Market)
+                                    </h5>
+                                </div>                 
+                                
+                                
+                                <!--<apex:pageMessages id="errors" /> --->
+                            
+                              <div class="alert alert-danger fade in" style="{!IF(UpsertPermission,'display:none;','')}"  id="SaveFailPart">
+                                  
+                                  <strong>Error! Can not Save!</strong><br/>
+                                    <apex:outputText escape="false" value="{!Msg}"/>
+                                </div>  
+                                
+                                
+                                <div class="alert alert-success fade in" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                                    <strong>Save Success!</strong> <br/>
+                                    <apex:outputText escape="false" value="{!Msg}"/>
+                                </div>    
+                        
+                                         
+
+                 
+                                  <div class="control-group panel-body ">
+                                      <div class="bs row">
+                                           <div class="col-xs-1">
+                                               <apex:outputLabel style="font-weight:bold;" >Verify:</apex:outputLabel>
+                                               <div class="form-group divsearch">
+                                                    <apex:selectList id="BAV1" value="{!FinVerify}" size="1" styleClass="form-control searchcss input-sm">
+                                                        <apex:selectOption itemValue="" itemLabel=" "/>
+                                                        <apex:selectOption itemValue="Checked" itemLabel="Checked"/>
+                                                        <apex:selectOption itemValue="Unchecked" itemLabel="Unchecked"/>
+                                                    </apex:selectList>
+                                               </div>
+                                          </div>
+                                                           
+    
+                                          <div class="col-xs-1">
+                                                <apex:outputLabel style="font-weight:bold;">PO ID:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!PO_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="PO ID"  />
+                                               </div>
+                                          </div>
+                                          
+    
+                                          <div class="col-xs-1">
+                                                <apex:outputLabel style="font-weight:bold;">POL ID:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!POline_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="POL ID"  />
+                                               </div>
+                                          </div>
+                                          
+    
+                                          <div class="col-xs-1">
+                                                <apex:outputLabel style="font-weight:bold;">Payment ID:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!Payment_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="Payment ID"  />
+                                               </div>
+                                          </div>
+                                          
+    
+    
+                                          <div class="col-xs-1">
+                                                <apex:outputLabel style="font-weight:bold;">Payment Line ID:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!PayLine_ID}"  styleClass="form-control searchcss input-sm" html-placeholder="Payment Line ID"  />
+                                               </div>
+                                          </div>
+                                          
+    
+                                           <div class="col-xs-1">
+                                               <apex:outputLabel style="font-weight:bold;" >Status:</apex:outputLabel>
+                                               <div class="form-group divsearch">
+                                                   <apex:selectList id="status" value="{!PaymentStatus}" size="1" styleClass="form-control searchcss input-sm">
+                                                        <apex:selectOption itemValue="" itemLabel=" "/>
+                                                        <apex:selectOption itemValue="Submitted" itemLabel="Submitted"/>
+                                                        <apex:selectOption itemValue="Final" itemLabel="Final"/>
+                                                    </apex:selectList>
+                                               </div>
+                                          </div>
+                                          
+                                               
+                                          <div class="col-xs-1">
+                                              <apex:outputLabel style="font-weight:bold;" >Fiscal Year:</apex:outputLabel>
+                                              <div class="form-group divsearch">
+                                                  <apex:selectList id="fiscalyear" value="{!Fiscalyear}" size="1" styleClass="form-control searchcss input-sm">
+                                                      <apex:selectOption itemValue="FY1213" itemLabel="FY1213"/>
+                                                      <apex:selectOption itemValue="FY1314" itemLabel="FY1314"/>
+                                                      <apex:selectOption itemValue="FY1415" itemLabel="FY1415"/>
+                                                      <apex:selectOption itemValue="FY1516" itemLabel="FY1516"/>
+                                                      <apex:selectOption itemValue="FY1617" itemLabel="FY1617"/>
+                                                      <apex:selectOption itemValue="FY1718" itemLabel="FY1718"/>
+                                                      <apex:selectOption itemValue="FY1819" itemLabel="FY1819"/>
+                                                      <apex:selectOption itemValue="FY1920" itemLabel="FY1920"/>
+                                                      <apex:selectOption itemValue="FY2021" itemLabel="FY2021"/>
+                                                      <apex:selectOption itemValue="FY2122" itemLabel="FY2122"/>
+                                                      <apex:selectOption itemValue="FY2223" itemLabel="FY2223"/>
+                                                  </apex:selectList>    
+                                              </div>
+                                          </div>
+                                          
+                                          
+    
+                                          <div class="col-xs-1">
+                                               <apex:outputLabel style="font-weight:bold;">Invoice No:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!InvoiceNumber}"  styleClass="form-control searchcss input-sm" html-placeholder="Invoice No"  />
+                                               </div>
+                                          </div>
+                                          
+                                          <div class="col-xs-1">
+                                                <apex:outputLabel style="font-weight:bold;">Payee:</apex:outputLabel>
+                                                <div class="form-group divsearch">
+                                                    <apex:inputText value="{!Payee}"  styleClass="form-control searchcss input-sm" html-placeholder="Payee"  />
+                                               </div>
+                                          </div> 
+                                      </div>
+                                      <div class="bs row">
+
+                                             <div class="col-xs-2">  
+                                                <div class="form-group divsearch">
+                                                    <apex:outputLink styleClass="bs btn btn-warning btn-sm "
+                                                                        target="_blank"
+                                                                        value="/apex/ASI_MFM_PH_GLDate_SettingPage"> 
+                                                                        GL Date Setting             
+                                                    </apex:outputLink>
+                                               </div>
+                                            </div>
+                                            
+                                           <div class="col-xs-1">  
+                                                <div class="form-group divsearch"> 
+                                                    <apex:outputLink styleClass="bs btn btn-info btn-sm "
+                                                                        target="_blank"
+                                                                        value="/{!ReportFolderId}"> 
+                                                                        Report Folder             
+                                                    </apex:outputLink>
+                                                </div>
+                                            </div>
+                                          
+                                             <div class="col-xs-1">  
+                                                <div class="form-group divsearch">
+                                                    <apex:commandButton value="Save"
+                                                                        styleClass="bs btn btn-success btn-sm btn-block"
+                                                                        action="{!save}"
+                                                                        onclick="resultTable.page.len( -1 ).draw(false);"
+                                                                        status="ActionStatus"
+                                                                        oncomplete="setResultTable(true);"
+                                                                        rerender="SaveSuccessPart,DPFVerifyForm,results,SaveFailPart,hiddenJsonData,hiddenBlock" >  <!--,errors-->
+                                                    <apex:param name="ASI_MFM_PH_ACCODE_RECORD_TYPE" value="DP"/>
+                                                    </apex:commandButton>
+                                               </div>
+                                            </div>
+                                            
+                                            <div class="col-xs-1">  
+                                                <div class="form-group divsearch"> 
+                                                    <apex:commandButton value="Search"
+                                                                        styleClass="bs btn btn-default btn-sm btn-block"
+                                                                        action="{!runSearch}"
+                                                                        status="ActionStatus"
+                                                                        oncomplete="setResultTable(true);"
+                                                                        rerender="SaveSuccessPart,DPFVerifyForm,results,SaveFailPart,hiddenJsonData,hiddenBlock" /> <!--,errors-->
+                                               </div> 
+                                            </div>
+                                      </div>
+                                 </div>
+                            </div>
+                        </apex:outputPanel>   
+                        
+                         </div>
+                         
+                        <div class="bs row">
+                                <div lass="bs col-xs-12" >                       
+            			
+            			            <apex:outputPanel id="hiddenJsonData">  
+                                          <apex:inputHidden id="hiddenBlock" value="{!jsonDataMinimal}" />  
+                                     </apex:outputPanel>  
+                      
+            						<apex:outputPanel styleclass="bs panel-primary" id="results">
+
+            						  <div>
+                                            <button type="button" class="bs btn btn-warning btn-sm" id="showAll">Show All</button>
+                                            Toogle Column:
+                                            
+                                            <a class="toggle-vis" data-column="1" id="tc1">PO ID</a>-
+                                            <a class="toggle-vis" data-column="2" id="tc1">PO Line ID</a>-
+                                            <a class="toggle-vis" data-column="3" id="tc1">Payment ID</a>-
+                                            <a class="toggle-vis" data-column="4" id="tc1">Payment Line ID</a>-
+                                            <a class="toggle-vis" data-column="5" id="tc1">A/C Code</a>-
+                                            <a class="toggle-vis" data-column="6" id="tc1">Supplier Number</a>-
+                                            <a class="toggle-vis" data-column="7" id="tc1">Payee</a>-
+                                            <a class="toggle-vis" data-column="8" id="tc1">Invoice Number</a>-
+                                            <a class="toggle-vis" data-column="9" id="tc1">Invoice Date</a>-
+                                            <a class="toggle-vis" data-column="10" id="tc1">G/L Date</a>-
+                                            
+                                            <a class="toggle-vis" data-column="12" id="tc1">Payment Amount</a>-
+                                            <a class="toggle-vis" data-column="13" id="tc1">Tax Rate</a>-
+                                            <a class="toggle-vis" data-column="14" id="tc1">Payment Amount with Tax</a>-
+                                            <a class="toggle-vis" data-column="15" id="tc1">Status</a>-
+                                            <a class="toggle-vis" data-column="16" id="tc1">ETL</a>-
+                                            <a class="toggle-vis" data-column="17" id="tc1">ETL Date</a>-
+                                            <a class="toggle-vis" data-column="18" id="tc1">AP Remark</a>
+                                        </div>
+                            
+                            
+                                    <br/> 
+                                    
+            						                  
+            						                 <apex:variable value="{!0}" var="i"/>
+                                                    
+                                                     <table width="100%" border="0" id="dt_PaymentLineItems" class="hover table-striped responsive no-wrap display compact">
+                                                          <thead>
+                                                            <tr>
+                                                                <th><span> Verify</span><br/> <input type="checkbox" id="checkall"/></th>
+
+                                                                <th>PO ID</th>
+                                                                <th>PO Line ID</th>
+                                                                <th>Payment ID</th>
+                                                                <th>Payment Line ID</th>                                                                
+                                                                <th>A/C Code</th>
+                                                                <th>Supplier Number</th>
+                                                                <th>Payee</th>
+                                                                <th>Invoice Number</th>
+                                                                <th>Invoice Date</th>
+                                                                <th>G/L Date</th>
+                                                                <th>Currency</th>
+                                                                <th>Payment Amount</th>
+                                                                <th>Tax Rate</th>
+                                                                <th>Payment Amount with Tax</th>
+                                                                <th>Status</th>
+                                                                <th>ETL</th>
+                                                                <th>ETL Date</th>
+                                                                <th>AP Remark</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                                <apex:repeat value="{!LineItem}" var="line">
+                                                                <apex:variable var="i" value="{!i+1}"/>
+                                                                    <tr>
+                                                                        <td class="headerCen_input headerCen" id="FVerify_{!line.id}_chkbox">
+                                                                            <apex:inputfield value="{!line.ASI_MFM_Payment_Line_Item_Finance_Verify__c}"  html-data-invoice="{!line.ASI_MFM_Invoice_Number__c}" html-data-id="{!line.id}" html-data-payment="{!line.ASI_MFM_Payment__r.Id}"  html-data-row="{!i}" styleClass="Chkbox" onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"/>
+                                                                            <apex:outputfield value="{!line.ASI_MFM_Payment_Line_Item_Finance_Verify__c}"  rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"/>
+                                                                        
+                                                                        </td>
+                                                                     
+                                                                        <td class="headerCen"><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__c}"></apex:outputField></td>
+                                                                        <td  class="headerCen" ><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__c}"></apex:outputField></td>
+                                                                        
+                                                                        <td  class="headerCen" ><apex:outputField value="{!line.ASI_MFM_Payment__c}"></apex:outputField></td>
+                                                                        <td class="headerCen">
+                                                                            <apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!line.id}" target="_blank">
+                                                                             <apex:outputField value="{!line.name}"/>
+                                                                            </apex:outputLink>
+                                                                        </td>
+                                                                        
+                                                                        
+                                                                        <td class="acCode" id="acCode_{!line.id}_lkupfield">
+                                                                             <apex:inputField value="{!line.ASI_MFM_A_C_Code__c}"  html-data-id="{!line.id}"  onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"/> 
+                                                                             <apex:outputField value="{!line.ASI_MFM_A_C_Code__c}" html-data-id="{!line.id}" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"/>
+                                                                        </td>
+                                                                        
+                                                                        <td class="headerCen"  >{!line.ASI_MFM_PO__r.ASI_MFM_Supplier_Number__c}</td>
+                                                                        <td><apex:outputField value="{!line.ASI_MFM_Payee__c}"></apex:outputField></td>
+                                                                        <td class="invoiceNumber" id="invoiceNo_{!line.id}_textfield">
+                                                                            <apex:inputField value="{!line.ASI_MFM_Invoice_Number__c}" html-data-id="'{!line.id}'"  onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"></apex:inputField>
+                                                                            <apex:outputText value="{!line.ASI_MFM_Invoice_Number__c}" html-data-id="'{!line.id}'"  rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"></apex:outputText>
+                                                                        </td> 
+                                                                        
+                                                                        
+                                                                        <td class="invoiceDate" id="invoiceDate_{!line.id}_datefield">
+                                                                            <apex:inputField value="{!line.ASI_MFM_Invoice_Date__c}" html-data-id="{!line.id}" html-data-invoice="{!line.ASI_MFM_Invoice_Number__c}" onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"></apex:inputField>
+                                                                            <apex:outputField value="{!line.ASI_MFM_Invoice_Date__c}" html-data-id="{!line.id}" html-data-invoice="{!line.ASI_MFM_Invoice_Number__c}" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"></apex:outputField>
+                                                                        </td>
+
+                                                                        <td class="glDate" id="gl_{!line.id}_datefield">
+                                                                            <apex:inputField value="{!line.ASI_MFM_G_L_Date__c}" html-data-id="{!line.id}" html-data-invoice="{!line.ASI_MFM_Invoice_Number__c}" onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"></apex:inputField>
+                                                                            <apex:outputField value="{!line.ASI_MFM_G_L_Date__c}" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"></apex:outputField>
+                                                                        </td>
+                                                                        
+                                                                        <td> {!line.ASI_MFM_Currency__c}</td>
+                                                                        <td class="numberAmount" >{!line.ASI_MFM_Payment_Amount__c}</td>
+                                                                        
+                                                                        
+                                                                        <td class="taxrate headerNum" id="taxrate_{!line.id}_textfield" >{!line.ASI_MFM_Tax_Rate__c}
+                                                                            <!--
+                                                                            <apex:inputField value="{!line.ASI_MFM_Tax_Rate__c}"  rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}" onchange="updateHiddenJsonData('{!line.id}')"></apex:inputField>
+                                                                        	<apex:outputField value="{!line.ASI_MFM_Tax_Rate__c}" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"></apex:outputField>-->
+                                                                        </td>
+                                                                        <td class="numberAmount" >{!line.ASI_MFM_Amount_with_Tax__c}</td>
+                                                                        <td class="headerCen" >{!line.ASI_MFM_Payment__r.ASI_MFM_Status__c}</td>
+                                                                        
+                                                                         <td class="headerCen" ><apex:outputField value="{!line.ASI_MFM_ETL__c}"></apex:outputField></td>
+                                                                         <td class="headerCen" ><apex:outputField value="{!line.ASI_MFM_ETL_Date__c}"></apex:outputField></td>
+                                                                         
+                                                                        <td class="APremark" id="APremarks_{!line.id}_textfield"> 
+                                                                            <apex:inputField value="{!line.ASI_MFM_AP_Remark__c}" html-data-id="{!line.id}" html-data-invoice="{!line.ASI_MFM_Invoice_Number__c}" onchange="updateHiddenJsonData('{!line.id}')" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),False,true)}"></apex:inputField>
+                                                                            <apex:outputField value="{!line.ASI_MFM_AP_Remark__c}" rendered="{!if(or(line.ASI_MFM_Payment__r.ASI_MFM_Status__c='Submitted',line.ASI_MFM_ETL__c=true),true,False)}"></apex:outputField>
+                                                                        </td>
+                                                                    </tr>
+                                                                </apex:repeat>
+                                                        </tbody>
+                                                      </table> 
+                                        </apex:outputPanel>
+                               </div>
+                        </div>
+                 </div>
+            </apex:form>
+
+            <!---------------------Loading-------------------------------------->
+                <apex:actionstatus id="ActionStatus">
+                    <apex:facet name="start">
+                        <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                             height: 100%; width:100%; opacity:0.65;"> 
+                            <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                                &nbsp;&nbsp;&nbsp;
+                                <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                                <span class="waitingDescription">Please Wait...</span>
+                            </div>
+                        </div>
+                    </apex:facet>
+                </apex:actionstatus> 
+            
+            
+        
+    </body>
+    
+</apex:page>
+    <!---
+    <header>
+        <meta charset="utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>  
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/css/bootstrap.min.css')}"/>
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Datatable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+        <apex:stylesheet value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/css/SimpleTable.css')}" />
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"/>
+        <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.1/jquery-ui.min.js"/>  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/bootstrap.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Datatable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />  
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/numericInput.min.js')}" />
+        <apex:includeScript value="{!URLFOR($Resource.ASI_MFM_JP_Library, 'dist/js/CurrencyUtil.js')}" />
+
+        <style>
+            th { 
+            white-space: nowrap; 
+            }
+            
+            .headerNum {
+            text-align: right;
+            }
+            .headerCen {
+            text-align: center;
+            }
+            .SetRight{
+            text-align:right;
+            }
+            .numberAmount{
+            text-align:right;
+            font-weight:bold;
+            }
+        </style>
+    </header>
+    <body>
+        <apex:pageMessages id="errors" />
+        <apex:form >
+            
+            <apex:outputPanel styleclass="bs" >
+                <div class="panel panel-primary" style="width:1600px;">
+                    <div class="panel-heading">
+                        <h4>
+                            Finance Verification
+                        </h4>
+                    </div>
+                    
+                    <div class="alert alert-success" style="{!IF(SaveSuccess,'','display:none;')}" id="SaveSuccessPart">
+                        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+                        <strong>Save Success:</strong> &nbsp;{!Msg}
+                    </div>
+                    
+                    <div class="panel-body">
+                        <table width="100%" cellpadding="2" cellspacing="2">
+                            <tr>
+                                <td>
+                                    <apex:outputLabel style="font-weight:bold;" >Verify:</apex:outputLabel><br/>
+                                    <apex:selectList id="BAV1" value="{!FinVerify}" size="1">
+                                        <apex:selectOption itemValue="" itemLabel=" "/>
+                                        <apex:selectOption itemValue="Checked" itemLabel="Checked"/>
+                                        <apex:selectOption itemValue="Unchecked" itemLabel="Unchecked"/>
+                                    </apex:selectList> &nbsp; &nbsp;                                   
+                                </td>
+                                
+                                <td>
+                                    <apex:outputLabel style="font-weight:bold;">Payment ID:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!Payment_ID}"/> 
+                                </td>
+                                
+                                <td>
+                                    <apex:outputLabel style="font-weight:bold;">Payment Line ID:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!PayLine_ID}"/> 
+                                </td>
+                                
+                                <td>
+                                    <apex:outputLabel style="font-weight:bold;">PO ID:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!PO_ID}"/> 
+                                </td>
+                                
+                                 <td>
+                                    <apex:outputLabel style="font-weight:bold;">PO line ID:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!POline_ID}"/> 
+                                </td>
+                                
+                                 <td>
+                                     <apex:outputLabel style="font-weight:bold;" >Status:</apex:outputLabel><br/>
+                                     <apex:selectList id="status" value="{!PaymentStatus}" size="1">
+                                         <apex:selectOption itemValue="" itemLabel=" "/>
+                                         <apex:selectOption itemValue="Submitted" itemLabel="Submitted"/>
+                                         <apex:selectOption itemValue="Final" itemLabel="Final"/>
+                                     </apex:selectList> &nbsp; &nbsp;                                   
+                                </td>
+                                
+                                 <td>
+                                    <apex:outputLabel style="font-weight:bold;">Invoice Number:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!InvoiceNumber}"/> 
+                                </td>
+                                
+                                 <td>
+                                    <apex:outputLabel style="font-weight:bold;">Payee:</apex:outputLabel><br/>
+                                    <apex:inputText value="{!Payee}"/> 
+                                </td>
+                                
+                            </tr>
+                            <tr><td>&nbsp;</td></tr>
+                            <tr>
+                                <td  style="text-align: center;" colspan="7"  >
+                                    <apex:commandButton value="Save"
+                                                        action="{!save}"
+                                                        onclick="return confirm('Do you want to proceed?');"
+                                                        styleClass="bs btn btn-default btn-sm"/>
+                                    &nbsp;&nbsp;&nbsp;
+                                    <apex:commandButton value="Search"
+                                                        action="{!runSearch}"
+                                                        styleClass="bs btn btn-default btn-sm"
+                                                        status="ActionStatus"
+                                                        rerender="results,pagination,SummaryPage,debug" />
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </apex:outputPanel>
+            <apex:outputPanel styleclass="bs panel-primary" id="results">
+                <table width="100%" border="0" id="dt_LineItems" class="hover table-striped">
+                    <thead>
+                        <tr>
+                            <th>Verify</th>
+
+                            <th>Status</th>
+                            <th>Payment ID</th>
+                            <th>Payment Line ID</th>
+                            <th>PO ID</th>
+                            <th>PO Line ID</th>
+                            <th>Invoice Number</th>
+                            <th>Payee</th>
+                            <th>Invoice Date</th>
+                            <th>Invoice Due Date</th>
+                            <th>G/L Date</th>
+                            <th>Payment Amount</th>
+                            <th>Amount <br/>with Tax</th>
+                            <th>Payment List Item<br/> Description</th>
+                            <th>Comments</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <apex:repeat value="{!LineItem}" var="line">
+                            <tr>
+                                <td class="headerCen"><apex:inputfield id="chkApprove" value="{!line.ASI_MFM_Payment_Line_Item_Finance_Verify__c}" onclick="checkApproveDelete(this,'chkDelete')"/></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_Payment__r.ASI_MFM_Status__c}"></apex:outputField></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_Payment__c}"></apex:outputField></td>
+                                <td><apex:outputLink value="{!LEFT($Api.Partner_Server_URL_140, FIND('.com/',$Api.Partner_Server_URL_140)+3)}/{!line.id}" target="_blank">
+                                    <apex:outputField value="{!line.name}"/>
+                                    </apex:outputLink></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__r.ASI_MFM_PO__c}"></apex:outputField></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_PO_Line_Item__c}"></apex:outputField></td>
+                                <td class="invoiceNumber"><apex:inputText value="{!line.ASI_MFM_Payment__r.ASI_MFM_Invoice_Number__c}"></apex:inputText></td> 
+                                <td><apex:outputField value="{!line.ASI_MFM_Payee__c}"></apex:outputField></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_Payment__r.ASI_MFM_Invoice_Date__c}"></apex:outputField></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_Payment__r.ASI_MFM_Invoice_Due_Date__c}"></apex:outputField></td>
+                                <td><apex:outputField value="{!line.ASI_MFM_Payment__r.ASI_MFM_G_L_Date__c}"></apex:outputField></td>
+                                <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_Payment_Amount__c}"></apex:outputField></td>
+                                <td class="numberAmount" ><apex:outputField value="{!line.ASI_MFM_Amount_with_Tax__c}"></apex:outputField></td>
+                                <td class="SetRight"><apex:outputField value="{!line.ASI_MFM_Payment_List_Item_Description__c}"></apex:outputField></td>
+                                <td><apex:inputField value="{!line.ASI_MFM_Comments__c}"></apex:inputField></td>
+                                
+                            </tr>
+                        </apex:repeat>
+                        
+                    </tbody>
+                </table>
+              
+            </apex:outputPanel>
+            
+            
+            <apex:outputPanel styleclass="bs panel-primary" style="width:100%;" layout="block" id="pagination">
+                <table style="width: 100%;" >
+                    <tr>
+                        <td idth="33%" >&nbsp;</td>
+                        <td width="33%" style="text-align:center;">
+                            <apex:commandButton value="<<" action="{!firstPage}" style="height:25px; margin: 5px; line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=1,True,False)}" />
+                            <span style="height:1px">&nbsp;&nbsp;</span>
+                            <apex:commandButton value="< Previous" action="{!prevPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=1,True,False)}" />
+                            <span style="height:1px">&nbsp;</span>
+                            <apex:commandButton value="Next >" action="{!nextPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=maxPageNum,True,False)}"/>
+                            <span style="height:1px">&nbsp;&nbsp;</span>
+                            <apex:commandButton value=">>" action="{!lastPage}"  style="height:25px;line-height:0.5" styleClass="btn btn-default" reRender="results,debug,error,pagination" status="ActionStatus" disabled="{!if(currentPageNum=maxPageNum,True,False)}" />
+                        </td>
+                        <td width="33%" style="text-align:right;">
+                            Page: &nbsp;
+                            <apex:outputText value="{!newPageNum}"  />
+                            of {!maxPageNum}
+                        </td>
+                    </tr>
+                </table>
+            </apex:outputPanel>
+            
+            
+        </apex:form>
+        
+        
+        <apex:actionstatus id="ActionStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" id="el_loading" style="background-color: #fbfbfb;
+                                                                     height: 100%; width:100%; opacity:0.65;"> 
+                    <div class="waitingHolder" id="loadtext" style="position: absolute;" align="left" valign="top">
+                        &nbsp;&nbsp;&nbsp;
+                        <img class="waitingImage" src="/img/loading.gif" title="Please Wait..." />
+                        <span class="waitingDescription">Please Wait...</span>
+                    </div>
+                </div>
+            </apex:facet>
+        </apex:actionstatus> 
+    </body>
+</apex:page>--->

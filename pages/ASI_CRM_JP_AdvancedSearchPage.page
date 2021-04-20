@@ -1,0 +1,283 @@
+<!--
+*********************************************************************************
+ * Name: ASI_CRM_JP_AdvancedSearchPage
+ * Description: VF Page for Advanced Search Page(Javascript).
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 20/02/2017       Hugo Cheung             Created      
+-->
+<apex:page controller="ASI_CRM_JP_AdvancedSearchController" sidebar="false">
+    <head>
+        <title>Advanced Search Page</title>
+    </head>
+
+    <!-- Import Library -->
+    <!-- CSS -->
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/main.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/bootstrap.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/styles/datatables.min.css')}" />
+    <!-- JavaScript -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/jquery.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_JP_Library, '/lib/datatables.min.js')}" />
+
+    <!-- Style -->
+    <style>
+        .link-button {
+            cursor          : pointer;
+            text-decoration : underline;
+        }
+        
+        .savingRecord .fullScreenLoading {
+            display: block;
+        }
+
+        .fullScreenLoading {
+            display    : none;
+            position   : fixed;
+            z-index    : 1000;
+            top        : 0;
+            left       : 0;
+            height     : 100%;
+            width      : 100%;
+            background : rgba(255, 255, 255, .8)
+                         url('{!URLFOR($Resource.ASI_CRM_JP_Library, '/images/loading.gif')}')  
+                         50% 50% 
+                         no-repeat;
+        }
+
+        .error {
+            border : 2px solid red;
+        }
+
+        th, td {
+            padding-top    : 5px;
+            padding-bottom : 5px;
+            padding-right  : 10px;
+            padding-left   : 10px;
+        }
+        
+        table.dataTable td {
+            height : 30px;
+        }
+        
+        table.dataTable thead tr {
+            background-color : #cce6ff;
+        }
+    
+        table.dataTable tbody tr { 
+            background-color : #e6f3ff; 
+        }
+        
+        table.dataTable tbody tr:nth-child(even) {
+            background-color : white;  
+        }
+        
+        table.dataTable td { 
+            border-bottom : 2px solid #e0e0d1; 
+        }
+        
+    </style>
+
+    <!-- JavaScript -->
+    <script>
+        /****************
+        Define Variable
+        ****************/
+        const SELECT_LABLE                = 'Select';
+        const CONST_DATA_TABLE_PROPERTIES = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "bSearch":false,
+            "bFilter" : false,
+            "aLengthMenu": [10, 25, 50],
+            "iDisplayLength": 25,
+            "bSort" : true,
+            "bPaginate": true,
+            "bScrollCollapse": true,
+            "bJQueryUI": true,
+            "aaSorting": []
+        };
+        const TODAY_DATE = new Date();
+
+        //Error Message
+        const CUSTOMER_NAME_CANNOT_BE_NULL = 'Please input Ship To Customer';
+
+        /*****************
+        Datatable Field Config
+        *****************/
+        const selectField                   = {"title"          : "{!$Label.ASI_CRM_JP_Select}",
+                                               "orderable"      : false,
+                                               "data"           : "",
+                                               "render"         : function(data, type, full) {
+                                                                 	return "<a class='link-button' onClick='selectRow(this.parentNode.parentNode)'>{!$Label.ASI_CRM_JP_Select}</a>";
+                                                                  }
+                                              };
+
+        const shipToCustomerReadOnly        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Ship_To__c.Label}", 
+                                               "orderable"      : false,
+                                               "data"           : "",
+                                               "render"         : function(data, type, full) {
+                                                                    var fieldStr = "";
+                                                                    if(full.ASI_Ship_To_Customer__c) {
+                                                                        fieldStr += "<span>";
+                                                                        fieldStr += "<a href='/" + full.ASI_Ship_To_Customer__c + "' class='link-button'>" + full.ASI_Ship_To_Customer__r.Name + "</a>";
+                                                                        fieldStr += "</span>";
+                                                                    }
+                                                                    return fieldStr;
+                                                                  }
+                                              };
+
+        const shipToAddressReadOnly         = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_JP_Ship_To_Address__c.Label}", 
+                                               "orderable"      : false,
+                                               "data"           : "ASI_Ship_To_Customer__r.ASI_CRM_CN_Address__c",
+                                               "defaultContent" : ""
+                                              };
+
+        const soldToCustomerReadOnly        = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Sold_To__c.Label}", 
+                                               "orderable"      : false,
+                                               "data"           : "",
+                                               "render"         : function(data, type, full) {
+                                                                    var fieldStr = "";
+                                                                    if(full.ASI_Sold_To_Customer__c) {
+                                                                        fieldStr += "<span>";
+                                                                        fieldStr += "<a href='/" + full.ASI_Sold_To_Customer__c + "' class='link-button'>" + full.ASI_Sold_To_Customer__r.Name + "</a>";
+                                                                        fieldStr += "</span>";
+                                                                    }
+                                                                    return fieldStr;
+                                                                  }
+                                              };
+
+        const lastOrderDateReadOnly         = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Order_Date__c.Label}", 
+                                               "orderable"      : true,
+                                               "data"           : "ASI_Transaction_Date__c",
+                                               "defaultContent" : ""
+                                              };                          
+
+        const subWholesalerReadOnly         = {"title"          : "{!$ObjectType.ASI_CRM_JP_Sales_Order__c.fields.ASI_CRM_Sub_Wholesaler__c.Label}", 
+                                               "orderable"      : false,
+                                               "data"           : "",
+                                               "render"         : function(data, type, full) {
+                                                                    var fieldStr = "";
+                                                                    if(full.ASI_Sub_Wholesaler__c) {
+                                                                        fieldStr += "<span>";
+                                                                        fieldStr += "<a href='/" + full.ASI_Sub_Wholesaler__c + "' class='link-button'>" + full.ASI_Sub_Wholesaler__r.Name + "</a>";
+                                                                        fieldStr += "</span>";
+                                                                    }
+                                                                    return fieldStr;
+                                                                  }
+                                              };    
+
+        /****************
+        Define Standard Function
+        ****************/                                      
+        $(document).ready(
+            function() {
+                setTable('{!JSENCODE(advancedSearchListJson)}');
+            }
+        );
+
+        //Set Data Table
+        function setTable(advancedSearchListJson) {
+            var dataTableProperties = CONST_DATA_TABLE_PROPERTIES;
+            //Convert advanced search record list JSON to Object format
+            console.log('Data From Apex Controller : ');
+            console.log(jQuery.parseJSON(advancedSearchListJson));
+            if(advancedSearchListJson) {
+                dataTableProperties["aaData"] = jQuery.parseJSON(advancedSearchListJson);
+                //Set data table row id = advanced search record id
+                dataTableProperties["rowId"] = "Id";
+            }
+
+            //Set the data table columns
+            var columns = [];
+            columns.push(selectField);
+            columns.push(shipToCustomerReadOnly);
+            columns.push(shipToAddressReadOnly);
+            columns.push(soldToCustomerReadOnly);
+            columns.push(lastOrderDateReadOnly);
+            columns.push(subWholesalerReadOnly);
+            dataTableProperties["aoColumns"] = columns;
+
+            $("#advancedSearchTable").dataTable(dataTableProperties);
+        }
+
+        //Data Table Event Handler(Start)
+        function searchRecord() {
+            //Clear the error
+            $('.error').removeClass('error');
+            $('.saveErrorPanel').css("display","none");
+
+            var customerName = $("#customerName").val();
+            if(customerName) {
+                //Show the loading gif
+                $("body").addClass("savingRecord");
+                search(customerName);
+            } else {
+                //Display the error message and change the customer name field to red
+                $('#customerName').addClass('error');
+                $('.saveErrorPanel').css("display","block");
+                $('.errorMessage').html(CUSTOMER_NAME_CANNOT_BE_NULL);
+            }
+        }
+
+        function searchRecordComplete(advancedSearchListJson) {
+            $('#advancedSearchTable').DataTable().clear();
+            setTable(advancedSearchListJson);
+            //Hide the loading gif
+            $("body").removeClass("savingRecord");
+        }
+
+        function createNewSalesOrderJS() {
+            createNewSalesOrder($("#customerName").val());
+        }
+        
+        function selectRow(row) {
+            selectSalesOrderTemplate(row.id);
+        }
+        //Data Table Event Handler(End)
+    </script>
+
+    <body>
+        <div class="fullScreenLoading"></div>
+        <div class="saveErrorPanel alert alert-danger" style="display: none;">
+        <strong>Error</strong> 
+        <br />
+        <p class="errorMessage"></p>
+        </div>
+
+        <!-- Defind Action Function -->
+        <apex:form >
+            <apex:actionFunction name="search" action="{!search}" reRender="pageMsg" oncomplete="searchRecordComplete('{!JSENCODE(advancedSearchListJson)}')">
+                <apex:param name="customerName" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="createNewSalesOrder" reRender="pageMsg" action="{!createNewSalesOrder}">
+                 <apex:param name="customerName" value="" />
+            </apex:actionFunction>
+            <apex:actionFunction name="selectSalesOrderTemplate" reRender="pageMsg" action="{!selectSalesOrderTemplate}">
+                <apex:param name="templateId" value="" />
+            </apex:actionFunction>
+        </apex:form>
+
+        <apex:pageBlock >
+            <!-- Search Dialog-->
+            <div class="panel panel-info">
+                <div class="panel-heading">{!$Label.ASI_CRM_JP_Search_Ship_To}</div>
+                <div class="panel-body">
+                    <input type="text" id="customerName" value="{!defaultCustomerName}"/>
+                    <input type="button" class="btn" value="{!$Label.ASI_CRM_JP_Search}" onClick="searchRecord();" />
+                    <apex:outputPanel rendered="{!OR(isDutyFree, isCOTUser)}">
+                    	<input type="button" class="btn" value="{!$Label.ASI_CRM_JP_Add_New}" onClick="createNewSalesOrderJS();" />
+                    </apex:outputPanel>
+                </div>
+            </div>
+            <br />
+
+            <table id="advancedSearchTable" width="100%" />
+
+        </apex:pageBlock>
+    </body>
+
+</apex:page>

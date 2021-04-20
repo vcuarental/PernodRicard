@@ -1,0 +1,730 @@
+<apex:page controller="ASI_MFM_CN_ScanToPaySearch_Ctrl" docType="html-5.0">
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>     
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/bootstrap.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_DataTable, 'DataTables-1.10.7/media/css/jquery.dataTables.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, 'dist/css/SimpleTable.css')}" />
+    
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'jquery-ui.min.js')}"/>  
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/bootstrap.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.ASI_DataTable, 'DataTables-1.10.7/media/js/jquery.dataTables.min.js')}" />  
+    <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/numericInput.min.js')}" />    
+    <!-- <apex:includeScript value="{!URLFOR($Resource.ASI_Library, 'dist/js/CurrencyUtil.js')}" /> -->
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_CN_Common, '/ASI_HK_CRM_Common/scripts/CurrencyUtil.js')}" />
+    
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_Library, '/jquery-ui.css')}" />
+    
+    <head>
+        <style>
+            .button{
+                -moz-box-shadow:inset 0px 1px 0px 0px #ffffff;
+                -webkit-box-shadow:inset 0px 1px 0px 0px #ffffff;
+                box-shadow:inset 0px 1px 0px 0px #ffffff;
+                background:-webkit-gradient(linear, left top, left bottom, color-stop(0.05, #ffffff), color-stop(1, #f6f6f6));
+                background:-moz-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+                background:-webkit-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+                background:-o-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+                background:-ms-linear-gradient(top, #ffffff 5%, #f6f6f6 100%);
+                background:linear-gradient(to bottom, #ffffff 5%, #f6f6f6 100%);
+                filter:progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffffff', endColorstr='#f6f6f6',GradientType=0);
+                background-color:#ffffff;
+                -moz-border-radius:6px;
+                -webkit-border-radius:6px;
+                border-radius:6px;
+                border:1px solid #79b7e7;
+                display:inline-block;
+                cursor:pointer;
+                color:#666666;
+                font-family:Arial;
+                font-size:10px;
+                font-weight:bold;
+                padding:5px;
+                text-decoration:none;
+                text-shadow:0px 1px 0px #ffffff;
+            }
+            #dialogBG {
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                width: 100%;
+                height: 100%;
+                z-index: 10000;
+                background: rgb(255, 255, 255) transparent;
+                background-color: rgba(255, 255, 255, 0.85);
+                background-image: url({!URLFOR($Resource.ASI_HK_CRM_Common, '/ASI_HK_CRM_Common/img/bg_loading.png')});
+                background-repeat: repeat;
+                filter:progid:DXImageTransform.Microsoft.gradient(startColorstr=#D8FFFFFF, endColorstr=#D8FFFFFF);
+                -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr=#D8FFFFFF, endColorstr=#D8FFFFFF)";
+                display: none;
+            }
+            #loadingDiv {
+                position: relative;
+                top: 48%;
+                left: 45%;
+                vertical-align: middle;
+                display: block;
+            }
+            #loadingImg {
+                display: inline;
+                float: left;
+                height: 14px;
+                width: 14px;
+            }
+            #loadingText {
+                display: inline;
+                color: #666;
+                font-weight: bold;
+                margin-left: 6px;
+                font-size: 1em;
+            }
+            .leftAlign{
+                text-align: left; 
+                vertical-align: middle;
+                /*padding: 10px 18px;*/
+            }
+            .centerAlign{
+                text-align: center; 
+                vertical-align: middle;
+            }
+            
+            table.dataTable thead th.sorting,
+            table.dataTable thead th.sorting_asc,
+            table.dataTable thead th.sorting_desc {
+                /*background: none;*/
+                /*padding: 8px 10px;*/
+                padding-top: 10px;
+                padding-right: 18px;
+                padding-bottom: 10px;
+                padding-left: 10px;
+            }
+        </style>
+    </head>
+
+    <script type="text/javascript">
+
+        var G_NUM_OF_NP_CALL = 1;
+        var G_NUM_OF_NP_MAX = 500;//MAX RETURN IN ONE TNX
+        var G_NUM_OF_RESULT = 0;
+        var G_NUM_OF_MAX = 2000;//MAX RETURN IN ALL TNXS
+  
+        var resultPO = [];
+        var finishRetrieval = false;
+        var criteriaArray = {};
+
+    $('document').ready(function (){
+        dialogShow();
+        initTable();
+        dialogHide();
+    });
+    
+    function initTable(){
+        var theTable = $('#table-po-result');
+        var colSettings = tableColumnSetting();
+        
+        theTable.dataTable({
+            aaData: [],
+            //fnRowCallback: function(nRow, aData, iDisplayIndex, iDisplayIndexFull) {
+            //  renderFullLineItemTableRow($(nRow), aData);
+            //},
+            iDisplayLength: G_NUM_OF_MAX //Change the list size
+            ,
+            aoColumns: colSettings,
+            //sScrollY: '400px',
+            bPaginate: false,
+            bStateSave: true,
+            bLengthChange: false,
+            bSort: false,
+            aaSorting: [
+              [2, 'asc']
+            ],
+            bFilter: true,
+            sDom: 'lrt<"table-below"pi>',
+            bAutoWidth: false
+          });
+    }
+
+    function jsSearch(val){
+        resultPO = [];
+        finishRetrieval = false;
+        G_NUM_OF_NP_CALL = 1;
+        G_NUM_OF_RESULT = 0;
+        getUserInput();
+        dialogShow();
+        jsSearchExt();
+    }
+
+    function jsSearchExt(){
+        //var iStart = G_NUM_OF_NP_MAX * (G_NUM_OF_NP_CALL-1) + 1;
+        var iStart = G_NUM_OF_NP_MAX * (G_NUM_OF_NP_CALL-1);
+        var iEnd = G_NUM_OF_NP_MAX * G_NUM_OF_NP_CALL;
+        G_NUM_OF_NP_CALL += 1;
+
+        console.log('jsSearch:start=' + iStart);
+        console.log('jsSearch:end=' + iEnd);
+
+        console.log('jsonified' + JSON.stringify(criteriaArray));
+
+        try{
+            ASI_MFM_CN_ScanToPaySearch_Ctrl.search(
+                iStart, iEnd, G_NUM_OF_NP_MAX, JSON.stringify({criteriaArray : criteriaArray}),
+                callbackjsSearch, {
+                    escape: true,
+                    timeout: 50000
+                }
+            );
+        }
+        catch(e){
+            //dialogHide();
+            displayErrorMsg('Unknown error. Please contact the IT admin.' + e);
+        }
+    }
+
+    function callbackjsSearch(results, event) {
+        if (event.status) {
+            var bFinal = true;
+    
+            if (results) {
+                var size = results.length;
+                G_NUM_OF_RESULT += size;
+                for (var i = 0; i < size; i++) {
+                    var product = results[i];
+                    resultPO[product.id] = product;
+                    /*
+                    console.log('callbackjsSearch result['+i+'] ' + product);
+                    console.log('callbackjsSearch result['+i+'] id' + product.id);
+                    console.log('callbackjsSearch result['+i+'] po_sub_brand' + product.po_sub_brand);
+                    console.log('callbackjsSearch result['+i+'] po' + product.po);
+                    console.log('callbackjsSearch result['+i+'] po.Name' + product.po.Name);
+                    */
+                }
+                console.log('G_NUM_OF_RESULT: ' + G_NUM_OF_RESULT);
+                bFinal = (size!=G_NUM_OF_NP_MAX || G_NUM_OF_RESULT>=G_NUM_OF_MAX);
+            }
+    
+            if (bFinal) {
+                finishRetrieval = true;
+                displayDataIfReady();
+                dialogHide();
+            } else {
+                var delayCall = setTimeout(function() {
+                    jsSearchExt();
+                }, 200);
+            }
+        } else {
+            // TODO: Handle error
+            displayErrorMsg(event.message);
+        }
+    }
+
+    function displayDataIfReady() {
+        if (finishRetrieval) {
+          //initLineItemTable();
+          initResultTable();
+          //initFilters();
+        }
+    }
+
+    /*
+    function renderFullLineItemTableRow(row, lineItem) {
+        row.data('sfid', lineItem.id);
+        row.data('pid', lineItem.skuId);
+        row.data('currentT1PriceBTwithVAT', lineItem.currentT1PriceBTwithVAT);
+        row.data('totalEstimatedVolBT', lineItem.totalEstimatedVolBT);
+        row.data('newPriceBTNonVAT', lineItem.newPriceBTNonVAT);
+        row.data('grossSalesImpact', lineItem.grossSalesImpact);
+        row.data('promotionCodeID', lineItem.promotionCodeID);
+        row.data('pickListValue', lineItem.pickListValue);
+        row.data('promotionCodeName', lineItem.promotionCodeName);
+        row.data('promotionValue', lineItem.promotionValue);
+        row.data('motContractPriceWithoutVAT', lineItem.motContractPriceWithoutVAT); //20190214 Vincent Lam
+        row.data('duplicatedPrice', lineItem.duplicatedPrice);
+        row.data('motPriceDifference', lineItem.motPriceDifference);
+        row.data('motDiscountRate', lineItem.motDiscountRate);
+        row.data('buyX', lineItem.buyX);
+        row.data('getY', lineItem.getY);
+        row.data('vsCurrentT1PriceBTNonVAT', lineItem.vsCurrentT1PriceBTNonVAT);
+        row.addClass('data-row');
+        return row;
+    }
+
+    function renderNormalProductTableRow(row, pd) {
+        row.data('pid', pd.id);
+        row.addClass('data-row');
+        return row;
+    }
+    */
+
+    function tableColumnSetting() {
+        var cols = ['action', 'poNum', 'supplierName', 'bu', 'poType', 'subBrand', 'POAmt', 'PORemark', 'email', 'mailSent'];
+        var props = ['', 'po_num', 'po_sup_name', 'po_bu', 'po_type', 'po_sub_brand', 'po_tot_amt', 'po_remark','supplierEmail', 'po_mail_sent'];
+
+        var colSettings = [];
+
+        for (var i = 0; i < cols.length; i++) {
+            var mDataFunction = function() {
+              var prop = props[i];
+              if (prop) {
+                return function(source, type, val) {
+                  return source[prop] ? source[prop] : null;
+                }
+              }
+              return null;
+            }
+            if(i === 0){
+                colSettings.push({
+                    bSortable: false,
+                    bSearchable: false,
+                    sClass: 'sf-td centerAlign',
+                    mData: mDataFunction()
+                });
+            }
+            else if (i === 3 || i === 4 || i === 9) {
+                colSettings.push({
+                    bSortable: true,
+                    bSearchable: true,
+                    sClass: 'sf-td centerAlign',
+                    mData: mDataFunction()
+                });
+            }
+            else{
+                colSettings.push({
+                    bSortable: true,
+                    bSearchable: false,
+                    sClass: 'sf-td leftAlign',
+                    mData: mDataFunction()
+                });
+            }
+        }
+
+        var colIndices = [];
+        for (var i = 0; i < cols.length; i++) colIndices[cols[i]] = i;
+        colSettings[colIndices['mailSent']].mRender = function(data, type, full) {
+            /*
+            console.log('mrender, test');
+            console.log('mrender, type' + type);
+            console.log('mrender, data' + data);
+            console.log('action mrender, full' + full.id);
+            */
+            //console.log('mrender, type' + type);
+            if (data === true) {
+                return '<input type=\"checkbox\" checked value="' + data + '" disabled>';
+            } else {
+                return '<input type=\"checkbox\" value="' + data + '" disabled>';
+            }
+        };
+
+        
+        colSettings[colIndices['action']].mRender = function(data, type, full) {
+            /*
+            console.log('action mrender, type' + type);
+            console.log('action mrender, data' + data);
+            console.log('action mrender, full' + full.id);
+            */
+            return '<input type=\"checkbox\" class=\"row-selection\" onclick=\"isAllChecked(this)\" id=\"'+full.id+'\" value=\"'+full.po_num+'\" />';
+        };
+
+        colSettings[colIndices['poNum']].mRender = function(data, type, full) {
+            if ('display' === type) {
+              return '<a href="#" onclick="window.open(\'' + (full.id ? '/' + full.id : '') + '\', \'_blank\'); return false;" >' + (data ? data : '') + '</a>';
+            }
+            return data;
+        };
+
+        colSettings[colIndices['supplierName']].mRender = function(data, type, full) {
+            if ('display' === type) {
+              return '<a href="#" onclick="window.open(\'' + (full.supplierId ? '/' + full.supplierId : '') + '\', \'_blank\'); return false;" >' + (data ? data : '') + '</a>';
+            }
+            return data;
+        };
+
+        /*
+        colSettings[colIndices['supplierName']].mRender = function(data, type, full) {
+            return '<span style=\"padding: 10px 18px;\">'+data+'</span>';
+        };
+        */
+
+        colSettings[colIndices['POAmt']].mRender = function(data, type, full) {
+            if ('display' === type) {
+              //data = CurrencyUtil.numToCurrency(data);
+              return '<span>' + (data ? CurrencyUtil.numToCurrency(data.toFixed(2)) : '') + '</span>';
+            }
+            return data;
+        }
+
+        return colSettings;
+    }
+
+    function initResultTable() {
+        var theTable = $('#table-po-result');
+        var colSettings = tableColumnSetting();
+        if (resultPO && theTable.length > 0) {
+            var nPdArray = arrayValues(resultPO, 'object');
+            console.log('nPdArray: '+JSON.stringify(nPdArray));
+            theTable.dataTable().fnDestroy();
+            theTable.dataTable({
+                aaData: nPdArray,
+                //fnRowCallback: function(nRow, aData, iDisplayIndex, iDisplayIndexFull) {
+                //  renderFullLineItemTableRow($(nRow), aData);
+                //},
+                iDisplayLength: G_NUM_OF_MAX //Change the list size
+                ,
+                aoColumns: colSettings,
+                //sScrollY: '400px',
+                bPaginate: false,
+                bStateSave: true,
+                bLengthChange: false,
+                bSort: true,
+                aaSorting: [
+                  [2, 'asc']
+                ],
+                bFilter: true,
+                sDom: 'lrt<"table-below"pi>',
+                bAutoWidth: false,
+                bDeferRender: true,
+                rowId: 'id'
+              });
+        }
+      }
+      
+
+      function arrayValues(theArray, expectedDataType) {
+        var result = [];
+        for (var index in theArray) {
+          var val = theArray[index];
+          console.log('typeof: ' + typeof val);
+          if (!expectedDataType || typeof val === expectedDataType) {
+            result.push(val);
+          }
+        }
+        return result;
+      }
+
+        function getUserInput(val){
+            criteriaArray = {};
+            var x = document.getElementsByClassName('criteriaClass');
+            var criteriaIdLocatorRegStartStr = 'j_id0:pageForm:pageBlock:pageBlockSection:pageBlockSectionItem';
+            var criteriaIdLocatorRegEndStr = '_inVal';
+            var ids = document.querySelectorAll('[id^="'+criteriaIdLocatorRegStartStr+'"]');
+            
+            var classifiedClasses = ['criteriaTextClass', 'criteriaIdClass', 'criteriaBooleanClass'];
+            var list = $('[id^="'+criteriaIdLocatorRegStartStr+'"]').filter('[id$="'+criteriaIdLocatorRegEndStr+'"]');
+            $.each(list, function(key, value){
+                console.log('value ' + value.id);
+                var key = value.id.split(':');
+                var fieldIdentifier = key[key.length-1];;
+                //var relatedIds = document.querySelectorAll('[id*="'+fieldIdentifier+'"]');
+                
+                var curClass = value.getAttribute('class');
+                if(curClass != null){
+                    curClass = curClass.split(" ");
+                    for( j=0; j < curClass.length; j++){
+                        console.log('curClass: ' + curClass[j]);
+                        if(classifiedClasses.includes(curClass[j])){
+                            //console.log('HA');
+                            getInVal(fieldIdentifier, value, curClass[j]);
+                            return;
+                        }
+                        else{
+                            //console.log('SHXT');
+                        }
+                    }
+                    
+                }else{
+                    console.log('else');
+                    var relatedList = $('[id*="'+fieldIdentifier+'"]');
+                    $.each(relatedList, function(key, valueR){
+                        console.log('valueR ' + valueR.id);
+                        curClass = valueR.getAttribute('class');
+                        if(curClass != null){
+                            curClass = curClass.split(" ");
+                            for( j=0; j < curClass.length; j++){
+                                console.log('curClass: ' + curClass[j]);
+                                if(classifiedClasses.includes(curClass[j])){
+                                    //console.log('HA');
+                                    getInVal(fieldIdentifier, value, curClass[j]);
+                                    return;
+                                }
+                                else{
+                                    //console.log('SHXT');
+                                }
+                            }
+                        }
+                    })
+                }
+                //console.log('FINAL SHXT');
+            });
+        }
+
+        function getInVal(fi, val, cls){
+            console.log('getInVal fi: ' + fi);
+            console.log('getInVal val: ' + val);
+            console.log('getInVal cls: ' + cls);
+            var classifiedClasses = ['criteriaTextClass', 'criteriaIdClass', 'criteriaBooleanClass'];
+            switch(cls) {
+                case 'criteriaTextClass':
+                    getInText(fi, val);
+                    break;
+                case 'criteriaIdClass':
+                    getInId(fi, val);
+                    break;
+                case 'criteriaBooleanClass':
+                    getInBool(fi, val);
+                    break;
+                default:
+                // code block
+            }
+            /*
+            var x = document.getElementsByClassName('criteriaClass');
+            var criteriaIdLocatorRegStartStr = 'j_id0:pageForm:pageBlock:pageBlockSection:pageBlockSectionItem';
+            var criteriaIdLocatorRegEndStr = '_inVal';
+            var ids = document.querySelectorAll('[id^="'+criteriaIdLocatorRegStartStr+'"]');
+            */
+        
+        }
+
+        function getInText(key, val){
+            console.log('getInText val id: '+ val.id);
+            console.log('getInText val value: '+ val.value);
+            if(typeof val == 'undefined' || val == null)
+                return;
+            var parts = val.id.split('_');
+            var suffix = parts[parts.length-1];
+            if(suffix != 'inVal')
+                return;
+            criteriaArray[key] = val.value;
+            console.log('criteriaArray: ' + criteriaArray.toString());
+        }
+        function getInId(key, val){
+            console.log('getInId val id: '+ val.id);
+            console.log('getInId val value: '+ val.value);
+            var parts = val.id.split('_');
+            var suffix = parts[parts.length-1];
+            if(suffix != 'inVal')
+                return;
+            var idField = val.id + '_lkid';
+            var realIdField = document.getElementById(idField);
+            console.log('idField: ' + idField);
+            if(typeof realIdField == 'undefined' || realIdField == null)
+                return;
+            criteriaArray[key] = realIdField.value;
+            console.log('criteriaArray: ' + criteriaArray.toString());
+        }
+        function getInBool(key, val){
+            console.log('getInBool val id: '+ val.id);
+            console.log('getInBool val id: '+ val.checked);
+            if(typeof val == 'undefined' || val == null)
+                return;
+            var parts = val.id.split('_');
+            var suffix = parts[parts.length-1];
+            if(suffix != 'inVal')
+                return;
+            criteriaArray[key] = val.checked;
+            console.log('criteriaArray: ' + criteriaArray.toString());
+        }
+
+        function sendEmail(){
+            var ids=[];
+            try {
+                dialogShow();
+                var inputElem = document.getElementsByClassName('row-selection');
+                var emailFlag = false;
+                for(var i=0; i<inputElem.length; i++){
+                    if(inputElem[i].checked){
+                        ids.push(inputElem[i].id);
+                        var val_email = resultPO[inputElem[i].id].supplierEmail;
+                        console.log('sendEmail.val_email:' + val_email);
+                        if(typeof val_email == 'undefined' || val_email == null || val_email == ''){
+                            emailFlag = true;
+                            console.log('invalid email detected.');
+                        }
+                    }
+                }
+                console.log('ids: ' + ids);
+                if(ids.length <= 0){
+                    displayErrorMsg('There is no PO selected.');
+                    return;
+                }
+                if(emailFlag){
+                    displayErrorMsg('There is PO having no supplier email in your selection, please check.');
+                    return;
+                }
+                ASI_MFM_CN_ScanToPaySearch_Ctrl.sendEmail(
+                    ids, saveResultCallback, {
+                        escape: true,
+                        timeout: 30000
+                    }
+                );
+                //dialogHide();
+            }
+            catch(e){
+                console.log('catch e');
+                console.log(e);
+                dialogHide();
+            }
+        }
+
+        function saveResultCallback(result, event) {
+            console.log('saveResultCallback');
+            //modifying
+            if (event.status) {
+                if (result.success) {
+                    displayErrorMsg('Success');
+                    jsSearch(true);
+                } else {
+                    if (result.messages && result.messages.length > 0) {
+                        for (var i = 0; i < result.messages.length; i++) {
+                            displayErrorMsg(result.messages[i]);
+                        }
+                    } else {
+                        displayErrorMsg('Unknown error.');
+                    }
+                }
+            } else {
+                // TODO: Handle error
+                displayErrorMsg(event.message);
+            }
+            //modifying
+            //jsSearch(true);
+        }
+        
+        function dialogShow() {
+            $('#dialogBG').show();
+        }
+        function dialogHide() {
+            $('#dialogBG').hide();
+        }
+        // TODO: Display error messages
+        function displayErrorMsg(errMsg) {
+            dialogHide();
+            alert(errMsg);
+        }
+        
+
+        function checkAll(cb){
+            //console.log('hello');
+            var inputElem = document.getElementsByClassName('row-selection');
+            for(var i=0; i<inputElem.length; i++)
+            {
+                //if(inputElem[i].id.indexOf("checkedone")!=-1)
+                    inputElem[i].checked = cb.checked;
+            }
+        }
+
+        function isAllChecked(val){
+            var cb = document.getElementById('checkAllRow');
+            var isAll = true;
+            var inputElem = document.getElementsByClassName('row-selection');
+            
+            for(var i=0; i<inputElem.length; i++)
+            {
+                if(!inputElem[i].checked){
+                    isAll = false
+                    break;
+                }
+            }  
+            cb.checked = isAll;
+        }
+
+
+    </script>
+    <div id="dialogBG">
+            <div id="loadingDiv">
+                <!-- <img id="loadingImg" src="/img/bg_loading.png" title="Please Wait..."/> -->
+                <span id="loadingText">Loading...</span>
+            </div>
+    </div>
+    <apex:form id="pageForm">
+        <apex:pageBlock id="pageBlock">
+            <apex:pageBlockSection title="Search by" id="pageBlockSection">
+                <apex:pageBlockSectionItem id="pageBlockSectionItem1">
+                    <apex:outputLabel value="PO Number" /><apex:inputfield value="{!filterPo.Name}" styleclass="criteriaTextClass" id="PONum_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem2">
+                    <apex:outputLabel value="Plan" /><apex:inputfield value="{!filterPo.ASI_MFM_Plan__c}" styleclass="criteriaIdClass" id="Plan_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem3">
+                    <apex:outputLabel value="PO Total Amount(RMB)" /><apex:inputfield value="{!filterPoLineItem3.ASI_MFM_List_Item_Description__c}" styleclass="criteriaTextClass" id="OriAmt_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem4">
+                    <apex:outputLabel value="Budget Owner" /> <apex:inputfield value="{!filterPo.ASI_MFM_Budget_Owner__c}" styleclass="criteriaIdClass" id="BudgetOwner_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem5">
+                    <apex:outputLabel value="Supplier" /><apex:inputfield value="{!filterPo.ASI_MFM_Supplier_Name__c}" styleclass="criteriaIdClass" id="Supplier_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem8">
+                    <apex:outputLabel value="Sub Brand" /><apex:inputfield value="{!filterPoLineItem.ASI_MFM_Sub_brand_Code__c}" styleclass="criteriaIdClass" id="SubBrand_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem7">
+                    <apex:outputLabel value="Supplier Codes" /><apex:inputfield value="{!filterPoLineItem2.ASI_MFM_List_Item_Description__c}" styleclass="criteriaTextClass" id="SupplierCodes_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem15">
+                    <apex:outputLabel value="Sub-brand Codes" /><apex:inputfield value="{!filterPoLineItem.ASI_MFM_List_Item_Description__c}" styleclass="criteriaTextClass" id="SubBrandCodes_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem6">
+                    <apex:outputLabel value="Owner" /><apex:inputfield value="{!filterOwner.ASI_MFM_Buyer__c}" styleclass="criteriaIdClass" id="Owner_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem9">
+                    <apex:outputLabel value="PO Channel" /><apex:inputfield value="{!filterPo.ASI_MFM_PO_Channel__c}" styleclass="criteriaTextClass" id="POChannel_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem10">
+                    <apex:outputLabel value="Brand" /><apex:inputfield value="{!filterPoLineItem.ASI_MFM_Brand_Lookup__c}" styleclass="criteriaIdClass" id="Brand_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem11">
+                    <apex:outputLabel value="Fiscal Year" /><apex:inputfield value="{!filterPrefix.ASI_MFM_Fiscal_year__c}" styleclass="criteriaTextClass" id="FY_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem12">
+                    <apex:outputLabel value="PO Type" /><apex:inputfield value="{!filterPoLineItem4.ASI_MFM_List_Item_Description__c}" styleclass="criteriaTextClass" id="POType_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem13">
+                    <apex:outputLabel value="Supplier Email Sent" /><apex:inputfield value="{!filterPo.ASI_MFM_Supplier_eMail_Sent__c}" styleclass="criteriaBooleanClass" id="EmailSent_inVal"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem id="pageBlockSectionItem14">
+                    <apex:outputLabel value="BU" /><apex:inputfield value="{!filterPo.ASI_MFM_CN_BU_Picklist__c}" styleclass="criteriaTextClass" id="BU_inVal"/>
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+            <div id="pageButtonHead" class="centerAlign">
+                    <apex:actionFunction name="rerenderTable" rerender="polist" />
+                    <div class="button" onclick="jsSearch(this);">
+                        Search
+                    </div>
+                    <div class="button" onclick="sendEmail();">
+                        Send Email
+                    </div>
+            </div>
+        </apex:pageBlock>
+        <apex:pageBlock id="polist"> 
+        <div id="div-detail-normal-exist">
+                <table id="table-po-result" class="sf-table">
+                    <thead>
+                    <tr>
+                        <th class="sf-th"><input type="checkbox" onclick="checkAll(this)" id="checkAllRow"/> </th>
+                        <th class="sf-th">PO Number</th>
+                        <th class="sf-th">Supplier Name</th>
+                        <th class="sf-th">BU</th>
+                        <th class="sf-th">PO Type</th>
+                        <th class="sf-th">Sub-brand</th>
+                        <th class="sf-th">PO Total Amount(RMB)</th>
+                        <th class="sf-th">PO Remark</th>
+                        <th class="sf-th">Supplier Email</th>
+                        <th class="sf-th">Supplier Mail Sent</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+                <div style="height:1px"></div>
+            </div>
+            <div id="pageButtonBottom" class="centerAlign">
+                <apex:actionFunction name="rerenderTable" rerender="polist" />
+                <div class="button" onclick="jsSearch(this);">
+                    Search
+                </div>
+                <div class="button" onclick="sendEmail();">
+                    Send Email
+                </div>
+            </div>
+        </apex:pageBlock> 
+    </apex:form>
+</apex:page>

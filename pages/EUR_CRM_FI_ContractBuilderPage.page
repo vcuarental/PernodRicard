@@ -1,0 +1,1937 @@
+<apex:page standardController="EUR_CRM_Contract__c" extensions="EUR_CRM_FI_ContractBuilderController">
+ 
+<apex:variable var="pouringRefundSpirits" value="{!mechanicTypeWrapperMap['Pouring Refund Spirits']}" />
+<apex:variable var="pouringRefundWines" value="{!mechanicTypeWrapperMap['Pouring Refund Wines']}" />
+<apex:variable var="selectionBrandsSpirits" value="{!mechanicTypeWrapperMap['Selection Brands Spirits']}" />
+<apex:variable var="selectionBrandsWines" value="{!mechanicTypeWrapperMap['Selection Brands Wines']}" />
+<apex:variable var="marketingActivitySpirits" value="{!mechanicTypeWrapperMap['Marketing Activity Spirits']}" />
+<apex:variable var="marketingActivityWines" value="{!mechanicTypeWrapperMap['Marketing Activity Wines']}" />
+<apex:variable var="trips" value="{!mechanicTypeWrapperMap['Trips']}" />
+<apex:variable var="education" value="{!mechanicTypeWrapperMap['Education']}" />
+<apex:variable var="freeStock" value="{!mechanicTypeWrapperMap['Free stock']}" />
+<apex:variable var="rProfitColor" value="{!profitColor}"/>
+<apex:variable var="rCMColor" value="{!ContractMaterialColor}"/>
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+<apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/styles/common.css')}" /> 
+<link href="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+<apex:includeScript value="{!URLFOR($Resource.EUR_CRM_fnLengthChange)}" />
+
+
+<script>
+    $ = jQuery.noConflict();
+    var isAllInputValid = true;
+    //DataTable Variable
+    var cpiPouringRefundSpirits; //contract product item
+    var pPouringRefundSpirits; //
+    var refundAndBrandSpiritsExistingProducts = [];
+
+    var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : true
+    };
+    //Contract Mechanic Column Definition
+    
+    var colLabel_Action = "{!$Label.EUR_CRM_Action}";
+    var colLabel_Brand = "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand__c.label}";
+    var colLabel_BrandQuality = "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand_Quality__c.label}";
+    var colLabel_BrandQualitySize = "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand_Quality_Size__c.label}";    
+    var colLabel_SKU = "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_SKU__c.label}";
+    var productColumns = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": colLabel_BrandQualitySize} 
+        ];
+    var pColumns = {"BRAND":[{"sTitle": colLabel_Action},
+                           {"sTitle": colLabel_Brand}],
+                    "BQ":[{"sTitle": colLabel_Action},
+                           {"sTitle": colLabel_BrandQuality}],
+                    "BQS":[{"sTitle": colLabel_Action},
+                           {"sTitle": colLabel_BrandQualitySize}],
+                    "SKU":[{"sTitle": colLabel_Action},
+                           {"sTitle": colLabel_SKU}]
+                   };
+    var thousandSep;
+    var decimalSep;
+    $(document).ready(
+        function(){
+            console.log("##INIT - Contract Builder Page");
+            thousandSep = '{!thousandSep}';
+            decimalSep = '{!decimalSep}'; 
+            String.prototype.insert = function (index, string) {
+                  var ind = index < 0 ? this.length + index  :  index;
+                  return  this.substring(0, ind) + string + this.substring(ind, this.length);
+                };
+             updateProfitColor();
+             setTables();
+             
+             initializeRefundAndBrandSpiritsExistingProducts();
+             reCalculateProductList('selectionBrandsSpiritsTable');
+             reCalculateProductList('pouringRefundSpiritsTable');
+        }
+    );
+    function setTables(){
+        setPouringRefundSpirits();
+        setPouringRefundWines();
+        setSelectionBrandsSpirits();
+        setSelectionBrandsWines();
+        setTrips();
+        setEducation();
+        setFreeStock();
+        setMarketingActivitySpirits();
+        setMarketingActivityWines();
+    }
+    function setPouringRefundSpirits(){
+        var cpiPouringRefundSpirits_dataTableProperties = basicDataTableProperties;
+        cpiPouringRefundSpirits_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_BrandQualitySize},
+            {"sTitle": "{!$Label.EUR_CRM_Volume_In_Bottles}"},
+            {"sTitle": "{!$Label.EUR_CRM_Retro_Per_Bottle}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount_Spent__c.label}"} 
+        ];
+        cpiPouringRefundSpirits = $("#ContractProductItemTable{!pouringRefundSpirits.mechanicTypeId}").dataTable(cpiPouringRefundSpirits_dataTableProperties); 
+        var pPouringRefundSpirits_dataTableProperties = basicDataTableProperties;
+        pPouringRefundSpirits_dataTableProperties["aoColumns"] = pColumns["BQS"]; 
+        pPouringRefundSpirits = $("#ProductTable{!pouringRefundSpirits.mechanicTypeId}").dataTable(pPouringRefundSpirits_dataTableProperties);
+        calculateAllTotalSpend($("#ContractProductItemTable{!pouringRefundSpirits.mechanicTypeId}"),'pouringRefundSpirits','{!pouringRefundSpirits.mechanicTypeId}');    
+    }
+    function setPouringRefundWines(){
+        var cpiPouringRefundWines_dataTableProperties = basicDataTableProperties;
+        cpiPouringRefundWines_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_SKU},
+            {"sTitle": "{!$Label.EUR_CRM_Volume_In_Bottles}"},
+            {"sTitle": "{!$Label.EUR_CRM_Retro_Per_Bottle}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount_Spent__c.label}"} 
+        ];
+        cpiPouringRefundWines = $("#ContractProductItemTable{!pouringRefundWines.mechanicTypeId}").dataTable(cpiPouringRefundWines_dataTableProperties); 
+        var pPouringRefundWines_dataTableProperties = basicDataTableProperties;
+        pPouringRefundWines_dataTableProperties["aoColumns"] = pColumns["SKU"]; 
+        pPouringRefundWines = $("#ProductTable{!pouringRefundWines.mechanicTypeId}").dataTable(pPouringRefundWines_dataTableProperties);
+        calculateAllTotalSpend($("#ContractProductItemTable{!pouringRefundWines.mechanicTypeId}"),'pouringRefundWines','{!pouringRefundWines.mechanicTypeId}');    
+    }
+    function setSelectionBrandsSpirits(){
+        var cpiSelectionBrandsSpirits_dataTableProperties = basicDataTableProperties;
+        cpiSelectionBrandsSpirits_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_BrandQualitySize},
+            {"sTitle": "{!$Label.EUR_CRM_Volume_In_Bottles}"},
+            {"sTitle": "{!$Label.EUR_CRM_Retro_Per_Bottle}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount_Spent__c.label}"} 
+        ];
+        cpiSelectionBrandsSpirits = $("#ContractProductItemTable{!selectionBrandsSpirits.mechanicTypeId}").dataTable(cpiSelectionBrandsSpirits_dataTableProperties); 
+        var pSelectionBrandsSpirits_dataTableProperties = basicDataTableProperties;
+        pSelectionBrandsSpirits_dataTableProperties["aoColumns"] = pColumns["BQS"];
+        pSelectionBrandsSpirits = $("#ProductTable{!selectionBrandsSpirits.mechanicTypeId}").dataTable(pSelectionBrandsSpirits_dataTableProperties);
+        calculateAllTotalSpend($("#ContractProductItemTable{!selectionBrandsSpirits.mechanicTypeId}"),'selectionBrandsSpirits','{!selectionBrandsSpirits.mechanicTypeId}');    
+    } 
+    function setSelectionBrandsWines(){
+        var cpiSelectionBrandsWines_dataTableProperties = basicDataTableProperties;
+        cpiSelectionBrandsWines_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_Brand},
+            {"sTitle": "{!$Label.EUR_CRM_Volume_In_Bottles}"},
+            {"sTitle": "{!$Label.EUR_CRM_Retro_Per_Bottle}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount_Spent__c.label}"} 
+        ];
+        cpiSelectionBrandsWines = $("#ContractProductItemTable{!selectionBrandsWines.mechanicTypeId}").dataTable(cpiSelectionBrandsWines_dataTableProperties); 
+        var pSelectionBrandsWines_dataTableProperties = basicDataTableProperties;
+        pSelectionBrandsWines_dataTableProperties["aoColumns"] = pColumns["BRAND"];
+        pSelectionBrandsWines = $("#ProductTable{!selectionBrandsWines.mechanicTypeId}").dataTable(pSelectionBrandsWines_dataTableProperties);
+        calculateAllTotalSpend($("#ContractProductItemTable{!selectionBrandsWines.mechanicTypeId}"),'selectionBrandsWines','{!selectionBrandsWines.mechanicTypeId}');    
+    } 
+    function setTrips(){
+        var cpiTrips_dataTableProperties = basicDataTableProperties;
+        cpiTrips_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_Brand},
+            // {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Contract_Event__c.label}"} ,
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_No_of_People__c.label}"} ,
+            {"sTitle": "{!$Label.EUR_CRM_Value}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_AnP__c.label}"}
+        ];
+        cpiTrips = $("#ContractProductItemTable{!trips.mechanicTypeId}").dataTable(cpiTrips_dataTableProperties); 
+        var pTrips_dataTableProperties = basicDataTableProperties;
+        pTrips_dataTableProperties["aoColumns"] = pColumns["BRAND"];
+        pTrips = $("#ProductTable{!trips.mechanicTypeId}").dataTable(pTrips_dataTableProperties); 
+   
+       $('#trips_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!trips.mechanicTypeId}'))));     
+    } 
+    function setEducation(){
+        var cpiEducation_dataTableProperties = basicDataTableProperties;
+        cpiEducation_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_Brand},
+            // {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Contract_Event__c.label}"} ,
+            {"sTitle": "{!$Label.EUR_CRM_Value}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_AnP__c.label}"}
+        ];
+        cpiEducation = $("#ContractProductItemTable{!education.mechanicTypeId}").dataTable(cpiEducation_dataTableProperties); 
+        var pEducation_dataTableProperties = basicDataTableProperties;
+        pEducation_dataTableProperties["aoColumns"] = pColumns["BRAND"];
+        pEducation = $("#ProductTable{!education.mechanicTypeId}").dataTable(pEducation_dataTableProperties); 
+         $('#education_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!education.mechanicTypeId}'))));   
+    } 
+    function setFreeStock(){
+        var cpiFreeStock_dataTableProperties = basicDataTableProperties;
+        cpiFreeStock_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_BrandQuality}, 
+            {"sTitle": "{!$Label.EUR_CRM_Value}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_AnP__c.label}"}
+        ];
+        cpiFreeStock = $("#ContractProductItemTable{!freeStock.mechanicTypeId}").dataTable(cpiFreeStock_dataTableProperties); 
+        var pFreeStock_dataTableProperties = basicDataTableProperties;
+        pFreeStock_dataTableProperties["aoColumns"] = pColumns["BQ"];
+        pFreeStock = $("#ProductTable{!freeStock.mechanicTypeId}").dataTable(pFreeStock_dataTableProperties);   
+        $('#freeStock_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!freeStock.mechanicTypeId}'))));  
+    }
+    function setMarketingActivitySpirits(){
+        var cpiMarketingActivitySpirits_dataTableProperties = basicDataTableProperties;
+        cpiMarketingActivitySpirits_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_Brand}, 
+            {"sTitle": "{!$Label.EUR_CRM_Amount}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_AnP__c.label}"}
+        ];
+        cpiMarketingActivitySpirits = $("#ContractProductItemTable{!marketingActivitySpirits.mechanicTypeId}").dataTable(cpiMarketingActivitySpirits_dataTableProperties); 
+        var pMarketingActivitySpirits_dataTableProperties = basicDataTableProperties;
+        pMarketingActivitySpirits_dataTableProperties["aoColumns"] = pColumns["BRAND"];
+        pMarketingActivitySpirits = $("#ProductTable{!marketingActivitySpirits.mechanicTypeId}").dataTable(pMarketingActivitySpirits_dataTableProperties);   
+        $('#marketingActivitySpirits_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!marketingActivitySpirits.mechanicTypeId}'))));  
+    } 
+    
+    function setMarketingActivityWines(){
+        var cpiMarketingActivityWines_dataTableProperties = basicDataTableProperties;
+        cpiMarketingActivityWines_dataTableProperties["aoColumns"] = [
+            {"sTitle":colLabel_Action},
+            {"sTitle":colLabel_Brand}, 
+            {"sTitle": "{!$Label.EUR_CRM_Amount}"},
+            {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_AnP__c.label}"}
+        ];
+        cpiMarketingActivityWines = $("#ContractProductItemTable{!marketingActivityWines.mechanicTypeId}").dataTable(cpiMarketingActivityWines_dataTableProperties); 
+        var pMarketingActivityWines_dataTableProperties = basicDataTableProperties;
+        pMarketingActivityWines_dataTableProperties["aoColumns"] = pColumns["BRAND"];
+        pMarketingActivityWines = $("#ProductTable{!marketingActivityWines.mechanicTypeId}").dataTable(pMarketingActivityWines_dataTableProperties);   
+        $('#marketingActivityWines_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!marketingActivityWines.mechanicTypeId}'))));  
+    } 
+    function setMechanic(mechanic, contractProductCols, productCols){
+        var cpiMechanic_dataTableProperties = basicDataTableProperties;
+        cpiMechanic_dataTableProperties["aoColumns"] = contractProductCols;
+        var contractProductTable = ''; 
+    } 
+
+    function preventReturnKeyPress(){
+        $("input,select").keypress(function(e){
+            return e.keyCode!==13;
+        });
+    }
+    
+    function validateQty(input){
+        var decimal=  /^[1-9]\d*$/; 
+        return decimal.test(input);
+    }
+    
+    function validateDecimal(input){
+        var decimal=  /^([+]?)([0-9]*)(\.[0-9]+)?$/; 
+        return decimal.test(input);
+    }
+    function precise_round(num,decimals){
+        return Math.round(num*Math.pow(10,decimals))/Math.pow(10,decimals);
+    }
+
+    function cleanNumber(num){
+        var newNum = '' + num;
+        if(decimalSep == ','){
+            newNum = newNum.replace(/\./g,'');
+            newNum = newNum.replace(/,/g , '.');
+        }else{
+            newNum = newNum.replace(/,/g , '');
+        }
+        newNum = newNum.replace(/\s+/g, '')
+        return newNum;
+    } 
+    function calculateTotalSpend(  cpiRow){
+        var totalSpendVal=0;
+        var discountAmount = 0;
+        
+        var isInputValid = false;
+        
+        var qty = cpiRow.find("input.cpiQty").val();//cliRow.children().children(".cliQty").val();
+        qty = cleanNumber(qty); 
+        if (validateQty(qty)){
+            cpiRow.find("input.cpiQty").removeClass('error-input');
+            isInputValid = true;
+        }else{
+            cpiRow.find("input.cpiQty").addClass('error-input');
+            isAllInputValid = false;
+        }
+        
+        var retro = cpiRow.find("input.cpiRetro").val();//cliRow.children().children(".cliRetro").val();
+        retro = cleanNumber(retro);
+        if (validateDecimal(retro)){
+            cpiRow.find("input.cpiRetro").removeClass('error-input');
+            isInputValid = true;
+        }else{
+            cpiRow.find("input.cpiRetro").addClass('error-input');
+            isAllInputValid = false;
+        } 
+        
+        if (isInputValid){
+            qty = (qty!=null&&qty!=undefined&&qty!="NaN")?parseFloat(qty):0;
+            retro = (retro!=null&&retro!=undefined&&retro!="NaN")?parseFloat(retro):0;
+            
+            totalSpendVal = precise_round(qty*(retro), 2);
+  
+            
+            totalSpendVal = isNaN(totalSpendVal)?0:totalSpendVal;
+            totalSpendVal = parseFloat(totalSpendVal).toFixed(2);
+            return totalSpendVal;
+        }
+        
+        return 0;
+    }
+    function formatToCurrency(num){ 
+        var newNum = '' + num;
+        if(decimalSep == ','){
+            newNum = newNum.replace(/\./g,',');
+        }
+        var len = newNum.length;
+        len -= 6; //remove decimal place.
+        var i = 0; 
+        for(var j = len ; j > 0 ; j = j-3){ 
+            newNum = newNum.insert(j, thousandSep); 
+        }
+        return newNum;
+    }
+    function updateTotalSpend(mechanic,cpiRow,mechId){
+        var totalSpendId = '#'+mechanic + '_totalSpend_' + cpiRow; 
+
+        var rowSpendId ='#'+mechanic + '_row_' +  cpiRow ; 
+        var total =  calculateTotalSpend( $(rowSpendId));
+         
+        $(totalSpendId).text(formatToCurrency(total));  
+
+        var mTableId = '#ContractProductItemTable' + mechId;
+       var t =  sumTotalSpend($(mTableId));
+       var totalfooter = '#'+mechanic + '_span_footer_total';
+       t = formatToCurrency(t);
+       $(totalfooter).text(t); 
+    }
+    function sumTotalSpend(tableEle){
+        var sTotalSpend = 0;
+        var totalSpendArr = tableEle.find("span.cpiTotalSpend");
+        if(totalSpendArr != null && totalSpendArr.length > 0){
+            for (i=0; i<totalSpendArr.length; i++){
+                var totalSpendEle =  $(totalSpendArr[i]); 
+                var fTotalSpend = parseFloat( cleanNumber(totalSpendEle.text()));
+                fTotalSpend = isNaN(fTotalSpend)?0:fTotalSpend;
+                sTotalSpend += fTotalSpend;
+            }
+        }else{
+            totalSpendArr = tableEle.find("input.cpiTotalSpend");
+            if(totalSpendArr != null && totalSpendArr.length > 0){
+                for (i=0; i<totalSpendArr.length; i++){
+                    var totalSpendEle = '' + totalSpendArr[i].value; 
+                    var fTotalSpend = parseFloat( cleanNumber(totalSpendEle));
+                    fTotalSpend = isNaN(fTotalSpend)?0:fTotalSpend;
+                    sTotalSpend += fTotalSpend;
+                }
+
+            }
+        }
+         
+        sTotalSpend = isNaN(sTotalSpend)?0:sTotalSpend;
+        sTotalSpend = parseFloat(sTotalSpend).toFixed(2);
+        return sTotalSpend; 
+    }
+    function calculateAllTotalSpend(tableEle,mechanic,mechId){
+        var allCpiContentRow = tableEle.find(".cpiContent");
+         
+        for (var i=0; i<allCpiContentRow.length; i++){
+            var cpiContentRow = $(allCpiContentRow[i]);
+            var rId = $(cpiContentRow).find(".rowId");
+            updateTotalSpend(mechanic, $(rId).attr('id'),mechId); 
+
+        }
+    }
+    function updateProfitColor(){
+
+           var cmEmpty = $($('.contractMaterialValue')[0]).text() == 'true';
+           var profitEmpty = $($('.profitabilityValue')[0]).text() == 'true'; 
+            if(!cmEmpty){
+                var contractMaterialColor = $('.contractMaterialColor').text()
+                $($('.rProfit').find('td')[1]).find('span').css('background-color',contractMaterialColor);
+                $($('.rProfit').find('td')[1]).find('span').css('padding','5px');
+                $($('.rProfit').find('td')[1]).find('span').css('width','100px');
+                $($('.rProfit').find('td')[1]).find('span').css('font-size','13px'); 
+            }if(!profitEmpty){
+                var profitColor = $('.profitColor').text()
+                $($('.rProfit').find('td')[3]).find('span').css('background-color',profitColor);
+                $($('.rProfit').find('td')[3]).find('span').css('padding','5px');
+                $($('.rProfit').find('td')[3]).find('span').css('width','100px');
+                $($('.rProfit').find('td')[3]).find('span').css('font-size','13px'); 
+            }
+    }
+    
+    function initializeRefundAndBrandSpiritsExistingProducts() {
+        var selectedProductTable = $("#tab_PouringRefundSpirits [id*='ContractProductItemTable'] tr[id*='pouringRefundSpirits'], #tab_SelectionBrandsSpirits [id*='ContractProductItemTable'] tr[id*='selectionBrandsSpirits']");
+        
+        for(var i = 0; i < selectedProductTable.length; i++) {
+            refundAndBrandSpiritsExistingProducts.push(
+                $(selectedProductTable[i]).find('td').attr('id').substr(0,15)
+            );
+        }
+    }
+    
+    /*
+    * function: addProduct
+    * Adds a product to refund and brand spirits exclusivity list, hence a product can only exclusively exist in one of them
+    */
+    function addProduct(productName) {
+        refundAndBrandSpiritsExistingProducts.push(productName.substr(0,15));
+        
+        console.warn(refundAndBrandSpiritsExistingProducts);
+    }
+    
+    /*
+    * function: removeProduct
+    * removes a product 
+    */
+    function removeProduct(productName) {
+        if(!refundAndBrandSpiritsExistingProducts || refundAndBrandSpiritsExistingProducts.length <= 0) {
+            // Return if the refund and brand spirits existing products are empty
+            return;
+        }
+        
+        var index = refundAndBrandSpiritsExistingProducts.indexOf(productName.substr(0,15));
+                
+        if(index >= 0) {
+            refundAndBrandSpiritsExistingProducts.splice(index, 1);
+        }
+    }
+    
+    function reCalculateProductList(tableClass) {
+        //var selectProductTable = $('.' + tableClass + ' tr .sorting_1');
+        
+        var selectProductLength = $('.' + tableClass + ' tr .sorting_1').size();
+        
+        var productDataTable = $('.' + tableClass).dataTable();
+        productDataTable.fnLengthChange(5000);
+        
+        var selectProductTable = $('.' + tableClass + ' tr .sorting_1');
+        // console.log('selectProductTable => ', selectProductTable);
+        // console.log('refundAndBrandSpiritsExistingProducts => ', refundAndBrandSpiritsExistingProducts);
+        for(var i = 0; i < selectProductTable.size(); i++) {
+            //$(selectProductTable[i]).parent().show();
+            $(selectProductTable[i]).parent().find('a').removeClass('disabled');
+        }
+        
+        for(var i = 0; i < refundAndBrandSpiritsExistingProducts.length; i++) {
+            var product = selectProductTable.find("[id*='" + refundAndBrandSpiritsExistingProducts[i] + "']");
+            // console.log('product => ', product);
+            if(product.length > 0) {
+                //product.closest('tr').hide();
+                product.closest('tr').find('a').addClass('disabled');
+            }
+        }
+        
+        productDataTable.fnLengthChange(selectProductLength);
+    }
+</script> 
+<style>     
+#container1{
+    width:100%;
+}
+
+#tabLink{
+    font-size: 10px;
+}
+
+input.error-input {
+    border-color: red;
+}
+
+a.disabled {
+    pointer-events:none;
+    cursor: default;
+    color: lightgrey;
+    text-decoration: none;
+}
+</style>
+</head>
+<apex:actionStatus id="loading" >
+    <apex:facet name="start">
+         <c:EUR_CRM_LoadingStatus BackColor="#ffffff"
+                                    borderColor="#6B6B6B"
+                                    borderSize="1"
+                                    height="50px"
+                                     width="120px" 
+                                    margintop="-25px" 
+                                    marginleft="0%"
+                                    ImageUrl="{!$Resource.loadingStatus}"
+                                    Message="{!$Label.EUR_CRM_Loading}"/>
+    </apex:facet>
+</apex:actionStatus> 
+<apex:sectionHeader title="{!$Label.EUR_CRM_Build_Contract}" subtitle="{!EUR_CRM_Contract__c.name}"/>
+
+<apex:form > 
+<div style="width:100%;  ">
+    <div style="padding-left:40%; padding-bottom:5px; ">
+        <apex:commandButton value="{!$Label.EUR_CRM_Save}" action="{!save}" status="loading" reRender="pMessages"/>
+        <apex:commandButton value="{!$Label.EUR_CRM_Quick_Save}"  action="{!quickSave}" status="loading" reRender="pMessages, pageBlock_PouringRefundSpirits,pageBlock_PouringRefundWines, pageBlock_SelectionBrandsSpirits,
+        pageBlock_SelectionBrandsWines,
+        pageBlock_MarketingActivitySpirits,
+        pageBlock_MarketingActivityWines,
+        pageBlock_Trips,
+        pageBlock_Education,
+        pageBlock_FreeStock,
+        contractMaterial,
+        rProfit " onComplete=" preventReturnKeyPress(); updateProfitColor(); setTables(); reCalculateProductList('pouringRefundSpiritsTable'); reCalculateProductList('selectionBrandsSpiritsTable')"  />
+        <apex:commandButton value="{!$Label.EUR_CRM_Cancel}" action="{!view}"/> 
+        <input type="button" class="btn" value="{!$Label.EUR_CRM_Profit_Calculator}" onClick="window.open('/apex/EUR_CRM_FI_ProfitCalculator?id='+'{!EUR_CRM_Contract__c.id}');"/>
+        <input type="button" class="btn" value="{!$Label.EUR_CRM_ShowIncludedOutlets}" onClick="window.open('/apex/EUR_CRM_FI_SubChain?id='+'{!EUR_CRM_Contract__c.id}');"
+        style="display: {!if(EUR_CRM_Contract__c.RecordType.Developername != 'EUR_FI_Chain_Contract','None','')}"/>
+    </div>
+</div>
+<apex:outputPanel layout="block" >
+<apex:pageMessages id="pMessages" /></apex:outputPanel>
+
+<apex:actionFunction name="reRenderSelectionBrandsTab" status="loading" rerender="pageBlock_SelectionBrandsSpirits" onComplete="setSelectionBrandsSpirits();"/>
+<apex:actionFunction name="reRenderPouringRefundTab" status="loading" rerender="pageBlock_PouringRefundSpirits"  onComplete="setPouringRefundSpirits();"/>
+
+<apex:pageBlock mode="maindetail">
+        <apex:outputPanel layout="block" styleClass="rProfit" id="rProfit"  >
+        <apex:pageBlockSection columns="1" >
+
+        <!--<apex:pageBlockSectionItem > -->
+                <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract__c.fields.EUR_CRM_Account__c.label}"/>   -->
+                <apex:outputField value="{!EUR_CRM_Contract__c.EUR_CRM_Account__c}" />
+        <!--</apex:pageBlockSectionItem>  -->
+    <!--<apex:pageBlockSectionItem id="contractMaterial">-->
+            <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract__c.fields.EUR_CRM_Is_this_contract_material__c.label}"/>   -->
+            <!--<apex:outputField value="{!contractObj.EUR_CRM_Is_this_contract_material__c}" styleClass="contractMaterialValue"/>-->
+    <!--</apex:pageBlockSectionItem> -->
+        <!--<apex:pageBlockSectionItem >-->
+                <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract__c.fields.EUR_CRM_Start_Date__c.label}"/>   -->
+                <apex:outputField value="{!EUR_CRM_Contract__c.EUR_CRM_Start_Date__c}" />
+        <!--</apex:pageBlockSectionItem> -->
+    <!--<apex:pageBlockSectionItem >-->
+            <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract__c.fields.EUR_CRM_Is_this_contract_profitable__c.label}"/>   -->
+            <!--<apex:outputField value="{!contractObj.EUR_CRM_Is_this_contract_profitable__c}" styleClass="profitabilityValue"/>-->
+    <!--</apex:pageBlockSectionItem>-->
+        <!--<apex:pageBlockSectionItem >-->
+                <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract__c.fields.EUR_CRM_End_Date__c.label}"/>   -->
+                <apex:outputField value="{!EUR_CRM_Contract__c.EUR_CRM_End_Date__c}" />
+        <!--</apex:pageBlockSectionItem>-->
+    </apex:pageBlockSection> 
+        <!--<apex:outputText styleClass="contractMaterialValue" value="{!contractObj.EUR_CRM_Is_this_contract_material__c == null}"  style="display:none"/>-->
+        <!--<apex:outputText styleClass="profitabilityValue"  value="{!contractObj.EUR_CRM_Is_this_contract_profitable__c == null}"  style="display:none"/>-->
+        <!--<apex:outputText value="{!profitColor}" styleClass="profitColor" style="display:none"/>-->
+        <!--<apex:outputText value="{!contractMaterialColor}" styleClass="contractMaterialColor" style="display:none" />-->
+        </apex:outputPanel>
+</apex:pageBlock>
+<div class="container1"> 
+<!-- ################################################################## -->
+    <div id="mechanicTypeTabs" class="tabLink">
+        <ul> 
+            <!--<li><a href="#tab_Test">Test: {!marketingActivitySpirits.mechanicTypeName}</a></li> -->   
+            <li><a href="#tab_PouringRefundSpirits" onClick="reCalculateProductList('pouringRefundSpiritsTable');return false;">{!pouringRefundSpirits.mechanicTypeName}</a></li> 
+            <li><a href="#tab_SelectionBrandsSpirits" onClick="reCalculateProductList('selectionBrandsSpiritsTable');return false;">{!selectionBrandsSpirits.mechanicTypeName}</a></li> 
+            <li><a href="#tab_MarketingActivitySpirits">{!marketingActivitySpirits.mechanicTypeName}</a></li> 
+            <li><a href="#tab_PouringRefundWines">{!pouringRefundWines.mechanicTypeName}</a></li> 
+            
+            <li><a href="#tab_SelectionBrandsWines">{!selectionBrandsWines.mechanicTypeName}</a></li>
+            <li><a href="#tab_MarketingActivityWines">{!marketingActivityWines.mechanicTypeName}</a></li>
+            <li><a href="#tab_Marketing">{!$Label.EUR_CRM_Marketing}</a></li>
+          
+            <!--        
+            <li><a href="#tab_MarketingActivitySpirits">{!marketingActivitySpirits.mechanicTypeName}</a></li> 
+            <li><a href="#tab_MarketingActivityWines">{!marketingActivityWines.mechanicTypeName}</a></li> 
+            <li><a href="#tab_Trips">{!trips.mechanicTypeName}</a></li> 
+            <li><a href="#tab_Education">{!education.mechanicTypeName}</a></li> 
+            <li><a href="#tab_FreeStock">{!freeStock.mechanicTypeName}</a></li> 
+            -->
+        </ul>
+        <!--
+        <div id="tab_Test">
+        </div>
+        -->
+<!-- ###POURING REFUND SPIRITS --###################################################################################### -->
+        <div id="tab_PouringRefundSpirits">
+            <apex:pageBlock id="pageBlock_PouringRefundSpirits">
+                <apex:pageBlockSection id="pageblock_lineItem_pouringRefundSpirits" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                    <!-- ### table POURING REFUND SPIRITS-->
+                    <apex:outputPanel layout="block">
+                    <table id="ContractProductItemTable{!pouringRefundSpirits.mechanicTypeId}">
+                    <apex:variable var="i" value="{!0}"/>
+                        <apex:repeat var="cpi" value="{!pouringRefundSpirits.contractProductItems}">
+                            <tr id="pouringRefundSpirits_row_{!cpi[pouringRefundSpirits.productAPIName]}" class="cpiContent">
+                               <td class="rowId" id="{!cpi[pouringRefundSpirits.productAPIName]}">   
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                            action="{!removeContractLineItem}"
+                                            rerender="pageBlock_PouringRefundSpirits"
+                                            onComplete="console.log ('Test onComplete - REMOVE'); removeProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"
+                                            immediate="true"
+                                            status="loading">
+                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>            
+                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi.EUR_CRM_Brand_Quality_Size__c}" assignTo="{!productName}"/> 
+                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                        </apex:commandLink>  
+                                    </td>
+                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[pouringRefundSpirits.productAPIName]}"/></td> 
+                                    <!--
+                                    <td><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}" onKeyUp="
+                                         $('#pouringRefundSpirits_totalSpend_{!cpi.EUR_CRM_Brand_Quality_Size__c}').text(                                    calculateTotalSpend('{!cpi}',$(pouringRefundSpirits_row_{!cpi.EUR_CRM_Brand_Quality_Size__c})));"/></td> -->
+                                    <td>
+                                    <div class="requiredInput">
+                                     <div class="requiredBlock"/>
+                                    <!--<apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}"   onKeyUp="updateTotalSpend('pouringRefundSpirits',   '{!cpi.EUR_CRM_Brand_Quality_Size__c}','{!pouringRefundSpirits.mechanicTypeId}');"/></div>-->
+                                    <apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Volume_Btl__c}"   onKeyUp="updateTotalSpend('pouringRefundSpirits',   '{!cpi.EUR_CRM_Brand_Quality_Size__c}','{!pouringRefundSpirits.mechanicTypeId}');"/></div>
+                                    </td>
+                                    <td>
+                                    <div class="requiredInput">
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiRetro" value="{!cpi.EUR_CRM_Amount__c}" 
+                                      onKeyUp="updateTotalSpend('pouringRefundSpirits',   '{!cpi.EUR_CRM_Brand_Quality_Size__c}','{!pouringRefundSpirits.mechanicTypeId}');"/></div></td> 
+                                    <td>
+                                        <span class="cpiTotalSpend" id="pouringRefundSpirits_totalSpend_{!cpi.EUR_CRM_Brand_Quality_Size__c}"> </span>
+                                   
+                                    </td> 
+                            </tr>          
+                        <apex:variable var="i" value="{!i+1}"/>         
+                       </apex:repeat> 
+                       <tfoot>
+                            <tr>
+                                <th style="text-align:right;" colspan="4" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                <th id="pouringRefundSpirits_footer_total"  >
+                                    <span id="pouringRefundSpirits_span_footer_total"  >
+                                    {!pouringRefundSpirits.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                </th>
+                                </tr>
+                        </tfoot>
+                    </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+                <apex:pageBlockSection id="pageblock_contractMechanic_pouringRefundSpirits" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                    <!--<apex:pageBlockTable id="ProductTableaDy0E000000CckWSAS" value="{!pouringRefundSpirits.BQSs}" var="bqs">-->
+                        <!--<apex:column>-->
+                        <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                          <!--action="{!addContractLineItem}"-->
+                                          <!--rerender="pageBlock_PouringRefundSpirits"-->
+                                          <!--onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"-->
+                                          <!--immediate="true"-->
+                                          <!--status="loading">-->
+                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>-->
+                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!bqs.Id}" assignTo="{!productName}"/>-->
+                        <!--</apex:commandLink>-->
+                        <!--</apex:column>-->
+                        <!--<apex:column value="{!bqs.Name}"/>-->
+                    <!--</apex:pageBlockTable>-->
+                <apex:outputPanel layout="block">
+                   <table id="ProductTable{!pouringRefundSpirits.mechanicTypeId}" class="pouringRefundSpiritsTable">
+                       <!--<apex:repeat var="contractMechanic" value="{!pouringRefundSpirits.selectableProducts}">-->
+                           <!--<tr>-->
+                               <!--<td>-->
+                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                            <!--action="{!addContractLineItem}"-->
+                                            <!--rerender="pageBlock_PouringRefundSpirits"-->
+                                            <!--onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"-->
+                                            <!--immediate="true"-->
+                                            <!--status="loading">-->
+                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>-->
+                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[pouringRefundSpirits.productAPIName]}" assignTo="{!productName}"/>-->
+                                        <!--</apex:commandLink>-->
+                                    <!--</td>-->
+                                    <!--<td><apex:outputField value="{!contractMechanic[pouringRefundSpirits.productAPIName]}"/></td>-->
+                                <!--</tr>-->
+                       <!--</apex:repeat>-->
+                       <apex:repeat var="key" value="{!pouringRefundSpirits.BbyId}" rendered="{!pouringRefundSpirits.productAPIName == 'EUR_CRM_Brand__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundSpirits"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundSpirits.BbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundSpirits.BbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundSpirits.BQbyId}" rendered="{!pouringRefundSpirits.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundSpirits"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundSpirits.BQbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundSpirits.BQbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundSpirits.BQSbyId}" rendered="{!pouringRefundSpirits.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundSpirits"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundSpirits.BQSbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundSpirits.BQSbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundSpirits.SKUbyId}" rendered="{!pouringRefundSpirits.productAPIName == 'EUR_CRM_SKU__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundSpirits"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundSpirits(); reCalculateProductList('pouringRefundSpiritsTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundSpirits.SKUbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundSpirits.SKUbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                   </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+            </apex:pageBlock>
+        </div>
+<!-- ### END POURING REFUND SPIRITS  ############################################################################## -->
+<!-- ### POURING REFUND WINES ##################################################################################### -->
+        <div id="tab_PouringRefundWines"> 
+            <apex:pageBlock id="pageBlock_PouringRefundWines">
+                <apex:pageBlockSection id="pageblock_lineItem_pouringRefundWines" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                    <!-- ### table POURING REFUND SPIRITS-->
+                    <apex:outputPanel layout="block">
+                    <table id="ContractProductItemTable{!pouringRefundWines.mechanicTypeId}">
+                    <apex:variable var="i" value="{!0}"/>
+                        <apex:repeat var="cpi" value="{!pouringRefundWines.contractProductItems}">
+                            <tr id="pouringRefundWines_row_{!cpi[pouringRefundWines.productAPIName]}" class="cpiContent">
+                               <td class="rowId" id="{!cpi[pouringRefundWines.productAPIName]}">   
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                            action="{!removeContractLineItem}"
+                                            rerender="pageBlock_PouringRefundWines"
+                                            onComplete="console.log ('Test onComplete - REMOVE'); preventReturnKeyPress(); setPouringRefundWines(); "
+                                            immediate="true"
+                                            status="loading">
+                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>            
+                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[pouringRefundWines.productAPIName]}"/> 
+                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                        </apex:commandLink>  
+                                    </td>
+                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[pouringRefundWines.productAPIName]}"/></td>  
+                                    <td>
+                                    <div class="requiredInput">
+                                     <!--<div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}"   onKeyUp="updateTotalSpend('pouringRefundWines',   '{!cpi[pouringRefundWines.productAPIName]}','{!pouringRefundWines.mechanicTypeId}');"/></div></td>-->
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Volume_Btl__c}"   onKeyUp="updateTotalSpend('pouringRefundWines',   '{!cpi[pouringRefundWines.productAPIName]}','{!pouringRefundWines.mechanicTypeId}');"/></div></td>
+                                    <td>
+                                    <div class="requiredInput">
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiRetro" value="{!cpi.EUR_CRM_Amount__c}"  
+                                      onKeyUp="updateTotalSpend('pouringRefundWines',   '{!cpi[pouringRefundWines.productAPIName]}','{!pouringRefundWines.mechanicTypeId}');"/></div></td> 
+                                    <td>
+                                        <span class="cpiTotalSpend" id="pouringRefundWines_totalSpend_{!cpi[pouringRefundWines.productAPIName]}"> </span>
+                                   
+                                    </td> 
+                            </tr>          
+                        <apex:variable var="i" value="{!i+1}"/>         
+                       </apex:repeat> 
+                       <tfoot>
+                            <tr>
+                                <th style="text-align:right;" colspan="4" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                <th id="pouringRefundWines_footer_total"  >
+                                    <span id="pouringRefundWines_span_footer_total"  >
+                                    {!pouringRefundWines.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                </th>
+                                </tr>
+                        </tfoot>
+                    </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+                <apex:pageBlockSection id="pageblock_contractMechanic_pouringRefundWines" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                <apex:outputPanel layout="block">
+                   <table id="ProductTable{!pouringRefundWines.mechanicTypeId}" class="pouringRefundWinesTable">
+                       <!--<apex:repeat var="contractMechanic" value="{!pouringRefundWines.selectableProducts}">  -->
+                           <!--<tr>-->
+                               <!--<td>-->
+                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                            <!--action="{!addContractLineItem}"-->
+                                            <!--rerender="pageBlock_PouringRefundWines"-->
+                                            <!--onComplete="console.log ('Test onComplete - ADD'); preventReturnKeyPress(); setPouringRefundWines(); "-->
+                                            <!--immediate="true"-->
+                                            <!--status="loading">-->
+                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>         -->
+                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[pouringRefundWines.productAPIName]}"/>                                -->
+                                        <!--</apex:commandLink>  -->
+                                    <!--</td>-->
+                                    <!--<td><apex:outputField value="{!contractMechanic[pouringRefundWines.productAPIName]}"/></td>   -->
+                                <!--</tr> -->
+                       <!--</apex:repeat>-->
+                       <apex:repeat var="key" value="{!pouringRefundWines.BbyId}" rendered="{!pouringRefundWines.productAPIName == 'EUR_CRM_Brand__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundWines"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundWines(); reCalculateProductList('pouringRefundWinesTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundWines.BbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundWines.BbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundWines.BQbyId}" rendered="{!pouringRefundWines.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundWines"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundWines(); reCalculateProductList('pouringRefundWinesTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundWines.BQbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundWines.BQbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundWines.BQSbyId}" rendered="{!pouringRefundWines.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundWines"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundWines(); reCalculateProductList('pouringRefundWinesTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundWines.BQSbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundWines.BQSbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!pouringRefundWines.SKUbyId}" rendered="{!pouringRefundWines.productAPIName == 'EUR_CRM_SKU__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_PouringRefundWines"
+                                                     onComplete="console.log ('Test onComplete - ADD'); addProduct('{!productName}'); preventReturnKeyPress(); setPouringRefundWines(); reCalculateProductList('pouringRefundWinesTable')"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!pouringRefundWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!pouringRefundWines.SKUbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td>
+                                   <apex:outputField value="{!pouringRefundWines.SKUbyId[key].Name}"/>
+                               </td>
+                           </tr>
+                       </apex:repeat>
+                   </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+            </apex:pageBlock>
+        </div>
+<!-- ### END POURING REFUND WINES  ################################################################################ -->
+<!-- ### SELECTION BRANDS SPIRITS ################################################################################# -->
+        <div id="tab_SelectionBrandsSpirits">
+            <apex:pageBlock id="pageBlock_SelectionBrandsSpirits">
+                <apex:pageBlockSection id="pageblock_lineItem_SelectionBrandsSpirits" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                    <!-- ### table POURING REFUND SPIRITS-->
+                    <apex:outputPanel layout="block">
+                    <table id="ContractProductItemTable{!selectionBrandsSpirits.mechanicTypeId}">
+                    <apex:variable var="i" value="{!0}"/>
+                        <apex:repeat var="cpi" value="{!selectionBrandsSpirits.contractProductItems}">
+                            <tr id="selectionBrandsSpirits_row_{!cpi[selectionBrandsSpirits.productAPIName]}" class="cpiContent">
+                               <td class="rowId" id="{!cpi[selectionBrandsSpirits.productAPIName]}">   
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                            action="{!removeContractLineItem}"
+                                            rerender="pageBlock_SelectionBrandsSpirits"
+                                            onComplete=" preventReturnKeyPress(); removeProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable')"
+                                            immediate="true"
+                                            status="loading">
+                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>            
+                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[selectionBrandsSpirits.productAPIName]}" assignTo="{!productName}"/> 
+                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                        </apex:commandLink>  
+                                    </td>
+                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[selectionBrandsSpirits.productAPIName]}"/></td> 
+                                    <!--
+                                    <td><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}" onKeyUp="
+                                         $('#pouringRefundSpirits_totalSpend_{!cpi.EUR_CRM_Brand_Quality_Size__c}').text(                                    calculateTotalSpend('{!cpi}',$(pouringRefundSpirits_row_{!cpi.EUR_CRM_Brand_Quality_Size__c})));"/></td> -->
+                                    <td>
+                                    <div class="requiredInput">
+                                     <!--<div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}"   onKeyUp="updateTotalSpend('selectionBrandsSpirits',   '{!cpi[selectionBrandsSpirits.productAPIName]}','{!selectionBrandsSpirits.mechanicTypeId}');"/></div></td>-->
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Volume_Btl__c}"   onKeyUp="updateTotalSpend('selectionBrandsSpirits',   '{!cpi[selectionBrandsSpirits.productAPIName]}','{!selectionBrandsSpirits.mechanicTypeId}');"/></div></td>
+                                    <td>
+                                    <div class="requiredInput">
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiRetro" value="{!cpi.EUR_CRM_Amount__c}"  
+                                      onKeyUp="updateTotalSpend('selectionBrandsSpirits',   '{!cpi[selectionBrandsSpirits.productAPIName]}','{!selectionBrandsSpirits.mechanicTypeId}');"/></div>
+
+                                      </td> 
+                                    <td>
+                                        <span class="cpiTotalSpend" id="selectionBrandsSpirits_totalSpend_{!cpi[selectionBrandsSpirits.productAPIName]}"> </span>
+                                   
+                                    </td> 
+                            </tr>          
+                        <apex:variable var="i" value="{!i+1}"/>         
+                       </apex:repeat> 
+                       <tfoot>
+                            <tr>
+                                <th style="text-align:right;" colspan="4" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                <th id="selectionBrandsSpirits_footer_total"  >
+                                    <span id="selectionBrandsSpirits_span_footer_total"  >
+                                    {!selectionBrandsSpirits.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                </th>
+                                </tr>
+                        </tfoot>
+                    </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+                <apex:pageBlockSection id="pageblock_contractMechanic_selectionBrandsSpirits" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                <apex:outputPanel layout="block">
+                   <table id="ProductTable{!selectionBrandsSpirits.mechanicTypeId}" class="selectionBrandsSpiritsTable">
+                       <!--<apex:repeat var="contractMechanic" value="{!selectionBrandsSpirits.selectableProducts}">  -->
+                           <!--<tr>-->
+                               <!--<td> -->
+                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                            <!--action="{!addContractLineItem}"-->
+                                            <!--rerender="pageBlock_SelectionBrandsSpirits"-->
+                                            <!--onComplete="  preventReturnKeyPress(); addProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable');"-->
+                                            <!--immediate="true"-->
+                                            <!--status="loading">-->
+                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>         -->
+                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[selectionBrandsSpirits.productAPIName]}" assignTo="{!productName}"/>                                -->
+                                        <!--</apex:commandLink>  -->
+                                    <!--</td>-->
+                                    <!--<td><apex:outputField value="{!contractMechanic[selectionBrandsSpirits.productAPIName]}"/></td>   -->
+                                <!--</tr> -->
+                       <!--</apex:repeat>-->
+                       <apex:repeat var="key" value="{!selectionBrandsSpirits.BbyId}" rendered="{!selectionBrandsSpirits.productAPIName == 'EUR_CRM_Brand__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsSpirits"
+                                                     onComplete="  preventReturnKeyPress(); addProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable');"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsSpirits.BbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsSpirits.BbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsSpirits.BQbyId}" rendered="{!selectionBrandsSpirits.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsSpirits"
+                                                     onComplete="  preventReturnKeyPress(); addProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable');"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsSpirits.BQbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsSpirits.BQbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsSpirits.BQSbyId}" rendered="{!selectionBrandsSpirits.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsSpirits"
+                                                     onComplete="  preventReturnKeyPress(); addProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable');"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsSpirits.BQSbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsSpirits.BQSbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsSpirits.SKUbyId}" rendered="{!selectionBrandsSpirits.productAPIName == 'EUR_CRM_SKU__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsSpirits"
+                                                     onComplete="  preventReturnKeyPress(); addProduct('{!productName}'); setSelectionBrandsSpirits(); reCalculateProductList('selectionBrandsSpiritsTable');"
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsSpirits.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsSpirits.SKUbyId[key].Id}" assignTo="{!productName}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsSpirits.SKUbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                   </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+            </apex:pageBlock>
+        </div>
+<!-- ### END SELECTION BRANDS SPIRITS  ########################################################################## -->
+<!-- ### SELECTION BRANDS WINES ################################################################################# -->
+        <div id="tab_SelectionBrandsWines"> 
+            <apex:pageBlock id="pageBlock_SelectionBrandsWines">
+                <apex:pageBlockSection id="pageblock_lineItem_SelectionBrandsWines" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                    <!-- ### table POURING REFUND Wines-->
+                    <apex:outputPanel layout="block">
+                    <table id="ContractProductItemTable{!selectionBrandsWines.mechanicTypeId}">
+                    <apex:variable var="i" value="{!0}"/>
+                        <apex:repeat var="cpi" value="{!selectionBrandsWines.contractProductItems}">
+                            <tr id="selectionBrandsWines_row_{!cpi[selectionBrandsWines.productAPIName]}" class="cpiContent">
+                               <td class="rowId" id="{!cpi[selectionBrandsWines.productAPIName]}">   
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                            action="{!removeContractLineItem}"
+                                            rerender="pageBlock_SelectionBrandsWines"
+                                            onComplete=" preventReturnKeyPress(); setSelectionBrandsWines(); "
+                                            immediate="true"
+                                            status="loading">
+                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>            
+                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[selectionBrandsWines.productAPIName]}"/> 
+                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                        </apex:commandLink>  
+                                    </td>
+                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[selectionBrandsWines.productAPIName]}"/></td>  
+                                    <td>
+                                    <div class="requiredInput">
+                                     <!--<div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Quantity__c}"   onKeyUp="updateTotalSpend('selectionBrandsWines',   '{!cpi[selectionBrandsWines.productAPIName]}','{!selectionBrandsWines.mechanicTypeId}');"/></div></td>-->
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiQty" value="{!cpi.EUR_CRM_Volume_Btl__c}"   onKeyUp="updateTotalSpend('selectionBrandsWines',   '{!cpi[selectionBrandsWines.productAPIName]}','{!selectionBrandsWines.mechanicTypeId}');"/></div></td>
+                                    <td>
+                                    <div class="requiredInput">
+                                     <div class="requiredBlock"/><apex:inputField styleclass="cpiRetro" value="{!cpi.EUR_CRM_Amount__c}"  
+                                      onKeyUp="updateTotalSpend('selectionBrandsWines',   '{!cpi[selectionBrandsWines.productAPIName]}','{!selectionBrandsWines.mechanicTypeId}');"/> </div></td> 
+                                    <td>
+                                        <span class="cpiTotalSpend" id="selectionBrandsWines_totalSpend_{!cpi[selectionBrandsWines.productAPIName]}"> </span>
+                                   
+                                    </td> 
+                            </tr>          
+                        <apex:variable var="i" value="{!i+1}"/>         
+                       </apex:repeat> 
+                       <tfoot>
+                            <tr>
+                                <th style="text-align:right;" colspan="4" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                <th id="selectionBrandsWines_footer_total"  >
+                                    <span id="selectionBrandsWines_span_footer_total"  >
+                                    {!selectionBrandsWines.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                </th>
+                                </tr>
+                        </tfoot>
+                    </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+                <apex:pageBlockSection id="pageblock_contractMechanic_selectionBrandsWines" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                <apex:outputPanel layout="block">
+                   <table id="ProductTable{!selectionBrandsWines.mechanicTypeId}">
+                       <!--<apex:repeat var="contractMechanic" value="{!selectionBrandsWines.selectableProducts}">  -->
+                           <!--<tr>-->
+                               <!--<td> -->
+                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                            <!--action="{!addContractLineItem}"-->
+                                            <!--rerender="pageBlock_SelectionBrandsWines"-->
+                                            <!--onComplete="  preventReturnKeyPress(); setSelectionBrandsWines(); "-->
+                                            <!--immediate="true"-->
+                                            <!--status="loading">-->
+                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>         -->
+                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[selectionBrandsWines.productAPIName]}"/>                                -->
+                                        <!--</apex:commandLink>  -->
+                                    <!--</td>-->
+                                    <!--<td><apex:outputField value="{!contractMechanic[selectionBrandsWines.productAPIName]}"/></td>   -->
+                                <!--</tr> -->
+                       <!--</apex:repeat> -->
+                       <apex:repeat var="key" value="{!selectionBrandsWines.BbyId}" rendered="{!selectionBrandsWines.productAPIName == 'EUR_CRM_Brand__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsWines"
+                                                     onComplete="  preventReturnKeyPress(); setSelectionBrandsWines(); "
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsWines.BbyId[key].Id}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsWines.BbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsWines.BQbyId}" rendered="{!selectionBrandsWines.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsWines"
+                                                     onComplete="  preventReturnKeyPress(); setSelectionBrandsWines(); "
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsWines.BQbyId[key].Id}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsWines.BQbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsWines.BQSbyId}" rendered="{!selectionBrandsWines.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsWines"
+                                                     onComplete="  preventReturnKeyPress(); setSelectionBrandsWines(); "
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsWines.BQSbyId[key].Id}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsWines.BQSbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                       <apex:repeat var="key" value="{!selectionBrandsWines.SKUbyId}" rendered="{!selectionBrandsWines.productAPIName == 'EUR_CRM_SKU__c'}">
+                           <tr>
+                               <td>
+                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                     action="{!addContractLineItem}"
+                                                     rerender="pageBlock_SelectionBrandsWines"
+                                                     onComplete="  preventReturnKeyPress(); setSelectionBrandsWines(); "
+                                                     immediate="true"
+                                                     status="loading">
+                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!selectionBrandsWines.mechanicTypeEnglishName}"/>
+                                       <apex:param name="PARAM_PRODUCT_ID" value="{!selectionBrandsWines.SKUbyId[key].Id}"/>
+                                   </apex:commandLink>
+                               </td>
+                               <td><apex:outputField value="{!selectionBrandsWines.SKUbyId[key].Name}"/></td>
+                           </tr>
+                       </apex:repeat>
+                   </table>
+                    </apex:outputPanel>
+                </apex:pageBlockSection>
+            </apex:pageBlock>
+        </div>
+<!-- ### END SELECTION BRANDS WINES  ########################################################################## -->
+<!-- ### MARKETING ACTIVITY SPIRITS --###################################################################################### -->
+                <div id="tab_MarketingActivitySpirits">
+                    <apex:pageBlock id="pageBlock_MarketingActivitySpirits">
+                            <!--<apex:pageBlockSection title="{!$Label.EUR_CRM_Lump_Sum}"  >-->
+                                <!--<apex:pageBlockSectionItem >-->
+                                    <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Lumpsum_Value__c.label}" />-->
+                                    <!--<apex:inputField value="{!marketingActivitySpirits.contractActivityItem.EUR_CRM_Lumpsum_Value__c}"/>-->
+                                <!--</apex:pageBlockSectionItem>-->
+                            <!--</apex:pageBlockSection>-->
+
+                        <apex:outputPanel id="inputArea_MarketingActivitySpirits">
+                            <apex:outputPanel id="bqSelection_MarketingActivitySpirits"  >
+                                <apex:pageBlockSection id="pageblock_lineItem_MarketingActivitySpirits" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                                    <!-- ### table POURING REFUND Wines-->
+                                    <apex:outputPanel layout="block">
+                                    <table id="ContractProductItemTable{!marketingActivitySpirits.mechanicTypeId}">
+                                    <apex:variable var="i" value="{!0}"/>
+                                        <apex:repeat var="cpi" value="{!marketingActivitySpirits.contractProductItems}">
+                                            <tr id="marketingActivitySpirits_row_{!cpi[marketingActivitySpirits.productAPIName]}" class="cpiContent">
+                                               <td class="rowId" id="{!cpi[marketingActivitySpirits.productAPIName]}">   
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                                            action="{!removeContractLineItem}"
+                                                            rerender="pageBlock_MarketingActivitySpirits"
+                                                            onComplete=" preventReturnKeyPress(); setMarketingActivitySpirits(); "
+                                                            immediate="true"
+                                                            status="loading">
+                                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>            
+                                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[marketingActivitySpirits.productAPIName]}"/> 
+                                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                                        </apex:commandLink>  
+                                                    </td>
+                                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[marketingActivitySpirits.productAPIName]}"/></td>   
+                                                    <td> 
+                                                        <div class="requiredInput">
+                                                        <div class="requiredBlock"/>
+                                                        <apex:inputField styleclass="cpiTotalSpend" value="{!cpi.EUR_CRM_Marketing_Amount__c}" onKeyUp="$('#marketingActivitySpirits_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!marketingActivitySpirits.mechanicTypeId}'))));"  />
+                                                        </div>
+                                                    </td>
+                                                <td>
+                                                    <apex:inputField value="{!cpi.EUR_CRM_AnP__c}"/>
+                                                </td>
+
+                                            </tr>          
+                                        <apex:variable var="i" value="{!i+1}"/>         
+                                       </apex:repeat> 
+                                       <tfoot>
+                                            <tr>
+                                                <th style="text-align:right;" colspan="2" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                                <th id="marketingActivitySpirits"  >
+                                                    <span id="marketingActivitySpirits_span_footer_total"  >
+                                                    {!marketingActivitySpirits.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                                </th>
+                                                </tr>
+                                        </tfoot>
+                                    </table>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSection>
+                                <apex:pageBlockSection id="pageblock_contractMechanic_marketingActivitySpirits" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                                <apex:outputPanel layout="block">
+                                   <table id="ProductTable{!marketingActivitySpirits.mechanicTypeId}">
+                                       <!--<apex:repeat var="contractMechanic" value="{!marketingActivitySpirits.selectableProducts}">  -->
+                                           <!--<tr>-->
+                                               <!--<td> -->
+                                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                                            <!--action="{!addContractLineItem}"-->
+                                                            <!--rerender="pageBlock_MarketingActivitySpirits"-->
+                                                            <!--onComplete="  preventReturnKeyPress(); setMarketingActivitySpirits(); "-->
+                                                            <!--immediate="true"-->
+                                                            <!--status="loading">-->
+                                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>         -->
+                                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[marketingActivitySpirits.productAPIName]}"/>                                -->
+                                                        <!--</apex:commandLink>  -->
+                                                    <!--</td>-->
+                                                    <!--<td><apex:outputField value="{!contractMechanic[marketingActivitySpirits.productAPIName]}"/></td>   -->
+                                                <!--</tr> -->
+                                       <!--</apex:repeat> -->
+                                       <apex:repeat var="key" value="{!marketingActivitySpirits.BbyId}" rendered="{!marketingActivitySpirits.productAPIName == 'EUR_CRM_Brand__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivitySpirits"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivitySpirits(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivitySpirits.BbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivitySpirits.BbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivitySpirits.BQbyId}" rendered="{!marketingActivitySpirits.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivitySpirits"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivitySpirits(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivitySpirits.BQbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivitySpirits.BQbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivitySpirits.BQSbyId}" rendered="{!marketingActivitySpirits.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivitySpirits"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivitySpirits(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivitySpirits.BQSbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivitySpirits.BQSbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivitySpirits.SKUbyId}" rendered="{!marketingActivitySpirits.productAPIName == 'EUR_CRM_SKU__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivitySpirits"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivitySpirits(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivitySpirits.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivitySpirits.SKUbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivitySpirits.SKUbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                   </table>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSection>
+
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:pageBlock>
+<!-- ### END MARKETING ACTIVITY SPIRITS --###################################################################################### -->
+<!-- ### MARKETING ACTIVITY WINES --############################################################################################ -->
+                </div>
+                <div id="tab_MarketingActivityWines">
+                    <apex:pageBlock id="pageBlock_MarketingActivityWines">
+                        <apex:outputPanel id="inputArea_MarketingActivityWines">
+                            <!--<apex:pageBlockSection title="{!$Label.EUR_CRM_Lump_Sum}"  >-->
+                                <!--<apex:pageBlockSectionItem >-->
+                                    <!--<apex:outputLabel value="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Lumpsum_Value__c.label}" />-->
+                                    <!--<apex:inputField value="{!marketingActivityWines.contractActivityItem.EUR_CRM_Lumpsum_Value__c}"/>-->
+                                <!--</apex:pageBlockSectionItem>-->
+                            <!--</apex:pageBlockSection>-->
+                            <apex:outputPanel id="bqSelection_MarketingActivityWines"  >
+                                <apex:pageBlockSection id="pageblock_lineItem_MarketingActivityWines" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                                    <!-- ### table POURING REFUND Wines-->
+                                    <apex:outputPanel layout="block">
+                                    <table id="ContractProductItemTable{!marketingActivityWines.mechanicTypeId}">
+                                    <apex:variable var="i" value="{!0}"/>
+                                        <apex:repeat var="cpi" value="{!marketingActivityWines.contractProductItems}">
+                                            <tr id="marketingActivityWines_row_{!cpi[marketingActivityWines.productAPIName]}" class="cpiContent">
+                                               <td class="rowId" id="{!cpi[marketingActivityWines.productAPIName]}">   
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                                            action="{!removeContractLineItem}"
+                                                            rerender="pageBlock_MarketingActivityWines"
+                                                            onComplete=" preventReturnKeyPress(); setMarketingActivityWines(); "
+                                                            immediate="true"
+                                                            status="loading">
+                                                            <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>            
+                                                            <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[marketingActivityWines.productAPIName]}"/> 
+                                                            <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                                        </apex:commandLink>  
+                                                    </td>
+                                                    <td><apex:outputField styleClass="cpiProduct" value="{!cpi[marketingActivityWines.productAPIName]}"/></td>   
+                                                    <td> 
+                                                    <div class="requiredInput">
+                                                        <div class="requiredBlock"/>
+                                                        <apex:inputField styleclass="cpiTotalSpend" value="{!cpi.EUR_CRM_Marketing_Amount__c}" onKeyUp="$('#marketingActivityWines_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!marketingActivityWines.mechanicTypeId}'))));"  />
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <apex:inputField value="{!cpi.EUR_CRM_AnP__c}"/>
+                                                    </td>
+                                            </tr>          
+                                        <apex:variable var="i" value="{!i+1}"/>         
+                                       </apex:repeat> 
+                                       <tfoot>
+                                            <tr>
+                                                <th style="text-align:right;" colspan="2" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                                <th id="marketingActivityWines"  >
+                                                    <span id="marketingActivityWines_span_footer_total"  >
+                                                    {!marketingActivityWines.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                                </th>
+                                                </tr>
+                                        </tfoot>
+                                    </table>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSection>
+                                <apex:pageBlockSection id="pageblock_contractMechanic_marketingActivityWines" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                                <apex:outputPanel layout="block">
+                                   <table id="ProductTable{!marketingActivityWines.mechanicTypeId}">
+                                       <!--<apex:repeat var="contractMechanic" value="{!marketingActivityWines.selectableProducts}">  -->
+                                           <!--<tr>-->
+                                               <!--<td> -->
+                                                   <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                                            <!--action="{!addContractLineItem}"-->
+                                                            <!--rerender="pageBlock_MarketingActivityWines"-->
+                                                            <!--onComplete="  preventReturnKeyPress(); setMarketingActivityWines(); "-->
+                                                            <!--immediate="true"-->
+                                                            <!--status="loading">-->
+                                                            <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>         -->
+                                                            <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[marketingActivityWines.productAPIName]}"/>                                -->
+                                                        <!--</apex:commandLink>  -->
+                                                    <!--</td>-->
+                                                    <!--<td><apex:outputField value="{!contractMechanic[marketingActivityWines.productAPIName]}"/></td>   -->
+                                                <!--</tr> -->
+                                       <!--</apex:repeat> -->
+                                       <apex:repeat var="key" value="{!marketingActivityWines.BbyId}" rendered="{!marketingActivityWines.productAPIName == 'EUR_CRM_Brand__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivityWines"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivityWines(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivityWines.BbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivityWines.BbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivityWines.BQbyId}" rendered="{!marketingActivityWines.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivityWines"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivityWines(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivityWines.BQbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivityWines.BQbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivityWines.BQSbyId}" rendered="{!marketingActivityWines.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivityWines"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivityWines(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivityWines.BQSbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivityWines.BQSbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                       <apex:repeat var="key" value="{!marketingActivityWines.SKUbyId}" rendered="{!marketingActivityWines.productAPIName == 'EUR_CRM_SKU__c'}">
+                                           <tr>
+                                               <td>
+                                                   <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                                     action="{!addContractLineItem}"
+                                                                     rerender="pageBlock_MarketingActivityWines"
+                                                                     onComplete="  preventReturnKeyPress(); setMarketingActivityWines(); "
+                                                                     immediate="true"
+                                                                     status="loading">
+                                                       <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!marketingActivityWines.mechanicTypeEnglishName}"/>
+                                                       <apex:param name="PARAM_PRODUCT_ID" value="{!marketingActivityWines.SKUbyId[key].Id}"/>
+                                                   </apex:commandLink>
+                                               </td>
+                                               <td><apex:outputField value="{!marketingActivityWines.SKUbyId[key].Name}"/></td>
+                                           </tr>
+                                       </apex:repeat>
+                                   </table>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSection>
+
+                            </apex:outputPanel>
+                        </apex:outputPanel>
+                    </apex:pageBlock>
+                </div>
+<!-- ### END MARKETING ACTIVITY WINES --###################################################################################### -->
+<!-- ### MARKETING    ######################################################################################### -->
+        <div id="tab_Marketing">    
+            <div id="marketingTabs" class="tabLink">
+                <ul> 
+                    <!--        
+                    <li><a href="#tab_MarketingActivitySpirits">{!marketingActivitySpirits.mechanicTypeName}</a></li> 
+                    <li><a href="#tab_MarketingActivityWines">{!marketingActivityWines.mechanicTypeName}</a></li> 
+                    -->
+                    <li><a href="#tab_Trips">{!trips.mechanicTypeName}</a></li> 
+                    <li><a href="#tab_Education">{!education.mechanicTypeName}</a></li> 
+                    <li><a href="#tab_FreeStock">{!freeStock.mechanicTypeName}</a></li> 
+                </ul>
+                <div id="tab_Trips">                
+<!-- ### TRIPS ################################################################################# --> 
+                    <apex:pageBlock id="pageBlock_Trips">
+                        <apex:pageBlockSection id="pageblock_lineItem_Trips" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                            <!-- ### table POURING REFUND Wines-->
+                            <apex:outputPanel layout="block">
+                            <table id="ContractProductItemTable{!trips.mechanicTypeId}">
+                            <apex:variable var="i" value="{!0}"/>
+                                <apex:repeat var="cpi" value="{!trips.contractProductItems}">
+                                    <tr id="trips_row_{!cpi[trips.productAPIName]}" class="cpiContent">
+                                       <td class="rowId" id="{!cpi[trips.productAPIName]}">   
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                                    action="{!removeContractLineItem}"
+                                                    rerender="pageBlock_Trips"
+                                                    onComplete=" preventReturnKeyPress(); setTrips(); "
+                                                    immediate="true"
+                                                    status="loading">
+                                                    <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>            
+                                                    <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[trips.productAPIName]}"/> 
+                                                     <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                                </apex:commandLink>  
+                                            </td>
+                                            <td><apex:outputField styleClass="cpiProduct" value="{!cpi[trips.productAPIName]}"/> 
+                                            </td>  
+                                            <!--<td>  -->
+                                                <!--<div class="requiredInput">-->
+                                                <!--<div class="requiredBlock"/> -->
+                                                <!--
+                                                <apex:inputField value="{!cpi.EUR_CRM_Trip_Name__c}"  />
+                                           
+                                                <apex:variable var="prodId" value="{!cpi[trips.productAPIName]}" />
+                                                <apex:variable var="wrapper" value="{!trips.productContractEventMap[prodId]}" />
+                                                wrapper.contractEventOptions
+                                                 --> 
+                                                  
+                                                <!--<apex:selectList size="1" value="{!cpi.EUR_CRM_Contract_Event__c}"  >-->
+                                                <!--<apex:selectOptions value="{!trips.productContractEventMap[cpi[trips.productAPIName]].contractEventOptions}"  /> -->
+                                                <!--</apex:selectList>  </div>-->
+                                                 
+                                            <!--</td> -->
+                                            <td>
+                                                <div class="requiredInput">
+                                                <div class="requiredBlock"/>
+                                                <apex:inputField value="{!cpi.EUR_CRM_No_of_People__c}"  />
+                                                </div>
+                                            </td> 
+                                            <td>
+                                                <div class="requiredInput">
+                                                <div class="requiredBlock"/>
+                                                <apex:inputField styleclass="cpiTotalSpend" value="{!cpi.EUR_CRM_Marketing_Amount__c}" onKeyUp="$('#trips_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!trips.mechanicTypeId}'))));" />
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <apex:inputField value="{!cpi.EUR_CRM_AnP__c}"/>
+                                            </td>
+                                    </tr>          
+                                <apex:variable var="i" value="{!i+1}"/>         
+                               </apex:repeat> 
+                               <tfoot>
+                                    <tr>
+                                        <th style="text-align:right;" colspan="3" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                        <th id="trips"  >
+                                            <span id="trips_span_footer_total"  >
+                                            {!trips.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                        </th>
+                                        </tr>
+                                </tfoot>
+                            </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        <apex:pageBlockSection id="pageblock_contractMechanic_trips" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                        <apex:outputPanel layout="block">
+                           <table id="ProductTable{!trips.mechanicTypeId}">
+                               <!--<apex:repeat var="contractMechanic" value="{!trips.selectableProducts}">  -->
+                                   <!--<tr>-->
+                                       <!--<td> -->
+                                           <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                                    <!--action="{!addContractLineItem}"-->
+                                                    <!--rerender="pageBlock_Trips"-->
+                                                    <!--onComplete="  preventReturnKeyPress(); setTrips(); "-->
+                                                    <!--immediate="true"-->
+                                                    <!--status="loading">-->
+                                                    <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>         -->
+                                                    <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[trips.productAPIName]}"/>                                -->
+                                                <!--</apex:commandLink>  -->
+                                            <!--</td>-->
+                                            <!--<td><apex:outputField value="{!contractMechanic[trips.productAPIName]}"/></td>   -->
+                                        <!--</tr> -->
+                               <!--</apex:repeat> -->
+                               <apex:repeat var="key" value="{!trips.BbyId}" rendered="{!trips.productAPIName == 'EUR_CRM_Brand__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Trips"
+                                                             onComplete="  preventReturnKeyPress(); setTrips(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!trips.BbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!trips.BbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!trips.BQbyId}" rendered="{!trips.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Trips"
+                                                             onComplete="  preventReturnKeyPress(); setTrips(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!trips.BQbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!trips.BQbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!trips.BQSbyId}" rendered="{!trips.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Trips"
+                                                             onComplete="  preventReturnKeyPress(); setTrips(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!trips.BQSbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!trips.BQSbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!trips.SKUbyId}" rendered="{!trips.productAPIName == 'EUR_CRM_SKU__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Trips"
+                                                             onComplete="  preventReturnKeyPress(); setTrips(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!trips.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!trips.SKUbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!trips.SKUbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                           </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                    </apex:pageBlock> 
+                </div>
+<!-- ### END TRIPS  ########################################################################## -->
+<!-- ### EDUCATION ################################################################################# -->
+                <div id="tab_Education">
+                    <apex:pageBlock id="pageBlock_Education">
+                        <apex:pageBlockSection id="pageblock_lineItem_Education" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                            <!-- ### table POURING REFUND Wines-->
+                            <apex:outputPanel layout="block">
+                            <table id="ContractProductItemTable{!education.mechanicTypeId}">
+                            <apex:variable var="i" value="{!0}"/>
+                                <apex:repeat var="cpi" value="{!education.contractProductItems}">
+                                    <tr id="education_row_{!cpi[education.productAPIName]}" class="cpiContent">
+                                       <td class="rowId" id="{!cpi[education.productAPIName]}">   
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                                    action="{!removeContractLineItem}"
+                                                    rerender="pageBlock_Education"
+                                                    onComplete=" preventReturnKeyPress(); setEducation(); "
+                                                    immediate="true"
+                                                    status="loading">
+                                                    <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>            
+                                                    <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[education.productAPIName]}"/> 
+                                                    <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                                </apex:commandLink>  
+                                        </td>
+                                        <td><apex:outputField styleClass="cpiProduct" value="{!cpi[education.productAPIName]}"/></td>
+                                            <!--<td>-->
+                                                <!--<div class="requiredInput">-->
+                                                <!--<div class="requiredBlock"/>-->
+                                                <!--
+                                                <apex:inputField value="{!cpi.EUR_CRM_Education_Name__c}"  />
+                                                -->
+                                                <!--<apex:selectList size="1" value="{!cpi.EUR_CRM_Contract_Event__c}"  >-->
+                                                <!--<apex:selectOptions value="{!education.productContractEventMap[cpi[education.productAPIName]].contractEventOptions}"  /> -->
+                                                <!--</apex:selectList>-->
+
+                                                <!--</div>-->
+                                            <!--</td>  -->
+                                        <td>
+                                            <div class="requiredInput">
+                                            <div class="requiredBlock"/>
+                                            <apex:inputField styleclass="cpiTotalSpend"
+                                                             value="{!cpi.EUR_CRM_Marketing_Amount__c}"
+                                                             onKeyUp="$('#education_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!education.mechanicTypeId}'))));"  />
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <apex:inputField value="{!cpi.EUR_CRM_AnP__c}"/>
+                                        </td>
+                                    </tr>          
+                                <apex:variable var="i" value="{!i+1}"/>         
+                               </apex:repeat> 
+                               <tfoot>
+                                    <tr>
+                                        <th style="text-align:right;" colspan="2" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                        <th id="education"  >
+                                            <span id="education_span_footer_total"  >
+                                            {!education.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                        </th>
+                                        </tr>
+                                </tfoot>
+                            </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        <apex:pageBlockSection id="pageblock_contractMechanic_education" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                        <apex:outputPanel layout="block">
+                           <table id="ProductTable{!education.mechanicTypeId}">
+                               <!--<apex:repeat var="contractMechanic" value="{!education.selectableProducts}">  -->
+                                   <!--<tr>-->
+                                       <!--<td> -->
+                                           <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                                    <!--action="{!addContractLineItem}"-->
+                                                    <!--rerender="pageBlock_Education"-->
+                                                    <!--onComplete="  preventReturnKeyPress(); setEducation(); "-->
+                                                    <!--immediate="true"-->
+                                                    <!--status="loading">-->
+                                                    <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>         -->
+                                                    <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[education.productAPIName]}"/>                                -->
+                                                <!--</apex:commandLink>  -->
+                                            <!--</td>-->
+                                            <!--<td><apex:outputField value="{!contractMechanic[education.productAPIName]}"/></td>   -->
+                                        <!--</tr> -->
+                               <!--</apex:repeat> -->
+                               <apex:repeat var="key" value="{!education.BbyId}" rendered="{!education.productAPIName == 'EUR_CRM_Brand__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Education"
+                                                             onComplete="  preventReturnKeyPress(); setEducation(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!education.BbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!education.BbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!education.BQbyId}" rendered="{!education.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Education"
+                                                             onComplete="  preventReturnKeyPress(); setEducation(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!education.BQbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!education.BQbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!education.BQSbyId}" rendered="{!education.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Education"
+                                                             onComplete="  preventReturnKeyPress(); setEducation(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!education.BQSbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!education.BQSbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!education.SKUbyId}" rendered="{!education.productAPIName == 'EUR_CRM_SKU__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_Education"
+                                                             onComplete="  preventReturnKeyPress(); setEducation(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!education.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!education.SKUbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!education.SKUbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                           </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                    </apex:pageBlock> 
+                </div>
+<!-- ### END EDUCATION  ########################################################################## -->
+<!-- ### FREE STOCK ################################################################################# -->
+                <div id="tab_FreeStock">
+                    <apex:pageBlock id="pageBlock_FreeStock">
+                        <apex:pageBlockSection id="pageblock_lineItem_FreeStock" title="{!$Label.EUR_CRM_Edit} {!$ObjectType.EUR_CRM_Contract_Product_Item__c.LabelPlural}" columns="1">
+                            <!-- ### table POURING REFUND Wines-->
+                            <apex:outputPanel layout="block">
+                            <table id="ContractProductItemTable{!freeStock.mechanicTypeId}">
+                            <apex:variable var="i" value="{!0}"/>
+                                <apex:repeat var="cpi" value="{!freeStock.contractProductItems}">
+                                    <tr id="freeStock_row_{!cpi[freeStock.productAPIName]}" class="cpiContent">
+                                       <td class="rowId" id="{!cpi[freeStock.productAPIName]}">   
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Remove}"
+                                                    action="{!removeContractLineItem}"
+                                                    rerender="pageBlock_FreeStock"
+                                                    onComplete=" preventReturnKeyPress(); setFreeStock(); "
+                                                    immediate="true"
+                                                    status="loading">
+                                                    <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>            
+                                                    <apex:param name="PARAM_PRODUCT_ID" value="{!cpi[freeStock.productAPIName]}"/> 
+                                                    <apex:param name="PARAM_ROW_NUMBER"   value="{!i}"/>                               
+                                                </apex:commandLink>  
+                                            </td>
+                                            <td><apex:outputField styleClass="cpiProduct" value="{!cpi[freeStock.productAPIName]}"/></td>   
+                                            <td>
+                                                <div class="requiredInput">
+                                                <div class="requiredBlock"/>
+                                                <apex:inputField styleclass="cpiTotalSpend" value="{!cpi.EUR_CRM_Marketing_Amount__c}" onKeyUp="$('#freeStock_span_footer_total').text(formatToCurrency(sumTotalSpend($('#ContractProductItemTable{!freeStock.mechanicTypeId}'))));"  />
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <apex:inputField value="{!cpi.EUR_CRM_AnP__c}"/>
+                                            </td>
+                                    </tr>          
+                                <apex:variable var="i" value="{!i+1}"/>         
+                               </apex:repeat> 
+                               <tfoot>
+                                    <tr>
+                                        <th style="text-align:right;" colspan="2" rowspan="1"><apex:outputLabel value="{!$Label.EUR_CRM_Total_Value}: "/></th>
+                                        <th id="freeStock"  >
+                                            <span id="freeStock_span_footer_total"  >
+                                            {!freeStock.contractActivityItem.EUR_CRM_Product_Items_Total__c}</span>
+                                        </th>
+                                        </tr>
+                                </tfoot>
+                            </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                        <apex:pageBlockSection id="pageblock_contractMechanic_freeStock" title="{!$Label.EUR_CRM_Select_Products}" columns="1">
+                        <apex:outputPanel layout="block">
+                           <table id="ProductTable{!freeStock.mechanicTypeId}">
+                               <!--<apex:repeat var="contractMechanic" value="{!freeStock.selectableProducts}">  -->
+                                   <!--<tr>-->
+                                       <!--<td> -->
+                                           <!--<apex:commandLink value="{!$Label.EUR_CRM_Add}"-->
+                                                    <!--action="{!addContractLineItem}"-->
+                                                    <!--rerender="pageBlock_FreeStock"-->
+                                                    <!--onComplete="  preventReturnKeyPress(); setFreeStock(); "-->
+                                                    <!--immediate="true"-->
+                                                    <!--status="loading">-->
+                                                    <!--<apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>         -->
+                                                    <!--<apex:param name="PARAM_PRODUCT_ID" value="{!contractMechanic[freeStock.productAPIName]}"/>                                -->
+                                                <!--</apex:commandLink>  -->
+                                            <!--</td>-->
+                                            <!--<td><apex:outputField value="{!contractMechanic[freeStock.productAPIName]}"/></td>   -->
+                                        <!--</tr> -->
+                               <!--</apex:repeat> -->
+                               <apex:repeat var="key" value="{!freeStock.BbyId}" rendered="{!freeStock.productAPIName == 'EUR_CRM_Brand__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_FreeStock"
+                                                             onComplete="  preventReturnKeyPress(); setFreeStock(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!freeStock.BbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!freeStock.BbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!freeStock.BQbyId}" rendered="{!freeStock.productAPIName == 'EUR_CRM_Brand_Quality__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_FreeStock"
+                                                             onComplete="  preventReturnKeyPress(); setFreeStock(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!freeStock.BQbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!freeStock.BQbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!freeStock.BQSbyId}" rendered="{!freeStock.productAPIName == 'EUR_CRM_Brand_Quality_Size__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_FreeStock"
+                                                             onComplete="  preventReturnKeyPress(); setFreeStock(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!freeStock.BQSbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!freeStock.BQSbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                               <apex:repeat var="key" value="{!freeStock.SKUbyId}" rendered="{!freeStock.productAPIName == 'EUR_CRM_SKU__c'}">
+                                   <tr>
+                                       <td>
+                                           <apex:commandLink value="{!$Label.EUR_CRM_Add}"
+                                                             action="{!addContractLineItem}"
+                                                             rerender="pageBlock_FreeStock"
+                                                             onComplete="  preventReturnKeyPress(); setFreeStock(); "
+                                                             immediate="true"
+                                                             status="loading">
+                                               <apex:param name="PARAM_MECHANIC_TYPE_NAME" value="{!freeStock.mechanicTypeEnglishName}"/>
+                                               <apex:param name="PARAM_PRODUCT_ID" value="{!freeStock.SKUbyId[key].Id}"/>
+                                           </apex:commandLink>
+                                       </td>
+                                       <td><apex:outputField value="{!freeStock.SKUbyId[key].Name}"/></td>
+                                   </tr>
+                               </apex:repeat>
+                           </table>
+                            </apex:outputPanel>
+                        </apex:pageBlockSection>
+                    </apex:pageBlock> 
+                </div>
+            </div>
+        </div>
+<!-- ### END FREE STOCK  ########################################################################## -->
+    <span class="requiredLegend brandTertiaryFgr">
+        <span class="requiredExampleOuter">
+            <span class="requiredExample">&nbsp;
+            </span>
+        </span>
+        <span class="requiredMark">*</span><span class="requiredText"> = 
+            {!$Label.EUR_CRM_Required_Information}
+        </span>
+    </span>
+    </div>
+<!-- END MARKETING  ############################################################################################ -->
+<!-- ########################################################################################################### -->
+    <script>
+    $('#mechanicTypeTabs').tabs();
+    $('#marketingTabs').tabs();
+    </script> 
+</div> 
+</apex:form>
+</apex:page>

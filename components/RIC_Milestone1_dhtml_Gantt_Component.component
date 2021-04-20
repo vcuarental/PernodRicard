@@ -1,0 +1,410 @@
+<apex:component controller="RIC_dhtmlx_Gantt_Controller" allowDML="true">
+    <apex:includeScript value="{!$Resource.RIC_gant_codebase}/gant_codebase/codebase/dhtmlxgantt.js"/>
+    <apex:includeScript value="{!$Resource.RIC_gant_codebase}/gant_codebase/codebase/locale/locale_fr.js"/>
+    <apex:stylesheet value="{!$Resource.RIC_gant_codebase}/gant_codebase/codebase/dhtmlxgantt.css"/>
+    <apex:includeScript value="{!$Resource.RIC_gant_codebase}/gant_codebase/codebase/ext/dhtmlxgantt_marker.js"/>
+    <apex:attribute name="target" type="String" required="true" 
+                    description="The Project This is For" assignTo="{!mytarget}" />
+    <html>
+		<head>
+            <meta http-equiv="X-UA-Compatible" content="IE=8" />
+        </head>
+        <style type="text/css">
+            html, body{ height:100%; width: 100%; padding:0px; margin:0px; overflow: hidden;}
+            #gantt_here{
+                background:white;
+                width:99%;
+            	height:400px;
+            }
+            .parent{
+            	background: #efefef;
+            }
+            .gantt_scale_cell.weekend, .gantt_task_cell.weekend{
+            	background-color: #EFF5FD;
+            }
+            .gantt_selected .gantt_task_cell.weekend{
+            	background-color: #f0e493;
+            }
+            .gantt_task_scale .gantt_scale_cell.highlighted-column {
+                color: #454545;
+                font-weight: bold;
+            }
+            .todayDate {background:rgba(124,252,0, 0.4);}
+        </style>
+        <body >
+            <apex:actionFunction name="retourAction" action="{!retour}" rerender="myHiddenField"/>
+            
+            <div class="controls">
+                <apex:commandButton value="Retour" action="{!retour}" onclick="retourClick('{!mytarget}'); return false;"/>
+                <apex:commandButton value="Sauvegarder" onclick="onSaveClick(); return false;"/>
+            </div>
+            <div id="gantt_here"></div>
+            <div class="controls">
+                <input type="radio" id="scale1" name="scale" value="1" /><label for="scale1">Vue quotidienne</label>
+                <input type="radio" id="scale2" name="scale" value="2" /><label for="scale2">Vue hebdomadaire</label>
+                <input type="radio" id="scale3" name="scale" value="3" checked="true"/><label for="scale3">Vue mensuelle</label>
+                <input type="radio" id="scale4" name="scale" value="4" /><label for="scale4">Vue annuelle</label>
+            </div>
+        </body>
+        
+        <script type="text/javascript">
+        var pageModified = false;
+        var timer;
+        var status = 1;
+        var tasks = {!projectGanttJson};
+        
+        Date.prototype.getDayName = function () {
+            var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            return days[this.getDay()];
+        }
+        
+        //Execute the Save action in Salesforce. This updates all the Tasks' info based on the changes made on the Gantt
+        function onSaveClick() {
+            var tasksToSalesforce = getAllTasks();
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.RIC_dhtmlx_Gantt_Controller.saveAllTasksToSalesforce}',
+                tasksToSalesforce, 
+                function(result, event){
+                },
+                {escape: true}
+            );
+            
+            gantt.alert({
+                title:"Confirmation",
+                type:"alert-error",
+                text:"Modifications enregistrées!"
+            });
+        }
+        
+        //Function used to redirect the user to the record in SF after clicking on the Task' bar or the 'Retour et Annuler' button
+        function retourClick(id) {
+            if(pageModified == true) {
+                gantt.confirm({
+                    text: "Quitter sans sauvegarder les modifications?",
+                    ok:"Oui", 
+                    cancel:"Non",
+                    callback: function(result){
+                        if(result){
+                            parent.location.href = '/'+id;
+                        }
+                    }
+                });
+            }
+            else {
+                parent.location.href = '/'+id;
+            }
+        };
+        
+        //Get all the Gantt tasks and store their info in a String in order to send them to the controller after Saving
+        function getAllTasks() {
+            var tasks = gantt.getTaskByTime();
+            var stringToSendToSF = '';
+            for (var i=0; i<tasks.length; i++){
+                stringToSendToSF += tasks[i].id + '>' + tasks[i].start_date + '>' + tasks[i].end_date + '>' + tasks[i].text + '>' + tasks[i].assigned_toId + ';';
+            }
+            pageModified = false;
+            return stringToSendToSF;
+        };
+        
+        //Set the Date scale unit for each radio button
+        function setScaleConfig(value){
+            switch (value) {
+                case "1":
+                    gantt.config.scale_unit = "day";
+                    gantt.config.step = 1;
+                    gantt.config.date_scale = "%d %M";
+                    gantt.config.subscales = [];
+                    gantt.config.min_column_width = 50;
+                    gantt.templates.date_scale = null;
+                    break;
+                case "2":
+                    var weekScaleTemplate = function(date){
+                        var dateToStr = gantt.date.date_to_str("%d %M");
+                        var endDate = gantt.date.add(gantt.date.add(date, 1, "week"), -1, "day");
+                        return dateToStr(date) + " - " + dateToStr(endDate);
+                    };
+                    gantt.config.start_date = new Date('{!earliestStartDate}');
+                    gantt.config.end_date = new Date('{!latestEndDate}');
+                    gantt.config.scale_unit = "week";
+                    gantt.config.step = 1;
+                    gantt.templates.date_scale = weekScaleTemplate;
+                    gantt.config.subscales = [
+                        {unit:"day", step:1, date:"%D" }
+                    ];
+                    gantt.config.min_column_width = 30;
+                    break;
+                case "3":
+                    gantt.config.start_date = new Date('{!earliestStartDate}');
+                    gantt.config.end_date = new Date('{!latestEndDate}');
+                    gantt.config.scale_unit = "month";
+                    gantt.config.date_scale = "%M, %Y";
+                    gantt.config.subscales = [
+                        {unit:"day", step:1, date:"%j" }
+                    ];
+                    gantt.config.scale_height = 50;
+                    gantt.config.min_column_width = 20;
+                    gantt.templates.date_scale = null;
+                    break;
+                case "4":
+                    var dateYear = new Date('{!earliestStartDate}').getUTCFullYear();
+                    var endDateYear = new Date('{!latestEndDate}').getUTCFullYear();
+                    gantt.config.start_date = new Date(dateYear, 0, 1);
+                    gantt.config.end_date = new Date(endDateYear, 11, 31);
+                    gantt.config.scale_unit = "year";
+                    gantt.config.step = 1;
+                    gantt.config.date_scale = "%Y";
+                    gantt.config.min_column_width = 27;
+                    gantt.config.scale_height = 50;
+                    gantt.templates.date_scale = null;
+                    gantt.config.subscales = [
+                        {unit:"month", step:1, date:"%M" }
+                    ];
+                    break;
+            }
+        }
+        
+        //Function used to get the right Radio Button chosen in order to display the right Date Scale Unit
+        var func = function(e) {
+            e = e || window.event;
+            var el = e.target || e.srcElement;
+            var value = el.value;
+            setScaleConfig(value);
+            gantt.render();
+        };
+        
+        var els = document.getElementsByName("scale");
+        for (var i = 0; i < els.length; i++) {
+            els[i].onclick = func;
+        }
+        
+        //Specify the info displayed in the bar of a Task
+        gantt.templates.task_text=function(start,end,task){
+            return task.text;
+        };
+        
+        //Specify the date subscale unit
+        gantt.config.subscales = [
+            {unit:"day", step:1, date:"%j" }
+        ];
+		
+        gantt.attachEvent("onGanttReady", function(){
+            var projEndDateValue = '{!projectEndDate}';
+            if(projEndDateValue == null || projEndDateValue == '')
+                gantt.config.show_markers = false;
+        });
+        
+        gantt.attachEvent("onTaskDrag", function(id, mode, task, original, e) {
+            //Used to store that a change has been made on the page on a task drag
+            pageModified = true;
+            var modes = gantt.config.drag_mode; 
+            if(mode == modes.move || mode == modes.resize){
+                
+                //Handle the scrolling through the chart when dragging tasks/resizing tasks
+                var oldStartDatePosition = gantt.posFromDate(original.start_date);
+                var currentStartDatePosition = gantt.posFromDate(task.start_date);
+                var oldEndDatePosition = gantt.posFromDate(original.end_date);
+                var currentEndDatePosition = gantt.posFromDate(task.end_date);
+                var startDatesPositionsDifference = currentStartDatePosition - oldStartDatePosition;
+                var endDatesPositionsDifference = currentEndDatePosition - oldEndDatePosition;
+                var currentScrollPosition = gantt.getScrollState().x;
+                /*if(mode == modes.move && gantt.getParent(id) == 0) {
+                    gantt.scrollTo(currentScrollPosition + (startDatesPositionsDifference), null);
+                }*/
+                
+                //Align the children to the parent when moving the parent
+                if(gantt.getParent(id) != 0 || gantt.hasChild(id)) {
+                    var childrens = gantt.getChildren(id);
+                    if(mode == modes.move) {
+                        //Keep the childs in the parent's dates borders
+                        var diff = task.start_date - original.start_date;
+                        for(var i = 0; i < childrens.length; i++) {
+                            var child = gantt.getTask(childrens[i]);
+                            child.start_date = new Date(+child.start_date + diff);
+                            child.end_date = new Date(+child.end_date + diff);
+                        }
+                    }
+                    
+                    //Align the children to the parent dates when moving/resizing the
+                    //children. Do not allow the end date or the start date of the children
+                    //to depass the dates of the parent
+                    if(childrens.length == 0) {
+                        var resizeDiff = original.duration*(1000*60*60*24);
+                        var parent = gantt.getTask(task.parent);
+                        if(+task.end_date > +parent.end_date){
+                            task.end_date = new Date(parent.end_date);
+                            if(mode == modes.move)
+                                task.start_date = new Date(task.end_date - resizeDiff);
+                        }
+                        if(+task.start_date < +parent.start_date){
+                            task.start_date = new Date(parent.start_date);
+                            if(mode == modes.move)
+                                task.end_date = new Date(+task.start_date + resizeDiff);
+                        }
+                    }
+                    
+                    var latestDate;
+                    var earliestDate;
+                    //Do not allow the parents dates to be < of the earliest children start date
+                    if(gantt.hasChild(id) && mode == modes.resize) {
+                        for(var i = 0; i < childrens.length; i++) {
+                            var child = gantt.getTask(childrens[i]);
+                            if(latestDate == null) {
+                                latestDate = child.end_date;
+                            }
+                            else {
+                                if(child.end_date > latestDate)
+                                    latestDate = child.end_date;                            
+                            }
+                            
+                            if(earliestDate == null) {
+                                earliestDate = child.start_date;
+							}
+                            else {
+                                if(child.start_date < earliestDate){
+                                    earliestDate = child.start_date;
+                                }    
+							}
+                        }
+                        if(+task.end_date < +latestDate){
+                            task.end_date = latestDate;
+                        }
+                        
+                        if(+task.start_date > +earliestDate){
+                            task.start_date = earliestDate;
+                        }
+                    }
+                }
+            }
+            gantt.refreshData();
+            return true;
+        });
+        
+        //Specify the sections of the popup box on Task' double click
+        gantt.config.lightbox.sections = [
+            {name:"description",height:50, type:"textarea", map_to:"text", focus:true},
+            {name:"template", height:16, type:"template", map_to:"my_template"},
+            {name:"time", height:72, type:"duration", map_to:"auto"}
+        ];
+        
+        //Initialize the Lookup field 'Assigned To' before the double click popup appears.
+        //The lookup field is being used as an HTML element and not as an apex:inputField element
+        //in order to avoid the AJAX conflict between the page and the lookup behaviour
+        gantt.attachEvent("onBeforeLightbox", function(id) {
+            if(id.startsWith("{!ricActionKeyPrefix}")) {
+                var task = gantt.getTask(id);
+                var userName = task.assigned_to;
+                task.my_template = "<form id=\"j_id0:j_id1\" name=\"j_id0:j_id1\" method=\"post\"  enctype=\"application/x-www-form-urlencoded\"><input type=\"hidden\" " + 
+                    "name=\"j_id0:j_id1\" value=\"j_id0:j_id1\"><input type=\"hidden\" name=\"j_id0:j_id1:j_id2_lkid\" "+
+                    "id=\"j_id0:j_id1:j_id2_lkid\" value=\"0054E000001VH3E\"><input type=\"hidden\" name=\"j_id0:j_id1:j_id2_lkold\" id=\"j_id0:j_id1:j_id2_lkold\" value=\""+userName+"\">"+
+                    "<input type=\"hidden\" name=\"j_id0:j_id1:j_id2_lktp\" id=\"j_id0:j_id1:j_id2_lktp\" value=\"StandardUserLookup\"><input type=\"hidden\" name=\"j_id0:j_id1:j_id2_lspf\" "+
+                    "id=\"j_id0:j_id1:j_id2_lspf\" value=\"0\"><input type=\"hidden\" name=\"j_id0:j_id1:j_id2_lspfsub\" id=\"j_id0:j_id1:j_id2_lspfsub\" value=\"0\"><input type=\"hidden\" "+
+                    "name=\"j_id0:j_id1:j_id2_mod\" id=\"j_id0:j_id1:j_id2_mod\" value=\"1\"><span class=\"lookupInput\"><input id=\"j_id0:j_id1:j_id2\" maxlength=\"255\" "+
+                    "name=\"j_id0:j_id1:j_id2\" onchange=\"getElementByIdCS('j_id0:j_id1:j_id2_lkid').value='';getElementByIdCS('j_id0:j_id1:j_id2_mod').value='1';\" size=\"20\" "+
+                    "type=\"text\" value=\"" + userName + "\"><script>new ForeignKeyInputElement(\"j_id0:j_id1:j_id2\",\"/_ui/common/data/LookupValidationServlet\",null,true,"+
+                    "{\"acent\":\"005\"});<\/script><a "+
+                    "href=\"javascript:%20openLookup%28%27%2F_ui%2Fcommon%2Fdata%2FLookupPage%3Flkfm%3Dj_id0%253Aj_id1%26lknm%3Dj_id0%253Aj_id1%"+
+                    "253Aj_id2%26lktp%3D%27%20%2B%20getElementByIdCS%28%27j_id0%3Aj_id1%3Aj_id2_lktp%27%29.value%2C670%2C%271%27%2C%27%26lksrch%3D%27%20%2B%20escapeUTF%28get"+
+                    "ElementByIdCS%28%27j_id0%3Aj_id1%3Aj_id2%27%29.value.substring%280%2C%2080%29%29%29\" id=\"j_id0:j_id1:j_id2_lkwgt\" onclick=\"setLastMousePosition(event)\" "+
+                    "title=\"Assigné à Lookup (New Window)\"><img src=\"/img/s.gif\" alt=\"Assigné à Lookup (New Window)\" class=\"lookupIcon\" onblur=\"this.className = 'lookupIcon';\" "+
+                    "onfocus=\"this.className = 'lookupIconOn';\" onmouseout=\"this.className = 'lookupIcon';this.className = 'lookupIcon';\" onmouseover=\"this.className = "+
+                    "'lookupIconOn';this.className = 'lookupIconOn';\" title=\"Assigné à Lookup (New Window)\"></a></span><div id=\"j_id0:j_id1:j_id3\"></div></form>";
+            }
+            return true;
+        });
+        
+        //Behaviour: updates a Task when we double click on a it and change its info the popup box
+        //This is used to update the Task's Assigned To User in the Gantt
+        gantt.attachEvent("onLightboxSave", function(id, task, is_new){
+            if(document.getElementById('j_id0:j_id1:j_id2_lkold') != null) {
+                var userNameValue = document.getElementById('j_id0:j_id1:j_id2_lkold').value;
+                var userIdValue = document.getElementById('j_id0:j_id1:j_id2_lkid').value;
+                task.assigned_to = userNameValue;
+                task.assigned_toId = userIdValue;
+                gantt.updateTask(id);
+            }
+            
+            return true;
+        })
+        
+        // Specify the behaviour of the Single click event on a Task.
+        // 'gridTarget' is used to identify the location where the user has clicked. We only redirect the user if he clicks
+        // on the bar but not on the grid.
+        gantt.attachEvent("onTaskClick", function(id,e){
+            var target = e.target || e.srcElement;
+            var gridTarget = false,
+                gridParent = gantt.$grid;
+            while(target){
+                if(target == gantt.$grid){
+                    gridTarget = true;
+                    break;
+                }else{
+                    target = target.parentNode;
+                }
+            }
+            
+            if(!gridTarget){
+                status = 1;
+                timer = setTimeout(function() {
+                    if (status == 1) {
+                        retourClick(id);
+                    }
+                }, 500);
+            }
+            
+            return true;
+        });
+        
+        //Add a timer that waits for the doubleClick event before executing the single click event,
+        //in order to not confuse double click with 1 click
+        gantt.attachEvent("onTaskDblClick", function(id, e) {
+            clearTimeout(timer);
+            status = 0;
+            return true;
+        });
+        
+        //Highlight Weekends and Today date cells
+        var today = new Date();
+        gantt.templates.task_cell_class = function(task, date){
+            if(date.getDayName() == 'Saturday' || date.getDayName() == 'Sunday') {
+                return "weekend";
+            }
+            if(date.getUTCDate() == today.getUTCDate()-1 && date.getUTCMonth() == today.getUTCMonth() && date.getUTCFullYear() == today.getUTCFullYear()) {
+                return "todayDate";
+            }
+            return "";
+        };
+        
+        //Specify the custom columns of the grid
+        gantt.config.columns = [
+            {name:"text",       label:"Description",  width:"170", tree: true},
+            {name:"start_date", label:"Début", width:"80", align: "center"},
+            {name:"end_date",   label:"Échéance",width:"80",align: "center" },
+            {name:"duration",   label:"Durée",width:"*",align: "center" }
+        ];
+        
+        gantt.config.start_date = new Date('{!earliestStartDate}');
+        gantt.config.end_date = new Date('{!latestEndDate}');
+        gantt.config.scale_unit = "month";
+        gantt.config.date_scale = "%M, %Y";
+        gantt.config.date_grid = "%d-%m-%Y";
+        gantt.config.row_height = 30;
+        gantt.config.min_column_width = 20;
+        gantt.config.grid_width = 390;
+        gantt.config.buttons_right = [];
+        gantt.config.details_on_create = false;
+        gantt.locale.labels.section_template = "Assigné à";
+        gantt.config.start_on_monday = true;
+        var markerId = gantt.addMarker({
+            start_date: new Date('{!projectEndDate}'), //End date of the project
+            css: "today", //a CSS class applied to the marker
+            text: "MAD", //the marker title
+        });
+        gantt.config.fit_tasks = true;
+        gantt.config.round_dnd_dates = false;
+        gantt.config.drag_links = false;
+        gantt.config.show_progress = false;
+        gantt.init("gantt_here");
+        gantt.parse(tasks);
+        </script>
+    </html>
+</apex:component>

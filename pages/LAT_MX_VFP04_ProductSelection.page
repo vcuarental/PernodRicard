@@ -1,0 +1,273 @@
+<apex:page standardController="Opportunity" extensions="LAT_MX_VFP04_ProductSelectionExtension" sidebar="false">
+
+    <style>
+        .label{margin-right:10px; font-weight:bold;}
+        .fyi{color:red; font-weight:bold;}
+        .centraliza{text-align: center;}
+        .textRight{text-align: right;}
+        .customPopup{background-color: white; border-style: solid; border-width: 2px; left: 50%; padding:10px; position: fixed; z-index: 9999; width: 550px; margin-left: -250px; top:100px;
+        }
+        font1{font-family: arial, helvetica, serif; font-weight: normal}
+        font2{font-family: arial, helvetica, serif; font-weight: bold}
+        font3{font-family: arial, helvetica, serif; font-weight: lighter}
+
+        .vfHelpText a            {position:relative;}
+        .vfHelpText a span       {display: none;}
+        .vfHelpText a:hover span {display: block;
+                                  position:absolute;
+                                  top:1.25em;
+                                  padding:2px 5px;
+                                  left:-7em; width:15em;
+                                  z-index:100;
+                                  border:1px solid orange;
+                                  background-color:#FEFDB9;
+                                  color:black;
+                                 }
+    </style>
+    
+    <script type='text/javascript'>
+        var arriba;
+        function subir(){
+            if (document.body.scrollTop != 0 || document.documentElement.scrollTop != 0){
+                window.scrollBy(0, -50);
+                arriba = setTimeout('subir()', 10);
+            }else{
+                clearTimeout(arriba);
+            }
+        }
+        function pressOnSearch(e){
+             var key;
+             if(window.event){
+                key = window.event.keyCode;//IE
+             }else{
+                key = e.which;//firefox
+             }
+             if(key==13){
+                doSearch();
+             }
+        }
+    </script>
+    
+    <apex:form id="form">
+        
+        <!-- STATUS LOADING -->
+        <apex:actionStatus id="status">
+            <apex:facet name="start">
+                <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_MX_VFP04_00028}"/>
+                <!-- LAT_MX_VFP04_00028: Espere... -->
+            </apex:facet>
+        </apex:actionStatus>
+        
+        <!-- ENCABEZADO -->
+        <apex:sectionHeader Title="{!$Label.LAT_MX_VFP04_00001}" subtitle="{!opportunity.Name}"/> 
+        <!-- LAT_MX_VFP04_00001: Administrar productos -->
+        
+        <apex:pageMessages />
+        
+        <!-- DATOS CABECERA -->
+        <apex:pageBlock title="{!$Label.LAT_MX_VFP04_00021}">
+            <apex:outputLabel styleClass="label" value="{!$ObjectType.Account.Fields.LAT_MX_AvailableCreditLimit__c.Label}:"/> &nbsp;
+            <c:LAT_FormatNumber value="{!originalAvailableCreditLimit}" decimalQuantity="2" decimalSeparated="." thousandsSeparator="," currency="{!TheOpp.CurrencyIsoCode}"/>
+            <br/>
+            <apex:outputLabel styleClass="label" value="{!$ObjectType.Opportunity.Fields.Valor_total__c.Label}:"/> &nbsp;
+            <c:LAT_FormatNumber Value="{!theOpp.Valor_total__c}" decimalQuantity="2" decimalSeparated="." thousandsSeparator="," currency="{!TheOpp.CurrencyIsoCode}"/>
+            <br/>
+            <apex:outputLabel styleClass="label" value="{!$Label.LAT_MX_VFP04_00002}:"/> &nbsp; 
+            <!-- LAT_MX_VFP04_00002: Saldo de Límite de Credito -->
+            <apex:panelGroup styleClass="fyi" rendered="{!theOpp.Account.LAT_MX_AvailableCreditLimit__c != null && (theOpp.Account.LAT_MX_AvailableCreditLimit__c < 0)}">
+                <c:LAT_FormatNumber Value="{!theOpp.Account.LAT_MX_AvailableCreditLimit__c}" decimalQuantity="2" decimalSeparated="." thousandsSeparator="," currency="{!TheOpp.CurrencyIsoCode}"/>
+            </apex:panelGroup>
+            <apex:panelGroup rendered="{!theOpp.Account.LAT_MX_AvailableCreditLimit__c != null && (theOpp.Account.LAT_MX_AvailableCreditLimit__c >= 0)}">
+                <c:LAT_FormatNumber Value="{!theOpp.Account.LAT_MX_AvailableCreditLimit__c}" decimalQuantity="2" decimalSeparated="." thousandsSeparator="," currency="{!TheOpp.CurrencyIsoCode}"/>
+            </apex:panelGroup>
+        </apex:pageBlock>
+        
+        <br/>
+        
+        <!-- SECCION DE PRODUCTOS SELECCIONADOS -->
+        <apex:pageBlock title="{!$Label.LAT_MX_VFP04_00003}" id="selected"> 
+        <!-- LAT_MX_VFP04_00003: Productos Seleccionados -->
+            
+            <!-- BOTONES DE LA TABLA SUPERIOR -->
+            <apex:pageBlockButtons >
+                <apex:commandButton action="{!doSave}" value="{!$Label.LAT_MX_VFP04_00004}" rendered="{!allowEdit}"/> 
+                <!-- LAT_MX_VFP04_00004: Grabar -->
+                <apex:commandButton action="{!doCancel}" value="{!$Label.LAT_MX_VFP04_00005}" immediate="true"/> 
+                <!-- LAT_MX_VFP04_00005: Cancelar -->
+
+                <!-- Online request to check availibity stock for products selected -->
+                <apex:commandButton status="status" reRender="status,form" action="{!doCheckAvailability}" value="{!$Label.LAT_MX_VFP04_00030}" /> 
+
+
+            </apex:pageBlockButtons>
+            
+            <apex:pageblockTable value="{!shoppingCart}" var="s">
+                <!-- COLUMNAS DE LA TABLA SUPERIOR -->           
+                <apex:column headerValue="{!$ObjectType.Product2.Label}"> 
+                    <apex:outputlink value="/{!s.PriceBookEntry.Product2Id}" > 
+                        {!s.PriceBookEntry.Product2.Name} 
+                    </apex:outputlink> 
+                </apex:column>     
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_SkuText__c.Label}"                      value="{!s.LAT_SkuText__c}"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.UOM_AR__c.Label}"                       value="{!s.UOM_AR__c}" styleClass="centraliza"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Quantity.Label}"                        value="{!s.Quantity}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.UnitPrice.Label}"                       value="{!s.UnitPrice}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.TotalPrice.Label}"                      value="{!s.TotalPrice}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.bottles_per_box__c.Label}"              value="{!s.bottles_per_box__c}" styleClass="textRight"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Descricao_do_status__c.Label}"          value="{!s.Descricao_do_status__c}"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Description.Label}"                     value="{!s.Description}"/>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_C9Quantity__c.Label}" value="{!s.LAT_C9Quantity__c }"/> 
+
+                
+                <apex:column headerValue="Inventario PRM" rendered="{!showStockValues || checkedStockValues}">
+                     <apex:outputPanel style="float: left;width: 100%;" layout="block" styleclass="vfHelpText" rendered="{!s.PriceBookEntry.Product2.Lat_Stocks__r.size != 0}">
+                        <div >
+                            <apex:outputText value="{!s.PriceBookEntry.Product2.Lat_Stocks__r[0].LAT_StockLevel__c}("></apex:outputText>
+                            <apex:outputText value="{0, number,###,###,##0}">
+                                <apex:param value="{!s.PriceBookEntry.Product2.Lat_Stocks__r[0].LAT_Stock__c}"/>
+                            </apex:outputText>)
+                            <apex:outputLink value="javascript:return false;" rendered="{! OR(s.PriceBookEntry.Product2.Lat_Stocks__r[0].LAT_StockLevel__c == 'Unknown',s.PriceBookEntry.Product2.Lat_Stocks__r[0].LAT_StockLevel__c == 'Indeterminado') }">
+                                <img src="/s.gif" alt="" class="helpOrb" />
+                                <span>{!$Label.LAT_MX_VFP04_00031}</span>
+                            </apex:outputLink>
+                        </div>
+                     </apex:outputPanel>
+                     <apex:outputPanel rendered="{!s.PriceBookEntry.Product2.Lat_Stocks__r.size == 0}">
+                     <apex:outputText value="?"/>
+                     </apex:outputPanel>
+                </apex:column>
+                <apex:column headerValue="Inventario PRM" rendered="{!!showStockValues && !checkedStockValues}">
+                </apex:column>
+                
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_MX_CancellationReason__c.Label}" rendered="{!showColumns}">
+                    <apex:panelgroup rendered="{!s.LAT_MX_CancellationReason__c != null}">
+                        <div title="{!mapCanReasonAlternText[s.LAT_MX_CancellationReason__c]}">{!s.LAT_MX_CancellationReason__c}</div>
+                    </apex:panelgroup> 
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Backorder__c.Label}"                    value="{!s.Backorder__c}"/>               
+                <!-- <apex:column headerValue="{!$Label.LAT_MX_VFP04_00022}"> -->
+                <!-- LAT_MX_VFP04_00022: Fecha acordada cliente -->
+                <!--     <apex:outputField value="{!s.LAT_MX_KAMPromisedDate__c}"/> -->
+                <!-- </apex:column>      -->         
+                <apex:column headerValue="{!$Label.LAT_MX_VFP04_00024}" rendered="{!showColumns}"                          value="{!s.LAT_MX_EstimatedDeliveryDate__c}"/>
+                <!-- LAT_MX_VFP04_00024: Fecha entrega teorica -->
+                <apex:column headerValue="{!$Label.LAT_MX_VFP04_00025}" rendered="{!showColumns}"                          value="{!s.LAT_MX_LogisticsPromisedDate__c}"/>
+                <!-- LAT_MX_VFP04_00025: Fecha cita -->
+                <apex:column headerValue="{!$Label.LAT_MX_VFP04_00023}" rendered="{!showColumns}"                          value="{!s.LAT_MX_RealDeliveryDate__c}"/> 
+                <!-- LAT_MX_VFP04_00023: Fecha entrega real -->
+                <apex:column headerValue="{!$Label.LAT_MX_VFP04_00026}" rendered="{!showColumns}"                          value="{!s.LAT_MX_SignedDatedReceipt__c}"/> 
+                <!-- LAT_MX_VFP04_00026: Folio contrarecibo -->
+                
+                <!-- BOTON RESUMEN -->
+                <apex:column headerValue=" " styleClass="centraliza">
+                  <apex:commandButton value="{!$Label.LAT_MX_VFP04_00006}" action="{!doShowPopup}" rerender="popup"> 
+                  <!-- LAT_MX_VFP04_00006: Resumen -->
+                        <apex:param value="{!s.PriceBookEntryId}" assignTo="{!idOliPbe}" name="idOliPbe"/>
+                    </apex:commandButton>
+                </apex:column>
+                <!-- BOTON REMOVER -->
+                <apex:column headerValue=" " styleClass="centraliza" rendered="{!allowEdit && NOT(theOpp.StageName='Pedido processado no JDE')}">
+                    <apex:commandButton action="{!doRemoveFromShoppingCart}" value="{!$Label.LAT_MX_VFP04_00007}" id="btRemove" reRender="msgPnl,form" rendered="{!!s.Remover__c}"> 
+                    <!-- LAT_MX_VFP04_00007: Remover -->
+                        <apex:param value="{!s.PricebookEntryId}" assignTo="{!toUnselect}" name="toUnselect"/>
+                    </apex:commandButton> 
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Remover__c.Label}" styleClass="centraliza" rendered="{!theOpp.StageName!='Novo pedido'}">
+                    <apex:inputField value="{!s.Remover__c}" rendered="{!allowEdit && NOT(s.Remover__c)}"/>
+                    <apex:outputField value="{!s.Remover__c}" rendered="{!!allowEdit || (allowEdit && s.Remover__c)}"/>
+                </apex:column> 
+            </apex:pageblockTable>
+            
+        </apex:pageBlock>
+              
+        <!-- SECCION DE PRODUCTOS HABILITADOS PARA SELECCIONAR -->
+        <apex:pageBlock title="{!$Label.LAT_MX_VFP04_00008}" rendered="{!allowEdit}"> 
+        <!-- LAT_MX_VFP04_00008: Lista de Productos -->
+            
+            <!-- BOTONES DE LA TABLA INFERIOR -->
+            <apex:pageBlockButtons >
+                <apex:commandButton style="float:left" value="{!$Label.LAT_MX_VFP04_00009}" action="{!doAddItemsToShoppingCart}" reRender="status,form" oncomplete="subir();return false" rendered="{!allowEdit}" status="status"/> 
+                <!-- LAT_MX_VFP04_00009: Agregar -->
+                <apex:commandButton value="{!$Label.LAT_MX_VFP04_00010}" action="{!doPrevious}" reRender="form" rendered="{!allowEdit}" disabled="{!prevDisable}"/> 
+                <!-- LAT_MX_VFP04_00010: Anterior -->
+                <apex:commandButton value="{!$Label.LAT_MX_VFP04_00011}" action="{!doNext}" reRender="form" rendered="{!allowEdit}" disabled="{!nextDisable}"/> 
+                <!-- LAT_MX_VFP04_00011: Proxima -->
+            </apex:pageBlockButtons>
+            
+            <!-- BUSCADOR DE PRODUCTOS -->
+            <apex:outputLabel value="{!$Label.LAT_MX_VFP04_00012} " styleClass="label"/> 
+            <!-- LAT_MX_VFP04_00012: Buscar producto: -->
+            <apex:inputText value="{!searchProd}" onkeypress="return pressOnSearch(event)" style="width:300px"/>&nbsp;
+            <apex:commandButton value="{!$Label.LAT_MX_VFP04_00013}" action="{!doSearchProducts}" reRender="form" rendered="{!allowEdit}"/> 
+            <!-- LAT_MX_VFP04_00013: Buscar -->
+            <apex:actionFunction name="doSearch" action="{!doSearchProducts}"/><br/><br/>
+            
+            <apex:pageBlockTable value="{!listAvailableProductsWrapper}" var="wrap"  style="width:50%"> 
+               <!-- COLUMNAS DE LA TABLA INFERIOR -->
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Quantity.Label}"> 
+                    <apex:inputField value="{!wrap.oli.Quantity}" required="false" style="width: 100px"/>
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.Product2.Label}">
+                      <apex:outputlink value="/{!wrap.priceBook.Product2Id}" tabindex="-1">
+                      {!wrap.priceBook.Product2.Name}
+                  </apex:outputlink>
+                </apex:column>
+                <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.Sku__c.Label}"     value="{!wrap.priceBook.Product2.SKU__c}" />
+                <!-- <apex:column headerValue="{!$ObjectType.OpportunityLineItem.Fields.LAT_MX_KAMPromisedDate__c.Label}">
+                  <apex:inputField value="{!wrap.oli.LAT_MX_KAMPromisedDate__c}" required="false"/>
+                </apex:column> -->             
+                <apex:column value="{!measurementUnit}" styleClass="centraliza"> <!-- headerValue="{!$ObjectType.OpportunityLineItem.Fields.UOM_AR__c.Label}" -->
+                    <apex:facet name="header">
+                        <c:LAT_BreakHeader value="{!$ObjectType.OpportunityLineItem.Fields.UOM_AR__c.Label}" breaks="auto" styleToApply="font-weight:bold;"/>
+                    </apex:facet>  
+                </apex:column>
+
+                <!-- Inventario PRM -->
+                 <apex:column headerValue="Inventario PRM" styleClass="centraliza" > 
+                     <apex:outputPanel layout="block" styleclass="vfHelpText" rendered="{!showStockValues}">
+                        {!wrap.inventarioPRM}
+                        <apex:outputLink value="javascript:return false;" rendered="{!OR(CONTAINS(wrap.inventarioPRM,'Unknown'),CONTAINS(wrap.inventarioPRM,'Indeterminado'))}">
+                                <img src="/s.gif" alt="" class="helpOrb" />
+                                <span>{!$Label.LAT_MX_VFP04_00031}</span>
+                            </apex:outputLink>
+                     </apex:outputPanel>
+                    
+                </apex:column> 
+
+             <!--    <apex:column value="{!wrap.priceBook.Product2.LAT_MX_StockPRM__c}" styleClass="textRight">
+                    <apex:facet name="header">
+                        <c:LAT_BreakHeader value="{!$ObjectType.Product2.Fields.LAT_MX_StockPRM__c.Label}" breaks="auto" styleToApply="font-weight:bold;"/>
+                    </apex:facet>  
+                </apex:column> -->
+
+                <apex:column value="{!wrap.priceBook.Product2.LAT_MX_ClientStock__c}" styleClass="textRight">
+                    <apex:facet name="header">
+                        <c:LAT_BreakHeader value="{!$ObjectType.Product2.Fields.LAT_MX_ClientStock__c.Label}" breaks="auto" styleToApply="font-weight:bold;"/>
+                    </apex:facet>  
+                </apex:column>                
+
+                <apex:column value="{!wrap.quota}" styleClass="textRight">
+                    <apex:facet name="header">
+                        <c:LAT_BreakHeader value="{!$Label.LAT_MX_VFP04_00029}" breaks="auto" styleToApply="font-weight:bold;"/>
+                        <!-- LAT_MX_VFP04_00029: Asignación de productos -->
+                    </apex:facet>  
+                </apex:column>                
+            </apex:pageBlockTable>
+            
+        </apex:pageBlock> 
+        
+        <!-- POP UP DE RESUMEN -->  
+        <apex:outputPanel id="popup">           
+            <apex:outputPanel styleClass="customPopup" layout="block" rendered="{!displayPopUp}">
+               <apex:pageBlock >
+                    <apex:pageBlockTable value="{!itemOpp}" var="item" >
+                        <apex:column headerValue="Composición de precios" value="{!item.Campo_de_formatacao__c}"/><br/><br/>
+                    </apex:pageBlockTable>
+                <apex:commandButton value="{!$Label.LAT_MX_VFP04_00014}" action="{!doClosePopup}" rerender="popup"/> 
+                <!-- LAT_MX_VFP04_00014: Cerrar -->
+                </apex:pageBlock>
+            </apex:outputPanel>
+        </apex:outputPanel>   
+        
+    </apex:form>
+</apex:page>

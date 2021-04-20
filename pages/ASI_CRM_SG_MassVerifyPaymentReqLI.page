@@ -1,0 +1,570 @@
+<!--
+**********************************************************************************
+ * Name : ASI_CRM_SG_MassVerifyPaymentReqLI
+ * Created : DC @1/1/2016 11:01 AM
+ * Revision History:
+ * 1. 01/01/2016 - [DC 1.0] Created
+ * 2. 01/04/2016 - [DC 2.0] Updated to include only records of “ASI CRM SG Payment Request” or “ASI CRM SG Payment Request Read-Only” recordtype.
+ * 2. 01/04/2016 - [DC 2.1] Updated to set "Amount", "Type", "Outlet" be mandatory fields.
+ * 2. 01/04/2016 - [DC 2.2] Updated to fetch ASI_CRM_SG_Sub_brand__c instead of ASI_TH_CRM_Subbrand__c.
+ * 2. 01/25/2016 - [DC 2.3] Updated fields for Outlet and Vendor.
+ * 3. 02/22/2016 - [DC 3.0] Added fields to search bar.
+ * 3. 02/23/2016 - [DC 3.1] Added fields and validations to Main table.
+ * 4. 03/11/2016 - [DC 4.0] Changed fields to use Line Item fields instead of Request Header ones.
+ * 5. 03/21/2016 - [VL 5.1] Remove column "Contract Line No."
+ * 4. 03/22/2016 - [DC 5.0] Moved search logic to onclick of button
+ * 6. 23 Mar 2016 - [VL 6.0] Remove pagination
+ * 7. 15 Apr 2016 - [VL 7.0] Remove "Payment Request Ref." in search box
+ * 8. 18 Apr 2016 - [VL 8.0] Remove sort function on table header
+ * 9. 20 Apr 2016 - [VL 9.0] Remve "JDE is Append Local Channel" column
+ * 10. 8 Nov 2017 - [WL 10.0] P4.1A Add RTM Checkbox and validate Payment Type by for old vs RTM Contract
+ **********************************************************************************
+-->
+
+<apex:page standardController="ASI_TH_CRM_PaymentRequestLineItem__c" action="{!init}" extensions="ASI_CRM_SG_MassVerifyPaymentReqLICtrl" sidebar="false">
+     
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script>
+    function checkApproveDelete(obj,opposeId){
+        if($(obj).is(':checked')){
+            $(obj).parent().parent().find("[id*="+opposeId+"]").attr('checked', !$(obj).is(':checked'));
+        }
+    }
+
+    var isModified;
+
+    /* Set isModified to true if values are changed */
+    $(document).ready(function($) {
+        setModified(false);
+    });
+
+    var setModified = function(value) {
+        isModified = value;
+        console.log('isModified is : ' + isModified);
+    }
+    
+    function checkAll(obj,opposeObjId,checkAllId,opposeId){    
+        $("[id*="+checkAllId+"]").each(function(){
+            $(this).attr('checked', $(obj).is(':checked'));
+        });
+        
+        $("#"+opposeObjId).attr('checked', false);
+
+        $("[id*="+opposeId+"]").each(function(){
+            $(this).attr('checked', false);
+        });        
+    }
+    
+    function openAccountWin(id){
+        window.open("/"+id);
+    }
+    
+    function doSearch() {
+        
+        var isConfirmed = false;
+        if(isModified == true) {
+            isConfirmed = confirm('You haven\'t saved the changes in records. Do you really want to refresh the records?');
+        } else {
+            isConfirmed = true;
+        }
+
+        if(isConfirmed == true) {
+            searchServer(
+              document.getElementById("ContractNo").value,  
+              document.getElementById("PaymentRequestNo").value,
+                /* [VL 7.0] BEGIN */
+                /*
+              document.getElementById("PaymentRequestRef").value,
+                */
+              '',
+                /* [VL 7.0] BEGIN */
+              document.getElementById("Outlet").value,
+              document.getElementById("Vendor").value,
+              document.getElementById("JdeCoaCode").value,
+              document.getElementById("fromGLdate").value,
+              document.getElementById("toGLdate").value,
+                /* [VL 7.0] BEGIN */
+                /*
+              document.getElementById("Status").value
+                */
+              ''
+                /* [VL 7.0] BEGIN */
+            );
+        }
+    }
+
+    var validateData = function(headerId, invoiceNo, invoiceDate) {
+        console.log('headerId is : '+ headerId);
+        console.log('invoiceNo is : '+ invoiceNo);
+        console.log('invoiceDate is : '+ invoiceDate);
+
+        performValidation(
+            headerId,
+            invoiceNo,
+            invoiceDate
+        );
+    }
+
+    </script>
+    <apex:pageMessages id="errors" />
+    <apex:form id="formRen" >
+        <apex:actionFunction name="performValidation" action="{!validateData}" rerender="formRen">
+            <apex:param name="headerId" value="" />
+            <apex:param name="invoiceNo" value="" />
+            <apex:param name="invoiceDate" value="" />
+        </apex:actionFunction>
+
+        <apex:actionFunction name="performValidationOnSave" action="{!validateDataOnSave}" rerender="formRen" />
+        <apex:actionFunction name="save" action="{!save}" />
+
+        <apex:outputPanel id="confirmPanel" rendered="{!isErrorOnSave}" >
+            <script type="text/javascript">
+                
+                var alertMessage = '{!alertMessage}';
+                var formattedAlert = alertMessage.replace(/NEXT/g, "\n");
+                
+                console.log('did it enter here?');
+                
+                var isConfirmed = window.confirm(formattedAlert);
+                
+                if(isConfirmed == true) {
+                    save();
+                }
+            </script>
+        </apex:outputPanel>
+
+        <apex:inputHidden id="alertMessage" value="{!alertMessage}" />
+        <apex:inputHidden id="isError" value="{!isError}" />
+        
+        <apex:outputPanel id="alertPanel" rendered="{!isError}" >
+            <script type="text/javascript">
+                
+                var alertMessage = '{!alertMessage}';
+                var formattedAlert = alertMessage.replace(/NEXT/g, "\n");
+                
+                window.alert(formattedAlert);
+            </script>
+        </apex:outputPanel>
+
+        <apex:pageBlock title="Mass Verify Payment Request Line Items" mode="edit">
+            <apex:pageBlockButtons >
+                <apex:commandButton value="Save" onclick="setModified(false); performValidationOnSave(); return false;" />
+                <apex:commandButton value="Return" action="{!cancel}"/>
+            </apex:pageBlockButtons>
+            <table width="100%" border="0" >
+                <tr>
+                    <td width="100%" valign="top">
+                        <apex:pageBlock mode="edit" id="criteria" >
+                            <apex:actionFunction name="searchServer" action="{!runSearch}" rerender="results,debug,errors" immediate="true">
+                                <apex:param name="ContractNo" value="" />
+                                <apex:param name="PaymentRequestNo" value="" />
+                                <apex:param name="PaymentRequestRef" value="" />
+                                <apex:param name="Outlet" value="" />
+                                <apex:param name="Vendor" value="" />
+                                <apex:param name="JdeCoaCode" value="" />
+                                <apex:param name="fromGLdates" value="" />
+                                <apex:param name="toGLdates" value="" />
+                                <apex:param name="Status" value="" />
+                            </apex:actionFunction>
+                            
+                            <table cellpadding="2" cellspacing="2">
+                                
+                                <tr>
+                                    <td style="font-weight:bold;width:150px;">Contract No.:
+                                        <input type="text" id="ContractNo" /></td>
+                                    <td style="font-weight:bold;width:150px;">Payment Request No.:
+                                        <input type="text" id="PaymentRequestNo" /></td>
+                                <!-- [VL 7.0] BEGIN -->
+                                <!--
+                                    <td style="font-weight:bold;width:150px;">Payment Request Ref.:
+                                        <input type="text" id="PaymentRequestRef" /></td>
+                                -->
+                                <!-- [VL 7.0] END -->
+                                    <td style="font-weight:bold;width:150px;">Outlet: 
+                                        <input type="text" id="Outlet" /></td>
+                                    <td style="font-weight:bold;width:150px;">Vendor: 
+                                        <input type="text" id="Vendor" /></td>
+                                    <td style="font-weight:bold;width:150px;">A&amp;C Code (JDE COA Code): 
+                                        <input type="text" id="JdeCoaCode" /></td>
+                                    <td style="font-weight:bold;width:150px;">From G/L Date: <br/>
+                                        <input type="date" style="width:150px;" id="fromGLdate" /> 
+                                    </td>
+                                    <td style="font-weight:bold;width:150px;">To G/L Date: <br/>
+                                        <input type="date" style="width:150px;" id="toGLdate" /> 
+                                    </td>
+                                <!-- [VL 7.0] BEGIN -->
+                                <!--
+                                    <td style="font-weight:bold;width:150px;">Status:
+                                        <input type="text" id="Status" /></td>
+                                -->
+                                <!-- [VL 7.0] END -->
+                                    <td style="font-weight:bold;width:150px;">
+                                        <apex:commandButton value=" Search " onclick="doSearch(); return false;" />
+                                    </td>
+                                </tr>
+
+                                <!-- <tr>
+                                    <td style="font-weight:bold;width:150px;">Contract No.:
+                                        <input type="text" id="ContractNo" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">Payment Request No.:
+                                        <input type="text" id="PaymentRequestNo" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">Payment Request Ref.:
+                                        <input type="text" id="PaymentRequestRef" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">Outlet: 
+                                        <input type="text" id="Outlet" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">Vendor: 
+                                        <input type="text" id="Vendor" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">A&amp;C Code (JDE COA Code): 
+                                        <input type="text" id="JdeCoaCode" onchange="doSearch();" /></td>
+                                    <td style="font-weight:bold;width:150px;">From G/L Date: <br/>
+                                        <input type="date" style="width:150px;" id="fromGLdate" onchange="doSearch();" /> 
+                                    </td>
+                                    <td style="font-weight:bold;width:150px;">To G/L Date: <br/>
+                                        <input type="date" style="width:150px;" id="toGLdate" onchange="doSearch();" /> 
+                                    </td>
+                                    <td style="font-weight:bold;width:150px;">Status:
+                                        <input type="text" id="Status" onchange="doSearch();" /></td>
+                                </tr> -->
+                            </table>
+
+                        </apex:pageBlock>
+                    </td>
+                </tr>
+                <tr>
+                    <td valign="top" >
+                        <apex:pageBlock mode="edit" id="results">
+                            <apex:variable var="i" value="{!0}"/>
+                            <apex:pageBlockTable value="{!lstLineItems}" var="line">
+                                <apex:variable var="i" value="{!i+1}"/>
+                                <apex:column headerValue="Select">
+                                    <!-- Checkbox -->
+                                    <apex:facet name="header">Verify<br/>
+                                        <input id="confirmCheck" type="checkbox" onclick="checkAll(this,'delete','chkApprove','chkDelete'); setModified(true);"/></apex:facet>
+                                    <apex:inputfield id="chkApprove" value="{!line.ASI_CRM_Verified__c}" onclick="checkApproveDelete(this,'chkDelete'); setModified(true);"/>
+                                </apex:column>
+                                <!--------------
+                                <apex:column headerValue="Select">
+                                    <apex:facet name="header">
+                                        <input id="confirm" type="checkbox" onclick="checkAll(this,'delete','chkApprove','chkDelete')"/>
+                                        <apex:commandLink value="Verify and Sync to JDE     " action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_Verified__c" assignTo="{!sortField}"/>
+                                        
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                    <apex:inputfield id="chkApprove" value="{!line.ASI_CRM_Verified__c}" onclick="checkApproveDelete(this,'chkDelete')"/>
+                                </apex:column>
+---------------->
+                                
+                                <apex:column >
+                                    <!-- Contract No. -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Contract No." action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Contract_No__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Contract No.
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Contract__c}"/>
+                                </apex:column>
+
+                                <!-- Status -->
+                                <apex:column >
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN (Added by DC on 04/28/2016)--> 
+                                        <!-- 
+                                        <apex:commandLink value="Status" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Status__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink> 
+                                        -->
+                                        Status
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Status__c}"/>
+                                </apex:column>
+
+                                <!-- Contract Line Number -->
+                                <!-- [VL 5.0] BEGIN -->
+                                <!--
+                                <apex:column >
+                                    <apex:facet name="header">
+                                        <apex:commandLink value="Contract Line Number" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.ASI_TH_CRM_Status__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+                                    </apex:facet>
+                                    (TBC)
+                                </apex:column>
+                                -->
+                                <!-- [VL 5.0] END -->
+
+                                <apex:column >
+                                    <!-- Payment Request No. -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Payment Request No." action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Payment Request No.
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Payment_Request__c}"/>
+                                </apex:column>
+                                
+                                <apex:column >
+                                    <!-- Payment Request Ref. -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Payment Request Ref." action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="Name" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Payment Request Ref.
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputLink value="/{!line.Id}" id="nameLink">{!line.Name}</apex:outputLink>
+                                    <!-- <apex:outputField value="{!line.Name}"/> -->
+                                </apex:column>
+                                
+                                <apex:column >
+                                    <!-- Outlet -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Outlet" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.ASI_CRM_Outlet_Fx__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Outlet
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Payment_Request__r.ASI_CRM_CN_OutletWS__c}"/>
+                                </apex:column>
+                                
+                                <apex:column >
+                                    <!-- Vendor -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Vendor" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Payment_Request__r.ASI_CRM_Vendor__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Vendor
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Payment_Request__r.ASI_CRM_Vendor__c}"/>
+                                </apex:column>
+
+                                <apex:column >
+                                <!-- [DC 4.0] START -->
+                                    <!-- Invoice No. -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Invoice No." action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Invoice_No__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Invoice No.
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:inputField value="{!line.ASI_TH_CRM_Invoice_No__c}" 
+                                        onchange="setModified(true);"
+                                        onblur="validateData('{!line.ASI_TH_CRM_Payment_Request__c}', $(this).val(), null);"/>
+                                </apex:column>
+
+                                <apex:column >
+                                    <!-- Invoice Date -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Invoice Date" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_SG_Invoice_Date__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Invoice Date
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:inputField required="true" value="{!line.ASI_CRM_SG_Invoice_Date__c}" 
+                                        onchange="setModified(true); validateData('{!line.ASI_TH_CRM_Payment_Request__c}', null, $(this).val());"/>
+                                </apex:column>
+
+                                <!-- [DC 4.0] END -->
+
+								<!-- [WL 10.0] BEGIN -->
+								<apex:column >
+                                    <!-- Type -->
+                                    <apex:facet name="header">
+                                        Before RTM
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_CRM_Contract_Exist_Before_RTM__c}"/>
+                                </apex:column>
+								<!-- [WL 10.0] END -->
+								
+                                <apex:column >
+                                    <!-- Type -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Type" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_SG_Type__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Type
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+									<!-- [WL 10.0] BEGIN -->
+                                    <!--<apex:inputField required="true" value="{!line.ASI_CRM_SG_Type__c}" onchange="setModified(true);"/>-->
+									<apex:selectList value="{!line.ASI_CRM_SG_Type__c}" size="1" required="true"
+                                                styleclass="type"
+                                                style="width:250px"
+												rendered="{!line.ASI_CRM_Contract_Exist_Before_RTM__c}">
+													<apex:selectOption itemValue="Ad-hoc Promotions" itemLabel="Ad-hoc Promotions"/>
+													<apex:selectOption itemValue="Advertising Spot" itemLabel="Advertising Spot"/>
+													<apex:selectOption itemValue="Events" itemLabel="Events"/>
+													<apex:selectOption itemValue="Product Branding Display" itemLabel="Product Branding Display"/>
+													<apex:selectOption itemValue="Sales Support" itemLabel="Sales Support"/>
+													<apex:selectOption itemValue="Signages" itemLabel="Signages"/>
+													<apex:selectOption itemValue="Trade Incentive Trips" itemLabel="Trade Incentive Trips"/>
+													<apex:selectOption itemValue="Cash - Upfront" itemLabel="Cash - Upfront"/>
+													<apex:selectOption itemValue="Cash - Target Achieved" itemLabel="Cash - Target Achieved"/>
+													<apex:selectOption itemValue="Bottle Incentive" itemLabel="Bottle Incentive"/>													
+									</apex:selectList>									                                    
+									
+									<apex:selectList value="{!line.ASI_CRM_SG_Type__c}" size="1" required="true"
+                                                styleclass="type"
+                                                style="width:250px"
+												rendered="{!!line.ASI_CRM_Contract_Exist_Before_RTM__c}">													
+													<apex:selectOption itemValue="Cash - Upfront" itemLabel="Cash - Upfront"/>
+													<apex:selectOption itemValue="Cash - Target Achieved" itemLabel="Cash - Target Achieved"/>
+													<apex:selectOption itemValue="Back Rebates" itemLabel="Back Rebates"/>	
+													<apex:selectOption itemValue="Sales Support" itemLabel="Sales Support"/>	
+													<apex:selectOption itemValue="A&P Fund" itemLabel="A&P Fund"/>	
+									</apex:selectList>
+									<!-- [WL 10.0] END -->
+                                </apex:column>
+
+                                <!-- JDE COA Code -->
+                                <apex:column >
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="JDE COA Code"  action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_SG_JDE_COA_Code__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        JDE COA Code
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_CRM_SG_JDE_COA_Code__c}"/>
+                                </apex:column>
+                        		-->
+                        		<!-- [VL 9.0] END -->
+
+                                <apex:column >
+                                    <!-- G/L Date -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="G/L Date" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_GL_Date__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        G/L Date
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:inputField required="true" value="{!line.ASI_CRM_GL_Date__c}" onchange="setModified(true);"/>
+                                </apex:column>
+
+                                <apex:column >
+                                    <!-- Sub-brand -->
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Sub-brand" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Subbrand__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Sub-brand
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:inputField value="{!line.ASI_CRM_SG_Sub_brand__c}" onchange="setModified(true);"></apex:inputField>
+                                </apex:column>
+                                
+                                <apex:column >
+                                    <apex:facet name="header">
+                                        <!-- [VL 8.0] BEGIN -->
+                                        <!--
+                                        <apex:commandLink value="Amount" action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_TH_CRM_Amount__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+										-->
+                                        Amount
+                                        <!-- [VL 8.0] END -->
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_TH_CRM_Amount__c}"/>
+                                </apex:column>
+                                
+                                <!-- [VL 9.0] BEGIN -->
+                                <!--
+                                <apex:column >
+                                    <apex:facet name="header">
+//!-- [VL 8.0] BEGIN 
+//!--
+                                        <apex:commandLink value="JDE Is Append Local Channel"  action="{!toggleSort}"  rerender="results,debug">
+                                            <apex:param name="sortField" value="ASI_CRM_SG_JDE_Is_Append_Local_Channel__c" assignTo="{!sortField}"/>
+                                        </apex:commandLink>
+//--
+                                        JDE Is Append Local Channel
+//!-- [VL 8.0] END
+                                    </apex:facet>
+                                    <apex:outputField value="{!line.ASI_CRM_SG_JDE_Is_Append_Local_Channel__c}"/>
+                                </apex:column>
+                        		-->
+                        		<!-- [VL 9.0] END -->
+                            </apex:pageBlockTable>
+                        </apex:pageBlock>
+                    </td>
+                </tr>
+            </table>
+            <!-- [VL 6.0] BEGIN -->
+            <!--
+            <apex:outputPanel id="pagination" >
+                <apex:outputPanel style="width:100%;" layout="block" >
+                    <table style="width: 100%;" >
+                        <tr>
+                            <td idth="33%" ></td>
+                            <td width="33%" style="text-align:center;">
+                                <apex:commandLink value="<<" action="{!firstPage}" reRender="results,debug,error,pagination" />
+                                <span style="height:1px">&nbsp;&nbsp;</span>
+                                <apex:commandLink value="< Previous" action="{!prevPage}" reRender="results,debug,error,pagination" />
+                                <span style="height:1px">&nbsp;</span>
+                                <apex:commandLink value="Next >" action="{!nextPage}" reRender="results,debug,error,pagination" />
+                                <span style="height:1px">&nbsp;&nbsp;</span>
+                                <apex:commandLink value=">>" action="{!lastPage}" reRender="results,debug,error,pagination" />
+                            </td>
+                            <td width="33%" style="text-align:right;">
+                                Page
+                                <apex:inputText id="pageInputBox" style="align:right;" size="2" maxlength="4" value="{!newPageNum}" tabindex="100" />
+                                of {!maxPageNum}
+                            </td>
+                        </tr>
+                    </table>
+                </apex:outputPanel>
+
+            </apex:outputPanel>
+            -->
+            <!-- [VL 6.0] END -->
+        </apex:pageBlock>
+    </apex:form>
+    <!--
+  <apex:pageBlock title="Debug - SOQL" id="debug">
+      <apex:outputText value="{!debugSoql}" />           
+  </apex:pageBlock>
+-->
+</apex:page>

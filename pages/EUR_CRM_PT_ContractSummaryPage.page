@@ -1,0 +1,277 @@
+<apex:page standardController="EUR_CRM_Contract__c" extensions="EUR_CRM_PT_ContractPageController">
+    <apex:variable var="contractStatus" value="{!EUR_CRM_Contract__c.EUR_CRM_Status__c}" />
+    <!-- JQuery scripts -->
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+    <!-- Datatable plugin -->
+    <link
+        href="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'css/jquery.dataTables.css')}"
+        media="screen" rel="stylesheet" type="text/css" />
+    <apex:includeScript value="{!URLFOR($Resource.EUR_CRM_jQuery_DataTables, 'js/jquery.dataTables.js')}" />
+    <!-- style sheets -->
+    <apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />
+    <apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+    <apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_jQuery_Lib, '/styles/common.css')}" />
+    <link rel="stylesheet"
+        href="https://storage.googleapis.com/code.getmdl.io/1.0.0/material.indigo-pink.min.css" /> 
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    <script
+        src="https://storage.googleapis.com/code.getmdl.io/1.0.0/material.min.js"></script>
+    <apex:stylesheet value="{!URLFOR($Resource.EUR_CRM_ContractSummaryPage_Stylesheet)}" />
+
+
+    <script>
+        $j = jQuery.noConflict();
+        console.log('started..');
+        // The buttons to be displayed on the summary page
+        //var buttonConfig = ['edit','del','eur_crm_cancel','EUR_CRM_Invoice_Tracker'];
+        // The list of MechTypes to control table Ids
+        var mechanicTypes = "{!mechanicTypesNameString}";
+        mechanicTypes = mechanicTypes.split(",");
+        
+        var mechanicTypesNameId = "{!mechanicTypesNameIdString}";
+        mechanicTypesNameId = mechanicTypesNameId.split(",");
+        console.log(mechanicTypes);
+        
+        // The properties of the DatafTable from the jquery plugin 
+        var basicDataTableProperties = {
+            "bDestroy":true,
+            "bStateSave":true,
+            "aaSorting": [[1, "asc"]],
+            "bSearch":false,
+            "bFilter" : false,
+            "bLengthChange" : false
+        }; 
+        
+        var buttonConfig = {
+          'Activated':['eur_crm_view_volume_tracker','eur_crm_pt_roievaluation','eur_crm_deactivate_contract'],
+          'Deactivated':['eur_crm_view_volume_tracker','eur_crm_pt_roievaluation', 'eur_crm_activate_contract'],
+          'Cancelled':['eur_crm_pt_roievaluation'],
+          'Approved':['eur_crm_pt_roievaluation', 'eur_crm_cancel','eur_crm_activate_contract'],
+          'Submitted':['eur_crm_pt_roievaluation', 'eur_crm_cancel'],
+          'Draft':['edit','del','eur_crm_pt_roievaluation','eur_crm_cancel'],
+          'Approved-Pending Activation':['eur_crm_pt_roievaluation', 'eur_crm_cancel']
+        };
+        
+        // set the column titles
+        function setColumnTitles(mechType){
+            if(mechType=='Listing' || mechType=='House Pour'){
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Brand__c.fields.EUR_CRM_Category__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand_Quality_Size__c.label}"}
+     
+                ];
+            }
+            if(mechType=='Volume Targets and Rebates'){
+                
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand_Quality_Size__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Quantity__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Amount_Spent__c.label}"}
+                ];
+                
+            }
+            
+            if(mechType=='Events'){
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Marketing_Amount__c.label}"}
+          
+                ];
+            }
+            
+            if(mechType=='POS Material' || mechType=='Trainings'){
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand_Quality__c.label}"}
+                ];
+            }
+            if(mechType=='Uniforms' || mechType=='Drinks Menu Participation'){
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Marketing_Amount__c.label}"}
+                ];
+            }
+            if(mechType=='Bar Styling'){
+                return  [
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Brand__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Marketing_Amount__c.label}"},
+                {"sTitle": "{!$ObjectType.EUR_CRM_Contract_Product_Item__c.fields.EUR_CRM_Description__c.label}"}
+                ];
+            }
+        }
+        // displays the buttons according to buttonConfig list
+        function setButtons(){     
+            $j("input[type=button]").hide();
+            var cStatus ='{!contractStatus}';
+            console.log('cStatus:'+cStatus);
+            var buttons = buttonConfig[cStatus];
+            console.log('buttons:'+buttons);
+            for(var x in buttons){
+                var v = buttons[x];
+                $j('input[name="'+v+'"]').show();
+            }
+            $j('input[name="piSubmit"]').show();
+            $j('input[name="newNote"]').show();
+            $j('input[name="attachFile"]').show();
+        }
+        // Sets the datatable properties
+        function setGTable(mechType){
+            // Only set properties for this mechTypes
+            // Split the Mech Type names from Ids
+            var mechTypeSplit = mechType.split("-");
+            if(mechTypeSplit[1]=='Listing' || mechTypeSplit[1]=='House Pour'  || mechTypeSplit[1]=='Volume Targets and Rebates' || mechTypeSplit[1]=='Events' ||  mechTypeSplit[1]=='POS Material' || mechTypeSplit[1]=='Uniforms' || mechTypeSplit[1]=='Drinks Menu Participation' || mechTypeSplit[1]=='Bar Styling' || mechTypeSplit[1]=='Trainings'){
+                var cpi_dataTableProperties = basicDataTableProperties;
+                cpi_dataTableProperties["aoColumns"] =setColumnTitles(mechTypeSplit[1]);
+                var rTableId = '#ContractProductItemTable' + mechTypeSplit[0];
+                var rTable = $j(rTableId);
+                console.log('here');
+                if(rTable){
+                    rTable.dataTable(cpi_dataTableProperties);
+                }
+            }
+        }
+        // On DOM load
+        $j(document).ready(function(){ 
+            
+            setButtons();
+            // Loop the Mechanic Type names with Ids
+            console.log('mechanicTypesNameId:'+mechanicTypesNameId);
+            for(var i in mechanicTypesNameId){
+                // Set the datatable properties for each table
+                setGTable(mechanicTypesNameId[i]);
+            }
+ 
+        });
+    </script>
+    <!-- Header for Back-To-List link -->
+    <div class="bPageTitle ">
+        <div class="ptBreadcrumb">
+            &nbsp; « &nbsp;
+            <apex:outputLink value="/{!LEFT(EUR_CRM_Contract__c.Id,3)}">Back to List: Contracts</apex:outputLink>
+        </div>
+    </div>
+    <!-- Main Contract Details as specified by the page layout -->
+    <apex:detail subject="{!EUR_CRM_Contract__c.id}" relatedList="false" />
+    <!-- The related list details -->
+    <apex:pageBlock title="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.labelPlural}">
+        <!-- Activity Line Items table-->
+        <apex:repeat value="{!mechanicTypes}" var="mechType"> 
+            <apex:pageBlockSection title="{!mechanicTypeMap[mechType].Name} Mechanic Type" columns="1" >
+                <!-- Process only if the activity item of the current mechType is available -->
+                <apex:outputPanel layout="block" rendered="{!CONTAINS(availableActivities, mechanicTypeMap[mechType].Name)}">
+                    <apex:variable var="lineItem" value="{!activityItemMap[mechType]}" />
+                    
+                    <!-- Lump Sum Mechanic Type -->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType == 'Lump Sum'}">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Amount__c.label}:" value="{!lineItem.EUR_CRM_Amount__c}" />
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+                    </apex:pageBlockSection>
+                    <!-- Events Mechanic Type -->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType == 'Events'}">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Name__c.label}:" value="{!lineItem.EUR_CRM_Name__c}" />
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+                    </apex:pageBlockSection>
+                    
+                    <!-- Volume Targets and Rebates Mechanic Type -->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType == 'Volume Targets and Rebates'}">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Product_Items_Total__c.label}:" value="{!lineItem.EUR_CRM_Product_Items_Total__c}" />
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+                    </apex:pageBlockSection>
+                    
+                    <!-- Drinks Menu Production Mechanic Type -->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType == 'Drinks Menu Production' || mechType=='POS Material'}">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Amount__c.label}:" value="{!lineItem.EUR_CRM_Amount__c}" />
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+                    </apex:pageBlockSection>
+                    
+                    <!-- Other Marketing Activities Mechanic Type -->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType == 'Other Marketing Activities'}">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Amount__c.label}:" value="{!lineItem.EUR_CRM_Amount__c}" />
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+                    </apex:pageBlockSection>
+                    
+                    <!--Other Mech not in above-->
+                    <apex:pageBlockSection columns="1" rendered="{!mechType != 'Lump Sum' && mechType != 'Events' && mechType != 'Volume Targets and Rebates' && mechType != 'Drinks Menu Production' && mechType != 'Other Marketing Activities' && mechType != 'POS Material' }">
+                        <apex:outputField label="{!$ObjectType.EUR_CRM_Contract_Activity_Item__c.fields.EUR_CRM_Description__c.label}:" value="{!lineItem.EUR_CRM_Description__c}" />
+
+                    </apex:pageBlockSection>
+                    <!-- Product Line Items table -->
+
+
+
+
+                    <table id="ContractProductItemTable{!mechanicTypeMap[mechType].Id}" class="mdl-data-table mdl-js-data-table mdl-shadow--2dp" >
+                        
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!OR(mechType == 'Listing',mechType == 'House Pour')}"> 
+                            <tr>
+
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.brand.EUR_CRM_Category__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric">
+                                    <a href="/{!productLI.size.Id}" id="{!productLI.size.Id}"
+                                        onblur="LookupHoverDetail.getHover('{!productLI.size.Id}').hide();"
+                                        onfocus="LookupHoverDetail.getHover('{!productLI.size.Id}', '/{!productLI.size.Id}/m?retURL=%2F{!productLI.size.Id}&isAjaxRequest=1').show();"
+                                        onmouseout="LookupHoverDetail.getHover('{!productLI.size.Id}').hide();"
+                                        onmouseover="LookupHoverDetail.getHover('{!productLI.size.Id}', '/{!productLI.size.Id}/m?retURL=%2F{!productLI.size.Id}&isAjaxRequest=1').show();">
+                                        {!productLI.size.Name}
+                                    </a>
+                                </td>
+                            </tr>
+                        </apex:repeat>
+                        
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!mechType == 'Events'}">   
+                            <tr>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Brand__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Marketing_Amount__c}" /></td>
+    
+                                
+                            </tr>
+
+                        </apex:repeat>  
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!mechType == 'Volume Targets and Rebates'}">   
+                            <tr>
+                                <td class="mdl-data-table__cell--non-numeric">
+                                    <a href="/{!productLI.size.Id}" id="{!productLI.size.Id}"
+                                        onblur="LookupHoverDetail.getHover('{!productLI.size.Id}').hide();"
+                                        onfocus="LookupHoverDetail.getHover('{!productLI.size.Id}', '/{!productLI.size.Id}/m?retURL=%2F{!productLI.size.Id}&isAjaxRequest=1').show();"
+                                        onmouseout="LookupHoverDetail.getHover('{!productLI.size.Id}').hide();"
+                                        onmouseover="LookupHoverDetail.getHover('{!productLI.size.Id}', '/{!productLI.size.Id}/m?retURL=%2F{!productLI.size.Id}&isAjaxRequest=1').show();">
+                                        {!productLI.size.Name}
+                                    </a>
+                                </td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Amount__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Quantity__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Amount_Spent__c}" /></td>
+                            </tr>
+                        </apex:repeat> 
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!mechType == 'POS Material' || mechType == 'Trainings'}">  
+                            <tr>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Brand_Quality__c}" /></td>
+                            </tr>
+                        </apex:repeat> 
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!mechType == 'Uniforms' || mechType =='Drinks Menu Participation'}">   
+                            <tr>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Brand__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Marketing_Amount__c}" /></td>
+                            </tr>
+                        </apex:repeat> 
+                        <apex:repeat value="{!mechtypeWrapper[mechType]}" var="productLI" rendered="{!mechType == 'Bar Styling'}">  
+                            <tr>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Brand__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Marketing_Amount__c}" /></td>
+                                <td class="mdl-data-table__cell--non-numeric"><apex:outputField value="{!productLI.prodItem.EUR_CRM_Description__c}" /></td>
+                            </tr>
+                        </apex:repeat>                             
+                    </table>
+                </apex:outputPanel>
+            </apex:pageBlockSection>
+        </Apex:repeat>
+    </apex:pageBlock>
+    <!-- Contract Audit -->
+    <apex:relatedList list="EUR_CRM_Contract_Audits__r" />
+    <apex:relatedList list="EUR_CRM_Volume_Trackers__r"/>
+    <apex:relatedList list="ProcessSteps" />
+    <!-- Notes & attachments related list-->
+    <apex:relatedList list="CombinedAttachments" />
+</apex:page>

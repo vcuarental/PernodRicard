@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workflow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Notification</fullName>
+        <description>MMPJ_Ext_Vign_Notification</description>
+        <protected>false</protected>
+        <recipients>
+            <field>MMPJ_Ext_Vign_Contact__c</field>
+            <type>contactLookup</type>
+        </recipients>
+        <senderAddress>partners-mmpj@pernod-ricard.com</senderAddress>
+        <senderType>OrgWideEmailAddress</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_Notification</template>
+    </alerts>
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Notification_Message_Champ</fullName>
+        <description>MMPJ_Ext_Vign_Notification_Message_Champ</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>MMPJ_Ext_Vign_Admins_Fonctionnels_Champ</recipient>
+            <type>group</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_Nouveau_Message</template>
+    </alerts>
+    <alerts>
+        <fullName>MMPJ_Ext_Vign_Notification_Message_Cognac</fullName>
+        <description>MMPJ_Ext_Vign_Notification_Message_Cognac</description>
+        <protected>false</protected>
+        <recipients>
+            <recipient>MMPJ_Ext_Vign_Admins_Fonctionnels_Cognac</recipient>
+            <type>group</type>
+        </recipients>
+        <senderType>CurrentUser</senderType>
+        <template>MMPJ_Ext_Vign/MMPJ_Ext_Vign_Nouveau_Message</template>
+    </alerts>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Notification_Message_Champ</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Notification_Message_Champ</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <formula>AND( 	ISPICKVAL(MMPJ_Ext_Vign_Type__c,&apos;Message&apos;), 	ISPICKVAL(MMPJ_Ext_Vign_Contact__r.MMPJ_Ext_Vign_Contact_Segmentation__c,&quot;Champagne&quot;) )</formula>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+    <rules>
+        <fullName>MMPJ_Ext_Vign_Notification_Message_Cognac</fullName>
+        <actions>
+            <name>MMPJ_Ext_Vign_Notification_Message_Cognac</name>
+            <type>Alert</type>
+        </actions>
+        <active>true</active>
+        <formula>AND( 	ISPICKVAL(MMPJ_Ext_Vign_Type__c,&apos;Message&apos;), 	ISPICKVAL(MMPJ_Ext_Vign_Contact__r.MMPJ_Ext_Vign_Contact_Segmentation__c,&quot;Cognac&quot;) )</formula>
+        <triggerType>onCreateOnly</triggerType>
+    </rules>
+</Workflow>

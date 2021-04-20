@@ -1,0 +1,760 @@
+<!--
+/*********************************************************************************
+ * Name: ASI_CRM_SG_ManageSalesOrder_Page_WS
+ * Description: VF page to edit Sales Order line item for SG CRM Wholesaler sales order
+ *
+ * Version History
+ * Date             Developer               Comments
+ * ---------------  --------------------    --------------------------------------------------------------------------------
+ * 2014-12-23       Laputa: Conrad          Created
+ * 2016-03-24       Laputa: Vincent         [VL 1.0] Hide FOC column for SG wholesaler for profile = external user
+ * 2016-04-27       Laputa: Vincent         [VL 2.0] Add new column for sales team to adjust FOC
+ *                                          [VL 2.1] Hide add SKU section for sales team
+ * 2016-05-05       Laputa: Vincent         [VL 3.0] Add new column for SKU search table
+ *                                          [VL 3.1] Make Request Quantity (Carton / Bottle) readonly to internal users
+ * 2016-05-16       Laputa: Hugo            [HC 1.0] Add function for checking number is positive integer or not. 
+ *                                                   Not allow user input decimal number in Request Quantity field
+ * 2016-06-13       Laputa: Hugo            [HC 2.0] Show PRS WS Price in SKU and Line Detail
+ * 2016-07-20       Laputa: Hugo            [HC 3.0] Change SKU to SKU Name field
+ * 2018-02-21       Laputa: Hugo            [WL 4.0] Change SKU back to use SKU Name instead of JDE Search Text
+ */
+-->
+
+<apex:page standardController="ASI_KOR_Sales_Order_Request__c" extensions="ASI_CRM_SG_ManageSalesOrder_Ctrl_WS" sidebar="false" showheader="false">
+
+<head>
+<apex:stylesheet value="/sCSS/21.0/sprites/1297816277000/Theme3/default/gc/versioning.css" />   
+
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/css/redmond/jquery-ui-1.10.3.custom.min.css')}" />
+<apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/styles/common.css')}" />
+
+
+<link href="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'css/jquery.dataTables.css')}" media="screen" rel="stylesheet" type="text/css" />
+
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-1.9.1.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_Lib, '/libs/jquery/js/jquery-ui-1.10.3.custom.min.js')}" />
+<apex:includeScript value="{!URLFOR($Resource.ASI_CRM_SG_jQuery_DataTables, 'js/jquery.dataTables.js')}"/>
+
+<script>
+    $ = jQuery.noConflict();
+    
+    var eventDescriptionItemCount = 0;
+    var trainingDescriptionItemCount = 0;
+    
+    var colLabel_Action = "Action";     
+    
+    var basicDataTableProperties = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : true,
+        "aLengthMenu":[10,25,50],
+        "iDisplayLength":25,
+        "bSort" : false,
+        "oLanguage" : {"sSearch": "Filter"}
+    };
+    
+    var basicDataTableProperties2 = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : true,
+        "aLengthMenu":[10,25,50],
+        "iDisplayLength":25,
+        "bSort" : false,
+        "oLanguage" : {"sSearch": "Filter"}
+    };
+    
+    var basicDataTableProperties2 = {
+        "bDestroy":true,
+        "bStateSave":true,
+        "aaSorting": [[1, "asc"]],
+        "bSearch":false,
+        "bFilter" : true,
+        "aLengthMenu":[10,25,50],
+        "iDisplayLength":25,
+        "bSort" : true,
+        "oLanguage" : {"sSearch": "Filter"}
+    };
+    
+    //DataTable Variable
+    var cliSKU;
+    var cliSKU_KH;
+    var cmSKU;
+    var cliSalesOrderItems;
+    var cmSalesOrderItems;
+    var cliEvents;
+    var cmEvents;
+    var summaryEvents;
+    var cliCash;
+    var cliAP;
+    var cliPaymentSchedule1;
+    var cliPaymentSchedule2;
+    
+    $(document).ready(
+        function(){
+            setTables("{!region}");
+        }
+    );
+    
+    function setSKUTable(region){
+        var cliSKU_dataTableProperties = basicDataTableProperties;
+        
+        /* [VL 1.0] BEGIN */
+        /*
+        cliSKU_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "SKU"},
+            {"sTitle": "Request Quantity (Carton)"},
+            {"sTitle": "Request Quantity (Bottle)"},
+            {"sTitle": "FOC"}
+        ];
+        */
+        var recordtypeHeader = '{!salesOrderHeader.recordtype.developername}';
+        
+        /* [HC 2.0] BEGIN */
+        /* [HC 3.0] BEGIN */
+        if('{!$Profile.Name}'=='ASI SG External User') {
+            // table for SG Wholesaler sales order and external user
+            cliSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU Name"},
+                {"sTitle": "PRS WS Price"},
+                //{"sTitle": "Request Quantity (Carton)"},
+                {"sTitle": "Request Quantity (Bottle)"},
+                {"sTitle": "Buy (Bottle)"},
+                {"sTitle": "Trade Deal (Bottle)"}
+            ];
+        } else {
+            // table for SG Wholesaler sales order and internal user
+            cliSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU Name"},
+                {"sTitle": "PRS WS Price"},
+                //{"sTitle": "Request Quantity (Carton)"},
+                {"sTitle": "Request Quantity (Bottle)"},
+                {"sTitle": "Buy (Bottle)"},
+                {"sTitle": "Trade Deal (Bottle)"},
+                {"sTitle": "FOC"}
+                /* [VL 2.0] BEGIN */
+                , {"sTitle": "FOC (Additional)"}
+                /* [VL 2.0] END */
+            ];
+        }
+        /* [HC 3.0] END */
+        /* [HC 2.0] END */
+        /* [VL 1.0] END */
+        
+        var cliSKU_KH_dataTableProperties = basicDataTableProperties2;
+        cliSKU_KH_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU"},
+                {"sTitle": "Request Quantity (Bottle)"},
+            	{"sTitle": "Request Quantity (Carton)"},
+                {"sTitle": "Unit Price"},
+                {"sTitle": "Available Quantity (Carton)"}
+            ];
+        
+        
+        cliSKU =  $("#{!SALESORDER_TABLE}SKU").dataTable(cliSKU_dataTableProperties);
+		cliSKU_KH = $("#{!SALESORDER_TABLE}SKU_KH").dataTable(cliSKU_KH_dataTableProperties);
+        
+        var cmSKU_dataTableProperties = basicDataTableProperties2;
+        
+        /* [VL 3.0] BEGIN */
+        /*
+        cmSKU_dataTableProperties["aoColumns"] = [
+            {"sTitle": colLabel_Action},
+            {"sTitle": "SKU"},
+            {"sTitle": "Sku Code"},
+            {"sTitle": "Sku Description"}
+        ];
+        */        
+        
+        if (region == 'SG') {
+            // table for SG Wholesaler sales order
+            /* [HC 2.0] BEGIN */
+            /* [HC 3.0] BEGIN */
+            cmSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU Name"},
+                {"sTitle": "Sku Code"},
+                {"sTitle": "Sku Description"}
+                , {"sTitle": "Pack Factor"}
+                , {"sTitle": "UOM 1"}
+                , {"sTitle": "UOM 2"}
+                , {"sTitle": "Bottle Size (cL)"}
+                , {"sTitle": "Bottles per Case"}
+                , {"sTitle": "PRS WS Price"}
+            ];
+            /* [HC 3.0] END */
+            /* [HC 2.0] END */
+            /* [VL 3.0] END */
+            cmSKU =  $("#available_SKU").dataTable(cmSKU_dataTableProperties);
+        } else if (region == 'KH'){
+        	cmSKU_dataTableProperties["aoColumns"] = [
+                {"sTitle": colLabel_Action},
+                {"sTitle": "SKU Name"},
+                {"sTitle": "Sku Code"},
+                {"sTitle": "Sku Description"}
+                , {"sTitle": "Pack Factor"}
+                , {"sTitle": "UOM 1"}
+                , {"sTitle": "UOM 2"}
+                , {"sTitle": "Bottle Size (cL)"}
+                , {"sTitle": "Bottles per Case"}
+                , {"sTitle": "Price"}
+                , {"sTitle": "Available Quantity (Carton)"}
+            ];
+            cmSKU =  $("#available_SKU").dataTable(cmSKU_dataTableProperties);
+        }   
+    
+    }
+    
+    $.fn.digits = function(){ 
+        return this.each(function(){ 
+            $(this).text( $(this).text().replace(/(\d)(?=(\d\d\d)+(?!\d))/g, "$1,") ); 
+        })
+    }
+    
+    function setTables(region){
+        console.log ('setTables: ' + region);
+        setSKUTable(region);
+        
+        $('#{!SalesOrder_TABLE}SKU > tbody  > tr').each(function() {
+            $(this).find("input.OrderQuantity").trigger("change");
+        });
+        
+        $("span.numbers").digits();
+    }
+    
+    function validateNumber(input){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{0})?$"); 
+        return numRe.test(input);
+    }
+    
+    function validateFloat(input, precision){
+        input = normalizeFloat(input, [", ", "."]);
+        var numRe =  new RegExp("^([+]?)([0-9]*)(\.[0-9]{1,"+precision+"})?$"); 
+        return numRe.test(input);
+    }
+
+    /* [HC 1.0] BEGIN */
+    function isInteger(n) { return /^\+?(0|[\d,]*)$/.test(n); }
+    /* [HC 1.0] END */
+    
+    function calculateFOC(cpiRow, packagingSize, buySize, getFreeBottle) {
+        if(getFreeBottle == 0) {
+            return 0;
+        }
+        
+        //var cartonQty = parseInt(cpiRow.find('input.requestQtyCarton').val());
+        var bottleQty = parseInt(cpiRow.find('input.requestQtyBottle').val());
+        
+        var totalBottleQuantity = 
+            //((cartonQty!=null&&cartonQty!=undefined&&!isNaN(cartonQty)&&cartonQty!="") ? cartonQty : 0) * ((packagingSize!=null&&packagingSize!=undefined&&!isNaN(packagingSize)&&packagingSize!="") ? packagingSize : 0) +
+            ((bottleQty!=null&&bottleQty!=undefined&&!isNaN(bottleQty)&&bottleQty!="") ? bottleQty : 0);
+
+        return (totalBottleQuantity * getFreeBottle / buySize);
+    }
+
+    function normalizeFloat(number, chars) {
+        var lastIndex = -1;
+        for(i=0; i < chars.length; i++) {
+            t = number.lastIndexOf(chars[i]);
+
+            if (t > lastIndex) {
+                lastIndex = t;
+            }
+        }
+
+        if (lastIndex == -1) {
+            lastIndex = number.length;
+        }
+
+        var whole = number.substring(0, lastIndex);   
+        var precision = number.substring(lastIndex);
+        for (i=0; i < chars.length; i++) {
+            whole = whole.replace(chars[i], '');
+            precision = precision.replace(chars[i],'.');           
+        }
+        number = whole + precision;
+
+        f = parseFloat(number);
+        return f;
+    }
+    
+    /* **************************************************************** SKU TAB: AutoCalc Amount *********************************** */
+    function calculateAmount(cpiRow, price){
+        var totalResult = 0;
+        
+        if (cpiRow!=undefined){
+            var qty = cpiRow.find("input.OrderQuantity").val()
+            qty = normalizeFloat(qty, [",","."]);
+            qty = (qty!=null&&qty!=undefined&&qty!="NaN")?parseFloat(qty):0;
+            
+            price = normalizeFloat(price, [",","."]);
+            price = (price!=null&&price!=undefined&&price!="NaN")?parseFloat(price):0;
+            
+            totalResult = price * qty;
+            
+            totalResult = (totalResult!=null&&totalResult!=undefined&&!isNaN(totalResult)&&totalResult!="Infinity")?parseFloat(totalResult):0;
+            totalResult = parseFloat(Math.round(totalResult * 100) / 100).toFixed(2);
+        }
+        
+        return totalResult;
+    }
+    
+    function precise_round(num,decimals){
+        return Math.round(num*Math.pow(10,decimals))/Math.pow(10,decimals);
+    }
+    
+    function loading(val) {
+        if (val) {
+          document.getElementById('contentLoading').style.display = 'block';
+          document.getElementById('contentLoaded').style.display = 'none';
+        }
+        else {
+          document.getElementById('contentLoading').style.display = 'none';
+          document.getElementById('contentLoaded').style.display = 'block';
+        }
+    }
+    
+    function startLoading(){
+        $('#load_scrl').css('top', $(document).scrollTop() + 200);
+        $('.loadingBox').show();
+    }
+    function endLoading(){
+             $('.loadingBox').hide();
+    }
+    
+</script>
+
+<style>
+body {
+    margin-top: 40px;
+    font-size: 12px;
+    font-family: Helvetica,Arial,Verdana,sans-serif;
+    width:100%;
+}
+        
+.loadingOverlay{
+    opacity: 0.4;
+    postion: absolute;
+    top:0px;
+    left:0px;
+    background-color:#001100;
+    width:100%;
+    z-index: 5000
+}
+
+#container1{
+    width:100%;
+}
+
+#tabLink{
+    font-size: 10px;
+}
+
+.overlay {
+            display: none;
+            height: 100%;
+            left: 0;
+            position: fixed;
+            top: 0;
+            opacity: 0.3;
+            -moz-opacity: 0.3;
+            width: 100%;
+            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+            filter: alpha(opacity=30);
+            background: #000;
+            -khtml-opacity: 0.3;
+            z-index: 1000;
+        }
+.loader {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+    left: 50%;
+}
+
+input.error-input {
+    border-color: red;
+}
+
+</style>
+
+</head>
+
+    <body>
+        <apex:actionStatus id="loading" onstart="startLoading();" onstop="endLoading();" />
+        
+        <apex:form >
+            <apex:pageMessages id="pageMsg"></apex:pageMessages>
+            
+            <div id="contentLoading" style="display:none;">
+                <div style="text-align: center;">
+                    <p>Loading...
+                        <img src="/img/loading.gif" alt="Loading graphic" /></p>
+                </div>
+            </div>
+            
+            <div id="load_scrl" class="loadingBox loader" style="display:none"><div style="text-align: center;">
+                <p>Loading...
+                    <img src="/img/loading.gif" alt="Loading graphic" /></p>
+                </div>
+            </div>
+            <div class="loadingBox overlay"> </div>
+            
+            <apex:actionFunction name="retrieveSKUbySubBrand" action="{!retrieveSKUbySubBrand}" oncomplete="setTables('{!region}');"/>
+            
+            
+            <apex:pageBlock id="main_pageBlock">
+                <apex:pageblockButtons rendered="{!isEdit}">
+                    <apex:commandLink value="Save" 
+                                      status="loading"
+                                      action="{!saveSalesOrderItems}"
+                                      target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;">
+                        <apex:param name="IS_QUICK_SAVE" value="false"/>
+                    </apex:commandLink>
+                    <apex:commandButton value="Quick Save" 
+                                        rerender="pageMsg"
+                                        oncomplete="console.log('Quick Save Done');"
+                                        status="loading"
+                                        action="{!saveSalesOrderItems}">
+                        <apex:param name="IS_QUICK_SAVE" value="true"/>
+                    </apex:commandButton>
+                    <apex:commandLink value="Cancel" action="{!cancel}" 
+                                      immediate="true"
+                                      target="_parent" styleClass="btn" style="text-decoration:none;padding:4px;"/>
+                </apex:pageblockButtons>
+                <apex:pageBlockSection columns="1">
+                    <apex:outputField value="{!salesOrderHeader.Name}"/>
+                </apex:pageBlockSection>
+                
+                
+                <div id="mechanicTypeTabs" class="tabLink">
+                    <ul>
+                        <li><apex:outputPanel rendered="true"><a href="#tab_SKU">SKU</a></apex:outputPanel></li>
+                    </ul>
+                    
+                    <!-- SKU -->
+                    <div id="tab_SKU">
+                        <apex:pageBlock id="pageBlock_SKU"> 
+                            <apex:pageBlockSection id="section_lineItem_SKU" title="Sales Order Request Items" columns="1">
+                                
+                                <!-- SG -->
+                                <apex:outputPanel layout="block" rendered="{!region == 'SG'}">
+                                    <table id="{!SALESORDER_TABLE}SKU">
+                                        <apex:repeat var="cpiKey" value="{!allSalesOrderItemMap}">
+                                            <apex:repeat var="cpiObj" value="{!allSalesOrderItemMap[cpiKey]}">
+                                                <tr id="row_SKU_{!cpiKey}" class="cpiContent">
+                                                    <td>
+                                                        <!-- [VL 2.1] BEGIN -->
+                                                        <!--
+                                                        <apex:commandLink value="Delete"
+                                                        immediate="true"
+                                                        action="{!removeSalesOrderSKU}"
+                                                        rerender="pageBlock_SKU,  pageMsg"
+                                                        onComplete="console.log('Remove CPI'); setTables();"
+                                                        status="loading">
+                                                        <apex:param name="PARAM_SALESORDER_SKU_ID" value="{!cpiKey}"/>
+                                                        </apex:commandLink>
+                                                        -->
+                                                        <apex:commandLink value="Delete"
+                                                                          immediate="true"
+                                                                          action="{!removeSalesOrderSKU}"
+                                                                          rerender="pageBlock_SKU,  pageMsg"
+                                                                          onComplete="console.log('Remove CPI'); setTables('{!region}');"
+                                                                          status="loading"
+                                                                          rendered="{!($Profile.Name='ASI SG External User')}">
+                                                            <apex:param name="PARAM_SALESORDER_SKU_ID" value="{!cpiKey}"/>
+                                                        </apex:commandLink>
+                                                        <!-- [VL 2.1] END -->
+                                                    </td>
+                                                    <td>
+                                                        <!-- [HC 3.0] BEGIN -->
+                                                        <apex:outputLink value="/{!cpiObj.salesOrderLineItem.ASI_CRM_SG_SKU__c}">
+                                                            <apex:outputText value="{!cpiObj.skuName}"/>
+                                                        </apex:outputLink>
+                                                        <!-- [HC 3.0] END -->
+                                                    </td>
+                                                    <!-- [HC 2.0] BEGIN -->
+                                                    <td><apex:outputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_Selling_Price_Per_Bottle_PRS_WS__c}"/></td>
+                                                    <!-- [HC 2.0] END -->
+                                                    <!-- Wilken 20161115, remove Carton column
+                                                    !-- [VL 3.1] BEGIN --
+                                                    !--
+                                                    <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Carton__c}"
+                                                    required="false"
+                                                    styleclass="requestQtyCarton">
+                                                    </apex:inputField>
+                                                    --
+                                                    !-- [HC 1.0] BEGIN --
+                                                    <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Carton__c}"
+                                                    required="false"
+                                                    rendered="{!($Profile.Name='ASI SG External User')}"
+                                                    onChange="if(!isInteger($('#row_SKU_{!cpiKey}').find('input.requestQtyCarton').val()) 
+                                                    && $('#row_SKU_{!cpiKey}').find('input.requestQtyCarton').val()) 
+                                                    { alert('Request Quantity(Carton) must be positive integer!') };
+                                                    var foc = calculateFOC($('#row_SKU_{!cpiKey}'), {!cpiObj.salesOrderLineItem.ASI_CRM_Packaging_Size__c}, {!cpiObj.buySize}, {!cpiObj.getFreeBottle});
+                                                    if(!isInteger(foc)) {
+                                                    alert('Your order does not optimise our trade deal. Please reconsider.');
+                                                    };"
+                                                    styleclass="requestQtyCarton">
+                                                    </apex:inputField>
+                                                    !-- [HC 1.0] END --
+                                                    <apex:outputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Carton__c}"
+                                                    rendered="{!NOT($Profile.Name='ASI SG External User')}"
+                                                    styleclass="requestQtyCarton">
+                                                    </apex:outputField>
+                                                    !-- [VL 3.1] END --
+                                                    -->
+                                                    <td>
+                                                        <!-- [VL 3.1] BEGIN -->
+                                                        <!--
+                                                        <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"
+                                                        required="false"
+                                                        styleclass="requestQtyBottle">
+                                                        </apex:inputField>
+                                                        -->
+                                                        <!-- [HC 1.0] BEGIN -->
+                                                        <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"
+                                                                         required="false"
+                                                                         rendered="{!($Profile.Name='ASI SG External User')}"
+                                                                         onChange="if(!isInteger($('#row_SKU_{!cpiKey}').find('input.requestQtyBottle').val()) 
+                                                                                   && $('#row_SKU_{!cpiKey}').find('input.requestQtyBottle').val()) 
+                                                                                   { alert('Request Quantity(Bottle) must be positive integer!') };
+                                                                                   var foc = calculateFOC($('#row_SKU_{!cpiKey}'), {!cpiObj.salesOrderLineItem.ASI_CRM_Packaging_Size__c}, {!cpiObj.buySize}, {!cpiObj.getFreeBottle});
+                                                                                   if(!isInteger(foc)) {
+                                                                                   alert('Your order does not optimise our trade deal. Please reconsider.');
+                                                                                   };"
+                                                                         styleclass="requestQtyBottle">
+                                                        </apex:inputField>
+                                                        <!-- [HC 1.0] END -->
+                                                        <apex:outputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"
+                                                                          rendered="{!NOT($Profile.Name='ASI SG External User')}"
+                                                                          styleclass="requestQtyBottle">
+                                                        </apex:outputField>
+                                                        <!-- [VL 3.1] END -->
+                                                    </td>
+                                                    <td><apex:outputText value="{!cpiObj.buySize}"/></td>
+                                                    <td><apex:outputText value="{!cpiObj.getFreeBottle}"/></td>
+                                                    <!-- [VL 1.0] BEGIN -->
+                                                    <!--
+                                                    <td>
+                                                    <apex:inputField value="{!cpiObj.ASI_CRM_SG_FOC__c}"
+                                                    required="false"
+                                                    styleclass="FOC">
+                                                    </apex:inputField>
+                                                    </td>
+                                                    -->
+                                                    <apex:outputtext rendered="{!NOT($Profile.Name='ASI SG External User')}">
+                                                        <td>
+                                                            <!-- [VL 2.0] BEGIN -->
+                                                            <!--
+                                                            <apex:inputField value="{!cpiObj.ASI_CRM_SG_FOC__c}"
+                                                            required="false"
+                                                            styleclass="FOC">
+                                                            </apex:inputField>
+                                                            -->
+                                                            <apex:outputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_FOC__c}"
+                                                                              styleclass="FOC">
+                                                            </apex:outputField>
+                                                            <!-- [VL 2.0] END -->
+                                                        </td>
+                                                    </apex:outputtext>
+                                                    <!-- [VL 1.0] END -->
+                                                    <!-- [VL 2.0] BEGIN -->
+                                                    <apex:outputtext rendered="{!NOT($Profile.Name='ASI SG External User')}">
+                                                        <td>
+                                                            <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_FOC_Additional__c}"
+                                                                             required="false"
+                                                                             styleclass="FOCAdditional">
+                                                            </apex:inputField>
+                                                        </td>
+                                                    </apex:outputtext>
+                                                    <!-- [VL 2.0] END -->
+                                                </tr>
+                                            </apex:repeat>
+                                        </apex:repeat>
+                                    </table>
+                                </apex:outputPanel>
+                                
+                                <!-- KH -->
+                                <apex:outputPanel layout="block" rendered="{!region == 'KH'}">
+                                    <table id="{!SALESORDER_TABLE}SKU_KH">
+                                        <apex:repeat var="cpiKey" value="{!allSalesOrderItemMap}">
+                                            <apex:repeat var="cpiObj" value="{!allSalesOrderItemMap[cpiKey]}">
+                                                <tr id="row_SKU_{!cpiKey}" class="cpiContent">
+                                                    <td>
+                                                        <apex:commandLink value="Delete"
+                                                                          immediate="true"
+                                                                          action="{!removeSalesOrderSKU}"
+                                                                          rerender="pageBlock_SKU, pageMsg"
+                                                                          onComplete="console.log('Remove CPI'); setTables('{!region}');"
+                                                                          status="loading"
+                                                                          rendered="{!($Profile.Name='ASI SG External User' || $Profile.Name='ASI KH Standard User' || $Profile.Name='ASI Vendor Support System Administrator' )}">
+                                                            <apex:param name="PARAM_SALESORDER_SKU_ID" value="{!cpiKey}"/>
+                                                        </apex:commandLink>
+                                                    </td>
+                                                    <td>
+                                                        <apex:outputLink value="/{!cpiObj.salesOrderLineItem.ASI_CRM_SG_SKU__c}">
+                                                            <apex:outputText value="{!cpiObj.skuName}"/>
+                                                        </apex:outputLink>
+                                                    </td>
+                                                    <td>
+                                                        <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Bottle__c}"
+                                                                         required="false"
+                                                                         styleclass="requestQtyBottle">
+                                                        </apex:inputField>
+                                                    </td>
+                                                     <td>
+                                                        <apex:inputField value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Request_Quantity_Carton__c}"
+                                                                         required="false"
+                                                                         styleclass="requestQtyBottle">
+                                                        </apex:inputField>
+                                                    </td>
+                                                    <td><apex:outputText value="{!cpiObj.salesOrderLineItem.ASI_CRM_SG_Unit_Price__c}"/></td>
+                                                    <td><apex:outputText value="{!cpiObj.relatedSKU.ASI_CRM_Available_Quantity_Carton__c}"/></td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </apex:repeat>
+                                    </table>
+                                </apex:outputPanel>
+                                
+                            </apex:pageBlockSection>
+                            
+                            <!-- [VL 2.1] BEGIN -->
+                            <!--
+                            <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1" rendered="{!isEdit}">
+                            -->
+                            <apex:pageBlockSection id="section_available_SKU" title="SKU" columns="1" rendered="{!AND(isEdit,($Profile.Name='ASI SG External User' || $Profile.Name='ASI KH Standard User' || $Profile.Name='ASI Vendor Support System Administrator' ))}">
+                                <!-- [VL 2.1] END -->
+                                <apex:pageBlockSectionItem >
+                                    <apex:outputLabel value="SKU Code"/>
+                                    <apex:outputPanel >
+                                        <apex:inputText value="{!skuCodeFilter}"/>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSectionItem>
+                                
+                                <!-- [HC 3.0] BEGIN -->
+                                <apex:pageBlockSectionItem >
+                                    <apex:outputLabel value="SKU Name"/>
+                                    <apex:outputPanel >
+                                        <apex:inputText value="{!skuNameFilter}" />
+                                        <apex:commandbutton value="Search" action="{!retrieveSKUbySubBrand}" rerender="pageBlock_SKU, pageMsg" onComplete="setTables('{!region}');" status="loading"/>
+                                    </apex:outputPanel>
+                                </apex:pageBlockSectionItem>
+                                <!-- [HC 3.0] END -->
+                                
+                                <apex:pageBlockSectionItem >
+                                </apex:pageBlockSectionItem>
+                                
+                                
+                                <apex:outputPanel layout="block" rendered="{!region == 'SG'}">
+                                    <table id="available_SKU">
+                                        <apex:repeat var="csKey" value="{!allSKUMap}">
+                                            <apex:repeat var="csObj" value="{!allSKUMap[csKey]}">
+                                                <tr>
+                                                    <td>
+                                                        <apex:commandLink value="Add"
+                                                                          rendered="true" 
+                                                                          immediate="true"
+                                                                          action="{!addSalesOrderItem}"
+                                                                          rerender="pageBlock_SKU,  pageMsg"
+                                                                          onComplete="console.log('Add CPI'); setTables('{!region}');"
+                                                                          status="loading"> 
+                                                            <apex:param name="PARAM_SALESORDER_SOURCE_ITEM_ID" value="{!csKey}"/>
+                                                        </apex:commandLink>
+                                                    </td>
+                                                    <!-- [HC 3.0] BEGIN -->
+                                                    <td>
+                                                        <!-- [HC 3.0] BEGIN -->
+                                                        <!-- [WL 4.0] BEGIN -->
+                                                        <apex:outputLink value="/{!csObj.skuCode.Id}">                                          
+                                                            <!--<apex:outputField value="{!csObj.skuCode.ASI_CRM_Short_Description__c}"/>-->
+                                                            <apex:outputField value="{!csObj.skuCode.Name}"/>
+                                                        </apex:outputLink>
+                                                        <!-- [WL 4.0] END -->
+                                                        <!-- [HC 3.0] END -->
+                                                        
+                                                        
+                                                    </td>
+                                                    <!-- [HC 3.0] END -->
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_MFM_SKU_Code__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_MFM_SKU_Description__c}"/></td>
+                                                    <!-- [VL 3.0] BEGIN -->
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Pack_Factor__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_UOM1__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_UOM2__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Std_Bottle_Size__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Packaging_Size__c}"/></td>
+                                                    <!-- [HC 2.0] BEGIN -->
+                                                    <td><apex:outputText value="{!csObj.skuPrice}"/></td>
+                                                    <!-- [HC 2.0] END -->
+                                                    <!-- [VL 3.0] END -->
+                                                </tr>
+                                            </apex:repeat>
+                                        </apex:repeat>
+                                    </table>
+                                </apex:outputPanel>
+                                
+                                <apex:outputPanel layout="block" rendered="{!region == 'KH'}">
+                                    <table id="available_SKU">
+                                        <apex:repeat var="csKey" value="{!allSKUMap}">
+                                            <apex:repeat var="csObj" value="{!allSKUMap[csKey]}">
+                                                <tr>
+                                                    <td>
+                                                        <apex:commandLink value="Add"
+                                                                          rendered="true" 
+                                                                          immediate="true"
+                                                                          action="{!addSalesOrderItem}"
+                                                                          rerender="pageBlock_SKU,  pageMsg"
+                                                                          onComplete="console.log('Add CPI'); setTables('{!region}');"
+                                                                          status="loading"> 
+                                                            <apex:param name="PARAM_SALESORDER_SOURCE_ITEM_ID" value="{!csKey}"/>
+                                                        </apex:commandLink>
+                                                    </td>
+                                                    <td>
+                                                        <apex:outputLink value="/{!csObj.skuCode.Id}">                                          
+                                                            <apex:outputField value="{!csObj.skuCode.Name}"/>
+                                                        </apex:outputLink>
+                                                    </td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_MFM_SKU_Code__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_MFM_SKU_Description__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Pack_Factor__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_UOM1__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_UOM2__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Std_Bottle_Size__c}"/></td>
+                                                    <td><apex:outputField value="{!csObj.skuCode.ASI_HK_CRM_Packaging_Size__c}"/></td>
+                                                    <td><apex:outputText value="{!csObj.skuPrice}"/></td>
+                                                    <td><apex:outputText value="{!csObj.skuCode.ASI_CRM_Available_Quantity_Carton__c}"/></td>
+                                                </tr>
+                                            </apex:repeat>
+                                        </apex:repeat>
+                                    </table>
+                                </apex:outputPanel>
+                                
+                                
+                                
+                            </apex:pageBlockSection>
+                        </apex:pageBlock>
+                        
+                    </div>
+                    
+                </div>
+                
+                
+                <script>
+                $("#mechanicTypeTabs").tabs();
+                </script>
+                
+            </apex:pageBlock>
+            
+        </apex:form>
+        
+    </body>
+</apex:page>

@@ -1,0 +1,298 @@
+<!--
+ - Created by Jeffrey Cheung on 12/1/2018.
+ -->
+
+<apex:page controller="ASI_CRM_VN_MassOwnerTransferController" id="ASI_CRM_VN_MassOwnerTransfer">
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/styles/bootstrap.min.css')}"/>
+    <apex:stylesheet value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/styles/datatables.min.css')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/lib/jquery.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/lib/datatables.min.js')}"/>
+    <apex:includeScript value="{!URLFOR($Resource.ASI_CRM_VN_Library, '/lib/bootbox.min.js')}"/>
+
+    <style>
+        .row-eq-height {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: -ms-flexbox;
+            display: flex;
+        }
+
+        .align-items-center {
+            align-items: center;
+        }
+
+        .align-items-fix-end {
+            align-items: flex-end;
+        }
+
+        .alert {
+            display: none;
+        }
+
+        .loading-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background-color: black;
+            opacity: 0.25;
+        }
+
+        .loading-div {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            z-index: 1001;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 5px;
+        }
+    </style>
+
+    <script>
+        $(document).ready(function () {
+            // Initialise data table
+            let table = $("#dataTable").DataTable({
+                data: [],
+                ordering: false,
+                searching: false,
+                lengthChange: false,
+                pageLength: 500,
+                columnDefs: [{
+                    defaultContent: "-",
+                    targets: "_all"
+                }],
+                columns: [
+                    {
+                        title: `<input type='checkbox' onchange="selectAllItem(this.checked)"/>`,
+                        data: function (row, type, set, meta) {
+                            return meta.row;
+                        },
+                        render: function (data, type, row, meta) {
+                            return `<input type="checkbox" ${row.selected ? 'checked' : ''} onchange="updateSelectedItem(${meta.row})"/>`;
+                        }
+                    },
+                    {   title: 'Customer Name',
+                        data: 'Name',
+                        render(data, type, row, meta){
+                            return `<a href="/${row.Id}" target="_blank" onclick="event.stopPropagation()">${data}</a>`;
+                        }
+                    },
+                    {title: 'Customer Code', data: 'ASI_CRM_CustomerCode__c'},
+                    {title: 'Region(VN)', data: 'ASI_CRM_VN_Region__c'},
+                    {title: 'Area', data: 'ASI_CRM_Area__c'},
+                    {title: 'Province', data: 'ASI_CRM_VN_Province__c'},
+                    {title: 'Outlet Type', data: 'ASI_CRM_VN_OutletType__c'},
+                    {title: 'Record Type', data: 'RecordType.Name'},
+                    {title: 'Owner', data: 'Owner.Name'},
+                ]
+            });
+
+            // Let user select row by clicking the row
+            $('#dataTable tbody').on( 'click', 'tr', function () {
+                let selection = getSelection().toString();
+                if(!selection){
+                    updateSelectedItem(table.row( this ).index());
+                }
+            } );
+
+
+            // Populate data
+            $(document.getElementById("ASI_CRM_VN_MassOwnerTransfer:filter:searchButton")).trigger('click');
+        });
+
+        function selectAllItem(checked){
+            let table = $("#dataTable").DataTable();
+            table.rows({ page: 'current' }).every(function (row) {
+                let d = this.data();
+                d.selected = checked;
+            });
+
+            // Draw once all updates are done
+            table.rows().invalidate('data').draw(false);
+        }
+
+        function updateSelectedItem(rowIndex) {
+            let table = $("#dataTable").DataTable();
+            let d = table.row(rowIndex).data();
+            d.selected = !d.selected; // toggle boolean
+            table.row(rowIndex).data(d);
+        }
+
+        function drawTable(response) {
+            let table = $('#dataTable').DataTable();
+            table.clear().rows.add(response).draw();
+        }
+
+        function changeOwnerVF() {
+            let newOwnerSelectList = $("select[data-id='newOwnerSelectList']");
+            let ownerId = newOwnerSelectList.val();
+            let ownerName = newOwnerSelectList.find('option:selected').text();
+            let selectedItems = $("#dataTable").DataTable().data().filter(item => item.selected).toArray();
+
+            if(!ownerId){
+                $('#error-message').text('Please select an owner.').show();
+                return;
+            }
+            if(selectedItems.length === 0){
+                $('#error-message').text('Please select at least one outlet.').show();
+                return;
+            }
+
+            bootbox.confirm({
+                message: `You are going to transfer the following outlets to ${ownerName}. Continue?</br>` + selectedItems.map(item => '<li>' + item.Name + '</li>').join(''),
+                buttons: {
+                    confirm: {
+                        label: 'Yes',
+                        className: 'btn'
+                    },
+                    cancel: {
+                        label: 'No',
+                        className: 'btn'
+                    }
+                },
+                callback(result) {
+                    if(!result){
+                        return;
+                    }
+                    document.getElementById("ASI_CRM_VN_MassOwnerTransfer:filter:loading.start").style.display = "";
+
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{!$RemoteAction.ASI_CRM_VN_MassOwnerTransferController.changeOwner}',
+                        ownerId, JSON.stringify(selectedItems),
+                        function (result, event) {
+                            document.getElementById("ASI_CRM_VN_MassOwnerTransfer:filter:loading.start").style.display = "none";
+                            $('.alert').hide();
+                            if (event.status) {
+                                $('#success-message').html('Owner changed.').show();
+                                // Refresh data by triggering a click on search button
+                                $(document.getElementById("ASI_CRM_VN_MassOwnerTransfer:filter:searchButton")).trigger('click');
+
+                            } else if (event.type === 'exception') {
+                                $('#error-message').html(event.message).show();
+                            }
+                        },
+                        {escape: true}
+                    );
+                }
+            });
+
+
+        }
+
+    </script>
+
+
+    <apex:form id="filter">
+
+        <div class="panel panel-default">
+            <div class="panel-body">
+                <div class="row row-eq-height align-items-center">
+                    <div class="col-xs-8 ">
+                        <div class="row">
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="Outlet Type: " for="outletTypes"/>
+                                <apex:selectList id="outletTypes" html-class="form-control" value="{!selectedOutletType}"
+                                                 size="1">
+                                    <apex:selectOptions value="{!outletTypes}"/>
+                                </apex:selectList>
+                            </div>
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="Outlet Subtype: " for="outletSubtypes"/>
+                                <apex:selectList html-class="form-control" value="{!selectedOutletSubType}" size="1">
+                                    <apex:selectOptions value="{!outletSubtypes}"/>
+                                </apex:selectList>
+                            </div>
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="PROS Image: " for="PROSImages"/>
+                                <apex:selectList html-class="form-control" value="{!selectedPROSImage}" size="1">
+                                    <apex:selectOptions value="{!PROSImages}"/>
+                                </apex:selectList>
+                            </div>
+
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="Owner Name: " for="outletOwners"/>
+                                <apex:selectList html-class="form-control" value="{!selectedOutletOwner}" size="1">
+                                    <apex:selectOptions value="{!outletOwners}"/>
+                                </apex:selectList>
+                            </div>
+
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="Area: " for="areas"/>
+                                <apex:selectList html-class="form-control" value="{!selectedArea}" size="1">
+                                    <apex:selectOptions value="{!areas}"/>
+                                </apex:selectList>
+                            </div>
+
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="Province: " for="provinces"/>
+                                <apex:selectList html-class="form-control" value="{!selectedProvince}" size="1">
+                                    <apex:selectOptions value="{!provinces}"/>
+                                </apex:selectList>
+                            </div>
+
+                            <div class="col-xs-3">
+                                <apex:outputLabel value="District: " for="districts"/>
+                                <apex:selectList html-class="form-control" value="{!selectedDistrict}" size="1">
+                                    <apex:selectOptions value="{!districts}"/>
+                                </apex:selectList>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xs-4">
+                        <apex:commandButton id="searchButton" status="loading" action="{!searchOutlet}" value="Search outlet"
+                                            onComplete="drawTable({!filteredOutletsJSON});"/>
+                        <apex:commandButton action="{!resetFilter}" value="Reset filter" reRender="filter"/>
+                        <apex:actionStatus id="loading">
+                            <apex:facet name="start">
+                                <div class="loading-bg">
+                                    &nbsp;
+                                </div>
+                                <div class="loading-div">
+                                    <img src="/img/loading.gif"/>
+                                    <span>Please Wait...</span>
+                                </div>
+                            </apex:facet>
+                        </apex:actionStatus>
+
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </apex:form>
+
+
+        <div class="panel panel-default">
+            <div class="panel-body">
+                <div id="success-message" class="alert alert-success">
+                </div>
+                <div id="error-message" class="alert alert-danger">
+                </div>
+
+                <div class="row row-eq-height align-items-fix-end">
+                    <div class="col-xs-2">
+                        <apex:form >
+                        <apex:outputLabel value="New Owner Name: " for="newOwnerName"/>
+                        <apex:selectList html-class="form-control" html-data-id="newOwnerSelectList" size="1">
+                            <apex:selectOptions value="{!newOutletOwners}"/>
+                        </apex:selectList>
+                        </apex:form>
+                    </div>
+                    <div class="col-xs-4">
+                        <button class="btn" onclick="changeOwnerVF()">Change Owner</button>
+                    </div>
+                </div>
+                <table id="dataTable" class="display" width="100%">
+
+                </table>
+
+            </div>
+        </div>
+
+
+</apex:page>

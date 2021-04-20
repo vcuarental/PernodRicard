@@ -1,0 +1,103 @@
+<apex:page controller="ESN_BP_OAuthController" showHeader="false" sidebar="false">
+    <apex:includeScript value="{!URLFOR($Resource.jQuery, 'js/jquery-1.5.1.min.js')}"/>
+    <apex:includeScript value="{!$Resource.purl}"/>
+    
+    <script type='text/javascript'>  
+        $(document).ready(function(){
+            
+            /* User Agent flow, callback */
+            if (window.location.href.indexOf('#access_token') != -1) {
+                
+                //alert(window.location.href);
+                
+                //TODO
+                //The opener must listen loadStop event and check the url
+                
+                //var accessToken = decodeURIComponent(window.location.href.substring(window.location.href.indexOf('access_token=') + 13, window.location.href.indexOf('&instance_url=')));
+                //window.opener.postConnect(accessToken);
+                
+            } 
+            /* User Agent flow, callback error */
+            else if (window.location.href.indexOf('#error') != -1) {
+            
+                //alert(window.location.href);
+                
+                //TODO
+                //The opener must listen loadStop event and check the url
+            }
+            /* Web Server Flow, authorization code recieved */
+            else if (window.location.href.indexOf('code') != -1) {
+                
+                /* Toke Request */
+                Visualforce.remoting.Manager.invokeAction(
+                    '{!$RemoteAction.ESN_BP_OAuthController.getToken}',
+                    decodeURIComponent($.url(window.location.href).param('code')), 
+                    function(result, event){ 
+                    
+                        //if (result.indexOf('error') != -1)
+                        //    alert('error : ' + result);
+                        //else {
+                            
+                            var state = '{!IE8_VERSION_URL}';//$.url(window.location.href).param('state');
+                            //if (/MSIE (\d+\.\d+);/.test(navigator.userAgent)){ //test for MSIE x.x;
+                            //    var ieversion=new Number(RegExp.$1) // capture x.x portion and store as a number
+                            //    if (ieversion <= 8)
+                            //        state = '{!IE8_VERSION_URL}';
+                            //}
+                            window.location.href = state + '?token=' + result.split('|')[0];
+                        //}
+                    }
+                );
+                
+            } 
+            /* Initiate Web Server Flow */
+            else if ($.url(window.location.href).param('mode') === 'webserver') {
+            
+                //alert('request : ' + getTokenRequest('code'));
+                window.location.href = getTokenRequest('code');//tokenRequest;
+                
+            } 
+            /* Manage User Agent Flow */
+            else if ($.url(window.location.href).param('mode') === 'useragent') {
+                
+                /* Refresh Token Flow */
+                if($.url(window.location.href).param('refreshtoken') != null) {
+                    /* Toke Request */
+                    Visualforce.remoting.Manager.invokeAction(
+                        '{!$RemoteAction.ESN_BP_OAuthController.getRefreshToken}',
+                        decodeURIComponent($.url(window.location.href).param('refreshtoken')), 
+                        function(result, event){ 
+                        
+                            if (result.indexOf('error') != -1)
+                                //alert('error : ' + result);
+                                
+                                window.location.href = window.location.href + '#error=' + result.split('|')[0];
+                            else {
+                                //alert('accessToken : ' + result.split('|')[0]);
+                                //alert('instanceUrl : ' + result.split('|')[1]);
+                                
+                                window.location.href = window.location.href + '#acces_token=' + result.split('|')[0];
+                            }
+                        }
+                    );
+                /* Initiate User Agent Flow */
+                } else
+                    window.location.href = getTokenRequest('token');
+                
+            } else {
+            
+                //alert('Bad Request');
+            }
+        });
+        
+        function getTokenRequest(responseType) {
+        
+            var url = '{!AUTHORIZE_URL}';
+            var clientId = responseType === 'code' ? '{!WEB_SERVER_CONNECTED_APP_CLIENT_ID}' : '{!USER_AGENT_CONNECTED_APP_CLIENT_ID}';
+            var redirectUri = responseType === 'code' ? '{!WEB_SERVER_CONNECTED_APP_REDIRECT_URI}' : '{!USER_AGENT_CONNECTED_APP_REDIRECT_URI}';
+            var state = responseType === 'code' ? '&state=' + encodeURIComponent(document.referrer) : '';
+            
+            return url + '?response_type=' + responseType + '&client_id=' + clientId + '&redirect_uri=' + encodeURI(redirectUri) + state;
+        }
+    </script>
+</apex:page>

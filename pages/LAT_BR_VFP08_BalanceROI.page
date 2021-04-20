@@ -1,0 +1,310 @@
+<apex:page controller="LAT_BR_VFC08_BalanceROI" tabStyle="LAT_CRP_Custom_Report__c" sidebar="false" renderAs="{!IF(renderAs=='pdf', 'pdf', '')}" standardStylesheets="{!IF(renderAs != null, false, true)}" contentType="{!IF(renderAs == 'excel', 'application/vnd.ms-excel#BalanceROI.xls ', '' )}">
+
+    <head>
+        <style>
+            @page {size: landscape;}
+            .tableStyle {border-collapse:collapse; width:100%;}
+            .tableStyle td, .tableStyle th {font-size:11px; border:1px solid {!colorTab}; padding:3px 7px 2px 7px; height:20px;}
+            .tableStyle th {font-size:11.5px; text-align:center; padding-top:5px; padding-bottom:4px; background-color:{!colorTab}; color:#ffffff;}
+        </style> 
+    </head>        
+    
+    <apex:panelGroup rendered="{!hasAccess}">
+        <apex:panelGroup rendered="{!renderAs==null}">
+            <apex:sectionHeader title="{!$Label.LAT_BR_VFP03_00023}" subtitle="{!reportName}"/>
+            <!-- $Label.LAT_BR_VFP03_00023}: "Relatórios" -->
+            
+            <apex:pageMessages id="mjes"/>
+        
+            <apex:form >            
+                
+                <!-- STATUS LOADING -->
+                <apex:actionStatus id="status">
+                    <apex:facet name="start">
+                        <c:LAT_MX_LoadingLayer ImageUrl="{!URLFOR($Resource.LAT_MX_LoadingGif)}" Message="{!$Label.LAT_BR_VFP05_00023}"/>
+                        <!-- Label.LAT_BR_VFP05_00023 = Espere... -->
+                    </apex:facet>
+                </apex:actionStatus>
+            
+                <apex:pageblock title="{!reportName}" id="pageBlockFilter">
+                    <apex:pageBlockSection showHeader="false" columns="5" id="sectionFilter">
+                        <apex:panelGroup >
+                            <apex:outputLabel value="{!$Label.LAT_BR_VFP08_00001}" styleClass="label"/><br/>
+                            <!-- LAT_BR_VFP08_00001: Selecção das regiões -->
+                            <c:LAT_MultiselectPicklist leftLabel="{!$Label.LAT_BR_VFP03_00014}" leftOptions="{!RegionsAvailable}" rightLabel="{!$Label.LAT_BR_VFP03_00015}" rightOptions="{!regionsSelected}" size="10" width="125px"/>            
+                        </apex:panelGroup>
+                        
+                        <apex:panelGroup >
+                            <apex:outputLabel value="{!$Label.LAT_BR_VFP08_00002}" styleClass="label"/><br/>
+                            <!-- LAT_BR_VFP08_00002: Segmentações Seleção -->
+                            <c:LAT_MultiselectPicklist leftLabel="{!$Label.LAT_BR_VFP03_00014}" leftOptions="{!SegmentsAvailable}" rightLabel="{!$Label.LAT_BR_VFP03_00015}" rightOptions="{!segmentsSelected}" size="10" width="125px"/>            
+                        </apex:panelGroup>
+                        
+                        <apex:pageBlockSection title="{!$Label.LAT_BR_VFP08_00003}" collapsible="false" columns="1">
+                        <!-- LAT_BR_VFP08_00003: Filtro de data -->
+                            <apex:pageblocksectionItem >
+                                <apex:outputLabel value="{!$Label.LAT_BR_VFP08_00004}" />
+                                <!-- LAT_BR_VFP08_00004: Ano civil -->
+                                <apex:selectList value="{!fiscalYear}" size="1">
+                                    <apex:selectOptions value="{!FiscalYears}"/>
+                                    <apex:actionSupport event="onchange" rerender="meses" />
+                                </apex:selectList>
+                            </apex:pageblocksectionItem>
+                            
+                            <apex:pageblocksectionItem >
+                                <apex:outputLabel value="{!$Label.LAT_BR_VFP08_00005}" />
+                                <!-- LAT_BR_VFP08_00005: Mês (Até) -->
+                                <apex:selectList value="{!month}" size="1" id="meses">
+                                    <apex:selectOptions value="{!Months}"/>
+                                </apex:selectList>
+                            </apex:pageblocksectionItem>
+                            
+                        </apex:pageBlockSection>
+                        
+                    </apex:pageBlockSection>   
+                    <br/>
+                    <center>
+                        <apex:panelGroup id="botones">
+                            <apex:commandLink action="{!runReport}" value="{!$Label.LAT_BR_VFP03_00017}" styleClass="btn" style="text-decoration:none; padding-top: 4px; padding-bottom: 4px" reRender="tabla, botones" status="status"/>
+                            <!-- $Label.LAT_BR_VFP03_00017: "Executar Relatório" -->
+                            <apex:commandLink Target="_blank" value="{!$Label.LAT_BR_VFP03_00026}" action="{!doExportPDF}" rendered="{!ran}" styleClass="btn" style="text-decoration:none; padding-top: 4px; padding-bottom: 4px" id="exportPDF"/>
+                            <!-- $Label.LAT_BR_VFP03_00026: "Exportar para PDF" -->
+                            <apex:commandLink Target="_blank" value="{!$Label.LAT_BR_VFP03_00027}" action="{!doExportExcel}" rendered="{!ran}" styleClass="btn" style="text-decoration:none; padding-top: 4px; padding-bottom: 4px" id="exportExcel"/>
+                            <!-- $Label.LAT_BR_VFP03_00027: "Exportar para Excel" -->
+                        </apex:panelGroup>
+                    </center>
+                </apex:pageblock>
+            </apex:form>             
+            
+            <apex:panelGroup id="tabla">
+                <table class="tableStyle">
+                           
+                    <tr>
+                        <th>{!$Label.LAT_BR_VFP03_00018}</th>
+                        <!-- LAT_BR_VFP03_00018: "Região" -->
+                        <th>{!$Label.LAT_BR_VFP03_00019}</th>
+                        <!-- LAT_BR_VFP03_00019: "Segmentações" -->
+                        <th>{!$Label.LAT_BR_VFP08_00006}</th>
+                        <!-- LAT_BR_VFP08_00006: Nº contrato previsto -->
+                        <th>{!$Label.LAT_BR_VFP08_00007}</th>
+                        <!-- LAT_BR_VFP08_00007: Nº contrato actual -->
+                        <th>{!$Label.LAT_BR_VFP08_00008}</th>
+                        <!-- LAT_BR_VFP08_00008: Desvio Nº de contratos vs plan -->
+                        <th>{!$Label.LAT_BR_VFP08_00009}</th>
+                        <!-- LAT_BR_VFP08_00009: Total contratos -->
+                        <th>{!$Label.LAT_BR_VFP08_00010}</th>
+                        <!-- LAT_BR_VFP08_00010: Coleta -->
+                        <th>{!$Label.LAT_BR_VFP08_00011}</th>
+                        <!-- LAT_BR_VFP08_00011: ROI previsto -->
+                        <th>{!$Label.LAT_BR_VFP08_00012}</th>
+                        <!-- LAT_BR_VFP08_00012: ROI contrato-->
+                        <th>{!$Label.LAT_BR_VFP08_00013}</th>
+                        <!-- LAT_BR_VFP08_00013: ROI casa -->
+                        <th>{!$Label.LAT_BR_VFP08_00014}</th>
+                        <!-- LAT_BR_VFP08_00014: Var ROI (pp) -->
+                    </tr>
+                    
+                    <apex:repeat value="{!regions}" var="r">
+                        <tr>               
+                            <td rowspan="{!r.segments.size + 1}" >
+                                <apex:outputText value="{!r.name}"/>
+                            </td>            
+                            <apex:repeat value="{!r.segments}" var="s">
+                                <tr>                        
+                                    <td>
+                                        <apex:outputText value="{!s.sName}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.proposedContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.numberCurrentContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.diversionNumberContractsVsPlan}" style="{!IF(s.diversionNumberContractsVsPlan < 0, 'color:red', 'color:black')}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.totalContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.sCollect}"/>
+                                    </td>
+                                    <td>                                
+                                        <c:LAT_FormatNumber value="{!s.roiPredicted}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>
+                                        <c:LAT_FormatNumber value="{!s.roiContract}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>
+                                        <c:LAT_FormatNumber value="{!s.roiHouse}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>             
+                                        <span style="{!IF(s.roiVariation < 0, 'color:red', 'color:black')}">
+                                            <c:LAT_FormatNumber value="{!s.roiVariation}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />
+                                        </span>
+                                    </td>
+                                </tr>
+                            </apex:repeat>
+                        </tr>                
+                    </apex:repeat>
+                </table>  
+            </apex:panelGroup>
+        </apex:panelGroup>
+        
+        <apex:panelGroup rendered="{!renderAs!=null}">
+            <apex:panelGroup >
+                <center>
+                    <h2 align="center">
+                        <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00015}" applyFormat="{!renderAs == 'excel'}"/>
+                        <!-- LAT_BR_VFP08_00015: Calcular ROI -->
+                    </h2>
+                </center>
+            
+                <br/>
+                <b>
+                    <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP03_00025}" applyFormat="{!renderAs == 'excel'}"/>
+                    <!--$Label.LAT_BR_VFP03_00025: Mês/Ano (Até):" -->
+                </b> 
+                {!month}/{!fiscalYear}
+                <br/>
+                <br/>
+                
+                <table class="tableStyle">
+                    <tr>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP03_00018}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- $Label.LAT_BR_VFP03_00018: "Região" -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP03_00019}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- $Label.LAT_BR_VFP03_00019: "Segmentações" -->
+                        </th>
+                    </tr>
+                    <apex:repeat value="{!pdfFilters}" var="fil">
+                        <tr>
+                            <td>
+                                {!fil.region}
+                            </td>
+                            <td>
+                                {!fil.segment}
+                            </td>
+                        </tr>
+                    </apex:repeat>
+                </table>
+            </apex:panelGroup>
+            
+            <br/>
+            <table class="tableStyle">
+                    <tr>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP03_00018}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- $Label.LAT_BR_VFP03_00018: "Região" -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP03_00019}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- $Label.LAT_BR_VFP03_00019: "Segmentações" -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00006}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00006: Nº contrato fornecido -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00007}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00007: Nº contrato vigente -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00008}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00008: Desvio Nº de contratos versus plano -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00009}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00009: Total de contratos -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00010}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00010: Coleta -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00011}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00011: ROI fornecido -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00012}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00012: ROI contrato-->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00013}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00013: ROI casa -->
+                        </th>
+                        <th>
+                            <c:LAT_FormatTextToExcel text="{!$Label.LAT_BR_VFP08_00014}" applyFormat="{!renderAs == 'excel'}"/>
+                            <!-- LAT_BR_VFP08_00014: Var ROI (pp) -->
+                        </th>
+                    </tr>
+                    <apex:repeat value="{!regions}" var="r">
+                        <tr>               
+                            <td rowspan="{!r.segments.size + 1}" >
+                                <apex:outputText value="{!r.name}"/>
+                            </td>            
+                            <apex:repeat value="{!r.segments}" var="s">
+                                <tr>                        
+                                    <td>
+                                        <apex:outputText value="{!s.sName}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.proposedContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.numberCurrentContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.diversionNumberContractsVsPlan}" style="{!IF(s.diversionNumberContractsVsPlan < 0, 'color:red', 'color:black')}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.totalContracts}"/>
+                                    </td>
+                                    <td>
+                                        <apex:outputText value="{!s.sCollect}"/>
+                                    </td>
+                                    <td>                                
+                                        <c:LAT_FormatNumber value="{!s.roiPredicted}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>
+                                        <c:LAT_FormatNumber value="{!s.roiContract}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>
+                                        <c:LAT_FormatNumber value="{!s.roiHouse}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />%
+                                    </td>
+                                    <td>             
+                                        <span style="{!IF(s.roiVariation < 0, 'color:red', 'color:black')}">
+                                            <c:LAT_FormatNumber value="{!s.roiVariation}" decimalQuantity="0" decimalSeparated="," thousandsSeparator="." />
+                                        </span>
+                                    </td>
+                                </tr>
+                            </apex:repeat>
+                        </tr>                
+                    </apex:repeat>
+                </table>
+        </apex:panelGroup>
+    </apex:panelGroup>
+        
+    <apex:panelGroup rendered="{!!hasAccess}">
+        <table cellspacing="10">
+            <tbody>
+                <tr><td>
+                    <span style="font-weight: bold; font-size: 12pt;">
+                        {!$Label.LAT_BR_VFP03_00008}
+                        <!-- $Label.LAT_BR_VFP03_00008: "Privilégios insuficientes" -->
+                    </span>
+                </td></tr>
+                <tr><td>
+                    {!$Label.LAT_BR_VFP03_00009}
+                    <!-- $Label.LAT_BR_VFP03_00009: "Você não tem o nível de acesso necessário para executar a operação solicitada. Entre em contato com o proprietário do registro ou o administrador se necessitar obter acesso." -->
+                    <br/><br/>
+                </td></tr>
+            </tbody>
+        </table>
+    </apex:panelGroup>       
+                  
+  
+</apex:page>
